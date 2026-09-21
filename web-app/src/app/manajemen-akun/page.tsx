@@ -1,77 +1,32 @@
-import { createServerClient } from '@supabase/ssr';
-import { cookies } from 'next/headers';
+import { auth } from '@/auth';
 import { redirect } from 'next/navigation';
+import { db } from '@/db';
+import { sql } from 'drizzle-orm';
 import ManajemenAkunClient from './ManajemenAkunClient';
 
 export default async function ManajemenAkunPage() {
-  const cookieStore = await cookies();
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return cookieStore.getAll();
-        },
-        setAll(cookiesToSet) {
-          // handled by middleware
-        },
-      },
-    }
-  );
+  const session = await auth();
 
-  const { data: { user } } = await supabase.auth.getUser();
-
-  if (!user) {
+  if (!session?.user?.email) {
     redirect('/login');
   }
 
-  // Cek apakah user adalah manager
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .single();
+  // Cek apakah user adalah manager / executive
+  const [profile] = await db.execute(sql`
+    SELECT id, role FROM profiles WHERE LOWER(email) = ${session.user.email.toLowerCase()} LIMIT 1
+  `) as any[];
 
   if (!['manager', 'executive'].includes(profile?.role)) {
     redirect('/'); // Lempar ke dashboard jika bukan manager/executive
   }
 
-  const supabaseAdmin = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return cookieStore.getAll();
-        },
-        setAll(cookiesToSet) {
-          // handled by middleware
-        },
-      },
-    }
-  );
-
-  // Ambil data users dan campaigns untuk initial state menggunakan admin client
-  // supaya Manager pasti bisa melihat semua data tanpa terhalang RLS
-  const { data: profiles } = await supabaseAdmin
-    .from('profiles')
-    .select('*')
-    .order('created_at', { ascending: false });
-
-  const { data: campaigns } = await supabaseAdmin
-    .from('campaigns')
-    .select('id, name:nama')
-    .order('nama');
-
-  const { data: userCampaigns } = await supabaseAdmin
-    .from('user_campaigns')
-    .select('*');
-
-  const { data: whitelist } = await supabaseAdmin
-    .from('whitelisted_emails')
-    .select('*')
-    .order('created_at', { ascending: false });
+  // Ambil data users dan campaigns untuk initial state
+  const [profiles, campaigns, userCampaigns, whitelist] = await Promise.all([
+    db.execute(sql`SELECT * FROM profiles ORDER BY created_at DESC`).catch(() => []),
+    db.execute(sql`SELECT id, nama as name FROM campaigns ORDER BY nama`).catch(() => []),
+    db.execute(sql`SELECT * FROM user_campaigns`).catch(() => []),
+    db.execute(sql`SELECT * FROM whitelisted_emails ORDER BY created_at DESC`).catch(() => [])
+  ]);
 
   return (
     <div className="space-y-6">
@@ -81,10 +36,10 @@ export default async function ManajemenAkunPage() {
       </div>
 
       <ManajemenAkunClient 
-        initialProfiles={profiles || []} 
-        campaigns={campaigns || []}
-        initialUserCampaigns={userCampaigns || []}
-        initialWhitelist={whitelist || []}
+        initialProfiles={(profiles as any[]) || []} 
+        campaigns={(campaigns as any[]) || []}
+        initialUserCampaigns={(userCampaigns as any[]) || []}
+        initialWhitelist={(whitelist as any[]) || []}
       />
     </div>
   );

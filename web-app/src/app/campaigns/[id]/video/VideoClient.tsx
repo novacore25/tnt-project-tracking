@@ -3,7 +3,6 @@
 import React, { useState, useEffect } from "react";
 import { useDatabaseStore } from "@/store/useDatabaseStore";
 // Replaced standard UI imports
-import { createClient } from "@/utils/supabase/client";
 import { getCreatorType } from "@/utils/computed";
 import { formatDateTime, formatDateTimeShort, formatDate } from "@/utils/formatters";
 import { useParams } from "next/navigation";

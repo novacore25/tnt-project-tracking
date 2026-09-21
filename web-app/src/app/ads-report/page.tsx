@@ -4,7 +4,6 @@ import React, { useState, useRef, useEffect, useDeferredValue, useMemo, startTra
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/Table";
 import { useDatabaseStore } from "@/store/useDatabaseStore";
-import { createClient } from "@/utils/supabase/client";
 import { Edit2, Check, X, Search, FileSpreadsheet, Loader2, Trash2, Lock, Download, DollarSign, TrendingUp, AlertCircle, BarChart3, ChevronUp, ChevronDown, ChevronRight, Eye, Activity, UploadCloud, Calendar, Wallet } from "lucide-react";
 import Link from "next/link";
 import { useAuth } from "@/providers/AuthProvider";
@@ -13,7 +12,7 @@ import { Button } from "@/components/ui/Button";
 
 import { SearchableSelect } from "@/components/SearchableSelect";
 import { StringCombobox } from "@/components/StringCombobox";
-import { getAdsReportData } from "./actions";
+import { getAdsReportData, updateAdPerformanceAction, deleteAdPerformanceAction } from "./actions";
 
 
 const MemoizedTableRow = React.memo(({
@@ -367,7 +366,6 @@ export default function AdsReportPage() {
   const { profile } = useAuth();
   const isManager = profile?.role === 'manager' || profile?.role === 'executive';
 
-  const supabase = createClient();
   const [displayLimit, setDisplayLimit] = useState(100);
 
   // Sorting States
@@ -455,14 +453,6 @@ export default function AdsReportPage() {
       if (change.tanggal !== undefined) updates.tanggal = change.tanggal;
       
       let newUsername = change.original.creators?.username;
-      if (updates.creator_id !== undefined && updates.creator_id !== change.original.creator_id) {
-        if (updates.creator_id === null) {
-          newUsername = null;
-        } else {
-          const { data: creatorData } = await supabase.from('creators').select('username').eq('id', updates.creator_id).single();
-          if (creatorData) newUsername = creatorData.username;
-        }
-      }
       
       if (Object.keys(updates).length > 0) {
         const bulkUpdates: any = {};
@@ -479,8 +469,12 @@ export default function AdsReportPage() {
 
         if (Object.keys(bulkUpdates).length > 0) {
           const originalAdId = change.original.ad_id;
-          const { error } = await supabase.from('ads_performance').update(bulkUpdates).eq('ad_id', originalAdId);
-          if (!error) {
+          try {
+            await updateAdPerformanceAction({
+              adId: originalAdId,
+              updates: bulkUpdates,
+              bulkByAdId: true
+            });
             currentAds.forEach((a, idx) => {
               if (a.ad_id === originalAdId) {
                 currentAds[idx] = {
@@ -490,16 +484,23 @@ export default function AdsReportPage() {
                 };
               }
             });
+          } catch (err) {
+            console.error('Error updating bulk ads performance:', err);
           }
         }
         
         if (Object.keys(specificUpdates).length > 0) {
-          const { error } = await supabase.from('ads_performance').update(specificUpdates).eq('id', adId);
-          if (!error) {
+          try {
+            await updateAdPerformanceAction({
+              id: adId,
+              updates: specificUpdates
+            });
             const adIndex = currentAds.findIndex(a => a.id === adId);
             if (adIndex !== -1) {
               currentAds[adIndex] = { ...currentAds[adIndex], ...specificUpdates };
             }
+          } catch (err) {
+            console.error('Error updating specific ad performance:', err);
           }
         }
       }
@@ -561,11 +562,11 @@ export default function AdsReportPage() {
     if (!confirm("Apakah Anda yakin ingin menghapus data iklan ini secara permanen?")) return;
     setDeletingId(id);
     
-    const { error } = await supabase.from('ads_performance').delete().eq('id', id);
-    if (!error) {
+    try {
+      await deleteAdPerformanceAction([id]);
       setAdsPerformance(prev => prev.filter(ad => ad.id !== id));
       setSelectedAds(prev => prev.filter(selectedId => selectedId !== id));
-    } else {
+    } catch (error: any) {
       alert("Gagal menghapus data: " + error.message);
     }
     setDeletingId(null);
@@ -576,12 +577,11 @@ export default function AdsReportPage() {
     if (!confirm(`Apakah Anda yakin ingin menghapus ${selectedAds.length} data iklan yang dipilih secara permanen?`)) return;
     
     setIsLoading(true);
-    const { error } = await supabase.from('ads_performance').delete().in('id', selectedAds);
-    
-    if (!error) {
+    try {
+      await deleteAdPerformanceAction(selectedAds);
       setAdsPerformance(prev => prev.filter(ad => !selectedAds.includes(ad.id)));
       setSelectedAds([]);
-    } else {
+    } catch (error: any) {
       alert("Gagal menghapus data masal: " + error.message);
     }
     setIsLoading(false);

@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState } from 'react';
-import { createClient } from '@/utils/supabase/client';
+import { getAuthProfileAction } from '@/app/actions/storeActions';
 
 type Profile = {
   id: string;
@@ -43,38 +43,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [userCampaigns, setUserCampaigns] = useState<UserCampaign[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const supabase = createClient();
 
   useEffect(() => {
     let mounted = true;
 
     async function loadAuth() {
       try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) {
-          if (mounted) setIsLoading(false);
-          return;
-        }
-
-        const { data: profileData } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', user.id)
-          .single();
-
-        if (profileData && mounted) {
-          setProfile(profileData);
-          
-          if (profileData.role === 'anggota') {
-            const { data: ucData } = await supabase
-              .from('user_campaigns')
-              .select('campaign_id, all_campaigns')
-              .eq('user_id', user.id);
-            
-            if (ucData) {
-              setUserCampaigns(ucData);
-            }
-          }
+        const res = await getAuthProfileAction();
+        if (mounted && res.profile) {
+          setProfile(res.profile);
+          setUserCampaigns(res.userCampaigns || []);
         }
       } catch (error) {
         console.error('Error loading auth state:', error);

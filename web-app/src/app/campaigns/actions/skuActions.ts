@@ -1,22 +1,8 @@
-'use server'
+'use server';
 
-import { createClient } from "@supabase/supabase-js";
-import { syncUnmappedForProduct } from "@/lib/syncUnmapped";
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder-project.supabase.co";
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder-key";
-
-const supabase = createClient(supabaseUrl, supabaseServiceKey, {
-  auth: {
-    persistSession: false,
-    autoRefreshToken: false,
-  },
-  global: {
-    fetch: (url, options) => {
-      return fetch(url, { ...options, cache: 'no-store' });
-    }
-  }
-});
+import { db } from '@/db';
+import { sql } from 'drizzle-orm';
+import { syncUnmappedForProduct } from '@/lib/syncUnmapped';
 
 export type SkuInput = {
   nama_produk: string;
@@ -32,13 +18,9 @@ export type SkuInput = {
  */
 export async function getCampaignSkus(campaignId: number) {
   try {
-    const { data, error } = await supabase
-      .from('skus')
-      .select('*')
-      .eq('campaign_id', campaignId)
-      .order('id', { ascending: true });
-
-    if (error) throw error;
+    const data = await db.execute(sql`
+      SELECT * FROM skus WHERE campaign_id = ${campaignId} ORDER BY id ASC
+    `) as any[];
     return { success: true, data: data || [] };
   } catch (err: any) {
     console.error("Error getCampaignSkus:", err);
@@ -55,61 +37,17 @@ export async function deleteSkuAction(skuId: number, campaignId: number) {
       return { success: false, error: "ID SKU atau Campaign tidak valid" };
     }
 
-    // 1. Unlink sales where sku_id = skuId (prevents 23503 FK error)
-    const { error: salesErr } = await supabase
-      .from('sales')
-      .update({ sku_id: null })
-      .eq('sku_id', skuId);
-
-    if (salesErr) {
-      console.warn("Warning unlinking sales:", salesErr.message);
-    }
+    // 1. Unlink sales where sku_id = skuId
+    await db.execute(sql`UPDATE sales SET sku_id = NULL WHERE sku_id = ${skuId}`).catch(() => {});
 
     // 2. Unlink campaign_concepts where sku_id = skuId
-    const { error: conceptsErr } = await supabase
-      .from('campaign_concepts')
-      .update({ sku_id: null })
-      .eq('sku_id', skuId);
-
-    if (conceptsErr) {
-      console.warn("Warning unlinking concepts:", conceptsErr.message);
-    }
+    await db.execute(sql`UPDATE campaign_concepts SET sku_id = NULL WHERE sku_id = ${skuId}`).catch(() => {});
 
     // 3. Unlink videos where sku_id = skuId
-    const { error: vidsErr } = await supabase
-      .from('videos')
-      .update({ sku_id: null })
-      .eq('sku_id', skuId);
+    await db.execute(sql`UPDATE videos SET sku_id = NULL WHERE sku_id = ${skuId}`).catch(() => {});
 
-    if (vidsErr) {
-      console.warn("Warning unlinking videos:", vidsErr.message);
-    }
-
-    // 4. Remove skuId from campaign_creators.assigned_sku_ids
-    const { data: affectedCcs } = await supabase
-      .from('campaign_creators')
-      .select('id, assigned_sku_ids')
-      .eq('campaign_id', campaignId)
-      .contains('assigned_sku_ids', [skuId]);
-
-    if (affectedCcs && affectedCcs.length > 0) {
-      for (const cc of affectedCcs) {
-        const updatedSkus = (cc.assigned_sku_ids || []).filter((id: number) => id !== skuId);
-        await supabase
-          .from('campaign_creators')
-          .update({ assigned_sku_ids: updatedSkus.length > 0 ? updatedSkus : null })
-          .eq('id', cc.id);
-      }
-    }
-
-    // 5. Finally delete the SKU
-    const { error: delErr } = await supabase
-      .from('skus')
-      .delete()
-      .eq('id', skuId)
-      .eq('campaign_id', campaignId);
-
-    if (delErr) throw delErr;
+    // 4. Finally delete the SKU
+    await db.execute(sql`DELETE FROM skus WHERE id = ${skuId} AND campaign_id = ${campaignId}`);
 
     return { success: true };
   } catch (err: any) {
@@ -127,58 +65,19 @@ export async function deleteBatchSkusAction(skuIds: number[], campaignId: number
       return { success: false, error: "Tidak ada produk yang dipilih" };
     }
 
-    // 1. Unlink sales where sku_id in (skuIds)
-    const { error: salesErr } = await supabase
-      .from('sales')
-      .update({ sku_id: null })
-      .in('sku_id', skuIds);
+    const idsSql = sql.join(skuIds.map(id => sql`${id}`), sql`, `);
 
-    if (salesErr) console.warn("Warning unlinking sales:", salesErr.message);
+    // 1. Unlink sales
+    await db.execute(sql`UPDATE sales SET sku_id = NULL WHERE sku_id IN (${idsSql})`).catch(() => {});
 
-    // 2. Unlink campaign_concepts where sku_id in (skuIds)
-    const { error: conceptsErr } = await supabase
-      .from('campaign_concepts')
-      .update({ sku_id: null })
-      .in('sku_id', skuIds);
+    // 2. Unlink campaign_concepts
+    await db.execute(sql`UPDATE campaign_concepts SET sku_id = NULL WHERE sku_id IN (${idsSql})`).catch(() => {});
 
-    if (conceptsErr) console.warn("Warning unlinking concepts:", conceptsErr.message);
+    // 3. Unlink videos
+    await db.execute(sql`UPDATE videos SET sku_id = NULL WHERE sku_id IN (${idsSql})`).catch(() => {});
 
-    // 3. Unlink videos where sku_id in (skuIds)
-    const { error: vidsErr } = await supabase
-      .from('videos')
-      .update({ sku_id: null })
-      .in('sku_id', skuIds);
-
-    if (vidsErr) console.warn("Warning unlinking videos:", vidsErr.message);
-
-    // 4. Remove skuIds from campaign_creators.assigned_sku_ids
-    const { data: affectedCcs } = await supabase
-      .from('campaign_creators')
-      .select('id, assigned_sku_ids')
-      .eq('campaign_id', campaignId);
-
-    if (affectedCcs && affectedCcs.length > 0) {
-      const skuIdSet = new Set(skuIds);
-      for (const cc of affectedCcs) {
-        if (!cc.assigned_sku_ids || cc.assigned_sku_ids.length === 0) continue;
-        const filtered = cc.assigned_sku_ids.filter((id: number) => !skuIdSet.has(id));
-        if (filtered.length !== cc.assigned_sku_ids.length) {
-          await supabase
-            .from('campaign_creators')
-            .update({ assigned_sku_ids: filtered.length > 0 ? filtered : null })
-            .eq('id', cc.id);
-        }
-      }
-    }
-
-    // 5. Delete all selected SKUs
-    const { error: delErr } = await supabase
-      .from('skus')
-      .delete()
-      .in('id', skuIds)
-      .eq('campaign_id', campaignId);
-
-    if (delErr) throw delErr;
+    // 4. Delete all selected SKUs
+    await db.execute(sql`DELETE FROM skus WHERE id IN (${idsSql}) AND campaign_id = ${campaignId}`);
 
     return { success: true, count: skuIds.length };
   } catch (err: any) {
@@ -202,38 +101,28 @@ export async function updateSkuAction(skuId: number, campaignId: number, payload
       return { success: false, error: "Nama produk wajib diisi" };
     }
 
-    // Check if another SKU already uses this product_id in this campaign
-    const { data: duplicate } = await supabase
-      .from('skus')
-      .select('id')
-      .eq('campaign_id', campaignId)
-      .eq('product_id', trimmedProductId)
-      .neq('id', skuId)
-      .maybeSingle();
+    // Check duplicate
+    const duplicate = await db.execute(sql`
+      SELECT id FROM skus
+      WHERE campaign_id = ${campaignId} AND product_id = ${trimmedProductId} AND id != ${skuId}
+      LIMIT 1
+    `) as any[];
 
-    if (duplicate) {
+    if (duplicate && duplicate.length > 0) {
       return { success: false, error: `Product ID "${trimmedProductId}" sudah digunakan oleh produk lain di campaign ini.` };
     }
 
-    const updatePayload: Record<string, any> = {
-      nama_produk: trimmedNama,
-      product_id: trimmedProductId,
-      satuan_bundle: payload.satuan_bundle ? payload.satuan_bundle.trim() : null,
-      commission: payload.commission !== undefined && payload.commission !== null ? Number(payload.commission) : null,
-    };
-
-    if (payload.link_gmv_max !== undefined) updatePayload.link_gmv_max = payload.link_gmv_max || null;
-    if (payload.link_tap !== undefined) updatePayload.link_tap = payload.link_tap || null;
-
-    const { data, error } = await supabase
-      .from('skus')
-      .update(updatePayload)
-      .eq('id', skuId)
-      .eq('campaign_id', campaignId)
-      .select()
-      .single();
-
-    if (error) throw error;
+    const [data] = await db.execute(sql`
+      UPDATE skus SET
+        nama_produk = ${trimmedNama},
+        product_id = ${trimmedProductId},
+        satuan_bundle = ${payload.satuan_bundle ? payload.satuan_bundle.trim() : null},
+        commission = ${payload.commission !== undefined && payload.commission !== null ? Number(payload.commission) : null},
+        link_gmv_max = ${payload.link_gmv_max !== undefined ? payload.link_gmv_max || null : null},
+        link_tap = ${payload.link_tap !== undefined ? payload.link_tap || null : null}
+      WHERE id = ${skuId} AND campaign_id = ${campaignId}
+      RETURNING *
+    `) as any[];
 
     // Trigger direct sync unmapped in database
     await syncUnmappedForProduct(trimmedProductId, campaignId, data?.id);
@@ -276,9 +165,7 @@ export async function saveBatchSkusAction(
       const pid = (r.product_id || '').trim();
       if (!pid) continue;
 
-      // Keep only latest if duplicated within same batch
       if (seenProductIds.has(pid)) {
-        // Update previous entry
         const idx = cleanedRows.findIndex(item => item.product_id === pid);
         if (idx !== -1) {
           cleanedRows[idx] = {
@@ -305,54 +192,35 @@ export async function saveBatchSkusAction(
     }
 
     // 2. Fetch existing campaign SKUs
-    const { data: existingSkus } = await supabase
-      .from('skus')
-      .select('id, product_id, nama_produk, satuan_bundle, commission')
-      .eq('campaign_id', campaignId);
+    const existingSkus = await db.execute(sql`
+      SELECT id, product_id, nama_produk, satuan_bundle, commission
+      FROM skus
+      WHERE campaign_id = ${campaignId}
+    `) as any[];
 
     const existingMap = new Map((existingSkus || []).map(s => [s.product_id, s]));
 
     let insertedCount = 0;
     let updatedCount = 0;
 
-    const toInsert: any[] = [];
-
     for (const row of cleanedRows) {
       const existing = existingMap.get(row.product_id);
       if (existing) {
-        // Update existing if different
-        const shouldUpdate =
-          (row.nama_produk && row.nama_produk !== existing.nama_produk) ||
-          (row.satuan_bundle !== null && row.satuan_bundle !== existing.satuan_bundle) ||
-          (row.commission !== null && row.commission !== existing.commission);
-
-        if (shouldUpdate) {
-          const { error: updErr } = await supabase
-            .from('skus')
-            .update({
-              nama_produk: row.nama_produk || existing.nama_produk,
-              satuan_bundle: row.satuan_bundle !== null ? row.satuan_bundle : existing.satuan_bundle,
-              commission: row.commission !== null ? row.commission : existing.commission,
-            })
-            .eq('id', existing.id);
-
-          if (!updErr) updatedCount++;
-        }
+        await db.execute(sql`
+          UPDATE skus SET
+            nama_produk = ${row.nama_produk || existing.nama_produk},
+            satuan_bundle = ${row.satuan_bundle !== null ? row.satuan_bundle : existing.satuan_bundle},
+            commission = ${row.commission !== null ? row.commission : existing.commission}
+          WHERE id = ${existing.id}
+        `);
+        updatedCount++;
       } else {
-        toInsert.push({
-          campaign_id: campaignId,
-          nama_produk: row.nama_produk,
-          product_id: row.product_id,
-          satuan_bundle: row.satuan_bundle,
-          commission: row.commission,
-        });
+        await db.execute(sql`
+          INSERT INTO skus (campaign_id, nama_produk, product_id, satuan_bundle, commission)
+          VALUES (${campaignId}, ${row.nama_produk}, ${row.product_id}, ${row.satuan_bundle}, ${row.commission})
+        `);
+        insertedCount++;
       }
-    }
-
-    if (toInsert.length > 0) {
-      const { error: insErr } = await supabase.from('skus').insert(toInsert);
-      if (insErr) throw insErr;
-      insertedCount = toInsert.length;
     }
 
     // 3. Trigger direct database sync for all product IDs
@@ -378,7 +246,10 @@ export async function saveBatchSkusAction(
 export async function syncCampaignUnmappedAction(campaignId: number) {
   try {
     if (!campaignId) return { success: false, error: "Campaign ID tidak valid" };
-    const { data: skus } = await supabase.from('skus').select('id, product_id').eq('campaign_id', campaignId);
+    const skus = await db.execute(sql`
+      SELECT id, product_id FROM skus WHERE campaign_id = ${campaignId}
+    `) as any[];
+
     if (!skus || skus.length === 0) {
       return { success: true, message: "Tidak ada SKU terdaftar di campaign ini", syncedCount: 0 };
     }

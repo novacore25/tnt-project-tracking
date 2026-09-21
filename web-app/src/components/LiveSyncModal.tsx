@@ -5,9 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Button } from "@/components/ui/Button";
 import { Upload, Loader2, FileSpreadsheet, CheckCircle } from "lucide-react";
 import * as xlsx from 'xlsx';
-import { createClient } from "@/utils/supabase/client";
-
-const supabase = createClient();
+import { importLiveOrganicAction } from "@/app/actions/importActions";
 
 const parseRp = (val: any) => {
   if (!val) return 0;
@@ -102,24 +100,10 @@ export function LiveSyncModal() {
 
       const sessionsArray = Array.from(sessionsMap.values());
       
-      setStatus(`Menyimpan ${sessionsArray.length} Sesi Live ke database...`);
-      for (let i = 0; i < sessionsArray.length; i += 100) {
-        const chunk = sessionsArray.slice(i, i + 100);
-        const { error } = await supabase.from('live_sessions').upsert(chunk, { onConflict: 'livestream_room_id' });
-        if (error) throw error;
-      }
-
-      setStatus(`Menyimpan ${productsList.length} Data Produk ke database...`);
-      const allRoomIds = Array.from(sessionsMap.keys());
-      for (let i = 0; i < allRoomIds.length; i += 100) {
-        const chunk = allRoomIds.slice(i, i + 100);
-        await supabase.from('live_session_products').delete().in('livestream_room_id', chunk);
-      }
-
-      for (let i = 0; i < productsList.length; i += 500) {
-        const chunk = productsList.slice(i, i + 500);
-        const { error } = await supabase.from('live_session_products').insert(chunk);
-        if (error) throw error;
+      setStatus(`Menyimpan ${sessionsArray.length} Sesi Live dan ${productsList.length} Produk via Server Action...`);
+      const result = await importLiveOrganicAction(sessionsArray, productsList);
+      if (!result.success) {
+        throw new Error(result.error);
       }
 
       setStats({ sessions: sessionsArray.length, products: productsList.length });

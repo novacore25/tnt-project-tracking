@@ -6,9 +6,9 @@ import { Button } from "@/components/ui/Button";
 import { Upload, AlertCircle, CheckCircle2, Loader2, Trash2, ArrowRight, ArrowLeft } from "lucide-react";
 import Papa from "papaparse";
 import * as XLSX from "xlsx";
-import { createClient } from "@/utils/supabase/client";
 import { useDatabaseStore } from "@/store/useDatabaseStore";
 import { StringCombobox } from "@/components/StringCombobox";
+import { fetchAdNameMappingsAction, saveAdNameMappingAction, executeAdsImportAction } from "@/app/actions/importActions";
 
 // SearchableSelect component
 function SearchableSelect({ value, initialLabel, onChange, placeholder }: { value: number | '', initialLabel?: string, onChange: (val: number | '') => void, placeholder: string }) {
@@ -16,7 +16,7 @@ function SearchableSelect({ value, initialLabel, onChange, placeholder }: { valu
   const [open, setOpen] = useState(false);
   const [options, setOptions] = useState<{id: number, label: string}[]>([]);
   const wrapperRef = useRef<HTMLDivElement>(null);
-  const supabase = createClient();
+  const { creators } = useDatabaseStore();
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -30,21 +30,20 @@ function SearchableSelect({ value, initialLabel, onChange, placeholder }: { valu
 
   useEffect(() => {
     const fetchOptions = async () => {
-      const trimmed = search.trim().replace(/\s+/g, '');
+      const trimmed = search.trim().replace(/\s+/g, '').replace(/^@/, '');
       if (!trimmed) {
         setOptions([]);
         return;
       }
-      const fuzzyPattern = '%' + trimmed.split('').join('%') + '%';
-      const { data } = await supabase.from('creators').select('id, username').ilike('username', fuzzyPattern).limit(20);
-      if (data) {
-        const sorted = data.map(d => ({ id: d.id, label: `@${d.username}` })).sort((a, b) => a.label.length - b.label.length).slice(0, 5);
-        setOptions(sorted);
-      }
+      const matched = creators
+        .filter(c => c.username.toLowerCase().includes(trimmed.toLowerCase()))
+        .slice(0, 5)
+        .map(c => ({ id: c.id, label: `@${c.username}` }));
+      setOptions(matched);
     };
-    const handler = setTimeout(fetchOptions, 300);
+    const handler = setTimeout(fetchOptions, 200);
     return () => clearTimeout(handler);
-  }, [search]);
+  }, [search, creators]);
 
   const displayValue = open ? search : (value ? (options.find(o => o.id === value)?.label || initialLabel || search) : "");
 
@@ -79,7 +78,6 @@ export default function AdsImport() {
   const [result, setResult] = useState<{success: number; errors: string[]} | null>(null);
   
   const { campaigns, creators } = useDatabaseStore();
-  const supabase = createClient();
 
   // Carousel Mapping State
   const [unmappedAdsByFile, setUnmappedAdsByFile] = useState<{fileId: string, fileName: string, unmapped: {adName: string, adId: string}[]}[]>([]);
@@ -93,10 +91,12 @@ export default function AdsImport() {
 
   useEffect(() => {
     const fetchCampaignAds = async () => {
-      const { data } = await supabase.from('ads_performance').select('campaign_ads_name');
-      if (data) {
-        const unique = Array.from(new Set(data.map(d => d.campaign_ads_name).filter(Boolean))) as string[];
+      try {
+        const mappingsData = await fetchAdNameMappingsAction();
+        const unique = Array.from(new Set(mappingsData.map((d: any) => d.ad_name).filter(Boolean))) as string[];
         setGlobalCampaignAdsOptions(unique);
+      } catch (err) {
+        console.error('Error fetching campaign ads options:', err);
       }
     };
     fetchCampaignAds();
@@ -123,20 +123,15 @@ export default function AdsImport() {
 
       // Get existing mappings
       const knownMappingMap: Record<string, number> = { ...mappings };
-      const { count } = await supabase.from('ad_name_mapping').select('*', { count: 'exact', head: true });
-      if (count && count > 0) {
-        const promises = [];
-        for (let i = 0; i < count; i += 1000) {
-          promises.push(supabase.from('ad_name_mapping').select('*').range(i, i + 999));
-        }
-        const results = await Promise.all(promises);
-        results.forEach(res => {
-          if (res.data) {
-            res.data.forEach(m => {
-              if (!knownMappingMap[m.ad_name]) knownMappingMap[m.ad_name] = m.creator_id;
-            });
+      try {
+        const existingMappings = await fetchAdNameMappingsAction();
+        existingMappings.forEach((m: any) => {
+          if (!knownMappingMap[m.ad_name] && m.creator_id) {
+            knownMappingMap[m.ad_name] = m.creator_id;
           }
         });
+      } catch (err) {
+        console.error('Error loading mappings:', err);
       }
 
       let unmappedByFile: {fileId: string, fileName: string, unmapped: {adName: string, adId: string}[]}[] = [];
@@ -235,68 +230,61 @@ export default function AdsImport() {
       // Save new mappings globally
       const newMappingsToSave = Object.entries(mappings).map(([name, creatorId]) => ({ ad_name: name, creator_id: creatorId }));
       for (const mapping of newMappingsToSave) {
-        await supabase.from('ad_name_mapping').upsert(mapping, { onConflict: 'ad_name' });
+        await saveAdNameMappingAction(mapping);
       }
 
       // Process each file
       for (const fConfig of files) {
         if (!fConfig.parsedData) continue;
         
-        const chunkSize = 100;
-        for (let i = 0; i < fConfig.parsedData.length; i += chunkSize) {
-          const chunk = fConfig.parsedData.slice(i, i + chunkSize);
+        const safeParseNum = (val: any) => {
+          if (!val) return 0;
+          if (typeof val === 'number') return val;
+          const cleaned = String(val).replace(/[^0-9.-]+/g, "");
+          return Number(cleaned) || 0;
+        };
+
+        const rawInserts = fConfig.parsedData.map(row => {
+          const adName = row['Ad name'] || row['Ad Name'] || row['Ad Group Name'] || '';
+          const adId = String(row['Ad ID'] || row['Ad ID (Shop)'] || row['Ad Id']).trim();
+          const costUsd = safeParseNum(row['Cost'] || row['Spend'] || row['Amount Spent (USD)']);
+          const grossRevenueUsd = safeParseNum(row['Gross revenue (Shop)'] || row['Total Revenue']);
+          const purchases = safeParseNum(row['Purchases (Shop)'] || row['Purchases'] || row['Conversions']);
+          const impressions = safeParseNum(row['Impressions']);
+          const clicks = safeParseNum(row['Clicks (destination)'] || row['Clicks']);
+          const ppv = safeParseNum(row['Product page views'] || row['Product Page Views']);
+          const checkouts = safeParseNum(row['Checkouts initiated'] || row['Checkouts Initiated']);
+          const itemsPurchased = safeParseNum(row['Items purchased'] || row['Items Purchased']);
           
-          const safeParseNum = (val: any) => {
-            if (!val) return 0;
-            if (typeof val === 'number') return val;
-            const cleaned = String(val).replace(/[^0-9.-]+/g, "");
-            return Number(cleaned) || 0;
+          return {
+            campaign_id: globalCampaignId ? Number(globalCampaignId) : null,
+            campaign_ads_name: globalCampaignAdsName,
+            tanggal: fConfig.tanggal,
+            kurs: Number(fConfig.kurs) || 16000,
+            ad_name: adName,
+            ad_id: adId,
+            creator_id: mappings[adName] || null,
+            cost_usd: costUsd,
+            gross_revenue_usd: grossRevenueUsd,
+            purchases: purchases,
+            impressions: impressions,
+            clicks: clicks,
+            product_page_views: ppv,
+            checkouts_initiated: checkouts,
+            items_purchased: itemsPurchased,
+            raw_data: row
           };
+        });
 
-          const rawInserts = chunk.map(row => {
-            const adName = row['Ad name'] || row['Ad Name'] || row['Ad Group Name'] || '';
-            const adId = String(row['Ad ID'] || row['Ad ID (Shop)'] || row['Ad Id']).trim();
-            const costUsd = safeParseNum(row['Cost'] || row['Spend'] || row['Amount Spent (USD)']);
-            const grossRevenueUsd = safeParseNum(row['Gross revenue (Shop)'] || row['Total Revenue']);
-            const purchases = safeParseNum(row['Purchases (Shop)'] || row['Purchases'] || row['Conversions']);
-            const impressions = safeParseNum(row['Impressions']);
-            const clicks = safeParseNum(row['Clicks (destination)'] || row['Clicks']);
-            const ppv = safeParseNum(row['Product page views'] || row['Product Page Views']);
-            const checkouts = safeParseNum(row['Checkouts initiated'] || row['Checkouts Initiated']);
-            const itemsPurchased = safeParseNum(row['Items purchased'] || row['Items Purchased']);
-            
-            return {
-              campaign_id: globalCampaignId,
-              campaign_ads_name: globalCampaignAdsName,
-              tanggal: fConfig.tanggal,
-              kurs: fConfig.kurs,
-              ad_name: adName,
-              ad_id: adId,
-              creator_id: mappings[adName],
-              cost_usd: costUsd,
-              gross_revenue_usd: grossRevenueUsd,
-              purchases: purchases,
-              impressions: impressions,
-              clicks: clicks,
-              product_page_views: ppv,
-              checkouts_initiated: checkouts,
-              items_purchased: itemsPurchased,
-            };
-          });
+        const res = await executeAdsImportAction(rawInserts, {
+          minDate: fConfig.tanggal,
+          maxDate: fConfig.tanggal
+        });
 
-          // Uniqueness based on ad_id and tanggal
-          const adIds = rawInserts.map(r => r.ad_id);
-          await supabase.from('ads_performance').delete()
-            .eq('tanggal', fConfig.tanggal)
-            .in('ad_id', adIds);
-
-          const { error } = await supabase.from('ads_performance').insert(rawInserts);
-
-          if (error) {
-            errors.push(`File ${fConfig.file.name} Chunk ${i}: ${error.message}`);
-          } else {
-            successCount += rawInserts.length;
-          }
+        if (res.success) {
+          successCount += res.count;
+        } else {
+          errors.push(`File ${fConfig.file.name}: Gagal import`);
         }
       }
 

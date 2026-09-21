@@ -1,6 +1,8 @@
 "use server";
 
-import { createClient } from "@/utils/supabase/server";
+import { db } from '@/db';
+import { sql } from 'drizzle-orm';
+import { revalidatePath } from 'next/cache';
 
 export async function getAdsReportData(params: {
   startDate?: string;
@@ -11,36 +13,31 @@ export async function getAdsReportData(params: {
   sortKey: string;
   sortDir: 'asc' | 'desc';
 }) {
-  const supabase = await createClient();
-  
-  let rawAllData: any[] = [];
-  let from = 0;
-  const step = 1000;
-  let hasMore = true;
-  
-  while (hasMore) {
-    let query = supabase
-      .from('ads_performance')
-      .select('*, creators(username)')
-      .range(from, from + step - 1);
-      
-    if (params.campaignAdsName) {
-      query = query.eq('campaign_ads_name', params.campaignAdsName);
-    }
-    
-    const { data, error } = await query;
-    if (error) throw error;
-    
-    if (data && data.length > 0) {
-      rawAllData = [...rawAllData, ...data];
-      from += step;
-      if (data.length < step) hasMore = false;
-    } else {
-      hasMore = false;
-    }
+  let adsQuery = sql`
+    SELECT 
+      ap.*,
+      json_build_object('username', cr.username) as creators
+    FROM ads_performance ap
+    LEFT JOIN creators cr ON ap.creator_id = cr.id
+  `;
+
+  if (params.campaignAdsName) {
+    adsQuery = sql`${adsQuery} WHERE ap.campaign_ads_name = ${params.campaignAdsName}`;
   }
-  
-  if (!rawAllData || rawAllData.length === 0) {
+
+  adsQuery = sql`${adsQuery} ORDER BY ap.tanggal DESC`;
+
+  const [rawAdsRows, campaignsRows, budgetRows] = await Promise.all([
+    db.execute(adsQuery),
+    db.execute(sql`SELECT id, nama FROM campaigns`),
+    db.execute(sql`SELECT * FROM ads_allocations`)
+  ]);
+
+  let rawAllData = (rawAdsRows as unknown as any[]) || [];
+  const campaignsData = (campaignsRows as unknown as any[]) || [];
+  const budgetData = (budgetRows as unknown as any[]) || [];
+
+  if (rawAllData.length === 0) {
     return { 
       summary: { totalSpend: 0, totalGmv: 0, totalImpressions: 0, roas: 0, cpm: 0 }, 
       filteredSummary: { totalSpend: 0, totalGmv: 0, totalImpressions: 0, roas: 0, cpm: 0 }, 
@@ -137,13 +134,10 @@ export async function getAdsReportData(params: {
   }
 
   // Fetch campaigns to map names
-  const { data: campaignsData } = await supabase.from('campaigns').select('id, nama');
   const campaignNames: Record<number, string> = {};
-  if (campaignsData) {
-    campaignsData.forEach(c => {
-      campaignNames[c.id] = c.nama;
-    });
-  }
+  campaignsData.forEach(c => {
+    campaignNames[c.id] = c.nama;
+  });
 
   // 4. Calculate Campaign Breakdown (using ALL-TIME campaigns matching search)
   const campaignBreakdown: Record<number, any> = {};
@@ -229,7 +223,6 @@ export async function getAdsReportData(params: {
   });
 
   // Calculate allocated budgets from `ads_allocations`
-  const { data: budgetData } = await supabase.from('ads_allocations').select('*');
   const budgetBalances: Record<number, { allocated: number, remaining: number }> = {};
   
   if (budgetData) {
@@ -248,4 +241,104 @@ export async function getAdsReportData(params: {
     budgetBalances,
     data: tableData
   };
+}
+
+export async function updateAdPerformanceAction(params: {
+  id?: number;
+  adId?: string;
+  updates: {
+    campaign_id?: number | null;
+    creator_id?: number | null;
+    campaign_ads_name?: string | null;
+  };
+  bulkByAdId?: boolean;
+}) {
+  const { id, adId, updates, bulkByAdId } = params;
+
+  if (bulkByAdId && adId) {
+    await db.execute(sql`
+      UPDATE ads_performance
+      SET 
+        campaign_id = ${updates.campaign_id !== undefined ? updates.campaign_id : sql`campaign_id`},
+        creator_id = ${updates.creator_id !== undefined ? updates.creator_id : sql`creator_id`},
+        campaign_ads_name = ${updates.campaign_ads_name !== undefined ? updates.campaign_ads_name : sql`campaign_ads_name`}
+      WHERE ad_id = ${adId}
+    `);
+  } else if (id) {
+    await db.execute(sql`
+      UPDATE ads_performance
+      SET 
+        campaign_id = ${updates.campaign_id !== undefined ? updates.campaign_id : sql`campaign_id`},
+        creator_id = ${updates.creator_id !== undefined ? updates.creator_id : sql`creator_id`},
+        campaign_ads_name = ${updates.campaign_ads_name !== undefined ? updates.campaign_ads_name : sql`campaign_ads_name`}
+      WHERE id = ${id}
+    `);
+  }
+
+  revalidatePath('/ads-report');
+  return { success: true };
+}
+
+export async function deleteAdPerformanceAction(ids: number[]) {
+  if (!ids || ids.length === 0) return { success: true };
+  await db.execute(sql`
+    DELETE FROM ads_performance WHERE id = ANY(${ids}::int[])
+  `);
+  revalidatePath('/ads-report');
+  return { success: true };
+}
+
+export async function fetchAdsBudgetingDataAction() {
+  const [topups, allocations, perf] = await Promise.all([
+    db.execute(sql`SELECT * FROM ads_topups ORDER BY tanggal DESC`),
+    db.execute(sql`SELECT * FROM ads_allocations ORDER BY tanggal DESC`),
+    db.execute(sql`SELECT campaign_id, ad_id, tanggal, cost_usd, kurs FROM ads_performance`)
+  ]);
+
+  return {
+    topups: (topups as unknown as any[]) || [],
+    allocations: (allocations as unknown as any[]) || [],
+    performance: (perf as unknown as any[]) || []
+  };
+}
+
+export async function addAdsTopupAction(data: {
+  tanggal: string;
+  nominal_topup_idr: number;
+  kurs: number;
+  nominal_topup_usd: number;
+  keterangan?: string;
+}) {
+  await db.execute(sql`
+    INSERT INTO ads_topups (tanggal, nominal_topup_idr, kurs, nominal_topup_usd, keterangan)
+    VALUES (${data.tanggal}, ${data.nominal_topup_idr}, ${data.kurs}, ${data.nominal_topup_usd}, ${data.keterangan || null})
+  `);
+  revalidatePath('/ads-report/budgeting-ads');
+  return { success: true };
+}
+
+export async function deleteAdsTopupAction(id: number) {
+  await db.execute(sql`DELETE FROM ads_topups WHERE id = ${id}`);
+  revalidatePath('/ads-report/budgeting-ads');
+  return { success: true };
+}
+
+export async function addAdsAllocationAction(data: {
+  tanggal: string;
+  campaign_id: number;
+  alokasi_usd: number;
+  keterangan?: string;
+}) {
+  await db.execute(sql`
+    INSERT INTO ads_allocations (tanggal, campaign_id, alokasi_usd, keterangan)
+    VALUES (${data.tanggal}, ${data.campaign_id}, ${data.alokasi_usd}, ${data.keterangan || null})
+  `);
+  revalidatePath('/ads-report/budgeting-ads');
+  return { success: true };
+}
+
+export async function deleteAdsAllocationAction(id: number) {
+  await db.execute(sql`DELETE FROM ads_allocations WHERE id = ${id}`);
+  revalidatePath('/ads-report/budgeting-ads');
+  return { success: true };
 }

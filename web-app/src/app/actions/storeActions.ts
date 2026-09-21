@@ -1,6 +1,7 @@
 'use server';
 
 import { db } from '@/db';
+import { auth } from '@/auth';
 import {
   brands,
   campaigns,
@@ -14,6 +15,38 @@ import {
 } from '@/db/schema';
 import { eq, desc, asc, sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
+
+export async function getAuthProfileAction() {
+  try {
+    const session = await auth();
+    if (!session?.user?.email) {
+      return { profile: null, userCampaigns: [] };
+    }
+
+    const email = session.user.email.toLowerCase();
+    const [profile] = await db.select().from(profiles).where(eq(profiles.email, email)).limit(1);
+    if (!profile) return { profile: null, userCampaigns: [] };
+
+    const userCampaignsRes = await db.execute(sql`
+      SELECT campaign_id, all_campaigns FROM user_campaigns WHERE user_id = ${profile.id}
+    `).catch(() => []);
+
+    return {
+      profile: {
+        id: profile.id,
+        nama: profile.fullName || session.user.name || '',
+        email: profile.email,
+        avatar_url: profile.avatarUrl || session.user.image || null,
+        role: profile.role || 'staff',
+        status: 'active'
+      },
+      userCampaigns: (userCampaignsRes as any[]) || []
+    };
+  } catch (err) {
+    console.error('Error getting auth profile:', err);
+    return { profile: null, userCampaigns: [] };
+  }
+}
 
 /**
  * Mengambil data awal untuk dashboard & aplikasi via direct PostgreSQL pool

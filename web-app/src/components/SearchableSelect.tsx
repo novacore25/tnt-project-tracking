@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
-import { createClient } from "@/utils/supabase/client";
+import { searchCreatorsAction } from "@/app/actions/databaseActions";
 
 export function SearchableSelect({ 
   value, 
@@ -20,7 +20,6 @@ export function SearchableSelect({
   const [open, setOpen] = useState(false);
   const [options, setOptions] = useState<{id: number, label: string}[]>([]);
   const wrapperRef = useRef<HTMLDivElement>(null);
-  const supabase = createClient();
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -40,16 +39,10 @@ export function SearchableSelect({
         return;
       }
       
-      const fuzzyPattern = '%' + trimmed.split('').join('%') + '%';
-      
-      const { data } = await supabase.from('creators')
-        .select('id, username')
-        .ilike('username', fuzzyPattern)
-        .limit(20);
-        
-      if (data) {
+      const res = await searchCreatorsAction(trimmed);
+      if (res.success && res.data) {
         // Sort locally: 1. Starts with search, 2. Contains search exactly, 3. Length
-        const sorted = data.map(d => ({ id: d.id, label: `@${d.username}` })).sort((a, b) => {
+        const sorted = res.data.map((d: any) => ({ id: d.id, label: `@${d.username}` })).sort((a: any, b: any) => {
           const aLower = a.label.toLowerCase();
           const bLower = b.label.toLowerCase();
           const searchLower = trimmed.toLowerCase();

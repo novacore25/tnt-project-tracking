@@ -2,12 +2,15 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { useParams } from "next/navigation";
-import { createClient } from "@/utils/supabase/client";
 import { useAuth } from "@/providers/AuthProvider";
 import { useDatabaseStore } from "@/store/useDatabaseStore";
 import { Loader2, Plus, Trash2, CheckCircle2 } from "lucide-react";
-
-const supabase = createClient();
+import {
+  fetchCampaignConceptsAction,
+  addCampaignConceptAction,
+  updateCampaignConceptAction,
+  deleteCampaignConceptAction
+} from "@/app/actions/campaignPageActions";
 
 export default function CampaignConceptsPage() {
   const { id } = useParams();
@@ -24,16 +27,11 @@ export default function CampaignConceptsPage() {
 
   const fetchConcepts = useCallback(async () => {
     setIsLoading(true);
-    const { data, error } = await supabase
-      .from('campaign_concepts')
-      .select('*')
-      .eq('campaign_id', campaignId)
-      .order('no_konsep', { ascending: true });
-    
-    if (error) {
-      console.error("Error fetching concepts:", error);
+    const res = await fetchCampaignConceptsAction(campaignId);
+    if (res.success) {
+      setConcepts(res.data || []);
     } else {
-      setConcepts(data || []);
+      console.error("Error fetching concepts:", res.error);
     }
     setIsLoading(false);
   }, [campaignId]);
@@ -53,9 +51,9 @@ export default function CampaignConceptsPage() {
       updated_by: profile?.nama,
     };
 
-    const { data, error } = await supabase.from('campaign_concepts').insert([newConcept]).select();
-    if (!error && data) {
-      setConcepts(prev => [...prev, data[0]].sort((a, b) => (Number(a.no_konsep) || 0) - (Number(b.no_konsep) || 0)));
+    const res = await addCampaignConceptAction(newConcept);
+    if (res.success && res.data) {
+      setConcepts(prev => [...prev, res.data].sort((a, b) => (Number(a.no_konsep) || 0) - (Number(b.no_konsep) || 0)));
     }
   };
 
@@ -69,17 +67,11 @@ export default function CampaignConceptsPage() {
     const payload = { 
       [field]: value,
       updated_by: profile?.nama,
-      updated_at: new Date().toISOString()
     };
 
-    const { error } = await supabase
-      .from('campaign_concepts')
-      .update(payload)
-      .eq('id', conceptId);
-
-    if (error) {
-      console.error("Error updating concept:", error);
-      // Revert if error (simple reload for now)
+    const res = await updateCampaignConceptAction(conceptId, payload);
+    if (!res.success) {
+      console.error("Error updating concept:", res.error);
       fetchConcepts();
     }
     setSavingId(null);
@@ -89,7 +81,7 @@ export default function CampaignConceptsPage() {
     if (!confirm("Yakin ingin menghapus konsep ini?")) return;
     
     setConcepts(prev => prev.filter(c => c.id !== conceptId));
-    await supabase.from('campaign_concepts').delete().eq('id', conceptId);
+    await deleteCampaignConceptAction(conceptId);
   };
 
   if (isLoading) {
@@ -224,7 +216,8 @@ export default function CampaignConceptsPage() {
                       placeholder="Notes revisi untuk PIC..."
                       disabled={!isManager}
                       title={!isManager ? "Hanya Manager yang bisa memberikan notes" : ""}
-                    />
+                    >
+                    </textarea>
                   </td>
                   <td className="px-4 py-3 text-center align-middle">
                     <div className="flex items-center justify-center h-full">

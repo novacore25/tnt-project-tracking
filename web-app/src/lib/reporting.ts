@@ -1,22 +1,8 @@
-// src/lib/reporting.ts
-import { createClient } from '@/utils/supabase/client';
-import * as ExcelJS from 'exceljs';
-import { exportToExcel } from '@/utils/exportToExcel';
+'use server';
 
-// Helper to fetch all rows with pagination (1000 rows per batch)
-async function fetchAll<T>(baseQuery: any): Promise<T[]> {
-  const all: T[] = [];
-  let from = 0;
-  while (true) {
-    const { data, error } = await baseQuery.range(from, from + 999);
-    if (error) throw error;
-    if (!data || data.length === 0) break;
-    all.push(...(data as T[]));
-    if (data.length < 1000) break;
-    from += 1000;
-  }
-  return all;
-}
+import { db } from '@/db';
+import { sql } from 'drizzle-orm';
+import * as ExcelJS from 'exceljs';
 
 /**
  * Fetch report data for a given campaign.
@@ -25,35 +11,63 @@ async function fetchAll<T>(baseQuery: any): Promise<T[]> {
  * - topSkus: Array<{ sku: string; gmv: number; thumbnail: string }>
  * - creators, videos, samples, receipts (array of rows for the tabs)
  */
-export async function fetchReportData(campaignId: string) {
-  const supabase = createClient();
+export async function fetchReportData(campaignId: string | number) {
+  const cId = Number(campaignId);
 
-  // Example queries – adapt field names to actual schema
-  const [{ data: soldData }, { data: skuData }, creators, videos, samples, receipts] = await Promise.all([
-    supabase.from('sales').select('quantity').eq('campaign_id', campaignId),
-    supabase
-      .from('products')
-      .select('sku, gmv, thumbnail')
-      .eq('campaign_id', campaignId)
-      .order('gmv', { ascending: false })
-      .limit(5),
-    fetchAll<any>(supabase.from('creators').select('*').eq('campaign_id', campaignId)),
-    fetchAll<any>(supabase.from('videos').select('*').eq('campaign_id', campaignId)),
-    fetchAll<any>(supabase.from('samples').select('*').eq('campaign_id', campaignId)),
-    fetchAll<any>(supabase.from('receipts').select('*').eq('campaign_id', campaignId)),
-  ]);
+  try {
+    const [soldRes, skuRes, creatorsRes, videosRes] = await Promise.all([
+      db.execute(sql`
+        SELECT COALESCE(SUM(s.quantity), 0) as total_sold
+        FROM sales s
+        JOIN campaign_creators cc ON s.campaign_creator_id = cc.id
+        WHERE cc.campaign_id = ${cId}
+      `).catch(() => [{ total_sold: 0 }]),
+      db.execute(sql`
+        SELECT nama_produk as sku, 0 as gmv, '' as thumbnail
+        FROM skus
+        WHERE campaign_id = ${cId}
+        LIMIT 5
+      `).catch(() => []),
+      db.execute(sql`
+        SELECT c.*, cc.price, cc.approval, cc.tipe_konten
+        FROM creators c
+        JOIN campaign_creators cc ON c.id = cc.creator_id
+        WHERE cc.campaign_id = ${cId}
+      `).catch(() => []),
+      db.execute(sql`
+        SELECT v.*
+        FROM videos v
+        JOIN campaign_creators cc ON v.campaign_creator_id = cc.id
+        WHERE cc.campaign_id = ${cId}
+      `).catch(() => []),
+    ]);
 
-  const totalSold = soldData?.reduce((sum: number, row: any) => sum + (row.quantity ?? 0), 0) ?? 0;
-  const topSkus = skuData as any[];
+    const totalSold = Number((soldRes as any[])[0]?.total_sold || 0);
+    const topSkus = (skuRes as any[]) || [];
+    const creators = (creatorsRes as any[]) || [];
+    const videos = (videosRes as any[]) || [];
+    const samples: any[] = [];
+    const receipts: any[] = [];
 
-  return {
-    totalSold,
-    topSkus,
-    creators,
-    videos,
-    samples,
-    receipts,
-  };
+    return {
+      totalSold,
+      topSkus,
+      creators,
+      videos,
+      samples,
+      receipts,
+    };
+  } catch (error) {
+    console.error('Error fetching report data:', error);
+    return {
+      totalSold: 0,
+      topSkus: [],
+      creators: [],
+      videos: [],
+      samples: [],
+      receipts: [],
+    };
+  }
 }
 
 /**

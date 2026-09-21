@@ -1,21 +1,7 @@
 'use server';
 
-import { createClient } from "@supabase/supabase-js";
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder-project.supabase.co";
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder-key";
-
-function getSupabaseClient() {
-  return createClient(supabaseUrl, supabaseServiceKey, {
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false,
-    },
-    global: {
-      fetch: (url, options) => fetch(url, { ...options, cache: 'no-store' })
-    }
-  });
-}
+import { db } from '@/db';
+import { sql } from 'drizzle-orm';
 
 /**
  * Synchronize unmapped sales and organic videos for a specific product ID into a campaign.
@@ -23,7 +9,6 @@ function getSupabaseClient() {
  * strictly preserving existing creators and their status.
  */
 export async function syncUnmappedForProduct(productId: string, campaignId: number, skuId?: number) {
-  const supabase = getSupabaseClient();
   const trimmedPid = (productId || '').trim();
 
   if (!trimmedPid || !campaignId) {
@@ -33,44 +18,43 @@ export async function syncUnmappedForProduct(productId: string, campaignId: numb
   // 1. Resolve sku_id if not provided
   let resolvedSkuId = skuId;
   if (!resolvedSkuId) {
-    const { data: skuRecord } = await supabase
-      .from('skus')
-      .select('id')
-      .eq('product_id', trimmedPid)
-      .eq('campaign_id', campaignId)
-      .maybeSingle();
-    resolvedSkuId = skuRecord?.id;
+    const skuRows = await db.execute(sql`
+      SELECT id FROM skus WHERE product_id = ${trimmedPid} AND campaign_id = ${campaignId} LIMIT 1
+    `);
+    resolvedSkuId = (skuRows as any[])[0]?.id;
   }
 
   // 2. Update Sales where campaign_id is null and product_id matches
-  const { data: updatedSales, error: errSales } = await supabase
-    .from('sales')
-    .update({ 
-      campaign_id: campaignId,
-      ...(resolvedSkuId ? { sku_id: resolvedSkuId } : {})
-    } as any)
-    .is('campaign_id', null)
-    .eq('product_id', trimmedPid)
-    .select('creator_username');
-
-  if (errSales) {
-    console.error(`Error updating unmapped sales for PID ${trimmedPid}:`, errSales.message);
+  let updatedSales: any[] = [];
+  if (resolvedSkuId) {
+    const sRes = await db.execute(sql`
+      UPDATE sales
+      SET campaign_id = ${campaignId}, sku_id = ${resolvedSkuId}
+      WHERE campaign_id IS NULL AND product_id = ${trimmedPid}
+      RETURNING creator_username
+    `);
+    updatedSales = (sRes as any[]) || [];
+  } else {
+    const sRes = await db.execute(sql`
+      UPDATE sales
+      SET campaign_id = ${campaignId}
+      WHERE campaign_id IS NULL AND product_id = ${trimmedPid}
+      RETURNING creator_username
+    `);
+    updatedSales = (sRes as any[]) || [];
   }
 
   // 3. Update Organic Videos where campaign_id is null and product_id matches
-  const { data: updatedVideos, error: errVideos } = await supabase
-    .from('organic_videos')
-    .update({ campaign_id: campaignId } as any)
-    .is('campaign_id', null)
-    .eq('product_id', trimmedPid)
-    .select('content_uid, creator_username, post_time');
+  const vRes = await db.execute(sql`
+    UPDATE organic_videos
+    SET campaign_id = ${campaignId}
+    WHERE campaign_id IS NULL AND product_id = ${trimmedPid}
+    RETURNING content_uid, creator_username, post_time
+  `);
+  const updatedVideos = (vRes as any[]) || [];
 
-  if (errVideos) {
-    console.error(`Error updating unmapped videos for PID ${trimmedPid}:`, errVideos.message);
-  }
-
-  const sCount = updatedSales?.length || 0;
-  const vCount = updatedVideos?.length || 0;
+  const sCount = updatedSales.length;
+  const vCount = updatedVideos.length;
 
   if (sCount === 0 && vCount === 0) {
     return { success: true, salesUpdated: 0, videosUpdated: 0, creatorsAdded: 0 };
@@ -78,83 +62,59 @@ export async function syncUnmappedForProduct(productId: string, campaignId: numb
 
   // 4. Auto-Register Creators into creators and campaign_creators
   const uniqueUsernames = new Set<string>();
-  updatedSales?.forEach(s => { if (s.creator_username) uniqueUsernames.add(s.creator_username.toLowerCase().trim()); });
-  updatedVideos?.forEach(v => { if (v.creator_username) uniqueUsernames.add(v.creator_username.toLowerCase().trim()); });
+  updatedSales.forEach(s => { if (s.creator_username) uniqueUsernames.add(s.creator_username.toLowerCase().trim()); });
+  updatedVideos.forEach(v => { if (v.creator_username) uniqueUsernames.add(v.creator_username.toLowerCase().trim()); });
 
   const usernames = Array.from(uniqueUsernames).filter(Boolean);
   let newCcCount = 0;
 
   if (usernames.length > 0) {
-    // a. Check creators table
-    const existingCreatorMap = new Map<string, number>();
-    for (let i = 0; i < usernames.length; i += 200) {
-      const chunk = usernames.slice(i, i + 200);
-      const { data: existing } = await supabase.from('creators').select('id, username').in('username', chunk);
-      existing?.forEach(c => existingCreatorMap.set(c.username.toLowerCase(), c.id));
-    }
+    for (const u of usernames) {
+      const cRes = await db.execute(sql`
+        INSERT INTO creators (username, nama_asli, added_by, link_account)
+        VALUES (${u}, ${u}, 'system', ${`https://tiktok.com/@${u}`})
+        ON CONFLICT (username) DO UPDATE SET username = EXCLUDED.username
+        RETURNING id
+      `);
+      const creatorId = (cRes as any[])[0]?.id;
 
-    const missingCreators = usernames.filter(u => !existingCreatorMap.has(u));
-    if (missingCreators.length > 0) {
-      for (let i = 0; i < missingCreators.length; i += 200) {
-        const chunk = missingCreators.slice(i, i + 200);
-        const { data: inserted } = await supabase.from('creators').insert(
-          chunk.map(u => ({ username: u, nama_asli: u, added_by: 'system' }))
-        ).select('id, username');
-        inserted?.forEach(c => existingCreatorMap.set(c.username.toLowerCase(), c.id));
-      }
-    }
+      if (creatorId) {
+        const ccExists = await db.execute(sql`
+          SELECT id, assigned_sku_ids FROM campaign_creators
+          WHERE campaign_id = ${campaignId} AND creator_id = ${creatorId}
+          LIMIT 1
+        `);
+        const existingCc = (ccExists as any[])[0];
 
-    // b. Check campaign_creators
-    const creatorIds = usernames.map(u => existingCreatorMap.get(u)).filter(Boolean) as number[];
-    if (creatorIds.length > 0) {
-      const existingCcMap = new Map<number, any>();
-      for (let i = 0; i < creatorIds.length; i += 200) {
-        const chunk = creatorIds.slice(i, i + 200);
-        const { data: existingCcs } = await supabase.from('campaign_creators')
-          .select('id, creator_id, assigned_sku_ids')
-          .eq('campaign_id', campaignId)
-          .in('creator_id', chunk);
-        existingCcs?.forEach(cc => existingCcMap.set(cc.creator_id, cc));
-      }
-
-      // Update existing ccs if skuId needs to be appended
-      if (resolvedSkuId) {
-        for (const [cId, cc] of existingCcMap.entries()) {
-          const skus = cc.assigned_sku_ids || [];
-          if (!skus.includes(resolvedSkuId)) {
-            await supabase.from('campaign_creators').update({
-              assigned_sku_ids: [...skus, resolvedSkuId]
-            }).eq('id', cc.id);
+        if (existingCc) {
+          if (resolvedSkuId) {
+            const currentSkus: number[] = existingCc.assigned_sku_ids || [];
+            if (!currentSkus.includes(resolvedSkuId)) {
+              const updatedSkus = [...currentSkus, resolvedSkuId];
+              await db.execute(sql`
+                UPDATE campaign_creators
+                SET assigned_sku_ids = ${JSON.stringify(updatedSkus)}::jsonb
+                WHERE id = ${existingCc.id}
+              `);
+            }
           }
+        } else {
+          const skuPayload = resolvedSkuId ? [resolvedSkuId] : [];
+          await db.execute(sql`
+            INSERT INTO campaign_creators (
+              campaign_id, creator_id, tier, assigned_sku_ids, approval, client_approval, status_bayar, qty_vt, price
+            ) VALUES (
+              ${campaignId}, ${creatorId}, 'Nano', ${JSON.stringify(skuPayload)}::jsonb, 'pending', 'not_required', 'belum', 1, 0
+            )
+          `);
+          newCcCount++;
         }
-      }
-
-      // Insert new ccs for creators not yet in campaign_creators
-      const missingCcs = creatorIds.filter(cId => !existingCcMap.has(cId));
-      if (missingCcs.length > 0) {
-        const newCcs = missingCcs.map(cId => ({
-          campaign_id: campaignId,
-          creator_id: cId,
-          tier: 'Nano',
-          assigned_sku_ids: resolvedSkuId ? [resolvedSkuId] : [],
-          approval: 'pending',
-          client_approval: 'not_required',
-          status_bayar: 'belum',
-          qty_vt: 1,
-          price: 0
-        }));
-
-        for (let i = 0; i < newCcs.length; i += 200) {
-          const chunk = newCcs.slice(i, i + 200);
-          await supabase.from('campaign_creators').insert(chunk);
-        }
-        newCcCount = missingCcs.length;
       }
     }
   }
 
   // 5. Auto-assign to videos table (with valid urutan)
-  if (updatedVideos && updatedVideos.length > 0) {
+  if (updatedVideos.length > 0) {
     const uniqueMap = new Map<string, any>();
     updatedVideos.forEach(v => {
       if (v.content_uid && !uniqueMap.has(v.content_uid)) {
@@ -163,70 +123,43 @@ export async function syncUnmappedForProduct(productId: string, campaignId: numb
     });
     const uniqueVideos = Array.from(uniqueMap.values());
 
-    if (uniqueVideos.length > 0) {
-      const uids = uniqueVideos.map(v => v.content_uid);
-      const existingUids = new Set<string>();
-      for (let i = 0; i < uids.length; i += 200) {
-        const chunk = uids.slice(i, i + 200);
-        const { data: existingVids } = await supabase.from('videos').select('content_uid').in('content_uid', chunk);
-        existingVids?.forEach(v => existingUids.add(v.content_uid));
-      }
+    for (const v of uniqueVideos) {
+      if (!v.content_uid || !v.creator_username) continue;
+      const cleanUname = v.creator_username.toLowerCase().trim();
 
-      const missingVideos = uniqueVideos.filter(v => !existingUids.has(v.content_uid));
-      if (missingVideos.length > 0) {
-        const creatorUsernames = Array.from(new Set(missingVideos.map(m => m.creator_username?.toLowerCase()).filter(Boolean)));
-        const ccMap: Record<string, number> = {};
-        for (let i = 0; i < creatorUsernames.length; i += 200) {
-          const chunk = creatorUsernames.slice(i, i + 200);
-          const { data: ccs } = await supabase.from('campaign_creators')
-            .select('id, creators!inner(username)')
-            .eq('campaign_id', campaignId)
-            .in('creators.username', chunk);
-          ccs?.forEach((cc: any) => {
-            ccMap[cc.creators.username.toLowerCase()] = cc.id;
-          });
-        }
+      const ccRes = await db.execute(sql`
+        SELECT cc.id
+        FROM campaign_creators cc
+        JOIN creators cr ON cc.creator_id = cr.id
+        WHERE cc.campaign_id = ${campaignId} AND LOWER(cr.username) = ${cleanUname}
+        LIMIT 1
+      `);
+      const ccId = (ccRes as any[])[0]?.id;
 
-        const ccIds = Object.values(ccMap);
-        const maxUrutanMap: Record<number, number> = {};
-        if (ccIds.length > 0) {
-          for (let i = 0; i < ccIds.length; i += 200) {
-            const chunk = ccIds.slice(i, i + 200);
-            const { data: existingUrutan } = await supabase.from('videos')
-              .select('campaign_creator_id, urutan')
-              .in('campaign_creator_id', chunk);
-            existingUrutan?.forEach((v: any) => {
-              if ((v.urutan || 0) > (maxUrutanMap[v.campaign_creator_id] || 0)) {
-                maxUrutanMap[v.campaign_creator_id] = v.urutan;
-              }
-            });
-          }
-        }
+      if (ccId) {
+        const vidExists = await db.execute(sql`
+          SELECT id FROM videos WHERE content_uid = ${v.content_uid} LIMIT 1
+        `);
+        if ((vidExists as any[]).length === 0) {
+          const maxUrutanRes = await db.execute(sql`
+            SELECT COALESCE(MAX(urutan), 0) as max_u FROM videos WHERE campaign_creator_id = ${ccId}
+          `);
+          const nextUrutan = ((maxUrutanRes as any[])[0]?.max_u || 0) + 1;
 
-        const newVideosToInsert: any[] = [];
-        for (const missing of missingVideos) {
-          const ccId = ccMap[missing.creator_username?.toLowerCase()];
-          if (ccId) {
-            const nextUrutan = (maxUrutanMap[ccId] || 0) + 1;
-            maxUrutanMap[ccId] = nextUrutan;
-            newVideosToInsert.push({
-              campaign_creator_id: ccId,
-              content_uid: missing.content_uid,
-              link_video: `https://www.tiktok.com/@${missing.creator_username}/video/${missing.content_uid}`,
-              vt_approval: 'pending',
-              urutan: nextUrutan,
-              sku_id: resolvedSkuId || null,
-              concept: null,
-              created_at: missing.post_time || new Date().toISOString()
-            });
-          }
-        }
-
-        if (newVideosToInsert.length > 0) {
-          for (let i = 0; i < newVideosToInsert.length; i += 100) {
-            const chunk = newVideosToInsert.slice(i, i + 100);
-            await supabase.from('videos').insert(chunk);
-          }
+          await db.execute(sql`
+            INSERT INTO videos (
+              campaign_creator_id, content_uid, link_video, vt_approval, urutan, sku_id, concept, created_at
+            ) VALUES (
+              ${ccId},
+              ${v.content_uid},
+              ${`https://www.tiktok.com/@${cleanUname}/video/${v.content_uid}`},
+              'pending',
+              ${nextUrutan},
+              ${resolvedSkuId || null},
+              null,
+              ${v.post_time ? new Date(v.post_time) : new Date()}
+            )
+          `);
         }
       }
     }
@@ -244,12 +177,10 @@ export async function syncUnmappedForProduct(productId: string, campaignId: numb
  * Scan and synchronize ALL registered SKUs in the database against unmapped sales and videos.
  */
 export async function syncAllUnmappedGlobal() {
-  const supabase = getSupabaseClient();
-  const { data: allSkus, error: skuErr } = await supabase.from('skus').select('id, product_id, campaign_id, nama_produk');
-
-  if (skuErr || !allSkus) {
-    return { success: false, error: skuErr?.message || "Gagal mengambil daftar SKU" };
-  }
+  const skuRows = await db.execute(sql`
+    SELECT id, product_id, campaign_id, nama_produk FROM skus
+  `);
+  const allSkus = (skuRows as any[]) || [];
 
   let totalSales = 0;
   let totalVideos = 0;

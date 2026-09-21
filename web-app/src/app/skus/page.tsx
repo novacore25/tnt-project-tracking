@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/Dialog";
 import { useState } from "react";
 import { Edit2, Trash2, ExternalLink, RefreshCcw, Loader2 } from "lucide-react";
-import { createClient } from "@/utils/supabase/client";
+import { syncOrphanedSalesAction } from "@/app/actions/importActions";
 
 export default function SkuPage() {
   const { skus, campaigns, addSku, updateSku, deleteSku } = useDatabaseStore();
@@ -95,61 +95,9 @@ export default function SkuPage() {
     if (!confirm("Fitur ini akan menyinkronkan data penjualan masa lalu yang masih berstatus 'Tertunda' (tanpa Campaign). Proses ini memakan waktu beberapa detik. Lanjutkan?")) return;
     
     setIsSyncing(true);
-    const supabase = createClient();
     try {
-      const { data: orphanedSales, error: errFetch } = await supabase
-        .from('sales')
-        .select('*')
-        .is('campaign_id', null);
-        
-      if (errFetch) throw errFetch;
-      
-      if (!orphanedSales || orphanedSales.length === 0) {
-        alert("Semua data sudah tersinkronisasi. Tidak ada data yang tertunda.");
-        setIsSyncing(false);
-        return;
-      }
-
-      const skuMapping: Record<string, number> = {};
-      const tiktokToCampaigns: Record<string, number[]> = {};
-
-      skus?.forEach(s => {
-        if (s.product_id) {
-          skuMapping[s.product_id.toString()] = s.campaign_id;
-        }
-      });
-
-      campaigns?.forEach(c => {
-        if (c.tiktok_campaign_ids && c.tiktok_campaign_ids.length > 0) {
-          c.tiktok_campaign_ids.forEach(tid => {
-            if (!tiktokToCampaigns[tid]) tiktokToCampaigns[tid] = [];
-            tiktokToCampaigns[tid].push(c.id);
-          });
-        }
-      });
-
-      let updatedCount = 0;
-      for (const sale of orphanedSales) {
-        const rawProductId = sale.product_id?.toString() || '';
-        const tiktokCampaignId = sale.tiktok_campaign_id?.toString() || '';
-        let mappedCampaignId = null;
-
-        if (rawProductId && skuMapping[rawProductId]) {
-          mappedCampaignId = skuMapping[rawProductId];
-        } else if (tiktokCampaignId && tiktokToCampaigns[tiktokCampaignId]) {
-          const possibleCampaigns = tiktokToCampaigns[tiktokCampaignId];
-          if (possibleCampaigns.length === 1) {
-             mappedCampaignId = possibleCampaigns[0];
-          }
-        }
-
-        if (mappedCampaignId) {
-          await supabase.from('sales').update({ campaign_id: mappedCampaignId }).eq('id', sale.id);
-          updatedCount++;
-        }
-      }
-
-      alert(`Sinkronisasi selesai! Berhasil memetakan ulang ${updatedCount} baris data dari total ${orphanedSales.length} data yang tertunda.`);
+      const res = await syncOrphanedSalesAction();
+      alert(`Sinkronisasi selesai! Berhasil memetakan ulang ${res.updatedCount} baris data penjualan.`);
     } catch (err: any) {
       alert("Terjadi kesalahan saat sinkronisasi: " + err.message);
     } finally {

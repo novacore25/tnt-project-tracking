@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect, useMemo } from "react";
 import { useDatabaseStore } from "@/store/useDatabaseStore";
-import { createClient } from "@/utils/supabase/client";
 import { Search, Radio, Loader2, ChevronLeft, ChevronRight, User, Calendar, Users, Eye, ShoppingCart, DollarSign, ChevronDown, ChevronUp, Clock } from 'lucide-react';
 import { useCampaignFilter } from "@/providers/CampaignFilterProvider";
 

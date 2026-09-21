@@ -5,7 +5,8 @@ import { LayoutDashboard, Users, FolderKanban, Receipt, Wallet, Settings, Packag
 import { usePathname } from 'next/navigation';
 import { cn } from '@/utils/cn';
 import { useState, useEffect } from 'react';
-import { createClient } from '@/utils/supabase/client';
+import { useAuth } from '@/providers/AuthProvider';
+import { signOut } from 'next-auth/react';
 
 const navItems = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard, activePhase: true },
@@ -21,21 +22,11 @@ const navItems = [
 
 export function Sidebar() {
   const pathname = usePathname();
-  const [profile, setProfile] = useState<any>(null);
+  const { profile } = useAuth();
   // Default to false (collapsed) per user request
   const [isExpanded, setIsExpanded] = useState(false);
-  const supabase = createClient();
 
   useEffect(() => {
-    const fetchProfile = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single();
-        setProfile(data);
-      }
-    };
-    fetchProfile();
-    
     // Optional: Load state from local storage if desired, but defaults to false
     const savedState = localStorage.getItem('sidebar_expanded');
     if (savedState) {
@@ -50,8 +41,7 @@ export function Sidebar() {
   };
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
-    window.location.href = "/login";
+    await signOut({ callbackUrl: '/login' });
   };
 
   const [hoveredItem, setHoveredItem] = useState<{ name: string, top: number } | null>(null);

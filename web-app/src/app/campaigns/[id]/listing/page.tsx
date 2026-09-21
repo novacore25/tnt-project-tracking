@@ -10,7 +10,6 @@ import { useParams } from "next/navigation";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { exportToCSV } from "@/utils/exportCsv";
 import * as XLSX from "xlsx";
-import { createClient } from "@/utils/supabase/client";
 import { useAuth } from "@/providers/AuthProvider";
 import { useRouter } from "next/navigation";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/Dialog";
@@ -19,7 +18,6 @@ import { useCampaignFilter } from "@/providers/CampaignFilterProvider";
 import { NotesTimeline } from "@/components/NotesTimeline";
 import { CreatorRow } from "./CreatorRow";
 
-const supabase = createClient();
 const PAGE_SIZE = 100;
 
 const extractCampaignSnapshot = (creator: any, campaignCreatedAt?: string) => {

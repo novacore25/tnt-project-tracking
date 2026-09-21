@@ -4,7 +4,6 @@ import React, { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { createClient } from "@/utils/supabase/client";
 import { ArrowLeft, Save, Plus, AlertCircle, CheckCircle2, Wand2, Loader2, Download } from "lucide-react";
 import * as XLSX from "xlsx";
 import { useDatabaseStore } from "@/store/useDatabaseStore";
@@ -95,7 +94,6 @@ export default function SpreadsheetImportCreatorClient() {
   const rawParams = useParams();
   const rawId = rawParams?.id;
   const campaignId = Number(Array.isArray(rawId) ? rawId[0] : rawId);
-  const supabase = createClient();
   const { campaigns } = useDatabaseStore();
   const { profile, canEditCampaign } = useAuth();
   

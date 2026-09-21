@@ -6,9 +6,9 @@ import { Button } from "@/components/ui/Button";
 import { Upload, AlertCircle, CheckCircle2, FileSpreadsheet, Loader2, BarChart3, Users, Tags, ArrowRight, XCircle, ChevronDown, ChevronRight } from "lucide-react";
 import Papa from "papaparse";
 import * as XLSX from "xlsx";
-import { createClient } from "@/utils/supabase/client";
 import { useDatabaseStore } from "@/store/useDatabaseStore";
 import { syncUnmappedForProduct } from "@/lib/syncUnmapped";
+import { fetchImportMetadataAction, insertCustomSkuAction, executeSalesImportAction } from "@/app/actions/importActions";
 
 type PreviewRow = {
   campaign_id: number | null;
@@ -117,7 +117,6 @@ export default function OrganicImport({ mode = 'sales' }: { mode?: 'sales' | 'vi
   
   // Ambil tabel SKU dari store global
   const { skus, campaigns, fetchData } = useDatabaseStore();
-  const supabase = createClient();
   
   // State for inline SKU registration
   const [skuCampaignSelect, setSkuCampaignSelect] = useState<Record<string, string>>({});
@@ -211,12 +210,11 @@ export default function OrganicImport({ mode = 'sales' }: { mode?: 'sales' | 'vi
     
     setIsRegisteringSku(productId);
     try {
-      const { data: newSku, error } = await supabase.from('skus').insert({
+      const newSku = await insertCustomSkuAction({
         product_id: productId,
         nama_produk: productName,
         campaign_id: parseInt(campaignId)
-      }).select('id').single();
-      if (error) throw error;
+      });
       
       // Sinkronisasi otomatis data lama yang belum terpetakan
       await syncUnmappedForProduct(productId, parseInt(campaignId), newSku?.id);
@@ -245,31 +243,7 @@ export default function OrganicImport({ mode = 'sales' }: { mode?: 'sales' | 'vi
     const skuIdMapping: Record<string, number> = {};
     const tiktokToCampaigns: Record<string, number[]> = {};
 
-    let localSkus: any[] = [];
-    const { count: countSkus } = await supabase.from('skus').select('id', { count: 'exact', head: true });
-    if (countSkus && countSkus > 0) {
-      const promises = [];
-      for (let i = 0; i < countSkus; i += 1000) {
-        promises.push(supabase.from('skus').select('*').range(i, i + 999));
-      }
-      const results = await Promise.all(promises);
-      results.forEach(res => {
-        if (res.data) localSkus = localSkus.concat(res.data);
-      });
-    }
-
-    let localCampaigns: any[] = [];
-    const { count: countCamps } = await supabase.from('campaigns').select('id', { count: 'exact', head: true });
-    if (countCamps && countCamps > 0) {
-      const promises = [];
-      for (let i = 0; i < countCamps; i += 1000) {
-        promises.push(supabase.from('campaigns').select('*').range(i, i + 999));
-      }
-      const results = await Promise.all(promises);
-      results.forEach(res => {
-        if (res.data) localCampaigns = localCampaigns.concat(res.data);
-      });
-    }
+    const { skus: localSkus, campaigns: localCampaigns } = await fetchImportMetadataAction();
 
     localSkus.forEach(s => {
       if (s.product_id) {
@@ -652,265 +626,16 @@ export default function OrganicImport({ mode = 'sales' }: { mode?: 'sales' | 'vi
     
     const uniqueSalesPayload = Array.from(salesMap.values());
     const uniqueVideoPayload = Array.from(videoMap.values());
-    const uniquePayload = [...uniqueSalesPayload, ...uniqueVideoPayload];
-    const total = uniquePayload.length;
-    const chunkSize = 200; // Dikurangi jadi 200 untuk mencegah Payload Too Large / Failed to fetch
+    const total = uniqueSalesPayload.length + uniqueVideoPayload.length;
     
-    
-    for (let i = 0; i < total; i += chunkSize) {
-      const chunk = uniquePayload.slice(i, i + chunkSize);
-      
-      const salesChunk = chunk
-        .filter(c => c.order_id)
-        .map(c => {
-          const { video_views, video_likes, duration_str, video_product_rpm, ...salesData } = c;
-          return salesData;
-        });
-
-      const videoChunk = chunk
-        .filter(c => !c.order_id && c.content_uid)
-        .map(c => ({
-          content_uid: c.content_uid,
-          creator_username: c.creator_username,
-          post_time: c.tanggal,
-          content_type: c.content_type,
-          video_views: c.video_views,
-          video_likes: c.video_likes,
-          duration_str: c.duration_str,
-          video_product_rpm: c.video_product_rpm,
-          campaign_id: c.campaign_id,
-          product_id: c.product_id,
-          tiktok_campaign_id: c.tiktok_campaign_id,
-          raw_data: c.raw_data
-        }));
-      
-      const { error } = salesChunk.length > 0 ? await supabase.from('sales').upsert(salesChunk as any, { onConflict: 'order_id' }) : { error: null };
-      
-      if (videoChunk.length > 0) {
-        // Fetch existing videos to ensure we don't shrink views/likes with a partial date report
-        const uids = videoChunk.map(v => v.content_uid);
-        const { data: existingVids } = await supabase.from('organic_videos').select('content_uid, product_id, video_views, video_likes').in('content_uid', uids);
-        const existingMap = new Map();
-        if (existingVids) {
-          existingVids.forEach(ev => existingMap.set(`${ev.content_uid}_${ev.product_id || 'unknown'}`, ev));
-        }
-        
-        const finalVideoChunk = videoChunk.map(v => {
-          const ex = existingMap.get(`${v.content_uid}_${v.product_id || 'unknown'}`);
-          if (ex) {
-            return {
-              ...v,
-              video_views: Math.max(v.video_views || 0, ex.video_views || 0),
-              video_likes: Math.max(v.video_likes || 0, ex.video_likes || 0)
-            };
-          }
-          return v;
-        });
-
-        await supabase.from('organic_videos').upsert(finalVideoChunk as any, { onConflict: 'content_uid, product_id' });
-      }
-
-      if (error) {
-        errors.push(`Gagal batch baris ${i}: ${error.message}`);
-      } else {
-        successCount += chunk.length;
-      }
-      
-      setProgress({ current: Math.min(i + chunkSize, total), total });
-    }
-
-    // ====== AUTO-ASSIGN SKUS ======
     try {
-      const uniqueUsernames = Array.from(new Set(uniquePayload.map(p => p.creator_username).filter(Boolean)));
-      if (uniqueUsernames.length > 0) {
-        // 1. Fetch existing creators in chunks (case-insensitive match)
-        const creatorMap = new Map();
-        for (let i = 0; i < uniqueUsernames.length; i += 200) {
-          const chunk = uniqueUsernames.slice(i, i + 200);
-          // First: exact match lookup
-          const { data: chunkExisting } = await supabase.from('creators').select('id, username').in('username', chunk);
-          if (chunkExisting) {
-            chunkExisting.forEach(c => creatorMap.set(c.username.toLowerCase(), c.id));
-          }
-          // Second: for any still-missing usernames, try case-insensitive (ilike) lookup
-          const stillMissing = chunk.filter(u => !creatorMap.has(u.toLowerCase()));
-          for (const uname of stillMissing) {
-            const { data: ilikeResult } = await supabase.from('creators').select('id, username').ilike('username', uname).limit(1);
-            if (ilikeResult && ilikeResult.length > 0) {
-              creatorMap.set(ilikeResult[0].username.toLowerCase(), ilikeResult[0].id);
-            }
-          }
-        }
-        
-        // 2. Insert missing creators in chunks (only if truly missing after case-insensitive check)
-        const missingUsernames = uniqueUsernames.filter(u => !creatorMap.has(u.toLowerCase()));
-        if (missingUsernames.length > 0) {
-          for (let i = 0; i < missingUsernames.length; i += 500) {
-            const chunk = missingUsernames.slice(i, i + 500);
-            const { data: newCreators, error: errInsert } = await supabase.from('creators').insert(
-              chunk.map(u => ({ username: u, added_by: 'system' }))
-            ).select('id, username');
-            if (!errInsert && newCreators) {
-              newCreators.forEach(c => creatorMap.set(c.username.toLowerCase(), c.id));
-            }
-          }
-        }
-
-
-        // 3. Group by campaign -> creator -> set of sku_ids
-        const assignments: Record<number, Record<number, Set<number>>> = {};
-        for (const item of uniquePayload) {
-          const cId = creatorMap.get(item.creator_username?.toLowerCase());
-          if (cId && item.campaign_id) {
-            if (!assignments[item.campaign_id]) assignments[item.campaign_id] = {};
-            if (!assignments[item.campaign_id][cId]) assignments[item.campaign_id][cId] = new Set();
-            if (item.sku_id) assignments[item.campaign_id][cId].add(item.sku_id);
-          }
-        }
-
-        // 4. Update campaign_creators
-        for (const campIdStr of Object.keys(assignments)) {
-          const campId = parseInt(campIdStr);
-          const creatorIds = Object.keys(assignments[campId]).map(Number);
-          
-          if (creatorIds.length === 0) continue;
-
-          const ccMap = new Map();
-          for (let i = 0; i < creatorIds.length; i += 200) {
-            const chunk = creatorIds.slice(i, i + 200);
-            const { data: existingCc } = await supabase.from('campaign_creators')
-              .select('id, creator_id, assigned_sku_ids')
-              .eq('campaign_id', campId)
-              .in('creator_id', chunk);
-            if (existingCc) {
-              existingCc.forEach(cc => ccMap.set(cc.creator_id, cc));
-            }
-          }
-          
-          const newCcsToInsert = [];
-
-          for (const cId of creatorIds) {
-            const newSkus = Array.from(assignments[campId][cId]);
-            const existing = ccMap.get(cId);
-            
-            if (existing) {
-              const currentSkus = existing.assigned_sku_ids || [];
-              const merged = Array.from(new Set([...currentSkus, ...newSkus]));
-              if (merged.length !== currentSkus.length) {
-                await supabase.from('campaign_creators').update({ assigned_sku_ids: merged }).eq('id', existing.id);
-              }
-            } else {
-              newCcsToInsert.push({
-                campaign_id: campId,
-                creator_id: cId,
-                tier: 'Nano',
-                assigned_sku_ids: newSkus,
-                approval: 'pending',
-                client_approval: 'not_required',
-                status_bayar: 'belum',
-                qty_vt: 1,
-                price: 0
-              });
-            }
-          }
-          if (newCcsToInsert.length > 0) {
-            for (let i = 0; i < newCcsToInsert.length; i += 500) {
-              const chunk = newCcsToInsert.slice(i, i + 500);
-              await supabase.from('campaign_creators').insert(chunk);
-            }
-          }
-        }
+      const res = await executeSalesImportAction(uniqueSalesPayload, uniqueVideoPayload, mode === 'video');
+      if (res.success) {
+        successCount = res.salesInserted + res.videosInserted;
       }
-      
-      // 5. Auto Populate Videos Table (So they appear in Pending ber-Video)
-      if (mode === 'video') {
-        const uniqueVideos = Array.from(new Set(uniquePayload.map(p => p.content_uid).filter(Boolean)));
-        if (uniqueVideos.length > 0) {
-          const existingUids = new Set<string>();
-        for (let i = 0; i < uniqueVideos.length; i += 200) {
-          const chunk = uniqueVideos.slice(i, i + 200);
-          const { data: chunkExisting } = await supabase.from('videos').select('content_uid').in('content_uid', chunk);
-          if (chunkExisting) {
-            chunkExisting.forEach(v => existingUids.add(v.content_uid));
-          }
-        }
-        const missingVideos = uniquePayload.filter(p => p.content_uid && !existingUids.has(p.content_uid) && p.campaign_id);
-        
-        if (missingVideos.length > 0) {
-          const campIds = Array.from(new Set(missingVideos.map(m => m.campaign_id)));
-          const creatorUsernames = Array.from(new Set(missingVideos.map(m => m.creator_username)));
-          
-          const allCcs: any[] = [];
-          for (let i = 0; i < creatorUsernames.length; i += 200) {
-            const chunk = creatorUsernames.slice(i, i + 200);
-            const { data: ccs } = await supabase.from('campaign_creators')
-              .select('id, campaign_id, creators!inner(username)')
-              .in('campaign_id', campIds)
-              .in('creators.username', chunk);
-            if (ccs) allCcs.push(...ccs);
-          }
-            
-          const ccMapping: Record<string, number> = {};
-          allCcs.forEach((cc: any) => {
-            const key = `${cc.campaign_id}_${cc.creators.username.toLowerCase()}`;
-            ccMapping[key] = cc.id;
-          });
-          
-          // Fetch existing videos to get current max urutan for each creator
-          const maxUrutanMap: Record<number, number> = {};
-          const ccIdsArray = Object.values(ccMapping);
-          if (ccIdsArray.length > 0) {
-            for (let i = 0; i < ccIdsArray.length; i += 200) {
-              const chunk = ccIdsArray.slice(i, i + 200);
-              const { data: existingVids } = await supabase.from('videos')
-                .select('campaign_creator_id, urutan')
-                .in('campaign_creator_id', chunk);
-              if (existingVids) {
-                existingVids.forEach((v: any) => {
-                  const currentMax = maxUrutanMap[v.campaign_creator_id] || 0;
-                  if (v.urutan > currentMax) {
-                    maxUrutanMap[v.campaign_creator_id] = v.urutan;
-                  }
-                });
-              }
-            }
-          }
-          
-          const newVideosToInsert: any[] = [];
-          const seenVids = new Set();
-          
-          for (const missing of missingVideos) {
-            const key = `${missing.campaign_id}_${missing.creator_username.toLowerCase()}`;
-            const ccId = ccMapping[key];
-            if (ccId && !seenVids.has(missing.content_uid)) {
-              seenVids.add(missing.content_uid);
-              const nextUrutan = (maxUrutanMap[ccId] || 0) + 1;
-              maxUrutanMap[ccId] = nextUrutan;
-              newVideosToInsert.push({
-                campaign_creator_id: ccId,
-                content_uid: missing.content_uid,
-                link_video: `https://www.tiktok.com/@${missing.creator_username}/video/${missing.content_uid}`,
-                vt_approval: 'pending',
-                urutan: nextUrutan,
-                sku_id: missing.sku_id || null,
-                concept: null,
-                created_at: missing.tanggal
-              });
-            }
-          }
-          if (newVideosToInsert.length > 0) {
-            for (let i = 0; i < newVideosToInsert.length; i += 500) {
-              const chunk = newVideosToInsert.slice(i, i + 500);
-              await supabase.from('videos').insert(chunk);
-            }
-          }
-        }
-      }
-      }
-    } catch (autoAssignErr: any) {
-      errors.push(`Gagal Auto-Assign Produk/Video: ${autoAssignErr.message}`);
+    } catch (err: any) {
+      errors.push(`Gagal import data: ${err.message || err}`);
     }
-    // ==============================
     
     setResult({ success: successCount, skipped: total - successCount, errors });
     setStep(4);

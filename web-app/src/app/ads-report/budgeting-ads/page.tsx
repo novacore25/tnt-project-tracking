@@ -3,14 +3,19 @@
 import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/Table";
-import { createClient } from "@/utils/supabase/client";
 import { ArrowLeft, Plus, DollarSign, Wallet, TrendingUp, AlertCircle, History, Trash2, ChevronDown, ChevronUp } from "lucide-react";
 import Link from "next/link";
 import { useDatabaseStore } from "@/store/useDatabaseStore";
+import {
+  fetchAdsBudgetingDataAction,
+  addAdsTopupAction,
+  deleteAdsTopupAction,
+  addAdsAllocationAction,
+  deleteAdsAllocationAction
+} from "@/app/ads-report/actions";
 
 export default function BudgetingAdsPage() {
   const { campaigns } = useDatabaseStore();
-  const supabase = createClient();
   
   const [topups, setTopups] = useState<any[]>([]);
   const [allocations, setAllocations] = useState<any[]>([]);
@@ -45,16 +50,10 @@ export default function BudgetingAdsPage() {
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      const [resTopups, resAlloc, resSpend] = await Promise.all([
-        supabase.from("ads_topups").select("*").order("tanggal", { ascending: false }),
-        supabase.from("ads_allocations").select("*").order("tanggal", { ascending: false }),
-        // get spend per campaign - need ad_id, tanggal, cost_usd, kurs to pick latest date per ad
-        supabase.from("ads_performance").select("campaign_id, ad_id, tanggal, cost_usd, kurs")
-      ]);
-      
-      if (resTopups.data) setTopups(resTopups.data);
-      if (resAlloc.data) setAllocations(resAlloc.data);
-      if (resSpend.data) setAdsSpend(resSpend.data);
+      const data = await fetchAdsBudgetingDataAction();
+      setTopups(data.topups);
+      setAllocations(data.allocations);
+      setAdsSpend(data.performance);
     } catch (error) {
       console.error(error);
     } finally {
@@ -67,23 +66,23 @@ export default function BudgetingAdsPage() {
   }, []);
 
   // -- Kalkulasi Metrik Global --
-  const totalTopupUsd = topups.reduce((acc, curr) => acc + Number(curr.nominal_usd), 0);
-  const totalTopupIdr = topups.reduce((acc, curr) => acc + Number(curr.nominal_idr), 0);
+  const totalTopupUsd = topups.reduce((acc, curr) => acc + Number(curr.nominal_usd || curr.nominal_topup_usd || 0), 0);
+  const totalTopupIdr = topups.reduce((acc, curr) => acc + Number(curr.nominal_idr || curr.nominal_topup_idr || 0), 0);
   
   const totalAllocatedUsd = allocations.reduce((acc, curr) => acc + Number(curr.alokasi_usd), 0);
-  const totalAllocatedIdr = allocations.reduce((acc, curr) => acc + Number(curr.alokasi_idr), 0);
+  const totalAllocatedIdr = allocations.reduce((acc, curr) => acc + Number(curr.alokasi_idr || 0), 0);
   
   const idleFundsUsd = totalTopupUsd - totalAllocatedUsd;
 
   // -- Kalkulasi Per Campaign --
   const campaignBalances = campaigns.map(camp => {
     // total alokasi ke campaign ini
-    const campAllocations = allocations.filter(a => a.campaign_id === camp.id);
+    const campAllocations = allocations.filter(a => Number(a.campaign_id) === Number(camp.id));
     const allocatedUsd = campAllocations.reduce((acc, curr) => acc + Number(curr.alokasi_usd), 0);
-    const allocatedIdr = campAllocations.reduce((acc, curr) => acc + Number(curr.alokasi_idr), 0);
+    const allocatedIdr = campAllocations.reduce((acc, curr) => acc + Number(curr.alokasi_idr || 0), 0);
     
     // total spend campaign ini - ambil HANYA tanggal terakhir per ad_id
-    const campSpends = adsSpend.filter(s => s.campaign_id === camp.id);
+    const campSpends = adsSpend.filter(s => Number(s.campaign_id) === Number(camp.id));
     
     // Group by ad_id, lalu ambil baris dengan tanggal terbaru
     const adIdMap = new Map<string, any>();
@@ -99,18 +98,17 @@ export default function BudgetingAdsPage() {
     // Jumlahkan cost_usd dari tanggal terakhir per ad_id
     let spentUsd = 0;
     let spentIdr = 0;
-    for (const [, latestRow] of adIdMap) {
-      const costUsd = Number(latestRow.cost_usd || 0);
-      let kurs = Number(latestRow.kurs || 16000);
+    for (const ad of adIdMap.values()) {
+      let kurs = Number(ad.kurs || 16000);
       if (kurs < 1000) kurs = kurs * 1000;
-      
-      spentUsd += costUsd;
-      spentIdr += costUsd * kurs;
+      spentUsd += Number(ad.cost_usd || 0);
+      spentIdr += Number(ad.cost_usd || 0) * kurs;
     }
     
     const remainingUsd = allocatedUsd - spentUsd;
-    
-    const plafonIdr = camp.budget_ads_plafon || 0;
+    const remainingIdr = allocatedIdr - spentIdr;
+
+    const plafonIdr = Number(camp.budget_ads_plafon || 0);
     const sisaPlafonIdr = plafonIdr - allocatedIdr;
     
     return {
@@ -120,8 +118,10 @@ export default function BudgetingAdsPage() {
       spentUsd,
       spentIdr,
       remainingUsd,
+      remainingIdr,
       plafonIdr,
-      sisaPlafonIdr
+      sisaPlafonIdr,
+      allocations: campAllocations
     };
   });
   
@@ -139,20 +139,19 @@ export default function BudgetingAdsPage() {
     
     const kurs = idr / usd;
     
-    const { error } = await supabase.from("ads_topups").insert({
-      tanggal: topupDate,
-      nominal_idr: idr,
-      nominal_usd: usd,
-      kurs_topup: kurs,
-      catatan: topupNote
-    });
-    
-    if (error) {
-      alert(error.message);
-    } else {
+    try {
+      await addAdsTopupAction({
+        tanggal: topupDate,
+        nominal_topup_idr: idr,
+        nominal_topup_usd: usd,
+        kurs: kurs,
+        keterangan: topupNote
+      });
       setShowTopupForm(false);
       setTopupDate(""); setTopupIdr(""); setTopupUsd(""); setTopupNote("");
       fetchData();
+    } catch (error: any) {
+      alert(error.message);
     }
   };
 
@@ -164,47 +163,50 @@ export default function BudgetingAdsPage() {
     if (!sourceTopup) return alert("Top up sumber tidak valid");
     
     const idr = Number(allocIdr);
-    const kurs = Number(sourceTopup.kurs_topup);
+    const kurs = Number(sourceTopup.kurs_topup || (Number(sourceTopup.nominal_idr || sourceTopup.nominal_topup_idr) / Number(sourceTopup.nominal_usd || sourceTopup.nominal_topup_usd)) || 16000);
     const usd = idr / kurs;
     
     // VALIDASI HARD BLOCK:
-    const topupAllocated = allocations.filter(a => a.topup_id.toString() === allocTopupId).reduce((sum, curr) => sum + Number(curr.alokasi_usd), 0);
-    const sisaIdle = Number(sourceTopup.nominal_usd) - topupAllocated;
+    const topupAllocated = allocations.filter(a => a.topup_id?.toString() === allocTopupId).reduce((sum, curr) => sum + Number(curr.alokasi_usd), 0);
+    const sisaIdle = Number(sourceTopup.nominal_usd || sourceTopup.nominal_topup_usd) - topupAllocated;
     
     if (usd > sisaIdle + 0.05) {
       return alert(`Gagal: Dana Top Up tidak cukup!\nAnda mencoba membagikan $${usd.toLocaleString('en-US', {minimumFractionDigits: 2})}, tapi Sisa Top Up ini hanya $${sisaIdle.toLocaleString('en-US', {minimumFractionDigits: 2})}.`);
     }
     
-    const { error } = await supabase.from("ads_allocations").insert({
-      tanggal: allocDate,
-      topup_id: Number(allocTopupId),
-      campaign_id: Number(allocCampaignId),
-      alokasi_idr: idr,
-      alokasi_usd: usd,
-      catatan: allocNote
-    });
-    
-    if (error) {
-      alert(error.message);
-    } else {
+    try {
+      await addAdsAllocationAction({
+        tanggal: allocDate,
+        campaign_id: Number(allocCampaignId),
+        alokasi_usd: usd,
+        keterangan: allocNote
+      });
       setShowAllocForm(false);
       setAllocDate(""); setAllocTopupId(""); setAllocCampaignId(""); setAllocIdr(""); setAllocNote("");
       fetchData();
+    } catch (error: any) {
+      alert(error.message);
     }
   };
 
   const handleDeleteTopup = async (id: number) => {
     if (!confirm("Hapus Top Up ini? Semua alokasi yang menggunakan dana dari top up ini juga akan ikut terhapus!")) return;
-    const { error } = await supabase.from("ads_topups").delete().eq("id", id);
-    if (error) alert(error.message);
-    else fetchData();
+    try {
+      await deleteAdsTopupAction(id);
+      fetchData();
+    } catch (error: any) {
+      alert(error.message);
+    }
   };
 
   const handleDeleteAlloc = async (id: number) => {
     if (!confirm("Hapus riwayat alokasi ini? Saldo USD akan dikembalikan ke status Idle.")) return;
-    const { error } = await supabase.from("ads_allocations").delete().eq("id", id);
-    if (error) alert(error.message);
-    else fetchData();
+    try {
+      await deleteAdsAllocationAction(id);
+      fetchData();
+    } catch (error: any) {
+      alert(error.message);
+    }
   };
 
   const filteredTopups = topups.filter(t => {

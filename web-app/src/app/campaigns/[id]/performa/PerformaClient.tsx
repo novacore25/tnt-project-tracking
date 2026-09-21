@@ -1,15 +1,13 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { createClient } from "@/utils/supabase/client";
 import { TrendingUp, BarChart3, Activity, ArrowUpDown, ChevronDown, ChevronRight, Edit2, Check, X, Loader2, Eye, Users, PlaySquare, Download } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { exportToCSV } from "@/utils/exportCsv";
 import { useAuth } from "@/providers/AuthProvider";
 import { useCampaignFilter } from "@/providers/CampaignFilterProvider";
-
-const supabase = createClient();
+import { fetchPerformaPageFullDataAction, updateAdsPerformanceKursAction } from "@/app/actions/campaignPageActions";
 
 export default function CampaignPerformaClient({ campaignId }: { campaignId: number }) {
   const router = useRouter();
@@ -59,220 +57,25 @@ export default function CampaignPerformaClient({ campaignId }: { campaignId: num
   };
 
   const _fetchDataInner = async () => {
-      // 1. Phase 1: Fast indexed queries (campaign, skus, concepts, counts)
-      const [
-        campaignRes,
-        conceptsRes,
-        skusRes,
-        salesCountRes,
-        adsCountRes,
-        countsRes,
-        videoCountsRes,
-        perfSummaryRes,
-        creatorPerfRes,
-        orgCountRes,
-        ccCountRes,
-        vidCountRes
-      ] = await Promise.all([
-        supabase.from('campaigns').select('*').eq('id', campaignId).single(),
-        supabase.from('campaign_concepts').select('*, skus(nama_produk)').eq('campaign_id', campaignId).order('no_konsep', { ascending: true }),
-        supabase.from('skus').select('id, product_id').eq('campaign_id', campaignId),
-        supabase.from('sales').select('id', { count: 'exact', head: true }).eq('campaign_id', campaignId),
-        supabase.from('ads_performance').select('id', { count: 'exact', head: true }).eq('campaign_id', campaignId),
-        supabase.rpc('get_campaign_creator_counts', { p_campaign_id: campaignId }),
-        supabase.rpc('get_campaign_video_counts_fast', { p_campaign_id: campaignId }),
-        supabase.rpc('get_performance_summary_v2', { p_campaign_id: campaignId }),
-        supabase.rpc('get_campaign_creator_performance', { p_campaign_id: campaignId }),
-        supabase.from('organic_videos').select('id', { count: 'planned', head: true }).eq('campaign_id', campaignId),
-        supabase.from('campaign_creators').select('id', { count: 'exact', head: true }).eq('campaign_id', campaignId).in('approval', ['approved', 'pending', 'alternate']),
-        supabase.from('videos').select('id, campaign_creators!inner(campaign_id)', { count: 'exact', head: true }).eq('campaign_creators.campaign_id', campaignId)
-      ]);
+      const res = await fetchPerformaPageFullDataAction(campaignId);
+      if (!res.success || !res.campaign) return;
 
-      if (campaignRes.data) setCampaign(campaignRes.data);
-      if (conceptsRes.data) {
-        const sortedConcepts = [...conceptsRes.data].sort((a: any, b: any) => (Number(a.no_konsep) || 0) - (Number(b.no_konsep) || 0));
+      if (res.campaign) setCampaign(res.campaign);
+      if (res.concepts) {
+        const sortedConcepts = [...res.concepts].sort((a: any, b: any) => (Number(a.no_konsep) || 0) - (Number(b.no_konsep) || 0));
         setMasterConcepts(sortedConcepts);
       }
 
-      const skuList = (skusRes.data || []).map((s: any) => s.product_id).filter(Boolean);
-      const campaignSkuIds = new Set((skusRes.data || []).map((s: any) => s.id).filter(Boolean));
+      const skuList = (res.skus || []).map((s: any) => s.product_id).filter(Boolean);
+      const campaignSkuIds = new Set((res.skus || []).map((s: any) => s.id).filter(Boolean));
       const currentHasSkus = skuList.length > 0;
       setHasSkus(currentHasSkus);
 
-      const rpcSummary = perfSummaryRes?.data?.[0] || null;
-      if (rpcSummary) {
-        setRpcPerformance(rpcSummary);
-        if (currentHasSkus) {
-          setInitialTotalViews(Number(rpcSummary.total_views || 0));
-          setInitialTotalLikes(Number(rpcSummary.total_likes || 0));
-          setInitialTotalVideos(Number(rpcSummary.total_videos || 0));
-          setInitialTotalOrganic(Number(rpcSummary.organic_gmv || 0));
-          setInitialUnattributedGmv(Number(rpcSummary.unattributed_gmv || 0));
-        } else {
-          setInitialTotalViews(0);
-          setInitialTotalLikes(0);
-          setInitialTotalVideos(0);
-          setInitialTotalOrganic(0);
-          setInitialUnattributedGmv(0);
-        }
-      } else if (currentHasSkus && creatorPerfRes?.data && Array.isArray(creatorPerfRes.data)) {
-        // Fallback: if get_performance_summary_v2 timed out on Supabase, pre-populate totals from creatorPerfRes
-        let sumViews = 0, sumLikes = 0, sumVids = 0, sumGmv = 0;
-        creatorPerfRes.data.forEach((cp: any) => {
-          sumViews += Number(cp.video_views || 0);
-          sumLikes += Number(cp.video_likes || 0);
-          sumVids += Number(cp.video_count || 0);
-          sumGmv += Number(cp.gmv_organic || 0);
-        });
-        setInitialTotalViews(sumViews);
-        setInitialTotalLikes(sumLikes);
-        setInitialTotalVideos(sumVids);
-        setInitialTotalOrganic(sumGmv);
-      } else {
-        setInitialTotalViews(0);
-        setInitialTotalLikes(0);
-        setInitialTotalVideos(0);
-        setInitialTotalOrganic(0);
-        setInitialUnattributedGmv(0);
-      }
+      const ccData = res.campaignCreators || [];
+      const salesData = res.sales || [];
+      const rawAdsData = res.ads || [];
+      const orgVidsData = res.organicVideos || [];
 
-      // Fast creator counts
-      let fastCounts = { approved: 0, pending: 0, all: 0 };
-      if (countsRes.data && countsRes.data.length > 0) {
-        fastCounts = {
-          approved: Number(countsRes.data[0].approved || 0),
-          pending: Number(countsRes.data[0].pending || 0),
-          all: Number(countsRes.data[0].total || 0),
-        };
-      }
-      setFastCountsData(fastCounts);
-
-      // Fast video counts - ONLY valid if campaign has registered SKUs and RPC returned valid numbers
-      let fastVideoCounts = null;
-      if (currentHasSkus && videoCountsRes.data && videoCountsRes.data.length > 0) {
-        const d = videoCountsRes.data[0];
-        if (Number(d.total_approved || 0) > 0 || Number(d.total_livestream || 0) > 0) {
-          fastVideoCounts = {
-            approved: Number(d.total_approved || 0),
-            pending: Number(d.total_pending || 0),
-            livestream: Number(d.total_livestream || 0),
-          };
-        }
-      }
-      setFastVideoCountsData(fastVideoCounts);
-
-      // 2. Phase 2: Fetch creators, videos, sales, ads in parallel batches, and organic_videos in controlled chunks
-      const ccCount = ccCountRes.count || 0;
-      const vidCount = vidCountRes.count || 0;
-      const orgCount = orgCountRes.count || (rpcSummary ? Number(rpcSummary.total_videos || 0) : 0);
-      const salesCount = salesCountRes.count || 0;
-      const adsCount = adsCountRes.count || 0;
-      const pageSize = 1000;
-
-      const ccPromises = [];
-      for (let i = 0; i < ccCount; i += pageSize) {
-        ccPromises.push(
-          supabase
-            .from('campaign_creators')
-            .select('id, creator_id, approval, created_at, approved_at, content_type, qty_vt, qty_live, creators(id, username, nama_asli, link_account)')
-            .eq('campaign_id', campaignId)
-            .in('approval', ['approved', 'pending', 'alternate'])
-            .order('id', { ascending: true })
-            .range(i, i + pageSize - 1)
-        );
-      }
-
-      const vidPromises = [];
-      for (let i = 0; i < vidCount; i += pageSize) {
-        vidPromises.push(
-          supabase
-            .from('videos')
-            .select('id, campaign_creator_id, content_uid, vt_approval, urutan, concept, link_video, campaign_creators!inner(campaign_id)')
-            .eq('campaign_creators.campaign_id', campaignId)
-            .order('id', { ascending: true })
-            .range(i, i + pageSize - 1)
-        );
-      }
-
-      const salesPromises = [];
-      for (let i = 0; i < salesCount; i += pageSize) {
-        salesPromises.push(
-          supabase
-            .from('sales')
-            .select('tanggal, gmv, quantity, creator_username, content_uid, content_type, product_id')
-            .eq('campaign_id', campaignId)
-            .range(i, i + pageSize - 1)
-        );
-      }
-
-      const adsPromises = [];
-      for (let i = 0; i < adsCount; i += pageSize) {
-        adsPromises.push(
-          supabase
-            .from('ads_performance')
-            .select('*, creators(username)')
-            .eq('campaign_id', campaignId)
-            .range(i, i + pageSize - 1)
-        );
-      }
-
-      // Fetch organic_videos reliably in batches until finished without relying on count
-      const fetchOrgVideosChunked = async () => {
-        const results: any[] = [];
-        let from = 0;
-        const size = 1000;
-        while (true) {
-          const res = await supabase
-            .from('organic_videos')
-            .select('content_uid, post_time, content_type, creator_username, video_views, video_likes, product_id')
-            .eq('campaign_id', campaignId)
-            .range(from, from + size - 1);
-          if (res.error || !res.data || res.data.length === 0) break;
-          results.push(...res.data);
-          if (res.data.length < size) break;
-          from += size;
-        }
-        return results;
-      };
-
-      const [ccResults, vidResults, salesResults, adsResults, orgVidsData] = await Promise.all([
-        Promise.all(ccPromises),
-        Promise.all(vidPromises),
-        Promise.all(salesPromises),
-        Promise.all(adsPromises),
-        fetchOrgVideosChunked()
-      ]);
-
-      let ccData: any[] = [];
-      ccResults.forEach(res => {
-        if (res.data) ccData = ccData.concat(res.data);
-      });
-
-      let vidsData: any[] = [];
-      vidResults.forEach(res => {
-        if (res.data) vidsData = vidsData.concat(res.data);
-      });
-
-      let salesData: any[] = [];
-      salesResults.forEach(res => {
-        if (res.data) salesData = salesData.concat(res.data);
-      });
-
-      let rawAdsData: any[] = [];
-      adsResults.forEach(res => {
-        if (res.data) rawAdsData = rawAdsData.concat(res.data);
-      });
-
-      // Map videos back to creators
-      const videosByCcId = new Map<number, any[]>();
-      for (const v of vidsData) {
-        const list = videosByCcId.get(v.campaign_creator_id);
-        if (list) list.push(v);
-        else videosByCcId.set(v.campaign_creator_id, [v]);
-      }
-      for (const cc of ccData) {
-        cc.videos = videosByCcId.get(cc.id) || [];
-      }
       setLocalCreators(ccData);
 
       // 3. Fast In-Memory Aggregation of Sales and Organic Videos
@@ -605,35 +408,15 @@ export default function CampaignPerformaClient({ campaignId }: { campaignId: num
     fetchData();
   }, [campaignId]);
 
-  // Real-time subscription to 'sales' table
-  useEffect(() => {
-    if (!campaignId) return;
-    
-    const channel = supabase.channel('realtime_sales_updates')
-      .on('postgres_changes', { 
-        event: '*', 
-        schema: 'public', 
-        table: 'sales', 
-        filter: `campaign_id=eq.${campaignId}` 
-      }, () => {
-        fetchData();
-      })
-      .subscribe();
-      
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [campaignId]);
-
   const handleUpdateKurs = async (id: number) => {
     const numKurs = Number(editKursValue);
     if (!numKurs || numKurs <= 0) {
       alert("Kurs tidak valid!");
       return;
     }
-    const { error } = await supabase.from('ads_performance').update({ kurs: numKurs }).eq('id', id);
-    if (error) {
-      alert("Gagal update kurs: " + error.message);
+    const res = await updateAdsPerformanceKursAction(id, numKurs);
+    if (!res.success) {
+      alert("Gagal update kurs: " + res.error);
     } else {
       setAdsPerf(adsPerf.map(a => a.id === id ? { ...a, kurs: numKurs } : a));
       fetchData(); // Fetch Data again to recalculate baseCreatorStats and totals

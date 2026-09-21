@@ -1,6 +1,15 @@
 import { create } from 'zustand';
-import { createClient } from '@/utils/supabase/client';
 import { getInitialStoreData, createCampaignAction, updateCampaignAction, deleteCampaignAction, createBrandAction, createSkuAction, deleteSkuAction } from '@/app/actions/storeActions';
+import {
+  addAuditLogAction, addCreatorFullAction, updateCreatorAction, addCreatorSnapshotAction,
+  updateCreatorContactAction, updateCreatorNichesAction, addCreatorNoteAction,
+  addCampaignCreatorAction, updateCampaignCreatorAction, deleteCampaignCreatorAction,
+  addVideoAction, updateVideoApprovalAction, updateCreatorPaymentAction,
+  addAdsSpendAction, updateAdsSpendAction, fetchCreatorAddressesAction, updateCreatorAddressAction,
+  fetchLiveSchedulesAction, addLiveScheduleAction, deleteLiveScheduleAction,
+  updateBrandAction, addNicheAction, updateNicheAction,
+  addDailyPerformanceAction, updateDailyPerformanceAction, updateSkuAction
+} from '@/app/actions/databaseActions';
 import { DatabaseSchema, Creator, CreatorSnapshot, CreatorContact, CampaignCreator, Video, AuditLog, CreatorNote, CreatorPayment, AdsSpend, CreatorAddress, LiveSchedule, DailyPerformance, OrganicVideo } from '@/types/database';
 
 type DatabaseState = DatabaseSchema & {
@@ -69,8 +78,6 @@ type DatabaseState = DatabaseSchema & {
   // Realtime
   applyRealtimeUpdate: (table: keyof DatabaseState, payload: any) => void;
 };
-
-const supabase = createClient();
 
 export const useDatabaseStore = create<DatabaseState>((set, get) => ({
   brands: [],
@@ -171,25 +178,22 @@ export const useDatabaseStore = create<DatabaseState>((set, get) => ({
       let finalUserName = log.user_name;
 
       if (!finalUserId || !finalUserName) {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.user) {
-          finalUserId = session.user.id;
-          if (!finalUserName) {
-            const profile = get().profiles.find(p => p.id === session.user.id);
-            finalUserName = profile?.nama || session.user.email;
-          }
+        const profile = get().profiles.find(p => p.email === log.user_name);
+        if (profile) {
+          finalUserId = finalUserId || profile.id;
+          finalUserName = finalUserName || profile.nama || profile.email;
         }
       }
 
-      const { data, error } = await supabase.from('audit_logs').insert({
+      const res = await addAuditLogAction({
         ...log,
         user_id: finalUserId,
         user_name: finalUserName
-      }).select().single();
-      
-      if (!error && data) {
+      });
+
+      if (res.success && res.data) {
         set(state => ({
-          audit_logs: [data, ...state.audit_logs].slice(0, 500) // Keep latest 500 in memory
+          audit_logs: [res.data, ...state.audit_logs].slice(0, 500) // Keep latest 500 in memory
         }));
       }
     } catch (err) {
@@ -199,43 +203,13 @@ export const useDatabaseStore = create<DatabaseState>((set, get) => ({
 
   addCreatorFull: async (creator, snapshot, contact, nicheIds) => {
     try {
-      // Insert Creator
-      const { data: cData, error: cErr } = await supabase.from('creators').insert(creator).select().single();
-      if (cErr || !cData) throw cErr;
-      
-      const newCreatorId = cData.id;
-      set({ creators: [...get().creators, cData] });
+      const res = await addCreatorFullAction(creator, snapshot, contact, nicheIds);
+      if (!res.success) throw new Error(res.error);
 
-      // Insert Snapshot
-      if (snapshot) {
-        const { data: sData } = await supabase.from('creator_snapshots').insert({
-          ...snapshot,
-          creator_id: newCreatorId
-        }).select().single();
-        if (sData) set({ creator_snapshots: [...get().creator_snapshots, sData] });
-      }
-
-      // Insert Contact
-      if (contact) {
-        const { data: ctData } = await supabase.from('creator_contacts').insert({
-          creator_id: newCreatorId,
-          nomor: contact,
-          status: 'aktif',
-          tanggal_mulai: new Date().toISOString().split('T')[0]
-        }).select().single();
-        if (ctData) set({ creator_contacts: [...get().creator_contacts, ctData] });
-      }
-
-      // Insert Niches
-      if (nicheIds && nicheIds.length > 0) {
-        const nicheRows = nicheIds.map((nId, idx) => ({
-          creator_id: newCreatorId,
-          niche_id: nId,
-          peringkat: idx + 1
-        }));
-        const { data: nData } = await supabase.from('creator_niches').insert(nicheRows).select();
-        if (nData) set({ creator_niches: [...get().creator_niches, ...nData] });
-      }
+      if (res.creator) set({ creators: [...get().creators, res.creator] });
+      if (res.snapshot) set({ creator_snapshots: [...get().creator_snapshots, res.snapshot] });
+      if (res.contact) set({ creator_contacts: [...get().creator_contacts, res.contact] });
+      if (res.niches && res.niches.length > 0) set({ creator_niches: [...get().creator_niches, ...res.niches] });
     } catch (err) {
       console.error('Error adding creator full:', err);
       throw err;
@@ -245,22 +219,22 @@ export const useDatabaseStore = create<DatabaseState>((set, get) => ({
   updateCreator: async (id, updates) => {
     // Ambil data lama untuk audit
     const oldData = get().creators.find(c => c.id === id);
-    const { data, error } = await supabase.from('creators').update(updates).eq('id', id).select().single();
-    if (!error && data) {
+    const res = await updateCreatorAction(id, updates);
+    if (res.success && res.data) {
       set(state => ({
-        creators: state.creators.map(c => c.id === id ? { ...c, ...data } : c)
+        creators: state.creators.map(c => c.id === id ? { ...c, ...res.data } : c)
       }));
       // Record Audit
       if (oldData) {
         get().addAuditLog({
           user_id: null,
-          user_name: null, // Will be auto-filled by addAuditLog via session
+          user_name: null,
           action: 'UPDATE',
           table_name: 'creators',
           record_id: id.toString(),
           old_data: oldData,
-          new_data: data,
-          description: `Update Profil Kreator: ${data.username}`
+          new_data: res.data,
+          description: `Update Profil Kreator: ${res.data.username}`
         });
       }
     }
@@ -278,122 +252,55 @@ export const useDatabaseStore = create<DatabaseState>((set, get) => ({
         return sDate === snapshotDate;
       }) : null;
 
-    if (sameDateSnapshot) {
-      // UPDATE the existing snapshot row in-place rather than inserting a duplicate
-      const updatePayload: any = {};
-      if (snapshot.followers !== undefined) updatePayload.followers = snapshot.followers;
-      if (snapshot.level !== undefined) updatePayload.level = snapshot.level;
-      if (snapshot.gmv_30d !== undefined) updatePayload.gmv_30d = snapshot.gmv_30d;
-      if (snapshot.gmv_30d_video !== undefined) updatePayload.gmv_30d_video = snapshot.gmv_30d_video;
-      if (snapshot.gmv_30d_live !== undefined) updatePayload.gmv_30d_live = snapshot.gmv_30d_live;
-      if (snapshot.tier !== undefined) updatePayload.tier = snapshot.tier;
-      if (snapshot.audience_age !== undefined) updatePayload.audience_age = snapshot.audience_age;
-      if (snapshot.ratecard !== undefined) updatePayload.ratecard = snapshot.ratecard;
-      if (snapshot.updated_by !== undefined) updatePayload.updated_by = snapshot.updated_by;
-
-      // Check if anything actually changed
-      const hasChange = Object.keys(updatePayload).some(k => (updatePayload as any)[k] !== (sameDateSnapshot as any)[k]);
-      if (!hasChange) {
-        console.log("Snapshot identical to existing same-date snapshot, skipping update.");
-        return;
-      }
-
-      const { data, error } = await supabase.from('creator_snapshots')
-        .update(updatePayload)
-        .eq('id', sameDateSnapshot.id)
-        .select()
-        .single();
+    // Client-side deduplication against latest snapshot (only for inserts)
+    if (!sameDateSnapshot) {
+      const latestExisting = get().creator_snapshots
+        .filter(s => s.creator_id === snapshot.creator_id)
+        .sort((a, b) => {
+          const tDiff = new Date(b.tanggal_update || 0).getTime() - new Date(a.tanggal_update || 0).getTime();
+          if (tDiff !== 0) return tDiff;
+          return b.id - a.id;
+        })[0];
       
-      if (error) throw error;
-      if (data) {
-        set({ creator_snapshots: get().creator_snapshots.map(s => s.id === sameDateSnapshot.id ? data : s) });
+      if (latestExisting) {
+        if (latestExisting.audience_age === snapshot.audience_age && 
+            latestExisting.level === snapshot.level && 
+            latestExisting.gmv_30d === snapshot.gmv_30d &&
+            latestExisting.gmv_30d_video === snapshot.gmv_30d_video &&
+            latestExisting.gmv_30d_live === snapshot.gmv_30d_live &&
+            latestExisting.followers === snapshot.followers &&
+            latestExisting.tier === snapshot.tier) {
+          console.log("Snapshot identical to latest, skipping insert.");
+          return;
+        }
       }
-      return;
     }
 
-    // No same-date snapshot found — deduplication check against latest snapshot
-    const latestExisting = get().creator_snapshots
-      .filter(s => s.creator_id === snapshot.creator_id)
-      .sort((a, b) => {
-        const tDiff = new Date(b.tanggal_update || 0).getTime() - new Date(a.tanggal_update || 0).getTime();
-        if (tDiff !== 0) return tDiff;
-        return b.id - a.id;
-      })[0];
+    const res = await addCreatorSnapshotAction(snapshot);
+    if (!res.success) throw new Error(res.error);
     
-    if (latestExisting) {
-      if (latestExisting.audience_age === snapshot.audience_age && 
-          latestExisting.level === snapshot.level && 
-          latestExisting.gmv_30d === snapshot.gmv_30d &&
-          latestExisting.gmv_30d_video === snapshot.gmv_30d_video &&
-          latestExisting.gmv_30d_live === snapshot.gmv_30d_live &&
-          latestExisting.followers === snapshot.followers &&
-          latestExisting.tier === snapshot.tier) {
-        console.log("Snapshot identical to latest, skipping insert.");
-        return;
+    if (res.data) {
+      if (res.mode === 'updated') {
+        set({ creator_snapshots: get().creator_snapshots.map(s => s.id === res.data.id ? res.data : s) });
+      } else {
+        set({ creator_snapshots: [...get().creator_snapshots, res.data] });
       }
-    }
-
-    const { data, error } = await supabase.from('creator_snapshots').insert(snapshot).select().single();
-    if (error) {
-      throw error;
-    }
-    if (data) {
-      set({ creator_snapshots: [...get().creator_snapshots, data] });
     }
   },
 
   updateCreatorContact: async (creatorId, newNomor) => {
     try {
-      const activeContacts = get().creator_contacts.filter(c => c.creator_id === creatorId && c.status === 'aktif');
+      const res = await updateCreatorContactAction(creatorId, newNomor);
+      if (!res.success) throw new Error(res.error);
       
-      // Check if the new number is already in archive
-      const { data: existingArchived } = await supabase.from('creator_contacts')
-        .select('*')
-        .eq('creator_id', creatorId)
-        .eq('nomor', newNomor)
-        .single();
-      
-      const today = new Date().toISOString().split('T')[0];
-
-      // Archive all current active contacts
-      for (const ac of activeContacts) {
-        await supabase.from('creator_contacts').update({
-          status: 'arsip',
-          tanggal_diganti: today
-        }).eq('id', ac.id);
-        
+      // Update local state with all contacts for this creator
+      if (res.allContacts) {
         set(state => ({
-          creator_contacts: state.creator_contacts.map(c => c.id === ac.id ? { ...c, status: 'arsip', tanggal_diganti: today } : c)
+          creator_contacts: [
+            ...state.creator_contacts.filter(c => c.creator_id !== creatorId),
+            ...res.allContacts
+          ]
         }));
-      }
-
-      if (existingArchived) {
-        // Upsert / Reactivate old number
-        const { data: reactivated } = await supabase.from('creator_contacts').update({
-          status: 'aktif',
-          tanggal_mulai: today,
-          tanggal_diganti: null
-        }).eq('id', existingArchived.id).select().single();
-        
-        if (reactivated) {
-          set(state => ({
-            creator_contacts: state.creator_contacts.map(c => c.id === reactivated.id ? reactivated : c)
-          }));
-        }
-      } else {
-        // Insert new active number
-        const { data: inserted } = await supabase.from('creator_contacts').insert({
-          creator_id: creatorId,
-          nomor: newNomor,
-          status: 'aktif',
-          tanggal_mulai: today
-        }).select().single();
-        
-        if (inserted) {
-          set(state => ({
-            creator_contacts: [...state.creator_contacts, inserted]
-          }));
-        }
       }
     } catch (err) {
       console.error("Error updating contact:", err);
@@ -402,33 +309,21 @@ export const useDatabaseStore = create<DatabaseState>((set, get) => ({
 
   updateCreatorNiches: async (creatorId, nicheIds) => {
     try {
-      // Delete old niches
-      await supabase.from('creator_niches').delete().eq('creator_id', creatorId);
+      const res = await updateCreatorNichesAction(creatorId, nicheIds);
+      if (!res.success) throw new Error(res.error);
       
-      if (nicheIds.length > 0) {
-        const rows = nicheIds.map((nId, idx) => ({
-          creator_id: creatorId,
-          niche_id: nId,
-          peringkat: idx + 1
-        }));
-        const { data } = await supabase.from('creator_niches').insert(rows).select();
-        set(state => ({
-          creator_niches: [...state.creator_niches.filter(cn => cn.creator_id !== creatorId), ...(data || [])]
-        }));
-      } else {
-        set(state => ({
-          creator_niches: state.creator_niches.filter(cn => cn.creator_id !== creatorId)
-        }));
-      }
+      set(state => ({
+        creator_niches: [...state.creator_niches.filter(cn => cn.creator_id !== creatorId), ...(res.data || [])]
+      }));
     } catch (err) {
       console.error(err);
     }
   },
 
   addCreatorNote: async (note) => {
-    const { data, error } = await supabase.from('creator_notes').insert(note).select().single();
-    if (!error && data) {
-      set({ creator_notes: [...get().creator_notes, data] });
+    const res = await addCreatorNoteAction(note);
+    if (res.success && res.data) {
+      set({ creator_notes: [...get().creator_notes, res.data] });
     }
   },
 
@@ -469,22 +364,17 @@ export const useDatabaseStore = create<DatabaseState>((set, get) => ({
   },
 
   addCampaignCreator: async (cc) => {
-    const { data, error } = await supabase.from('campaign_creators').insert(cc).select().single();
-    if (!error && data) {
-      set({ campaign_creators: [...get().campaign_creators, data] });
+    const res = await addCampaignCreatorAction(cc);
+    if (res.success && res.data) {
+      set({ campaign_creators: [...get().campaign_creators, res.data] });
     }
   },
 
   updateCampaignCreator: async (id, updates, changedBy) => {
     // Ambil data lama untuk audit
     const oldData = get().campaign_creators.find(c => c.id === id);
-    const { error } = await supabase.from('campaign_creators').update(updates).eq('id', id);
-    if (error) {
-      console.error("Update Campaign Creator Error:", error);
-      alert("Gagal update data: " + error.message);
-      return;
-    }
-    if (!error) {
+    const res = await updateCampaignCreatorAction(id, updates);
+    if (res.success) {
       set((state) => ({
         campaign_creators: state.campaign_creators.map(c => c.id === id ? { ...c, ...updates } : c)
       }));
@@ -508,12 +398,15 @@ export const useDatabaseStore = create<DatabaseState>((set, get) => ({
           description: desc
         });
       }
+    } else {
+      console.error("Update Campaign Creator Error:", res.error);
+      alert("Gagal update data: " + res.error);
     }
   },
 
   deleteCampaignCreator: async (id) => {
-    const { error } = await supabase.from('campaign_creators').delete().eq('id', id);
-    if (!error) {
+    const res = await deleteCampaignCreatorAction(id);
+    if (res.success) {
       set((state) => ({
         campaign_creators: state.campaign_creators.filter(c => c.id !== id)
       }));
@@ -521,15 +414,15 @@ export const useDatabaseStore = create<DatabaseState>((set, get) => ({
   },
 
   addVideo: async (video) => {
-    const { data, error } = await supabase.from('videos').insert(video).select().single();
-    if (!error && data) {
-      set({ videos: [...get().videos, data] });
+    const res = await addVideoAction(video);
+    if (res.success && res.data) {
+      set({ videos: [...get().videos, res.data] });
     }
   },
 
   updateVideoApproval: async (id, approval, changedBy) => {
-    const { error } = await supabase.from('videos').update({ vt_approval: approval }).eq('id', id);
-    if (!error) {
+    const res = await updateVideoApprovalAction(id, approval as string);
+    if (res.success) {
       set((state) => ({
         videos: state.videos.map(v => v.id === id ? { ...v, vt_approval: approval } : v)
       }));
@@ -538,45 +431,28 @@ export const useDatabaseStore = create<DatabaseState>((set, get) => ({
 
   updateCreatorPayment: async (id, payment) => {
     try {
-      if (id) {
-        const { data, error } = await supabase.from('creator_payments').update(payment).eq('id', id).select().single();
-        if (error) throw error;
-        set((state) => ({
-          creator_payments: state.creator_payments.map(p => p.id === id ? { ...p, ...data } : p)
-        }));
-        
-        // sync status_bayar to campaign_creators backwards compatibility
-        if (payment.status_bayar && data.campaign_creator_id) {
-          let syncStatus = 'belum';
-          if (payment.status_bayar === 'pay_off') syncStatus = 'lunas';
-          else if (payment.status_bayar === 'half_paid') syncStatus = 'sebagian';
-          await supabase.from('campaign_creators').update({ status_bayar: syncStatus }).eq('id', data.campaign_creator_id);
+      const res = await updateCreatorPaymentAction(id, payment);
+      if (!res.success) throw new Error(res.error);
+      
+      if (res.data) {
+        if (id) {
           set((state) => ({
-            campaign_creators: state.campaign_creators.map(c => c.id === data.campaign_creator_id ? { ...c, status_bayar: syncStatus as any } : c)
+            creator_payments: state.creator_payments.map(p => p.id === id ? { ...p, ...res.data } : p)
           }));
+        } else {
+          set({ creator_payments: [...get().creator_payments, res.data] });
         }
-        return data;
-      } else if (payment.campaign_creator_id) {
-        const cc = get().campaign_creators.find(c => c.id === payment.campaign_creator_id);
-        const { data, error } = await supabase.from('creator_payments').insert({
-          campaign_creator_id: payment.campaign_creator_id,
-          rate_card: cc?.price || 0,
-          ...payment
-        }).select().single();
-        
-        if (error) throw error;
-        set({ creator_payments: [...get().creator_payments, data] });
 
-        if (payment.status_bayar) {
+        // Sync status_bayar to campaign_creators in local state
+        if (payment.status_bayar && res.data.campaign_creator_id) {
           let syncStatus = 'belum';
           if (payment.status_bayar === 'pay_off') syncStatus = 'lunas';
           else if (payment.status_bayar === 'half_paid') syncStatus = 'sebagian';
-          await supabase.from('campaign_creators').update({ status_bayar: syncStatus }).eq('id', payment.campaign_creator_id);
           set((state) => ({
-            campaign_creators: state.campaign_creators.map(c => c.id === payment.campaign_creator_id ? { ...c, status_bayar: syncStatus as any } : c)
+            campaign_creators: state.campaign_creators.map(c => c.id === res.data.campaign_creator_id ? { ...c, status_bayar: syncStatus as any } : c)
           }));
         }
-        return data;
+        return res.data;
       }
       return null;
     } catch (err) {
@@ -587,10 +463,10 @@ export const useDatabaseStore = create<DatabaseState>((set, get) => ({
 
   addAdsSpend: async (spend) => {
     try {
-      const { data, error } = await supabase.from('ads_spends').insert(spend).select().single();
-      if (!error && data) {
-        set({ ads_spends: [...get().ads_spends, data] });
-        return data;
+      const res = await addAdsSpendAction(spend);
+      if (res.success && res.data) {
+        set({ ads_spends: [...get().ads_spends, res.data] });
+        return res.data;
       }
       return null;
     } catch (err) {
@@ -606,12 +482,12 @@ export const useDatabaseStore = create<DatabaseState>((set, get) => ({
   },
   updateAdsSpend: async (id, spend) => {
     try {
-      const { data, error } = await supabase.from('ads_spends').update(spend).eq('id', id).select().single();
-      if (!error && data) {
+      const res = await updateAdsSpendAction(id, spend);
+      if (res.success && res.data) {
         set((state) => ({
-          ads_spends: state.ads_spends.map(s => s.id === id ? { ...s, ...data } : s)
+          ads_spends: state.ads_spends.map(s => s.id === id ? { ...s, ...res.data } : s)
         }));
-        return data;
+        return res.data;
       }
       return null;
     } catch {
@@ -622,24 +498,8 @@ export const useDatabaseStore = create<DatabaseState>((set, get) => ({
   fetchCreatorAddresses: async (campaignId) => {
     set({ isLoading: true, error: null });
     try {
-      const { data: campaignCreators } = await supabase
-        .from('campaign_creators')
-        .select('id')
-        .eq('campaign_id', campaignId);
-      
-      const ccIds = campaignCreators?.map(cc => cc.id) || [];
-      
-      if (ccIds.length > 0) {
-        const { data, error } = await supabase
-          .from('creator_addresses')
-          .select('*')
-          .in('campaign_creator_id', ccIds);
-        
-        if (error) throw error;
-        set({ creator_addresses: data || [], isLoading: false });
-      } else {
-        set({ creator_addresses: [], isLoading: false });
-      }
+      const res = await fetchCreatorAddressesAction(campaignId);
+      set({ creator_addresses: res.data || [], isLoading: false });
     } catch (err: any) {
       set({ error: err.message, isLoading: false });
     }
@@ -647,33 +507,22 @@ export const useDatabaseStore = create<DatabaseState>((set, get) => ({
 
   updateCreatorAddress: async (id, address) => {
     try {
-      const payload = { ...address };
-      delete (payload as any).campaign_creators;
-
-      if (id) {
-        const { data, error } = await supabase
-          .from('creator_addresses')
-          .update(payload)
-          .eq('id', id)
-          .select()
-          .single();
-        if (error) throw error;
-        set(state => ({
-          creator_addresses: state.creator_addresses.map(a => a.id === id ? data : a)
-        }));
-        return data;
-      } else {
-        const { data, error } = await supabase
-          .from('creator_addresses')
-          .insert([payload])
-          .select()
-          .single();
-        if (error) throw error;
-        set(state => ({
-          creator_addresses: [...state.creator_addresses, data]
-        }));
-        return data;
+      const res = await updateCreatorAddressAction(id, address);
+      if (!res.success) throw new Error(res.error);
+      
+      if (res.data) {
+        if (id) {
+          set(state => ({
+            creator_addresses: state.creator_addresses.map(a => a.id === id ? res.data : a)
+          }));
+        } else {
+          set(state => ({
+            creator_addresses: [...state.creator_addresses, res.data]
+          }));
+        }
+        return res.data;
       }
+      return null;
     } catch (err: any) {
       console.error(err);
       return null;
@@ -683,25 +532,8 @@ export const useDatabaseStore = create<DatabaseState>((set, get) => ({
   fetchLiveSchedules: async (campaignId) => {
     set({ isLoading: true, error: null });
     try {
-      const { data: campaignCreators } = await supabase
-        .from('campaign_creators')
-        .select('id')
-        .eq('campaign_id', campaignId);
-      
-      const ccIds = campaignCreators?.map(cc => cc.id) || [];
-      
-      if (ccIds.length > 0) {
-        const { data, error } = await supabase
-          .from('live_schedules')
-          .select('*')
-          .in('campaign_creator_id', ccIds)
-          .order('tanggal_live', { ascending: true });
-        
-        if (error) throw error;
-        set({ live_schedules: data || [], isLoading: false });
-      } else {
-        set({ live_schedules: [], isLoading: false });
-      }
+      const res = await fetchLiveSchedulesAction(campaignId);
+      set({ live_schedules: res.data || [], isLoading: false });
     } catch (err: any) {
       set({ error: err.message, isLoading: false });
     }
@@ -709,16 +541,15 @@ export const useDatabaseStore = create<DatabaseState>((set, get) => ({
 
   addLiveSchedule: async (schedule) => {
     try {
-      const { data, error } = await supabase
-        .from('live_schedules')
-        .insert([schedule])
-        .select()
-        .single();
-      if (error) throw error;
-      set(state => ({
-        live_schedules: [...state.live_schedules, data].sort((a, b) => new Date(a.tanggal_live).getTime() - new Date(b.tanggal_live).getTime())
-      }));
-      return data;
+      const res = await addLiveScheduleAction(schedule);
+      if (!res.success) throw new Error(res.error);
+      if (res.data) {
+        set(state => ({
+          live_schedules: [...state.live_schedules, res.data].sort((a, b) => new Date(a.tanggal_live).getTime() - new Date(b.tanggal_live).getTime())
+        }));
+        return res.data;
+      }
+      return null;
     } catch (err: any) {
       console.error(err);
       return null;
@@ -727,8 +558,8 @@ export const useDatabaseStore = create<DatabaseState>((set, get) => ({
 
   deleteLiveSchedule: async (id) => {
     try {
-      const { error } = await supabase.from('live_schedules').delete().eq('id', id);
-      if (error) throw error;
+      const res = await deleteLiveScheduleAction(id);
+      if (!res.success) throw new Error(res.error);
       set(state => ({
         live_schedules: state.live_schedules.filter(l => l.id !== id)
       }));
@@ -747,8 +578,8 @@ export const useDatabaseStore = create<DatabaseState>((set, get) => ({
   },
 
   updateBrand: async (id, updates) => {
-    const { error } = await supabase.from('brands').update(updates).eq('id', id);
-    if (!error) {
+    const res = await updateBrandAction(id, updates);
+    if (res.success) {
       set((state) => ({
         brands: state.brands.map((b) => (b.id === id ? { ...b, ...updates } : b)),
       }));
@@ -756,15 +587,15 @@ export const useDatabaseStore = create<DatabaseState>((set, get) => ({
   },
 
   addNiche: async (niche) => {
-    const { data, error } = await supabase.from('niches').insert(niche).select().single();
-    if (!error && data) {
-      set((state) => ({ niches: [...state.niches, data] }));
+    const res = await addNicheAction(niche);
+    if (res.success && res.data) {
+      set((state) => ({ niches: [...state.niches, res.data] }));
     }
   },
 
   updateNiche: async (id, updates) => {
-    const { error } = await supabase.from('niches').update(updates).eq('id', id);
-    if (!error) {
+    const res = await updateNicheAction(id, updates);
+    if (res.success) {
       set((state) => ({
         niches: state.niches.map((n) => (n.id === id ? { ...n, ...updates } : n)),
       }));
@@ -772,22 +603,22 @@ export const useDatabaseStore = create<DatabaseState>((set, get) => ({
   },
 
   addDailyPerformance: async (record) => {
-    const { data, error } = await supabase.from('daily_performance').insert(record).select().single();
-    if (!error && data) {
-      set((state) => ({ daily_performance: [...state.daily_performance, data] }));
-    } else if (error) {
-      throw error;
+    const res = await addDailyPerformanceAction(record);
+    if (res.success && res.data) {
+      set((state) => ({ daily_performance: [...state.daily_performance, res.data] }));
+    } else if (!res.success) {
+      throw new Error(res.error);
     }
   },
 
   updateDailyPerformance: async (id, updates) => {
-    const { data, error } = await supabase.from('daily_performance').update(updates).eq('id', id).select().single();
-    if (!error && data) {
+    const res = await updateDailyPerformanceAction(id, updates);
+    if (res.success && res.data) {
       set((state) => ({
         daily_performance: state.daily_performance.map((d) => (d.id === id ? { ...d, ...updates } : d)),
       }));
-    } else if (error) {
-      throw error;
+    } else if (!res.success) {
+      throw new Error(res.error);
     }
   },
 
@@ -800,11 +631,11 @@ export const useDatabaseStore = create<DatabaseState>((set, get) => ({
   },
 
   updateSku: async (id, updates) => {
-    const { data, error } = await supabase.from('skus').update(updates).eq('id', id).select().single();
-    if (error) throw error;
-    if (data) {
+    const res = await updateSkuAction(id, updates);
+    if (!res.success) throw new Error(res.error);
+    if (res.data) {
       set((state) => ({
-        skus: state.skus.map((s) => (s.id === id ? data : s)),
+        skus: state.skus.map((s) => (s.id === id ? res.data : s)),
       }));
     }
   },

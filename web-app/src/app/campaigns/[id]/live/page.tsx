@@ -4,10 +4,8 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { useDatabaseStore } from "@/store/useDatabaseStore";
 import { Calendar, Trash2, Plus, ArrowUp, ArrowDown, ArrowUpDown, CheckCircle2, XCircle, ChevronLeft, ChevronRight } from "lucide-react";
-import { createClient } from "@/utils/supabase/client";
+import { fetchLivePageDataAction } from "@/app/actions/campaignPageActions";
 import { useCampaignFilter } from "@/providers/CampaignFilterProvider";
-
-const supabase = createClient();
 
 // ─── Skeleton Loading Component ────────────────────────────────────────────────
 function SkeletonLoader() {
@@ -96,7 +94,7 @@ export default function LiveSchedulePage() {
   const [localCreators, setLocalCreators] = useState<any[]>([]);
   const [isFetchingCC, setIsFetchingCC] = useState(true);
 
-  // actualLives: hasil dari RPC get_campaign_live_stats — semua data sekaligus dari server
+  // actualLives
   const [actualLives, setActualLives] = useState<any[]>([]);
   const [isFetchingLives, setIsFetchingLives] = useState(false);
 
@@ -118,57 +116,22 @@ export default function LiveSchedulePage() {
     fetchLiveSchedules(campaignId);
   }, [campaignId, fetchLiveSchedules]);
 
-  // ─── Fetch Campaign Creators ───────────────────────────────────────────────
+  // ─── Fetch Campaign Creators & Actual Lives ──────────────────────────────────
   useEffect(() => {
-    const fetchCCs = async () => {
+    const fetchData = async () => {
       if (!campaignId) return;
       setIsFetchingCC(true);
-      let all: any[] = [];
-      let from = 0;
-      let hasMore = true;
-      while (hasMore) {
-        let query = supabase
-          .from('campaign_creators')
-          .select('*, creators(*)')
-          .eq('campaign_id', campaignId)
-          .in('approval', ['approved', 'alternate']);
-
-        if (campaign?.require_client_approval) {
-          query = query.in('client_approval', ['approved', 'not_required']);
-        }
-
-        const { data } = await query.range(from, from + 999);
-        if (data && data.length > 0) {
-          all = [...all, ...data];
-          if (data.length < 1000) hasMore = false;
-          else from += 1000;
-        } else {
-          hasMore = false;
-        }
-      }
-      setLocalCreators(all);
-      setIsFetchingCC(false);
-    };
-    fetchCCs();
-  }, [campaignId, campaign?.require_client_approval]);
-
-  // ─── Fetch Actual Lives via RPC (semua komputasi di server, bukan browser) ──
-  useEffect(() => {
-    const fetchActualLives = async () => {
-      if (!campaignId) return;
       setIsFetchingLives(true);
-      const { data, error } = await supabase.rpc('get_campaign_live_stats', {
-        p_campaign_id: campaignId,
-      });
-      if (!error && data) {
-        // RPC mengembalikan JSON array langsung — tidak perlu loop atau Map di browser
-        const lives = Array.isArray(data) ? data : [];
-        setActualLives(lives);
+      const res = await fetchLivePageDataAction(campaignId, !!campaign?.require_client_approval);
+      if (res.success) {
+        setLocalCreators(res.creators || []);
+        setActualLives(res.actualLives || []);
       }
+      setIsFetchingCC(false);
       setIsFetchingLives(false);
     };
-    fetchActualLives();
-  }, [campaignId]);
+    fetchData();
+  }, [campaignId, campaign?.require_client_approval]);
 
   // ─── Pre-compute semua agregat kreator dari FULL dataset (dari RPC, bukan paginated) ──
   // Satu kali loop, dipakai untuk leaderboard + filter tabel sekaligus

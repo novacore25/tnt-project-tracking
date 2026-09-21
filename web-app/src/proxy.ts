@@ -1,6 +1,4 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { updateSession } from "@/utils/supabase/middleware";
-import { createServerClient } from "@supabase/ssr";
 
 export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;

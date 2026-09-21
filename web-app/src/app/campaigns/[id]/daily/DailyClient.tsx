@@ -2,11 +2,9 @@
 
 import React, { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
-import { createClient } from "@/utils/supabase/client";
 import { useDatabaseStore } from "@/store/useDatabaseStore";
+import { fetchDailyPerformancePageDataAction } from "@/app/actions/campaignPageActions";
 import TimelineTarget from "./TimelineTarget";
-
-const supabase = createClient();
 
 const toWIBDateStr = (utcString: string | null | undefined): string | null => {
   if (!utcString) return null;
@@ -33,174 +31,25 @@ export default function CampaignDailyPerformanceClient({ campaignId }: { campaig
   const fetchData = async () => {
     setLoading(true);
     try {
-      // 1. Phase 1: Fetch metadata, indexed sales, skus, and counts concurrently
-      const [
-        campaignRes,
-        skusRes,
-        salesCountRes,
-        ccCountRes,
-        vidCountRes,
-        adsCountRes,
-        orgVideosCountRes
-      ] = await Promise.all([
-        supabase.from('campaigns').select('*').eq('id', campaignId).single(),
-        supabase.from('skus').select('product_id').eq('campaign_id', campaignId),
-        supabase.from('sales').select('id', { count: 'exact', head: true }).eq('campaign_id', campaignId),
-        supabase.from('campaign_creators').select('id', { count: 'exact', head: true }).eq('campaign_id', campaignId),
-        supabase.from('videos').select('id, campaign_creators!inner(campaign_id)', { count: 'exact', head: true }).eq('campaign_creators.campaign_id', campaignId),
-        supabase.from('ads_performance').select('id', { count: 'exact', head: true }).eq('campaign_id', campaignId),
-        supabase.from('organic_videos').select('id', { count: 'planned', head: true }).eq('campaign_id', campaignId)
-      ]);
+      const res = await fetchDailyPerformancePageDataAction(campaignId);
+      if (!res.success || !res.campaign) return;
 
-      const campaignData = campaignRes.data;
-      if (!campaignData) return;
+      const campaignData = res.campaign;
       setCampaign(campaignData);
 
       const campaignStartStr = campaignData.start_date ? campaignData.start_date.substring(0, 10) : null;
       const campaignEndStr = campaignData.end_date ? campaignData.end_date.substring(0, 10) : null;
 
-      const skuSet = new Set((skusRes.data || []).map(s => s.product_id).filter(Boolean));
+      const skuSet = new Set((res.skus || []).map((s: any) => s.product_id).filter(Boolean));
       const hasSkus = skuSet.size > 0;
 
-      // 2. Fetch campaign_creators, videos, ads, sales in parallel batches, and organic_videos in controlled chunks
-      const ccCount = ccCountRes.count || 0;
-      const vidCount = vidCountRes.count || 0;
-      const adsCount = adsCountRes.count || 0;
-      const salesCount = salesCountRes.count || 0;
-      const orgCount = orgVideosCountRes.count || 0;
-      const batchSize = 1000;
+      const allVideosFromCreators = res.campaignCreators || [];
+      const allVideos = res.videos || [];
+      const allAds = res.ads || [];
+      const allSales = res.sales || [];
+      const allOrganicVideos = res.organicVideos || [];
 
-      const ccPromises = [];
-      for (let i = 0; i < ccCount; i += batchSize) {
-        ccPromises.push(
-          supabase
-            .from('campaign_creators')
-            .select('id, creator_id, tier, approval, created_at, approved_at, content_type, qty_vt, qty_live, creators(username)')
-            .eq('campaign_id', campaignId)
-            .order('id', { ascending: true })
-            .range(i, i + batchSize - 1)
-        );
-      }
-
-      const vidPromises = [];
-      for (let i = 0; i < vidCount; i += batchSize) {
-        vidPromises.push(
-          supabase
-            .from('videos')
-            .select('id, campaign_creator_id, created_at, link_video, campaign_creators!inner(campaign_id)')
-            .eq('campaign_creators.campaign_id', campaignId)
-            .order('id', { ascending: true })
-            .range(i, i + batchSize - 1)
-        );
-      }
-
-      const adsPromises = [];
-      for (let i = 0; i < adsCount; i += batchSize) {
-        adsPromises.push(
-          supabase
-            .from('ads_performance')
-            .select('ad_id, tanggal, gross_revenue_usd, kurs')
-            .eq('campaign_id', campaignId)
-            .order('tanggal', { ascending: true })
-            .range(i, i + batchSize - 1)
-        );
-      }
-
-      const salesPromises = [];
-      for (let i = 0; i < salesCount; i += batchSize) {
-        salesPromises.push(
-          supabase
-            .from('sales')
-            .select('tanggal, gmv, quantity, creator_username, content_uid, content_type, product_id')
-            .eq('campaign_id', campaignId)
-            .range(i, i + batchSize - 1)
-        );
-      }
-
-      // Fetch organic_videos in controlled chunks (concurrency 4) to avoid Postgres statement timeouts
-      const fetchOrgVideosChunked = async () => {
-        const results: any[] = [];
-        if (!hasSkus || orgCount <= 0) return results;
-        const orgConcurrency = 4;
-        for (let i = 0; i < orgCount; i += batchSize * orgConcurrency) {
-          const chunk = [];
-          for (let c = 0; c < orgConcurrency && (i + c * batchSize) < orgCount; c++) {
-            const from = i + c * batchSize;
-            const to = from + batchSize - 1;
-            chunk.push(
-              supabase
-                .from('organic_videos')
-                .select('content_uid, post_time, content_type, creator_username, product_id')
-                .eq('campaign_id', campaignId)
-                .range(from, to)
-            );
-          }
-          const chunkResults = await Promise.all(chunk);
-          chunkResults.forEach(res => {
-            if (res.data) results.push(...res.data);
-          });
-        }
-        return results;
-      };
-
-      const [ccResults, vidResults, adsResults, salesResults, allOrganicVideos] = await Promise.all([
-        Promise.all(ccPromises),
-        Promise.all(vidPromises),
-        Promise.all(adsPromises),
-        Promise.all(salesPromises),
-        fetchOrgVideosChunked()
-      ]);
-
-      let allVideosFromCreators: any[] = [];
-      ccResults.forEach(r => { if (r.data) allVideosFromCreators = allVideosFromCreators.concat(r.data); });
-
-      let allVideos: any[] = [];
-      vidResults.forEach(r => { if (r.data) allVideos = allVideos.concat(r.data); });
-
-      let allAds: any[] = [];
-      adsResults.forEach(r => { if (r.data) allAds = allAds.concat(r.data); });
-
-      let allSales: any[] = [];
-      salesResults.forEach(r => { if (r.data) allSales = allSales.concat(r.data); });
-
-      // Map videos to corresponding campaign_creator
-      const videosByCcId = new Map<number, any[]>();
-      for (const v of allVideos) {
-        const list = videosByCcId.get(v.campaign_creator_id);
-        if (list) list.push(v);
-        else videosByCcId.set(v.campaign_creator_id, [v]);
-      }
-      for (const cc of allVideosFromCreators) {
-        cc.videos = videosByCcId.get(cc.id) || [];
-      }
-
-      // 3. Resolve missing tiers only for creators lacking tier in campaign_creators
-      const missingTierCreatorIds = Array.from(new Set(
-        allVideosFromCreators.filter(cc => !cc.tier && cc.creator_id).map(cc => cc.creator_id)
-      ));
       const snapshotTierMap = new Map<number, string>();
-      if (missingTierCreatorIds.length > 0) {
-        const chunkSize = 200;
-        const snapPromises = [];
-        for (let i = 0; i < missingTierCreatorIds.length; i += chunkSize) {
-          snapPromises.push(
-            supabase
-              .from('creator_snapshots')
-              .select('creator_id, tier')
-              .in('creator_id', missingTierCreatorIds.slice(i, i + chunkSize))
-              .not('tier', 'is', null)
-              .order('tanggal_update', { ascending: false })
-          );
-        }
-        const snapResults = await Promise.all(snapPromises);
-        snapResults.forEach(res => {
-          (res.data || []).forEach((s: any) => {
-            if (!snapshotTierMap.has(s.creator_id) && s.tier) {
-              snapshotTierMap.set(s.creator_id, s.tier);
-            }
-          });
-        });
-      }
 
       // Grouping
       const grouped: Record<string, { gmv: number; gmvAds: number; creators: Map<string, string>; pendingCreators: Map<string, string>; videos: Set<string>; videoCreators: Set<string>; gmvLive: number; gmvVT: number; ordersLive: number; ordersVT: number; liveSessions: Set<string>; liveCreators: Map<string, string>; pendingLiveCreators: Map<string, string> }> = {};

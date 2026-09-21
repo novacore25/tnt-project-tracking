@@ -7,11 +7,9 @@ import { Upload, Download, Loader2, ArrowRight, FileSpreadsheet, FolderKanban, A
 import { UsernameAutocomplete } from "@/components/ui/UsernameAutocomplete";
 import { findClosestMatch } from "@/utils/stringSimilarity";
 import { downloadCampaignSyncTemplate, parseCampaignSyncFile, parseFileHeaders, ParsedCampaignCreatorRow, CampaignColumnMapping } from "@/utils/importCampaignSync";
-import { createClient } from "@/utils/supabase/client";
+import { fetchCampaignSyncListingDbAction, executeFullCampaignSyncAction } from "@/app/actions/databaseActions";
 import { useDatabaseStore } from "@/store/useDatabaseStore";
 import { exportErrorLogToExcel, ErrorLogItem } from "@/utils/exportErrorLog";
-
-const supabase = createClient();
 
 export function CampaignSyncModal({ campaignId: initialCampaignId, onComplete }: { campaignId?: number; onComplete?: () => void }) {
   const { campaigns, fetchData, creators } = useDatabaseStore();
@@ -130,7 +128,7 @@ export function CampaignSyncModal({ campaignId: initialCampaignId, onComplete }:
     }
   };
 
-  const handleProceedMapping = async () => {
+    const handleProceedMapping = async () => {
     if (!file) return;
     setIsProcessing(true);
     setErrors([]);
@@ -139,21 +137,10 @@ export function CampaignSyncModal({ campaignId: initialCampaignId, onComplete }:
       setPreview(res.validData);
       setErrors(res.errors);
       
-      // Ambil data database untuk summary (harus di-paginate karena batas 1000 row)
-      let allCcData: any[] = [];
-      let hasMore = true;
-      let from = 0;
-      while (hasMore) {
-        const { data } = await supabase.from('campaign_creators').select('id, creator_id, price, qty_vt, qty_live, content_type, status_bayar, creators(username)').eq('campaign_id', campaignId).range(from, from + 999);
-        if (data && data.length > 0) {
-          allCcData.push(...data);
-          if (data.length < 1000) hasMore = false;
-          else from += 1000;
-        } else {
-          hasMore = false;
-        }
+      const dbRes = await fetchCampaignSyncListingDbAction(campaignId);
+      if (dbRes.success) {
+        setExistingDbCreators(dbRes.data);
       }
-      setExistingDbCreators(allCcData);
 
       setStep(3);
     } catch (err: any) {
@@ -167,238 +154,25 @@ export function CampaignSyncModal({ campaignId: initialCampaignId, onComplete }:
     if (preview.length === 0 || campaignId === 0) return;
     setIsCommitting(true);
     setCommitProgress(0);
-    setCommitStatus('Menyiapkan data sinkronisasi...');
+    setCommitStatus('Menjalankan sinkronisasi listing campaign via server action...');
     try {
-      const localErrorLog: ErrorLogItem[] = [];
-      setCommitStatus('Mengecek data kreator di database...');
-      const usernamesArray = Array.from(new Set(preview.map(p => p.username)));
-      const lowercasedUsernames = usernamesArray.map(u => u.toLowerCase());
-      const existingCreators: any[] = [];
-      
-      for (let i = 0; i < usernamesArray.length; i += 100) {
-        const chunk = usernamesArray.slice(i, i + 100);
-        const { data, error } = await supabase.from('creators').select('id, username').in('username', chunk);
-        if (error) throw error;
-        if (data) existingCreators.push(...data);
-      }
-
-      const existingCreatorUsernames = new Set(existingCreators.map(c => c.username.toLowerCase()));
-      let newUsernames = usernamesArray.filter(u => !existingCreatorUsernames.has(u.toLowerCase()));
-      
-      if (syncMode === 'db_acuan') {
-        newUsernames = [];
-      }
-      
-      let creatorMap = new Map(existingCreators.map(c => [c.username.toLowerCase(), c.id]));
-
-      // 2. Batch insert kreator baru (chunk per 100 untuk aman)
-      if (newUsernames.length > 0) {
-        for (let i = 0; i < newUsernames.length; i += 100) {
-          setCommitStatus(`Menyimpan ${newUsernames.length} kreator baru ke database... (${i}/${newUsernames.length})`);
-          const chunk = newUsernames.slice(i, i + 100);
-          const insertData = chunk.map(username => ({
-            username,
-            link_account: `https://www.tiktok.com/@${username}`
-          }));
-          
-          const { data: newC, error: errC } = await supabase.from('creators').insert(insertData).select('id, username');
-          if (errC) {
-            localErrorLog.push({ username: 'BATCH_INSERT', pesan_error: `Gagal menambahkan kreator baru: ${errC.message}`, data_mentah: chunk });
-            // Continue since we don't want to break the whole flow
-          }
-          if (newC) {
-            newC.forEach(c => creatorMap.set(c.username.toLowerCase(), c.id));
-          }
-        }
-      }
-
-      setCommitStatus('Menyiapkan update Creator Pool (Super Import)...');
-      const snapshots: any[] = [];
-      const contacts: any[] = [];
-      const nowStr = new Date().toISOString();
-
-      preview.forEach(row => {
-        const creatorId = creatorMap.get(row.username.toLowerCase());
-        if (!creatorId) return;
-
-        const hasSnapshotData = row.followers !== null || row.ratecard !== null || row.level !== null || row.audience_age !== null || row.gmv_30d !== null || row.tier !== null;
-        
-        if (hasSnapshotData) {
-          // calculate tier if possible or use the row tier
-          let finalTier = row.tier || null;
-          if (!finalTier && typeof row.followers === 'number') {
-             // simplified tier fallback
-             if (row.followers < 10000) finalTier = 'Nano';
-             else if (row.followers < 100000) finalTier = 'Micro';
-             else if (row.followers < 500000) finalTier = 'Macro';
-             else finalTier = 'Mega';
-          }
-
-          snapshots.push({
-            creator_id: creatorId,
-            followers: row.followers ?? null,
-            tier: finalTier,
-            level: row.level ?? null,
-            audience_age: row.audience_age ?? null,
-            gmv_30d: row.gmv_30d ?? null,
-            ratecard: row.ratecard ?? null,
-            tanggal_update: nowStr,
-            updated_by: 'Super Import Listing'
-          });
-        }
-
-        if (row.no_whatsapp) {
-          contacts.push({
-            creator_id: creatorId,
-            nomor: row.no_whatsapp,
-            status: 'aktif',
-            created_at: nowStr
-          });
-        }
+      const syncResult = await executeFullCampaignSyncAction({
+        campaignId,
+        syncMode,
+        previewRows: preview
       });
 
-      if (snapshots.length > 0) {
-        setCommitStatus('Menyimpan Snapshot Kreator...');
-        for (let i = 0; i < snapshots.length; i += 500) {
-          const chunk = snapshots.slice(i, i + 500);
-          await supabase.from('creator_snapshots').insert(chunk);
-        }
-      }
-
-      if (contacts.length > 0) {
-        setCommitStatus('Menyimpan Kontak Kreator...');
-        for (let i = 0; i < contacts.length; i += 500) {
-          const chunk = contacts.slice(i, i + 500);
-          await supabase.from('creator_contacts').insert(chunk);
-        }
-      }
-
-      setCommitStatus('Menyusun data campaign...');
-      const existingCcMap = new Map(existingDbCreators.map(cc => [cc.creator_id, cc]));
-
-      // 3. Siapkan data upsert untuk campaign_creators
-      const toInsertMap = new Map();
-      const toUpdateMap = new Map();
-      
-      preview.forEach(row => {
-        const creatorId = creatorMap.get(row.username.toLowerCase());
-        if (!creatorId) {
-          if (syncMode !== 'db_acuan') {
-            localErrorLog.push({ username: row.username, pesan_error: 'Gagal mendapatkan/membuat ID Kreator', data_mentah: row });
-          }
-          return;
-        }
-        
-        const existingCc = existingCcMap.get(creatorId);
-        const payload: any = {
-          campaign_id: campaignId,
-          creator_id: creatorId,
-          approval: row.approval,
-          notes_manager: row.notes_manager,
-          notes_pic: row.notes_pic,
-          sample_progress: row.sample_progress || 'Belum',
-          client_approval: 'not_required'
-        };
-
-        if (existingCc) {
-          payload.price = existingCc.price || 0;
-          payload.qty_vt = row.qty_vt !== undefined ? row.qty_vt : (existingCc.qty_vt || 1);
-          payload.qty_live = row.qty_live !== undefined ? row.qty_live : (existingCc.qty_live || 0);
-          payload.content_type = row.content_type !== null ? row.content_type : existingCc.content_type;
-          payload.status_bayar = existingCc.status_bayar || 'belum';
-        } else {
-          payload.price = 0;
-          payload.qty_vt = row.qty_vt !== undefined ? row.qty_vt : 1;
-          payload.qty_live = row.qty_live !== undefined ? row.qty_live : 0;
-          if (row.content_type !== null) payload.content_type = row.content_type;
-          payload.status_bayar = 'belum';
-        }
-        
-        if (existingCc) {
-          toUpdateMap.set(existingCc.id, { id: existingCc.id, ...payload });
-        } else {
-          // Jika db_acuan, JANGAN tambahkan orang baru ke dalam campaign
-          if (syncMode !== 'db_acuan') {
-            toInsertMap.set(creatorId, payload);
-          }
-        }
-      });
-
-      const toUpdate = Array.from(toUpdateMap.values());
-      const toInsert = Array.from(toInsertMap.values());
-
-      // 4. Batch update existing
-      for (let i = 0; i < toUpdate.length; i += 500) {
-        setCommitStatus(`Menyinkronkan data lama ke Campaign... (${i}/${toUpdate.length})`);
-        const chunk = toUpdate.slice(i, i + 500);
-        const { error } = await supabase.from('campaign_creators').upsert(chunk);
-        if (error) {
-          localErrorLog.push({ username: 'BATCH_UPDATE', pesan_error: `Gagal upsert campaign_creators: ${error.message}`, data_mentah: chunk });
-        }
-        setCommitProgress(Math.min(i + 500, toUpdate.length));
-      }
-
-      // 5. Batch insert new
-      for (let i = 0; i < toInsert.length; i += 500) {
-        setCommitStatus(`Menambahkan data baru ke Campaign... (${i}/${toInsert.length})`);
-        const chunk = toInsert.slice(i, i + 500);
-        const { error } = await supabase.from('campaign_creators').insert(chunk);
-        if (error) {
-          localErrorLog.push({ username: 'BATCH_INSERT', pesan_error: `Gagal insert campaign_creators: ${error.message}`, data_mentah: chunk });
-        }
-        setCommitProgress(toUpdate.length + Math.min(i + 500, toInsert.length));
-      }
-
-      // 6. Penanganan sisa jika excel_acuan (Delete jika kosong, Pending jika ada video/sales)
-      if (syncMode === 'excel_acuan') {
-        const excelUsernamesSet = new Set(usernamesArray.map(u => u.toLowerCase()));
-        const sisaIds: number[] = [];
-        
-        existingDbCreators.forEach(cc => {
-          const u = cc.creators?.username?.toLowerCase();
-          if (u && !excelUsernamesSet.has(u)) {
-            sisaIds.push(cc.id);
-          }
-        });
-
-        if (sisaIds.length > 0) {
-          setCommitStatus('Mengecek riwayat video kreator sisa...');
-          const { data: vids } = await supabase.from('videos').select('campaign_creator_id').in('campaign_creator_id', sisaIds);
-          const hasVideoSet = new Set(vids?.map(v => v.campaign_creator_id) || []);
-
-          const toPendingIds = sisaIds.filter(id => hasVideoSet.has(id));
-          const toDeleteIds = sisaIds.filter(id => !hasVideoSet.has(id));
-
-          if (toDeleteIds.length > 0) {
-            for (let i = 0; i < toDeleteIds.length; i += 500) {
-              setCommitStatus(`Membersihkan data sisa yang kosong... (${i}/${toDeleteIds.length})`);
-              const chunk = toDeleteIds.slice(i, i + 500);
-              const { error } = await supabase.from('campaign_creators').delete().in('id', chunk);
-              if (error) {
-                 setErrors(prev => [...prev, `Gagal menghapus data: ${error.message}`]);
-              }
-            }
-          }
-
-          if (toPendingIds.length > 0) {
-            for (let i = 0; i < toPendingIds.length; i += 500) {
-              setCommitStatus(`Mengubah status kreator ber-video menjadi Pending... (${i}/${toPendingIds.length})`);
-              const chunk = toPendingIds.slice(i, i + 500);
-              const { error } = await supabase.from('campaign_creators').update({ approval: 'pending' }).in('id', chunk);
-              if (error) {
-                 setErrors(prev => [...prev, `Gagal mengubah status: ${error.message}`]);
-              }
-            }
-          }
-        }
+      if (!syncResult.success) {
+        throw new Error(syncResult.error);
       }
 
       setCommitStatus('Memperbarui tampilan...');
       await fetchData();
-      setErrorLog(localErrorLog);
+      if (onComplete) onComplete();
+      setErrorLog(syncResult.errorLog || []);
       setStep(4);
     } catch (err: any) {
-      setErrors([e.message || "Terjadi kesalahan saat commit ke database."]);
+      setErrors([err.message || "Terjadi kesalahan saat commit ke database."]);
     } finally {
       setIsCommitting(false);
       setCommitStatus('');
