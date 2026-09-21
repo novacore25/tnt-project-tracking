@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { createClient } from "@/utils/supabase/client";
+import { bulkAutoDetectCreatorsAction, verifySpreadsheetCreatorsAction, executeSpreadsheetImportAction } from "@/app/actions/creatorActions";
 import { getAutoTier } from '@/utils/importCreatorSync';
 import { ArrowLeft, Save, Play, Plus, Trash2, AlertCircle, CheckCircle2 } from "lucide-react";
 import { useDatabaseStore } from "@/store/useDatabaseStore";
@@ -53,7 +53,6 @@ const getEmptyRow = (): SpreadsheetRow => ({
 export default function SpreadsheetImportClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const supabase = createClient();
   const { niches, fetchData } = useDatabaseStore();
   const { profile } = useAuth();
   
@@ -82,9 +81,7 @@ export default function SpreadsheetImportClient() {
     
     setIsAutoDetecting(true);
     try {
-      const { data: matchedCreators } = await supabase.from('creators')
-        .select('id, username, creator_contacts(nomor, status), creator_snapshots(ratecard, followers, level, audience_age, gmv_30d, tanggal_update, id), creator_niches(niche_id, niches(nama))')
-        .in('username', usernames);
+      const matchedCreators = await bulkAutoDetectCreatorsAction(usernames);
         
       if (matchedCreators && matchedCreators.length > 0) {
         setRows(currentRows => {
@@ -386,22 +383,17 @@ export default function SpreadsheetImportClient() {
     }
 
     const usernames = filledRows.map(r => r.username);
-    const { data: dbCreators } = await supabase.from('creators').select('id, username, added_by, created_at, last_updated_by, last_updated_at').in('username', usernames);
-    const creatorMap = new Map((dbCreators || []).map(c => [c.username, c]));
-    
-    const { data: profiles } = await supabase.from('profiles').select('id, nama');
-    const profileMap = new Map((profiles || []).map(p => [p.id, p.nama]));
+    const dbCreators = await verifySpreadsheetCreatorsAction(usernames);
+    const creatorMap = new Map((dbCreators || []).map((c: any) => [c.username.toLowerCase(), c]));
 
     filledRows = filledRows.map(r => {
-      const c = creatorMap.get(r.username);
+      const c = creatorMap.get(r.username.toLowerCase());
       if (!c) {
         return { ...r, status: 'baru', existingInfo: 'Belum terdaftar di database' };
       }
       
-      const updaterId = c.last_updated_by;
-      const adderId = c.added_by;
-      const updaterName = updaterId ? (profileMap.get(updaterId) || updaterId) : null;
-      const adderName = adderId ? (profileMap.get(adderId) || adderId) : null;
+      const updaterName = c.updater_name;
+      const adderName = c.adder_name;
 
       const lastUpdate = updaterName ? `diupdate oleh ${updaterName}` : (adderName ? `diinput oleh ${adderName}` : 'Sistem');
       const lastDate = c.last_updated_at || c.created_at;
@@ -431,113 +423,7 @@ export default function SpreadsheetImportClient() {
         username: r.username.replace('@', '').trim().toLowerCase()
       }));
       
-      const uniqueUsernames = Array.from(new Set(filledRows.map(r => r.username)));
-      
-      // Upsert Creators
-      const creatorPayloads = [];
-      const dbCreatorsRes = await supabase.from('creators').select('username').in('username', uniqueUsernames);
-      const existingUsernames = new Set((dbCreatorsRes.data || []).map(c => c.username));
-
-      const uniqueRowsMap = new Map();
-      filledRows.forEach(r => uniqueRowsMap.set(r.username, r));
-
-      for (const r of uniqueRowsMap.values()) {
-        if (!existingUsernames.has(r.username)) {
-           creatorPayloads.push({
-             username: r.username,
-             link_account: `https://www.tiktok.com/@${r.username}`,
-             mcn: r.mcn || null,
-             avatar_url: r.avatar_url || null,
-             added_by: profile?.id
-           });
-        } else {
-           creatorPayloads.push({
-             username: r.username,
-             mcn: r.mcn || null,
-             avatar_url: r.avatar_url || null,
-             link_account: `https://www.tiktok.com/@${r.username}`,
-             last_updated_by: profile?.id,
-             last_updated_at: new Date().toISOString()
-           });
-        }
-      }
-
-      const { data: cData, error: cErr } = await supabase.from('creators').upsert(
-        creatorPayloads,
-        { onConflict: 'username' }
-      ).select('id, username');
-      
-      if (cErr) throw cErr;
-      const cMap = new Map(cData?.map(c => [c.username, c.id]));
-
-      const snapshots = [];
-      const contacts = [];
-      for (const r of uniqueRowsMap.values()) {
-        const cId = cMap.get(r.username);
-        if (!cId) continue;
-        
-        snapshots.push({
-          creator_id: cId,
-          followers: parseInt(r.followers) || null,
-          tier: r.followers ? getAutoTier(parseInt(r.followers) || 0) : null,
-          level: parseInt(r.level) || null,
-          audience_age: r.audience_age || null,
-          gmv_30d: parseInt(r.gmv_30d) || null,
-          ratecard: parseInt(r.ratecard) || null,
-          tanggal_update: new Date().toISOString(),
-          updated_by: profile?.nama || 'System'
-        });
-
-        if (r.whatsapp) {
-          let cleanWa = r.whatsapp.replace(/\D/g, '');
-          if (cleanWa.startsWith('62')) cleanWa = '0' + cleanWa.substring(2);
-          else if (cleanWa.startsWith('8')) cleanWa = '0' + cleanWa;
-          
-          if (cleanWa) {
-            contacts.push({
-              creator_id: cId,
-              nomor: cleanWa,
-              status: 'aktif',
-              created_at: new Date().toISOString()
-            });
-          }
-        }
-      }
-
-      if (snapshots.length > 0) {
-        await supabase.from('creator_snapshots').insert(snapshots);
-      }
-      if (contacts.length > 0) {
-        const creatorIdsWithContacts = Array.from(new Set(contacts.map(c => c.creator_id)));
-        await supabase.from('creator_contacts').delete().in('creator_id', creatorIdsWithContacts);
-        await supabase.from('creator_contacts').insert(contacts);
-      }
-
-      const typedNiches = new Set(filledRows.map(r => r.niche.trim()).filter(Boolean));
-      if (typedNiches.size > 0) {
-        const { data: dbNiches } = await supabase.from('niches').select('id, nama');
-        const existingNicheNames = new Set((dbNiches || []).map(n => n.nama.toLowerCase()));
-        const missingNiches = Array.from(typedNiches).filter(n => !existingNicheNames.has(n.toLowerCase()));
-        if (missingNiches.length > 0) {
-          await supabase.from('niches').insert(missingNiches.map(name => ({ nama: name })));
-        }
-        const { data: finalNiches } = await supabase.from('niches').select('id, nama');
-        const nicheMap = new Map((finalNiches || []).map(n => [n.nama.toLowerCase(), n.id]));
-        const creatorNiches = [];
-        for (const r of uniqueRowsMap.values()) {
-           const cId = cMap.get(r.username);
-           const nicheName = r.niche.trim().toLowerCase();
-           const nId = nicheMap.get(nicheName);
-           if (cId && nId) {
-             creatorNiches.push({ creator_id: cId, niche_id: nId, peringkat: 1 });
-           }
-        }
-        if (creatorNiches.length > 0) {
-          const updatedCreatorIds = Array.from(new Set(creatorNiches.map(cn => cn.creator_id)));
-          await supabase.from('creator_niches').delete().in('creator_id', updatedCreatorIds);
-          await supabase.from('creator_niches').insert(creatorNiches);
-        }
-      }
+      await executeSpreadsheetImportAction(filledRows);
       
       await fetchData();
       localStorage.removeItem(`tnt_import_draft_global`);

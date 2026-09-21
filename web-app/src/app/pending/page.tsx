@@ -1,15 +1,12 @@
 "use client";
 
-import { createClient } from "@/utils/supabase/client";
+import { signOut } from "next-auth/react";
 import { Button } from "@/components/ui/Button";
 import { LogOut } from "lucide-react";
 
 export default function PendingPage() {
-  const supabase = createClient();
-
   const handleLogout = async () => {
-    await supabase.auth.signOut();
-    window.location.href = "/login";
+    await signOut({ callbackUrl: "/login" });
   };
 
   return (

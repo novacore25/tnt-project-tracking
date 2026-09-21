@@ -4,9 +4,9 @@ import React, { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { createClient } from "@/utils/supabase/client";
 import { ArrowLeft, Save, Plus, Trash2, CheckCircle2, AlertCircle } from "lucide-react";
 import { useDatabaseStore } from "@/store/useDatabaseStore";
+import { bulkAutoDetectAddressCreatorsAction, importSpreadsheetAddressesAction } from "@/app/actions/addressActions";
 
 type SpreadsheetRow = {
   id: string;
@@ -61,7 +61,6 @@ export default function SpreadsheetImportAddressClient() {
   const router = useRouter();
   const { id } = useParams();
   const campaignId = Number(id);
-  const supabase = createClient();
   const { campaigns } = useDatabaseStore();
   
   const campaign = campaigns.find(c => c.id === campaignId);
@@ -91,11 +90,7 @@ export default function SpreadsheetImportAddressClient() {
     
     setIsAutoDetecting(true);
     try {
-      const { data: allCCs } = await supabase.from('campaign_creators')
-        .select('id, creators!inner(id, username)')
-        .eq('campaign_id', campaignId);
-        
-      const matchedCCs = (allCCs || []).filter((cc: any) => usernames.includes(cc.creators.username.toLowerCase()));
+      const matchedCCs = await bulkAutoDetectAddressCreatorsAction(campaignId, usernames);
         
       if (matchedCCs && matchedCCs.length > 0) {
         setRows(currentRows => {
@@ -107,7 +102,7 @@ export default function SpreadsheetImportAddressClient() {
             const uname = row.username.replace('@', '').trim().toLowerCase();
             if (!uname) continue;
             
-            const matched = matchedCCs.find((cc: any) => cc.creators.username.toLowerCase() === uname);
+            const matched = matchedCCs.find((cc: any) => cc.username.toLowerCase() === uname);
             if (!matched) {
               if (row.status !== 'error') {
                 newRows[i] = { ...row, status: 'error', errorMsg: 'Kreator tidak ditemukan di campaign ini' };
@@ -116,11 +111,11 @@ export default function SpreadsheetImportAddressClient() {
               continue;
             }
 
-            if (row.ccId !== matched.id) {
+            if (row.ccId !== matched.cc_id) {
               newRows[i] = {
                 ...row,
-                ccId: matched.id,
-                creatorId: matched.creators.id,
+                ccId: matched.cc_id,
+                creatorId: matched.creator_id,
                 status: 'update',
                 errorMsg: undefined
               };
@@ -136,7 +131,7 @@ export default function SpreadsheetImportAddressClient() {
         }));
       }
     } catch (err) {
-      console.error(e);
+      console.error(err);
     } finally {
       setIsAutoDetecting(false);
     }
@@ -425,118 +420,22 @@ export default function SpreadsheetImportAddressClient() {
 
     setIsImporting(true);
     setSaveProgress({ current: 0, total: validRows.length });
-    let successCount = 0;
-    let failCount = 0;
 
-    const BATCH_SIZE = 25; // 25 data secara paralel agar cepat namun tidak menembus batas limit koneksi DB
-    
-    for (let i = 0; i < validRows.length; i += BATCH_SIZE) {
-      const batch = validRows.slice(i, i + BATCH_SIZE);
+    try {
+      const result = await importSpreadsheetAddressesAction(campaignId, campaign?.nama || '', validRows);
       
-      await Promise.all(batch.map(async (row) => {
-        try {
-          // 1. Dapatkan creator_addresses yang existing untuk update
-        const { data: existingAddr } = await supabase.from('creator_addresses')
-          .select('id, resi')
-          .eq('campaign_creator_id', row.ccId)
-          .maybeSingle();
-
-        const payload: any = {
-          campaign_creator_id: row.ccId,
-        };
-
-        if (row.nama_penerima?.trim()) payload.nama_penerima = row.nama_penerima;
-        if (row.nama_jalan?.trim()) payload.nama_jalan = row.nama_jalan;
-        if (row.provinsi?.trim()) payload.provinsi = row.provinsi;
-        if (row.kabupaten_kota?.trim()) payload.kabupaten_kota = row.kabupaten_kota;
-        if (row.kecamatan?.trim()) payload.kecamatan = row.kecamatan;
-        if (row.kelurahan?.trim()) payload.kelurahan = row.kelurahan;
-        if (row.kode_pos?.trim()) payload.kode_pos = row.kode_pos;
-        if (row.tanggal_kirim?.trim()) payload.tanggal_kirim = row.tanggal_kirim;
-        if (row.resi?.trim()) {
-          payload.resi = row.resi;
-          if (!existingAddr || existingAddr.resi !== row.resi) {
-            payload.resi_updated_at = new Date().toISOString();
-            payload.resi_updated_by = 'Internal TNT';
-          }
-        }
-        if (row.ekspedisi?.trim()) payload.ekspedisi = row.ekspedisi;
-        if (row.notes?.trim()) payload.notes = row.notes;
-        if (row.proses?.trim()) payload.proses = row.proses;
-
-        if (existingAddr) {
-          await supabase.from('creator_addresses').update(payload).eq('id', existingAddr.id);
-        } else {
-          await supabase.from('creator_addresses').insert(payload);
-        }
-
-        // 2. Cek histori creator_address_book jika berbeda, tambahkan
-        if (row.nama_jalan && row.creatorId) {
-          const { data: addressBook } = await supabase.from('creator_address_book')
-            .select('id')
-            .eq('creator_id', row.creatorId)
-            .ilike('alamat_jalan', row.nama_jalan);
-          
-          if (!addressBook || addressBook.length === 0) {
-            await supabase.from('creator_address_book').insert({
-              creator_id: row.creatorId,
-              label: `Alamat Campaign ${campaign?.nama || ''}`,
-              nama_penerima: row.nama_penerima,
-              alamat_jalan: row.nama_jalan,
-              provinsi: row.provinsi,
-              kota: row.kabupaten_kota,
-              kecamatan: row.kecamatan,
-              kodepos: row.kode_pos
-            });
-          }
-        }
-
-        // 3. Tambahkan ke creator_contacts jika whatsapp diisi dan belum ada
-        if (row.whatsapp && row.creatorId) {
-          // bersihkan karakter non angka
-          let cleanWa = row.whatsapp.replace(/\D/g, '');
-          if (cleanWa.startsWith('62')) {
-            cleanWa = '0' + cleanWa.substring(2);
-          } else if (cleanWa.startsWith('8')) {
-            cleanWa = '0' + cleanWa;
-          }
-
-          if (cleanWa) {
-            const { data: contacts } = await supabase.from('creator_contacts')
-              .select('id')
-              .eq('creator_id', row.creatorId)
-              .like('nomor', `%${cleanWa}%`);
-              
-            if (!contacts || contacts.length === 0) {
-              await supabase.from('creator_contacts').insert({
-                creator_id: row.creatorId,
-                nomor: cleanWa,
-                status: 'aktif',
-                tanggal_mulai: new Date().toISOString().split('T')[0]
-              });
-            }
-          }
-        }
-        
-        // Tandai row selesai
-        setRows(prev => prev.map(r => r.id === row.id ? { ...r, status: 'baru' } : r));
-        successCount++;
-      } catch (err: any) {
-        console.error(err);
-        setRows(prev => prev.map(r => r.id === row.id ? { ...r, status: 'error', errorMsg: err.message } : r));
-        failCount++;
+      setSaveProgress({ current: validRows.length, total: validRows.length });
+      setIsImporting(false);
+      alert(`Import selesai!\nBerhasil: ${result.successCount}\nGagal: ${result.failCount}`);
+      
+      if (result.failCount === 0) {
+        localStorage.removeItem(`tnt_import_alamat_${campaignId}`);
+        router.back(); // kembali ke alamat
       }
-      }));
-      
-      setSaveProgress(prev => ({ ...prev, current: Math.min(prev.current + BATCH_SIZE, prev.total) }));
-    }
-
-    setIsImporting(false);
-    setSaveProgress({ current: 0, total: 0 });
-    alert(`Import selesai!\nBerhasil: ${successCount}\nGagal: ${failCount}`);
-    if (failCount === 0) {
-      localStorage.removeItem(`tnt_import_alamat_${campaignId}`);
-      router.back(); // kembali ke alamat
+    } catch (err: any) {
+      console.error(err);
+      setIsImporting(false);
+      alert("Terjadi kesalahan saat menyimpan data: " + (err.message || "Unknown error"));
     }
   };
 

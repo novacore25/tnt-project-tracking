@@ -4,14 +4,18 @@ import { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import { useParams } from "next/navigation";
 import { useDatabaseStore } from "@/store/useDatabaseStore";
 import { CreatorAddress } from "@/types/database";
-import { createClient } from "@/utils/supabase/client";
 import { Download, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
 import { exportToCSV } from "@/utils/exportCsv";
 import { useAuth } from "@/providers/AuthProvider";
 import { MultiSelect } from "@/components/MultiSelect";
 import { useCampaignFilter } from "@/providers/CampaignFilterProvider";
+import { 
+  fetchCampaignCreatorsForAddressAction,
+  fetchCreatorAddressBookAction,
+  saveAddressDetailsAction,
+  syncMissingCampaignAddressesAction
+} from "@/app/actions/addressActions";
 
-const supabase = createClient();
 const PAGE_SIZE = 50;
 
 export default function AlamatPage() {
@@ -20,11 +24,8 @@ export default function AlamatPage() {
   const { isCreatorVisible } = useCampaignFilter();
 
   const {
-    campaign_creators,
-    creators,
     creator_addresses,
     fetchCreatorAddresses,
-    updateCreatorAddress,
     isLoading,
     campaigns,
     skus
@@ -71,42 +72,23 @@ export default function AlamatPage() {
   const [addressBook, setAddressBook] = useState<any[]>([]);
   const [selectedBookId, setSelectedBookId] = useState<string>('');
 
-  useEffect(() => {
-    fetchCreatorAddresses(campaignId);
-  }, [campaignId, fetchCreatorAddresses]);
-
-  useEffect(() => {
-    const fetchCCs = async () => {
-      if (!campaignId) return;
-      setIsFetchingCC(true);
-      let all: any[] = [];
-      let from = 0;
-      let hasMore = true;
-      while (hasMore) {
-        let query = supabase
-          .from('campaign_creators')
-          .select('*, creators(*, creator_contacts(nomor, status))')
-          .eq('campaign_id', campaignId)
-          .eq('approval', 'approved');
-          
-        if (campaign?.require_client_approval) {
-          query = query.in('client_approval', ['approved', 'not_required']);
-        }
-
-        const { data } = await query.range(from, from + 999);
-        if (data && data.length > 0) {
-          all = [...all, ...data];
-          if (data.length < 1000) hasMore = false;
-          else from += 1000;
-        } else {
-          hasMore = false;
-        }
-      }
-      setLocalCreators(all);
+  const loadData = useCallback(async () => {
+    if (!campaignId) return;
+    setIsFetchingCC(true);
+    try {
+      const ccs = await fetchCampaignCreatorsForAddressAction(campaignId, campaign?.require_client_approval);
+      setLocalCreators(ccs);
+      await fetchCreatorAddresses(campaignId);
+    } catch (err) {
+      console.error('Error fetching campaign creators for address:', err);
+    } finally {
       setIsFetchingCC(false);
-    };
-    fetchCCs();
-  }, [campaignId, campaign?.require_client_approval]);
+    }
+  }, [campaignId, campaign?.require_client_approval, fetchCreatorAddresses]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   // Auto-sync missing addresses from profile
   useEffect(() => {
@@ -115,61 +97,10 @@ export default function AlamatPage() {
     
     const autoSync = async () => {
       hasSyncedRef.current.add(campaignId);
-      
-      const existingCcIds = new Set(creator_addresses.map(a => a.campaign_creator_id));
-      const missingCCs = localCreators.filter(cc => !existingCcIds.has(cc.id) && cc.creator_id);
-      
-      if (missingCCs.length === 0) return;
-      
       try {
-        const creatorIds = missingCCs.map(cc => cc.creator_id);
-        const { data: addressBooks } = await supabase
-          .from('creator_address_book')
-          .select('*')
-          .in('creator_id', creatorIds);
-          
-        const insertPayloads = [];
-        for (const cc of missingCCs) {
-          const books = (addressBooks || []).filter(b => b.creator_id === cc.creator_id);
-          if (books.length > 0) {
-            books.sort((a, b) => {
-              if (a.is_primary && !b.is_primary) return -1;
-              if (!a.is_primary && b.is_primary) return 1;
-              return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-            });
-            const best = books[0];
-            insertPayloads.push({
-              campaign_creator_id: cc.id,
-              nama_penerima: best.nama_penerima || cc.creators?.alamat_penerima || '',
-              nama_jalan: best.alamat_jalan || cc.creators?.alamat_jalan || '',
-              provinsi: best.provinsi || cc.creators?.alamat_provinsi || '',
-              kabupaten_kota: best.kota || cc.creators?.alamat_kota || '',
-              kecamatan: best.kecamatan || cc.creators?.alamat_kecamatan || '',
-              kelurahan: '',
-              kode_pos: best.kodepos || cc.creators?.alamat_kodepos || '',
-              proses: 'Belum diproses'
-            });
-          } else if (cc.creators?.alamat_jalan || cc.creators?.alamat_penerima) {
-            insertPayloads.push({
-              campaign_creator_id: cc.id,
-              nama_penerima: cc.creators?.alamat_penerima || '',
-              nama_jalan: cc.creators?.alamat_jalan || '',
-              provinsi: cc.creators?.alamat_provinsi || '',
-              kabupaten_kota: cc.creators?.alamat_kota || '',
-              kecamatan: cc.creators?.alamat_kecamatan || '',
-              kelurahan: '',
-              kode_pos: cc.creators?.alamat_kodepos || '',
-              proses: 'Belum diproses'
-            });
-          }
-        }
-        
-        if (insertPayloads.length > 0) {
-          const BATCH_SIZE = 50;
-          for (let i = 0; i < insertPayloads.length; i += BATCH_SIZE) {
-             await supabase.from('creator_addresses').insert(insertPayloads.slice(i, i + BATCH_SIZE));
-          }
-          fetchCreatorAddresses(campaignId);
+        const res = await syncMissingCampaignAddressesAction(campaignId);
+        if (res.inserted > 0) {
+          await fetchCreatorAddresses(campaignId);
         }
       } catch (err) {
         console.error("Auto sync failed", err);
@@ -177,7 +108,7 @@ export default function AlamatPage() {
     };
     
     autoSync();
-  }, [isFetchingCC, isLoading, localCreators, creator_addresses, campaignId, fetchCreatorAddresses]);
+  }, [isFetchingCC, isLoading, localCreators, campaignId, fetchCreatorAddresses]);
 
   // Memoize address lookup map for O(1) access instead of O(n) per row
   const addressMap = useMemo(() => {
@@ -266,7 +197,7 @@ export default function AlamatPage() {
     const creator = cc?.creators;
     const creatorId = cc?.creator_id;
     if (creatorId) {
-      const { data: book } = await supabase.from('creator_address_book').select('*').eq('creator_id', creatorId).order('is_primary', { ascending: false });
+      const book = await fetchCreatorAddressBookAction(creatorId);
       setAddressBook(book || []);
     } else {
       setAddressBook([]);
@@ -350,72 +281,26 @@ export default function AlamatPage() {
       (payload as any).resi_updated_by = 'Internal TNT';
     }
 
-    await updateCreatorAddress(existing?.id || null, payload);
-    
-    // Save assigned_sku_ids
-    if (cc && JSON.stringify(cc.assigned_sku_ids || []) !== JSON.stringify(editAssignedSkus)) {
-      await updateCampaignCreator(ccId, { assigned_sku_ids: editAssignedSkus }, 'System');
-      // Update local state so it immediately reflects
-      setLocalCreators(prev => prev.map(c => c.id === ccId ? { ...c, assigned_sku_ids: editAssignedSkus } : c));
-    }
-    
-    // Save Whatsapp to creator_contacts
-    if (cc && cc.creator_id && isWaChanged && cleanWa) {
-      // 1. Archive old active contacts first
-      await supabase.from('creator_contacts')
-        .update({ status: 'arsip' })
-        .eq('creator_id', cc.creator_id)
-        .eq('status', 'aktif');
-        
-      // 2. Insert new contact
-      await supabase.from('creator_contacts').insert({
-        creator_id: cc.creator_id,
-        nomor: cleanWa,
-        status: 'aktif',
-        tanggal_mulai: new Date().toISOString().split('T')[0]
+    try {
+      await saveAddressDetailsAction({
+        campaignCreatorId: ccId,
+        existingAddressId: existing?.id,
+        formData: payload,
+        assignedSkuIds: isSkusChanged ? editAssignedSkus : undefined,
+        whatsapp: isWaChanged ? cleanWa : undefined,
+        creatorId: cc?.creator_id,
+        saveToBook: Boolean(formData.nama_jalan && !selectedBookId),
+        campaignName: campaign?.nama
       });
-      // Update local state so it immediately reflects
-      setLocalCreators(prev => prev.map(c => {
-        if (c.id === ccId) {
-          const oldContacts = Array.isArray(c.creators?.creator_contacts) ? c.creators.creator_contacts : (c.creators?.creator_contacts ? [c.creators.creator_contacts] : []);
-          const archivedContacts = oldContacts.map((contact: any) => 
-            contact.status === 'aktif' ? { ...contact, status: 'arsip' } : contact
-          );
-          const updatedContacts = [...archivedContacts, { nomor: cleanWa, status: 'aktif' }];
-          return {
-            ...c,
-            creators: {
-              ...c.creators,
-              creator_contacts: updatedContacts
-            }
-          };
-        }
-        return c;
-      }));
-    }
-    
-    // Auto-save to address book if not selected from book
-    if (formData.nama_jalan && !selectedBookId) {
-      if (cc && cc.creator_id) {
-        // Check if exactly same address exists in book
-        const isExist = addressBook.find(b => b.alamat_jalan?.toLowerCase() === formData.nama_jalan?.toLowerCase());
-        if (!isExist) {
-          await supabase.from('creator_address_book').insert({
-            creator_id: cc.creator_id,
-            label: 'Alamat Campaign ' + (campaign?.nama || ''),
-            nama_penerima: formData.nama_penerima,
-            alamat_jalan: formData.nama_jalan,
-            kecamatan: formData.kecamatan,
-            kota: formData.kabupaten_kota,
-            provinsi: formData.provinsi,
-            kodepos: formData.kode_pos
-          });
-        }
-      }
-    }
 
-    setEditId(null);
-    setIsSaving(false);
+      // Refresh data
+      await loadData();
+    } catch (err) {
+      console.error('Error saving address:', err);
+    } finally {
+      setEditId(null);
+      setIsSaving(false);
+    }
   };
 
   const handleSelectBook = (bookId: string) => {

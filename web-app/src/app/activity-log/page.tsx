@@ -2,14 +2,12 @@
 
 import React, { useEffect, useState } from "react";
 import { useAuth } from "@/providers/AuthProvider";
-import { createClient } from "@/utils/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/Table";
 import { Loader2 } from "lucide-react";
 import { exportToCSV } from "@/utils/exportCsv";
 import { Button } from "@/components/ui/Button";
-
-const supabase = createClient();
+import { fetchActivityLogsAction } from "@/app/actions/activityActions";
 
 export default function ActivityLogPage() {
   const { profile, isLoading: authLoading } = useAuth();
@@ -25,16 +23,14 @@ export default function ActivityLogPage() {
 
     const fetchLogs = async () => {
       setIsLoading(true);
-      const { data, error } = await supabase
-        .from('audit_logs')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(500);
-
-      if (!error && data) {
+      try {
+        const data = await fetchActivityLogsAction(500);
         setLogs(data);
+      } catch (err) {
+        console.error('Error fetching logs:', err);
+      } finally {
+        setIsLoading(false);
       }
-      setIsLoading(false);
     };
 
     fetchLogs();

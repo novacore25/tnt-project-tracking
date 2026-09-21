@@ -8,11 +8,10 @@ import { UsernameAutocomplete } from "@/components/ui/UsernameAutocomplete";
 import { findClosestMatch } from "@/utils/stringSimilarity";
 import { downloadAddressSyncTemplate, parseAddressSyncFile, AddressColumnMapping, ParsedAddressRow } from "@/utils/importAddressSync";
 import { parseFileHeaders } from "@/utils/importCampaignSync";
-import { createClient } from "@/utils/supabase/client";
 import { useDatabaseStore } from "@/store/useDatabaseStore";
 import { exportErrorLogToExcel, ErrorLogItem } from "@/utils/exportErrorLog";
-
-const supabase = createClient();
+import { verifySpreadsheetCreatorsAction } from "@/app/actions/creatorActions";
+import { syncAddressBatchAction } from "@/app/actions/addressActions";
 
 export function AddressSyncModal({ campaignId: initialCampaignId, onComplete }: { campaignId?: number; onComplete?: () => void }) {
   const { campaigns, fetchData, creators, skus } = useDatabaseStore();
@@ -123,16 +122,9 @@ export function AddressSyncModal({ campaignId: initialCampaignId, onComplete }: 
     try {
       const uniquePreview = Array.from(new Map(preview.map(item => [item.username.toLowerCase(), item])).values());
       const usernamesArray = uniquePreview.map(p => p.username);
-      const existingCreators: any[] = [];
       
-      for (let i = 0; i < usernamesArray.length; i += 100) {
-        const chunk = usernamesArray.slice(i, i + 100);
-        const { data, error } = await supabase.from('creators').select('id, username').in('username', chunk);
-        if (error) throw error;
-        if (data) existingCreators.push(...data);
-      }
-
-      const existingCreatorUsernames = new Set(existingCreators.map(c => c.username.toLowerCase()));
+      const verification = await verifySpreadsheetCreatorsAction(usernamesArray);
+      const existingCreatorUsernames = new Set(verification.map(c => c.username.toLowerCase()));
       const newUsernames = usernamesArray.filter(u => !existingCreatorUsernames.has(u.toLowerCase()));
       
       if (newUsernames.length > 0) {
@@ -140,143 +132,30 @@ export function AddressSyncModal({ campaignId: initialCampaignId, onComplete }: 
         setShowConfirmNewCreators(true);
         setIsCommitting(false);
       } else {
-        await executeCommit(existingCreators, []);
+        await executeCommit([]);
       }
     } catch (err: any) {
-      setErrors([e.message || "Terjadi kesalahan saat memverifikasi kreator."]);
+      setErrors([err.message || "Terjadi kesalahan saat memverifikasi kreator."]);
       setIsCommitting(false);
     }
   };
 
-  const executeCommit = async (existingCreators: any[], usernamesToSkip: string[]) => {
+  const executeCommit = async (usernamesToSkip: string[]) => {
     setIsCommitting(true);
-    setCommitProgress(0);
-    const skipSet = new Set(usernamesToSkip.map(u => u.toLowerCase()));
-    const localErrorLog: ErrorLogItem[] = [];
+    setCommitProgress(50);
+    setCommitStatus('Menyimpan data alamat ke database...');
     
     try {
-      const { data: ccs } = await supabase
-        .from('campaign_creators')
-        .select('id, creator_id, creators(username)')
-        .eq('campaign_id', campaignId);
-        
-      const campaignSkus = skus.filter(s => s.campaign_id === campaignId);
-
-      const usernameToCcId = new Map<string, number>();
-      ccs?.forEach(cc => {
-        const creator = cc.creators as any;
-        if (creator && !Array.isArray(creator) && creator.username) {
-          usernameToCcId.set(creator.username.toLowerCase(), cc.id);
-        }
-      });
-
-      const { data: addresses } = await supabase
-        .from('creator_addresses')
-        .select('id, campaign_creator_id')
-        .in('campaign_creator_id', ccs?.map(c => c.id) || []);
-
-      const addressMap = new Map(addresses?.map(a => [a.campaign_creator_id, a.id]));
-      let creatorMap = new Map(existingCreators.map(c => [c.username.toLowerCase(), c.id]));
-      
       const uniquePreview = Array.from(new Map(preview.map(item => [item.username.toLowerCase(), item])).values());
-      const chunkArray = (arr: any[], size: number) => Array.from({ length: Math.ceil(arr.length / size) }, (v, i) => arr.slice(i * size, i * size + size));
-      const chunks = chunkArray(uniquePreview, 50);
+      const res = await syncAddressBatchAction(campaignId, uniquePreview, usernamesToSkip);
 
-      for (let c = 0; c < chunks.length; c++) {
-        setCommitStatus(`Memproses gerbong ${c + 1} dari ${chunks.length}...`);
-        
-        await Promise.all(chunks[c].map(async (row: any, idx: number) => {
-          const lowerUser = row.username.toLowerCase();
-          
-          if (skipSet.has(lowerUser)) {
-            localErrorLog.push({ username: row.username, pesan_error: 'Kreator tidak ditemukan di database pusat dan Anda memilih untuk melewati', data_mentah: row });
-            return;
-          }
-
-          let creatorId = creatorMap.get(lowerUser);
-          
-          if (!creatorId) {
-            const { data: newC, error: errC } = await supabase.from('creators').insert({ username: row.username, link_account: `https://tiktok.com/@${row.username}` }).select('id').single();
-            if (newC) {
-              creatorId = newC.id as number;
-              creatorMap.set(lowerUser, creatorId);
-            } else {
-              localErrorLog.push({ username: row.username, pesan_error: 'Gagal membuat kreator baru di database', data_mentah: row });
-              return;
-            }
-          }
-
-          let ccId = usernameToCcId.get(lowerUser);
-          
-          if (!ccId) {
-            const { data: newCc, error: errCc } = await supabase.from('campaign_creators').insert({
-              campaign_id: campaignId,
-              creator_id: creatorId,
-              approval: 'pending',
-              client_approval: 'not_required',
-              status_bayar: 'belum',
-              qty_vt: 1,
-              price: 0
-            }).select('id').single();
-            
-            if (newCc) {
-              ccId = newCc.id as number;
-              usernameToCcId.set(lowerUser, ccId);
-            } else {
-              localErrorLog.push({ username: row.username, pesan_error: 'Gagal menambahkan kreator ke campaign ini', data_mentah: row });
-              return;
-            }
-          }
-
-          const existingAddrId = addressMap.get(ccId);
-          const payload = {
-            campaign_creator_id: ccId,
-            ...(row.nama_penerima && { nama_penerima: row.nama_penerima }),
-            ...(row.nama_jalan && { nama_jalan: row.nama_jalan }),
-            ...(row.kecamatan && { kecamatan: row.kecamatan }),
-            ...(row.kelurahan && { kelurahan: row.kelurahan }),
-            ...(row.kabupaten_kota && { kabupaten_kota: row.kabupaten_kota }),
-            ...(row.provinsi && { provinsi: row.provinsi }),
-            ...(row.kode_pos && { kode_pos: row.kode_pos }),
-            ...(row.resi && { resi: row.resi }),
-            ...(row.proses && { proses: row.proses }),
-            ...(row.tanggal_kirim && { tanggal_kirim: row.tanggal_kirim }),
-            ...(row.resi && { resi: row.resi }),
-            ...(row.ekspedisi && { ekspedisi: row.ekspedisi }),
-            ...(row.notes && { notes: row.notes }),
-          };
-
-          if (existingAddrId) {
-            await supabase.from('creator_addresses').update(payload).eq('id', existingAddrId);
-          } else {
-            await supabase.from('creator_addresses').insert(payload);
-          }
-
-          if (row.produk) {
-            const inputSkus = row.produk.split(',').map((p: string) => p.trim().toLowerCase()).filter(Boolean);
-            const matchedSkuIds: number[] = [];
-            
-            inputSkus.forEach((inputSkuName: string) => {
-              const matched = campaignSkus.find(s => s.nama_produk.toLowerCase().includes(inputSkuName) || inputSkuName.includes(s.nama_produk.toLowerCase()));
-              if (matched) {
-                matchedSkuIds.push(matched.id);
-              }
-            });
-
-            if (matchedSkuIds.length > 0) {
-              await supabase.from('campaign_creators').update({ assigned_sku_ids: matchedSkuIds }).eq('id', ccId);
-            }
-          }
-        }));
-
-        setCommitProgress(((c + 1) / chunks.length) * 100);
-      }
-
-      setErrorLog(localErrorLog);
+      setErrorLog(res.errorLog || []);
+      setCommitProgress(100);
       await fetchData();
+      if (onComplete) onComplete();
       setStep(4);
     } catch (err: any) {
-      setErrors([e.message || "Terjadi kesalahan saat commit ke database."]);
+      setErrors([err.message || "Terjadi kesalahan saat commit ke database."]);
     } finally {
       setIsCommitting(false);
       setShowConfirmNewCreators(false);
@@ -285,27 +164,10 @@ export function AddressSyncModal({ campaignId: initialCampaignId, onComplete }: 
 
   const handleConfirmNewCreators = async (addThem: boolean) => {
     setShowConfirmNewCreators(false);
-    setIsCommitting(true);
-    
-    try {
-      const existingCreators: any[] = [];
-      const uniquePreview = Array.from(new Map(preview.map(item => [item.username.toLowerCase(), item])).values());
-      const usernamesArray = uniquePreview.map(p => p.username);
-      
-      for (let i = 0; i < usernamesArray.length; i += 100) {
-        const chunk = usernamesArray.slice(i, i + 100);
-        const { data } = await supabase.from('creators').select('id, username').in('username', chunk);
-        if (data) existingCreators.push(...data);
-      }
-      
-      if (addThem) {
-        await executeCommit(existingCreators, []); 
-      } else {
-        await executeCommit(existingCreators, pendingNewUsernames); 
-      }
-    } catch (err: any) {
-      setErrors([e.message || "Gagal menyiapkan data commit."]);
-      setIsCommitting(false);
+    if (addThem) {
+      await executeCommit([]); 
+    } else {
+      await executeCommit(pendingNewUsernames); 
     }
   };
 

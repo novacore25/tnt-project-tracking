@@ -6,11 +6,10 @@ import { useRouter } from "next/navigation";
 import { Search, Loader2, Download, Users } from "lucide-react";
 import Link from "next/link";
 import { useState, useEffect, useCallback } from "react";
-import { createClient } from "@/utils/supabase/client";
+import { fetchCreatorsPaginated, fetchStaffProfiles } from "@/app/actions/creatorActions";
 import { exportToCSV } from "@/utils/exportCsv";
 import { CreatorSyncModal } from "@/components/CreatorSyncModal";
 
-const supabase = createClient();
 const PAGE_SIZE = 48;
 
 export default function CreatorPoolPage() {
@@ -28,12 +27,12 @@ export default function CreatorPoolPage() {
 
   const [staffProfiles, setStaffProfiles] = useState<{id: string, nama: string}[]>([]);
   useEffect(() => {
-    supabase.from('profiles').select('id, nama').order('nama').then(({data}) => {
+    fetchStaffProfiles().then(data => {
       if (data) setStaffProfiles(data);
     });
   }, []);
   
-  // Debounce search to avoid spamming Supabase on every keystroke
+  // Debounce search to avoid spamming on every keystroke
   const [debouncedSearch, setDebouncedSearch] = useState("");
   useEffect(() => {
     const handler = setTimeout(() => {
@@ -52,61 +51,29 @@ export default function CreatorPoolPage() {
   const fetchCreators = useCallback(async (pageNum: number, isReset: boolean = false) => {
     setIsLoading(true);
     try {
-      let baseSelect = `
-        id, username, nama_asli, link_account, created_at, added_by, last_updated_by,
-        creator_snapshots${filterTier || filterLevel ? '!inner' : ''} ( id, audience_age, level, tanggal_update, followers, tier ),
-        creator_niches${filterNiche ? '!inner' : ''} ( niche_id )
-        ${filterCampaign ? ', campaign_creators!inner ( campaign_id )' : ''}
-      `;
+      const res = await fetchCreatorsPaginated({
+        pageNum,
+        pageSize: PAGE_SIZE,
+        search: debouncedSearch,
+        filterCampaign,
+        filterNiche,
+        filterTier,
+        filterLevel,
+        filterAddedBy,
+        filterLastUpdatedBy,
+      });
 
-      let query: any = supabase.from('creators').select(baseSelect);
+      const profiles = await fetchStaffProfiles();
+      setProfileMap(new Map((profiles || []).map((p: any) => [p.id, p.nama])));
 
-      if (debouncedSearch) {
-        query = query.or(`username.ilike.%${debouncedSearch}%,nama_asli.ilike.%${debouncedSearch}%`);
-      }
-      if (filterCampaign) {
-        query = query.eq('campaign_creators.campaign_id', filterCampaign);
-      }
-      if (filterNiche) {
-        query = query.eq('creator_niches.niche_id', filterNiche);
-      }
-      if (filterTier) {
-        query = query.ilike('creator_snapshots.tier', `%${filterTier}%`);
-      }
-      if (filterLevel) {
-        query = query.eq('creator_snapshots.level', filterLevel);
-      }
-      if (filterAddedBy) {
-        query = query.eq('added_by', filterAddedBy);
-      }
-      if (filterLastUpdatedBy) {
-        query = query.eq('last_updated_by', filterLastUpdatedBy);
-      }
-
-      // Add pagination
-      const from = pageNum * PAGE_SIZE;
-      const to = from + PAGE_SIZE - 1;
-      query = query.order('id', { ascending: false }).range(from, to);
-
-      const { data: res, error } = await query;
-      if (error) throw error;
-
-      const { data: profiles } = await supabase.from('profiles').select('id, nama');
-      setProfileMap(new Map((profiles || []).map((p:any) => [p.id, p.nama])));
-
-      // Type Filter (Audience Age -> Type) needs to be done post-fetch because it's computed
-      let filteredRes = res || [];
+      let filteredRes = res.data || [];
       if (filterType) {
-         filteredRes = filteredRes.filter((c: any) => {
-            const snaps = c.creator_snapshots || [];
-            const latest = snaps.length > 0 ? snaps.sort((a:any, b:any) => {
-               const tDiff = new Date(b.tanggal_update || 0).getTime() - new Date(a.tanggal_update || 0).getTime();
-               if (tDiff !== 0) return tDiff;
-               return b.id - a.id;
-            })[0] : null;
-            const type = getCreatorType(latest?.audience_age || null);
-            return type === filterType;
-         });
+        filteredRes = filteredRes.filter((c: any) => {
+          const snaps = c.creator_snapshots || [];
+          const latest = snaps.length > 0 ? snaps[0] : null;
+          const type = getCreatorType(latest?.audience_age || null);
+          return type === filterType;
+        });
       }
 
       if (isReset) {
@@ -115,13 +82,13 @@ export default function CreatorPoolPage() {
         setData(prev => [...prev, ...filteredRes]);
       }
 
-      setHasMore((res || []).length === PAGE_SIZE);
+      setHasMore(res.hasMore);
     } catch (err: any) {
       console.error("Fetch error:", err);
     } finally {
       setIsLoading(false);
     }
-  }, [debouncedSearch, filterType, filterNiche, filterCampaign, filterTier, filterLevel, filterAddedBy, filterLastUpdatedBy]);
+  }, [debouncedSearch, filterCampaign, filterNiche, filterTier, filterLevel, filterAddedBy, filterLastUpdatedBy, filterType]);
 
   // Trigger fetch when filters change
   useEffect(() => {

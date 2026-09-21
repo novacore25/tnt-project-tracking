@@ -7,12 +7,10 @@ import { Upload, Download, Loader2, ArrowRight, CheckCircle } from "lucide-react
 import { UsernameAutocomplete } from "@/components/ui/UsernameAutocomplete";
 import { findClosestMatch } from "@/utils/stringSimilarity";
 import { downloadCreatorSyncTemplate, parseCreatorSyncFile, parseFileHeaders, ParsedCreatorRow, ColumnMapping } from "@/utils/importCreatorSync";
-import { createClient } from "@/utils/supabase/client";
+import { executeSpreadsheetImportAction } from "@/app/actions/creatorActions";
 import { useDatabaseStore } from "@/store/useDatabaseStore";
 import { exportErrorLogToExcel, ErrorLogItem } from "@/utils/exportErrorLog";
 import { useAuth } from "@/providers/AuthProvider";
-
-const supabase = createClient();
 
 export function CreatorSyncModal({ onComplete }: { onComplete?: () => void }) {
   const { profile } = useAuth();
@@ -111,119 +109,26 @@ export function CreatorSyncModal({ onComplete }: { onComplete?: () => void }) {
       // Fetch existing creators to map IDs
       // Deduplikasi preview (ambil data terakhir jika ada username ganda di excel)
       const uniquePreview = Array.from(new Map(preview.map(item => [item.username.toLowerCase(), item])).values());
-      const usernamesArray = uniquePreview.map(p => p.username);
-      const existingCreators: any[] = [];
-      
-      for (let i = 0; i < usernamesArray.length; i += 100) {
-        const chunk = usernamesArray.slice(i, i + 100);
-        const { data, error } = await supabase.from('creators').select('id, username').in('username', chunk);
-        if (error) throw error;
-        if (data) existingCreators.push(...data);
-      }
+      setCommitStatus('Menyimpan data ke database...');
+      setCommitProgress(50);
 
-      let creatorMap = new Map(existingCreators.map(c => [c.username.toLowerCase(), c.id]));
-      setCommitProgress(0);
+      const rowsToImport = uniquePreview.map(r => ({
+        username: r.username,
+        whatsapp: r.no_whatsapp,
+        followers: r.followers,
+        level: r.level,
+        audience_age: r.audience_age,
+        gmv_30d: r.gmv_30_days,
+        ratecard: r.ratecard,
+        niche: r.niche_1 || r.niche_2 || ''
+      }));
 
-      const chunkArray = (arr: any[], size: number) => Array.from({ length: Math.ceil(arr.length / size) }, (v, i) => arr.slice(i * size, i * size + size));
-      const chunks = chunkArray(uniquePreview, 50);
+      await executeSpreadsheetImportAction(rowsToImport);
 
-      const localErrorLog: ErrorLogItem[] = [];
-      let processedCount = 0;
-      for (let c = 0; c < chunks.length; c++) {
-        setCommitStatus(`Memproses gerbong ${c + 1} dari ${chunks.length}...`);
-        
-        await Promise.all(chunks[c].map(async (row: any, idx: number) => {
-          let creatorId = creatorMap.get(row.username.toLowerCase());
-          
-          // 1. Upsert Creator
-          if (!creatorId) {
-            const cleanUsername = row.username.toLowerCase().replace('@', '').trim();
-            const { data: newC, error: errC } = await supabase.from('creators').insert({
-              username: cleanUsername,
-              link_account: `https://www.tiktok.com/@${cleanUsername}`
-            }).select().single();
-            if (errC) { 
-              localErrorLog.push({ username: row.username, pesan_error: `Gagal buat kreator: ${errC.message}`, data_mentah: row });
-              return; 
-            }
-            creatorId = newC.id;
-            creatorMap.set(row.username, creatorId);
-          }
-
-          // 2. Contacts
-          if (row.no_whatsapp) {
-            const { data: currentContacts } = await supabase.from('creator_contacts')
-              .select('id, nomor').eq('creator_id', creatorId).eq('status', 'aktif');
-            
-            const existing = currentContacts?.[0];
-            if (!existing || existing.nomor !== row.no_whatsapp) {
-              if (existing) {
-                await supabase.from('creator_contacts').update({ status: 'arsip', tanggal_diganti: new Date().toISOString() }).eq('id', existing.id);
-              }
-              await supabase.from('creator_contacts').insert({
-                creator_id: creatorId,
-                nomor: row.no_whatsapp,
-                status: 'aktif',
-                tanggal_mulai: new Date().toISOString()
-              });
-            }
-          }
-
-          // 3. Snapshot
-          await supabase.from('creator_snapshots').insert({
-            creator_id: creatorId,
-            tanggal_update: new Date().toISOString(),
-            followers: row.followers,
-            tier: row.tier, 
-            level: row.level,
-            ratecard: row.ratecard,
-            gmv_30d: row.gmv_30_days,
-            audience_age: row.audience_age,
-            updated_by: profile?.nama || 'System'
-          });
-
-          // 4. Notes
-          if (row.catatan) {
-            await supabase.from('creator_notes').insert({
-              creator_id: creatorId,
-              catatan: row.catatan,
-              kategori: 'General',
-              tanggal: new Date().toISOString().split('T')[0]
-            });
-          }
-
-          // 5. Niches
-          if (row.niche_1 || row.niche_2) {
-            const { data: currentNiches } = await supabase.from('creator_niches').select('niche_id').eq('creator_id', creatorId);
-            const currentNicheIds = new Set(currentNiches?.map(n => n.niche_id) || []);
-            const newNicheInserts = [];
-            
-            if (row.niche_1 && !currentNicheIds.has(row.niche_1)) {
-              newNicheInserts.push({ creator_id: creatorId, niche_id: row.niche_1, peringkat: 1 });
-            }
-            if (row.niche_2 && !currentNicheIds.has(row.niche_2)) {
-              newNicheInserts.push({ creator_id: creatorId, niche_id: row.niche_2, peringkat: 2 });
-            }
-            if (newNicheInserts.length > 0) {
-              await supabase.from('creator_niches').insert(newNicheInserts);
-            }
-          }
-        }));
-        
-        processedCount += chunks[c].length;
-        // Kita set commitProgress dengan jumlah baris yang sudah diproses agar UI percentage calculation (commitProgress / preview.length) bekerja dengan benar.
-        // Jika ada baris duplikat yang di-skip, progress bisa loncat langsung selesai di akhir, jadi kita pastikan di c terakhir mencapai preview.length.
-        if (c === chunks.length - 1) {
-           setCommitProgress(preview.length);
-        } else {
-           setCommitProgress(Math.floor((processedCount / uniquePreview.length) * preview.length));
-        }
-      };
-
-      setErrorLog(localErrorLog);
+      setCommitProgress(preview.length);
       setStep(4);
     } catch (err: any) {
-      setErrors([e.message || "Terjadi kesalahan saat commit ke database."]);
+      setErrors([err.message || "Terjadi kesalahan saat commit ke database."]);
     } finally {
       setIsCommitting(false);
     }

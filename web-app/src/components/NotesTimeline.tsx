@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '@/providers/AuthProvider';
 import { Trash2, Edit2, Check, X, Send } from 'lucide-react';
-import { createClient } from '@/utils/supabase/client';
 
 export type TimelineNote = {
   id: string;

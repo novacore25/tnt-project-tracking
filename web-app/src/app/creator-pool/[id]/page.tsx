@@ -15,11 +15,7 @@ import { useState, ReactNode, useEffect, useRef, useCallback, useMemo } from "re
 import React from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/Dialog";
 import { Edit2 } from "lucide-react";
-import { useAuth } from "@/providers/AuthProvider";
-
-import { createClient } from "@/utils/supabase/client";
-
-const supabase = createClient();
+import { fetchCreatorProfile } from "@/app/actions/creatorActions";
 
 export default function CreatorProfilePage() {
   const { id } = useParams();
@@ -54,121 +50,23 @@ export default function CreatorProfilePage() {
     organicVideos: any[];
   } | null>(null);
 
-  useEffect(() => {
-    const fetchCreatorData = async () => {
-      setIsLoading(true);
-      try {
-        const { data: creator } = await supabase.from('creators').select('*').eq('id', creatorId).single();
-        if (!creator) {
-          setLocalData(null);
-          setIsLoading(false);
-          return;
-        }
-
-        // Helper: chunk an array into sub-arrays of max `size`
-        const chunk = <T,>(arr: T[], size: number): T[][] => {
-          const chunks: T[][] = [];
-          for (let i = 0; i < arr.length; i += size) {
-            chunks.push(arr.slice(i, i + size));
-          }
-          return chunks;
-        };
-
-        // Helper: sequential .in() fetch with chunking (avoids connection pool exhaustion)
-        const fetchInChunks = async (table: string, column: string, ids: (string | number)[], chunkSize = 100) => {
-          let results: any[] = [];
-          for (const batch of chunk(ids, chunkSize)) {
-            const { data } = await supabase.from(table).select('*').in(column, batch);
-            if (data) results = [...results, ...data];
-          }
-          return results;
-        };
-
-        // Phase 1: All independent queries (no dependencies) via Promise.allSettled
-        const settled = await Promise.allSettled([
-          supabase.from('creator_snapshots').select('*').eq('creator_id', creatorId),
-          supabase.from('creator_contacts').select('*').eq('creator_id', creatorId),
-          supabase.from('creator_niches').select('*').eq('creator_id', creatorId),
-          supabase.from('creator_notes').select('*').eq('creator_id', creatorId),
-          supabase.from('campaign_creators').select('*').eq('creator_id', creatorId),
-          supabase.from('ads_performance').select('*').eq('creator_id', creatorId),
-          supabase.from('creator_address_book').select('*').eq('creator_id', creatorId).order('id', { ascending: false }),
-          supabase.from('audit_logs').select('*').eq('table_name', 'creators').eq('record_id', creatorId.toString()).order('created_at', { ascending: false }),
-          supabase.from('live_sessions').select('*').ilike('creator_username', creator.username).order('start_time', { ascending: false }),
-          supabase.from('organic_videos').select('*').ilike('creator_username', creator.username).order('post_time', { ascending: false }),
-          supabase.from('sales').select('*').eq('creator_username', creator.username),
-        ]);
-
-        // Extract results safely — failed queries return empty arrays instead of crashing
-        const extract = (idx: number) => {
-          const r = settled[idx];
-          return r.status === 'fulfilled' ? (r.value.data || []) : [];
-        };
-
-        const snapshots = extract(0);
-        const contacts = extract(1);
-        const creatorNiches = extract(2);
-        const notes = extract(3);
-        const ccs = extract(4);
-        const ads = extract(5);
-        const addressBookResult = extract(6);
-        const auditLogsResult = extract(7);
-        const liveSess = extract(8);
-        const orgVids = extract(9);
-        const salesByUsername = extract(10);
-
-        // Phase 2: Dependent queries (need ccs/liveSess results) — sequential with chunking
-        let vids: any[] = [];
-        if (ccs.length > 0) {
-          const ccIds = ccs.map((c: any) => c.id);
-          vids = await fetchInChunks('videos', 'campaign_creator_id', ccIds, 100);
-        }
-
-        let sls: any[] = [...salesByUsername];
-        const contentUids = vids.map(v => v.content_uid).filter(Boolean);
-        if (contentUids.length > 0) {
-          const salesByContent = await fetchInChunks('sales', 'content_uid', contentUids, 100);
-          sls = [...sls, ...salesByContent];
-        }
-        // Deduplicate sales by id
-        const seenSaleIds = new Set<number>();
-        sls = sls.filter(s => {
-          if (seenSaleIds.has(s.id)) return false;
-          seenSaleIds.add(s.id);
-          return true;
-        });
-
-        let liveProducts: any[] = [];
-        if (liveSess.length > 0) {
-          const roomIds = liveSess.map((ls: any) => ls.livestream_room_id);
-          liveProducts = await fetchInChunks('live_session_products', 'livestream_room_id', roomIds, 100);
-        }
-
-        setLocalData({
-          creator,
-          snapshots,
-          contacts,
-          creatorNiches,
-          notes,
-          ccs,
-          videos: vids,
-          sales: sls,
-          ads,
-          addressBook: addressBookResult,
-          auditLogs: auditLogsResult,
-          liveSessions: liveSess,
-          liveProducts,
-          organicVideos: orgVids,
-        });
-      } catch (err) {
-        console.error("Error fetching creator data:", err);
-        setLocalData(null);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    fetchCreatorData();
+  const fetchCreatorData = useCallback(async () => {
+    if (!creatorId) return;
+    setIsLoading(true);
+    try {
+      const data = await fetchCreatorProfile(creatorId);
+      setLocalData(data);
+    } catch (err) {
+      console.error("Error fetching creator data:", err);
+      setLocalData(null);
+    } finally {
+      setIsLoading(false);
+    }
   }, [creatorId]);
+
+  useEffect(() => {
+    fetchCreatorData();
+  }, [fetchCreatorData]);
 
   // Derived states based on localData
   const creator = localData?.creator;

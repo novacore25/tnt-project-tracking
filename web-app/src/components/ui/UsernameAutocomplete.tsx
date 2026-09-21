@@ -1,11 +1,9 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { createClient } from '@/utils/supabase/client';
-
-const supabase = createClient();
+import React, { useState, useEffect, useRef } from 'react';
+import { searchCreatorUsernames } from '@/app/actions/creatorActions';
 
 export function UsernameAutocomplete({
   value,
-  options, // We keep this for backward compatibility, but we will mostly rely on Supabase
+  options, // We keep this for backward compatibility
   onChange,
   onCancel
 }: {
@@ -29,29 +27,22 @@ export function UsernameAutocomplete({
   }, [onCancel]);
 
   useEffect(() => {
-    const searchSupabase = async () => {
+    const search = async () => {
       const trimmed = query.trim().replace(/\s+/g, '');
       if (!trimmed) {
         setResults([]);
         return;
       }
       
-      // Fuzzy search pattern: abc -> %a%b%c%
-      const fuzzyPattern = '%' + trimmed.split('').join('%') + '%';
-      
-      const { data } = await supabase.from('creators')
-        .select('username')
-        .ilike('username', fuzzyPattern)
-        .limit(20);
-        
-      if (data) {
-        // Sort locally by length so exact/shortest match floats to the top
-        const sorted = data.map(d => d.username).sort((a, b) => a.length - b.length).slice(0, 5);
-        setResults(sorted);
+      try {
+        const data = await searchCreatorUsernames(trimmed);
+        setResults(data);
+      } catch (err) {
+        console.error('Error searching creator usernames:', err);
       }
     };
 
-    const handler = setTimeout(searchSupabase, 300);
+    const handler = setTimeout(search, 300);
     return () => clearTimeout(handler);
   }, [query]);
 

@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { createClient } from "@/utils/supabase/client";
+import { addCreatorFull } from "@/app/actions/creatorActions";
 import { useAuth } from "@/providers/AuthProvider";
 import { ArrowLeft, Save } from "lucide-react";
 import Link from 'next/link';
@@ -13,7 +13,6 @@ import { useDatabaseStore } from '@/store/useDatabaseStore';
 export default function AddCreatorClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const supabase = createClient();
   const { profile } = useAuth();
   const { fetchData } = useDatabaseStore();
 
@@ -57,74 +56,10 @@ export default function AddCreatorClient() {
     
     setIsLoading(true);
     try {
-      const username = formData.username.trim().toLowerCase();
-      const link_account = `https://www.tiktok.com/@${username}`;
-      
-      // 1. Upsert Creator
-      const { data: cData, error: cErr } = await supabase.from('creators').upsert(
-        { username, nama_asli: formData.nama, link_account, added_by: profile?.id },
-        { onConflict: 'username' }
-      ).select('id').single();
-      
-      if (cErr) throw cErr;
-      const creatorId = cData.id;
-
-      // 2. Snapshot
-      const followersNum = parseInt(formData.followers) || null;
-      let calculatedLevel = parseInt(formData.level.replace(/\D/g, '')) || null;
-      
-      if (!calculatedLevel && followersNum) {
-        if (followersNum < 10000) calculatedLevel = 1;
-        else if (followersNum < 100000) calculatedLevel = 2;
-        else if (followersNum < 500000) calculatedLevel = 3;
-        else if (followersNum < 1000000) calculatedLevel = 4;
-        else calculatedLevel = 5;
-      }
-
-      await supabase.from('creator_snapshots').insert({
-        creator_id: creatorId,
-        followers: followersNum,
-        level: calculatedLevel,
-        gmv_30d: parseInt(formData.gmv_30d.replace(/\D/g, '')) || null,
-        ratecard: parseInt(formData.ratecard.replace(/\D/g, '')) || null
-      });
-
-      // 3. Contacts
-      const contactsToInsert = [];
-      if (formData.whatsapp) {
-        contactsToInsert.push({ creator_id: creatorId, nomor: formData.whatsapp, status: 'aktif' });
-      }
-      if (formData.email) {
-        // Assume saving email in contacts with different status/type or just ignore if schema doesn't support
-        // We only save WA based on existing schema
-      }
-      if (contactsToInsert.length > 0) {
-        await supabase.from('creator_contacts').delete().eq('creator_id', creatorId);
-        await supabase.from('creator_contacts').insert(contactsToInsert);
-      }
-
-      // 4. Niches
-      if (formData.niche) {
-        const nichesArray = formData.niche.split(',').map(n => n.trim()).filter(Boolean);
-        for (const [idx, nicheName] of nichesArray.entries()) {
-           // Upsert niche to master table
-           const { data: nData } = await supabase.from('niches').select('id').ilike('nama', nicheName).single();
-           let nicheId = nData?.id;
-           if (!nicheId) {
-             const { data: newNiche } = await supabase.from('niches').insert({ nama: nicheName }).select('id').single();
-             nicheId = newNiche?.id;
-           }
-           if (nicheId) {
-              await supabase.from('creator_niches').delete().eq('creator_id', creatorId); // simplify: just replace
-              await supabase.from('creator_niches').insert({ creator_id: creatorId, niche_id: nicheId, peringkat: idx + 1 });
-           }
-        }
-      }
-
+      await addCreatorFull(formData);
       await fetchData();
       alert('Data kreator berhasil disimpan!');
       router.push('/creator-pool');
-
     } catch (err: any) {
       alert("Error: " + err.message);
     } finally {
