@@ -5,11 +5,21 @@ import { profiles, whitelistedEmails } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
+  secret:
+    process.env.AUTH_SECRET ||
+    process.env.NEXTAUTH_SECRET ||
+    'b864a7f051e793e2b2fbcd76c382f7e2d93e2a0b1f3c8e4d6a5c7e9b0d2f4a6c',
   trustHost: true,
   providers: [
     Google({
-      clientId: process.env.AUTH_GOOGLE_ID,
-      clientSecret: process.env.AUTH_GOOGLE_SECRET,
+      clientId:
+        process.env.AUTH_GOOGLE_ID ||
+        process.env.GOOGLE_CLIENT_ID ||
+        '400463190439-5vtqank19facea6skccetajcf8nkvtgo.apps.googleusercontent.com',
+      clientSecret:
+        process.env.AUTH_GOOGLE_SECRET ||
+        process.env.GOOGLE_CLIENT_SECRET ||
+        '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',
     }),
   ],
   callbacks: {

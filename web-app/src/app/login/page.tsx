@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { createClient } from "@/utils/supabase/client";
+import { signIn } from "next-auth/react";
 import { Button } from "@/components/ui/Button";
 import { Loader2 } from "lucide-react";
 
@@ -9,7 +9,6 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isRegistering, setIsRegistering] = useState(false);
   const [namaPanggilan, setNamaPanggilan] = useState("");
-  const supabase = createClient();
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -25,8 +24,7 @@ export default function LoginPage() {
   const handleAuth = async () => {
     setIsLoading(true);
     try {
-      // Login Google via Auth.js (NextAuth)
-      window.location.href = '/api/auth/signin/google';
+      await signIn("google", { callbackUrl: "/" });
     } catch (error: any) {
       alert("Error logging in: " + error.message);
       setIsLoading(false);
