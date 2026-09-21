@@ -6,11 +6,12 @@ import { ArrowLeft, Upload, Loader2, CheckCircle, AlertTriangle } from 'lucide-r
 import Link from 'next/link';
 import * as XLSX from 'xlsx';
 import { resolveCreatorForMigration, importHistoricalBatch } from '../../../actions/paymentActions';
-import { createClient } from '@/utils/supabase/client';
+import { useAuth } from '@/providers/AuthProvider';
 
 export default function ImportHistoricalBatchPage() {
   const params = useParams();
   const router = useRouter();
+  const { profile } = useAuth();
   const campaignId = Number(params.id);
 
   const [batchName, setBatchName] = useState("");
@@ -113,10 +114,7 @@ export default function ImportHistoricalBatchPage() {
     setError("");
 
     try {
-      const supabase = createClient();
-      const { data: userData } = await supabase.auth.getUser();
-      const { data: profile } = await supabase.from('profiles').select('id').eq('id', userData.user?.id).single();
-      const picId = profile?.id;
+      const picId = profile?.id || '';
 
       // Validate & Resolve Creators
       const itemsToImport = [];

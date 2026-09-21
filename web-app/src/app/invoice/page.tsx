@@ -6,20 +6,22 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/Table";
-import { createClient } from "@/utils/supabase/client";
+import { fetchInvoiceDataAction, fetchInvoiceRincianAction, approveInvoiceAction, rejectInvoiceAction } from "@/app/actions/invoiceActions";
 
 export default function InvoicePage() {
   const { campaigns } = useDatabaseStore();
-  const supabase = createClient();
   
   const [payout_requests, setPayoutRequests] = useState<any[]>([]);
   const [payout_creator, setPayoutCreator] = useState<any[]>([]);
 
   const fetchInvoiceData = async () => {
-    const { data: pr } = await supabase.from('payout_requests').select('*').order('created_at', { ascending: false });
-    const { data: pc } = await supabase.from('payout_creator').select('*');
-    if (pr) setPayoutRequests(pr);
-    if (pc) setPayoutCreator(pc);
+    try {
+      const data = await fetchInvoiceDataAction();
+      if (data.payout_requests) setPayoutRequests(data.payout_requests);
+      if (data.payout_creator) setPayoutCreator(data.payout_creator);
+    } catch (err) {
+      console.error("Error fetching invoice data:", err);
+    }
   };
 
   useEffect(() => {
@@ -40,18 +42,7 @@ export default function InvoicePage() {
   const openApproval = async (req: any) => {
     let rincian: any[] = [];
     if (req.jenis_topup === 'creator') {
-      const pcList = payout_creator.filter(pc => pc.payout_id === req.id);
-      
-      const rincianPromises = pcList.map(async pc => {
-        const { data: ccData } = await supabase.from('campaign_creators').select('*, creators(*)').eq('id', pc.campaign_creator_id).single();
-        return { 
-          ...pc, 
-          creator_username: ccData?.creators?.username, 
-          cc_id: pc.campaign_creator_id 
-        };
-      });
-      
-      rincian = await Promise.all(rincianPromises);
+      rincian = await fetchInvoiceRincianAction(req.id);
       
       // Set default status to lunas
       const defaultStatus: any = {};
@@ -67,22 +58,13 @@ export default function InvoicePage() {
     setProcessingId(approvalModal.reqId);
     
     try {
-      // 1. Update payout_requests
-      await supabase.from('payout_requests').update({ status: 'approved' }).eq('id', approvalModal.reqId);
-
-      // 2. Jika creator, update payout_creator dan campaign_creators
-      if (approvalModal.type === 'creator' && approvalModal.rincian) {
-        for (const r of approvalModal.rincian) {
-          await supabase.from('payout_creator').update({
-            tanggal_transfer: new Date().toISOString().split('T')[0],
-            bukti_transfer_url: buktiUrl
-          }).eq('id', r.id);
-
-          await supabase.from('campaign_creators').update({
-            status_bayar: statusBayar[r.id]
-          }).eq('id', r.cc_id); // Trigger audit log will fire
-        }
-      }
+      await approveInvoiceAction(
+        approvalModal.reqId,
+        approvalModal.type,
+        approvalModal.rincian || [],
+        statusBayar,
+        buktiUrl
+      );
 
       setApprovalModal(null);
       fetchInvoiceData(); // Refresh data
@@ -96,9 +78,14 @@ export default function InvoicePage() {
   const handleReject = async (reqId: number) => {
     if (confirm("Yakin ingin menolak request ini?")) {
       setProcessingId(reqId);
-      await supabase.from('payout_requests').update({ status: 'rejected' }).eq('id', reqId);
-      setProcessingId(null);
-      fetchInvoiceData();
+      try {
+        await rejectInvoiceAction(reqId);
+        fetchInvoiceData();
+      } catch (err: any) {
+        alert("Error rejecting: " + err.message);
+      } finally {
+        setProcessingId(null);
+      }
     }
   };
 

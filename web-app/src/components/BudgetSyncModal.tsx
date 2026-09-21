@@ -7,12 +7,10 @@ import { Upload, Loader2, ArrowRight, FileSpreadsheet, DollarSign, AlertCircle, 
 import { parseBudgetFileHeaders, parseBudgetSyncFile, ParsedBudgetRow, BudgetColumnMapping } from "@/utils/importBudgetSync";
 import { exportErrorLogToExcel, ErrorLogItem } from "@/utils/exportErrorLog";
 import { Download } from "lucide-react";
-import { createClient } from "@/utils/supabase/client";
+import { fetchApprovedCreatorsForBatch, bulkSyncBudgetRows } from "@/app/campaigns/actions/paymentActions";
 import { useDatabaseStore } from "@/store/useDatabaseStore";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/Table";
 import { Badge } from "@/components/ui/Badge";
-
-const supabase = createClient();
 
 export function BudgetSyncModal({ campaignId: initialCampaignId, onComplete }: { campaignId?: number; onComplete?: () => void }) {
   const { campaigns } = useDatabaseStore();
@@ -104,11 +102,7 @@ export function BudgetSyncModal({ campaignId: initialCampaignId, onComplete }: {
     let errorCount = 0;
 
     // Fetch existing campaign_creators for this campaign
-    const { data: existingCcs } = await supabase
-      .from('campaign_creators')
-      .select('id, price, creators ( username )')
-      .eq('campaign_id', campaignId)
-      .eq('approval', 'approved');
+    const existingCcs = await fetchApprovedCreatorsForBatch(campaignId);
 
     const ccMap = new Map<string, any>();
     (existingCcs || []).forEach(cc => {
@@ -118,49 +112,37 @@ export function BudgetSyncModal({ campaignId: initialCampaignId, onComplete }: {
 
     const localErrorLog: ErrorLogItem[] = [];
 
-    // Process in chunks of 50 to speed up significantly
-    const CHUNK_SIZE = 50;
-    
     // Deduplikasi preview (ambil data terakhir jika ada username ganda di excel)
     const uniquePreview = Array.from(new Map(preview.map(item => [item.username.toLowerCase(), item])).values());
-    
-    for (let i = 0; i < uniquePreview.length; i += CHUNK_SIZE) {
-      const chunk = uniquePreview.slice(i, i + CHUNK_SIZE);
-      
-      setCommitStatus(`Memproses ${i + 1} - ${Math.min(i + CHUNK_SIZE, uniquePreview.length)} dari ${uniquePreview.length}`);
-      setCommitProgress(Math.round(((i + CHUNK_SIZE) / uniquePreview.length) * 100));
+    const validRowsToSync: any[] = [];
 
-      await Promise.all(chunk.map(async (row) => {
-        const cc = ccMap.get(row.username.toLowerCase());
-        if (!cc) {
-          notFound++;
-          localErrorLog.push({ username: row.username, pesan_error: 'Tidak ditemukan di Campaign atau belum Approved', data_mentah: row });
-          return;
-        }
+    for (const row of uniquePreview) {
+      const cc = ccMap.get(row.username.toLowerCase());
+      if (!cc) {
+        notFound++;
+        localErrorLog.push({ username: row.username, pesan_error: 'Tidak ditemukan di Campaign atau belum Approved', data_mentah: row });
+      } else {
+        validRowsToSync.push({
+          id: cc.id,
+          price: row.ratecard !== null ? row.ratecard : undefined,
+          nominal_pelunasan: row.pelunasan !== null ? row.pelunasan : undefined,
+          status_bayar: row.status_bayar || undefined,
+          tgl_pembayaran: row.tgl_pembayaran || undefined,
+        });
+      }
+    }
 
-        try {
-          const updateData: any = {};
-          if (row.ratecard !== null) updateData.price = row.ratecard;
-          if (row.pelunasan !== null) updateData.nominal_pelunasan = row.pelunasan;
-          if (row.status_bayar) updateData.status_bayar = row.status_bayar;
-          if (row.tgl_pembayaran) updateData.tgl_pembayaran = row.tgl_pembayaran;
-
-          const { error } = await supabase
-            .from('campaign_creators')
-            .update(updateData)
-            .eq('id', cc.id);
-
-          if (error) {
-            errorCount++;
-            localErrorLog.push({ username: row.username, pesan_error: `Gagal update: ${error.message}`, data_mentah: row });
-          } else {
-            updated++;
-          }
-        } catch (err: any) {
-          errorCount++;
-          localErrorLog.push({ username: row.username, pesan_error: `Error try/catch: ${err?.message}`, data_mentah: row });
-        }
-      }));
+    if (validRowsToSync.length > 0) {
+      setCommitStatus(`Menyimpan ${validRowsToSync.length} data ke database...`);
+      setCommitProgress(50);
+      try {
+        await bulkSyncBudgetRows(validRowsToSync);
+        updated = validRowsToSync.length;
+        setCommitProgress(100);
+      } catch (err: any) {
+        errorCount = validRowsToSync.length;
+        localErrorLog.push({ username: 'batch', pesan_error: `Error bulk update: ${err?.message}`, data_mentah: {} });
+      }
     }
 
     setErrorLog(localErrorLog);

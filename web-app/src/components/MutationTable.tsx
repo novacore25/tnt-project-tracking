@@ -1,16 +1,18 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Download, RefreshCcw, Search, Link, Loader2, ChevronLeft, ChevronRight, X } from 'lucide-react';
-import { fetchMutationsPaginated, fetchMutationsExport } from '../app/campaigns/actions/paymentActions';
+import { fetchMutationsPaginated, fetchMutationsExport, updateItemBuktiTransfer } from '../app/campaigns/actions/paymentActions';
+import { useAuth } from '@/providers/AuthProvider';
 import { formatDateTime, formatDateTimeShort } from '@/utils/formatters';
 
 export function MutationTable() {
+  const { profile } = useAuth();
+  const userRole = profile?.role || '';
   const [selectedMonth, setSelectedMonth] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState<string>('');
   
   const [mutations, setMutations] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isExporting, setIsExporting] = useState<boolean>(false);
-  const [userRole, setUserRole] = useState<string>('');
   const [paymentType, setPaymentType] = useState<string>('all');
   
   // Edit Bukti
@@ -53,19 +55,6 @@ export function MutationTable() {
     // Reset to page 1 when filters change
     setPage(1);
   }, [selectedMonth, searchTerm, paymentType]);
-
-  useEffect(() => {
-    import('@/utils/supabase/client').then(({ createClient }) => {
-      const supabase = createClient();
-      supabase.auth.getUser().then(({ data: { user } }) => {
-        if (user) {
-          supabase.from('profiles').select('role').eq('id', user.id).single().then(({ data }) => {
-            if (data) setUserRole(data.role);
-          });
-        }
-      });
-    });
-  }, []);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -247,9 +236,7 @@ export function MutationTable() {
                                 if (e.key === 'Enter') {
                                   setIsSavingBukti(true);
                                   try {
-                                    const { createClient } = await import('@/utils/supabase/client');
-                                    const sb = createClient();
-                                    await sb.from('payment_items').update({ bukti_transfer: editBuktiValue }).eq('id', m.id);
+                                    await updateItemBuktiTransfer(m.id, editBuktiValue);
                                     setMutations(prev => prev.map(mu => mu.id === m.id ? { ...mu, bukti_transfer: editBuktiValue } : mu));
                                     setEditingBuktiId(null);
                                   } catch (err) {

@@ -3,17 +3,14 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { Loader2, ArrowRight, Wallet, CheckCircle2, Clock, AlertCircle, Pencil, Check, X } from "lucide-react";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { getPaymentBatches, getBudgetSummary } from "../campaigns/actions/paymentActions";
+import { getPaymentBatches, getBudgetSummary, updateCampaignBudget } from "../campaigns/actions/paymentActions";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/utils/supabase/client";
 import { MutationTable } from "@/components/MutationTable";
 import { RekapAdsTab } from "@/components/RekapAdsTab";
 import { GlobalCommandCenter } from "@/components/GlobalCommandCenter";
 import { useAuth } from "@/providers/AuthProvider";
 import { BatchDetail } from "../campaigns/[id]/keuangan/BatchDetail";
 import { formatDateTime, formatUserWithRole } from "@/utils/formatters";
-
-const supabase = createClient();
 
 export default function GlobalBudgetingPage() {
   return (
@@ -72,8 +69,7 @@ function GlobalBudgetingContent() {
     setSavingCell(cellKey);
     try {
       const newValue = Number(editValue.replace(/[^0-9]/g, '') || 0);
-      const { error } = await supabase.from('campaigns').update({ [field]: newValue }).eq('id', campaignId);
-      if (error) throw error;
+      await updateCampaignBudget(campaignId, field, newValue);
 
       // Update local summaries so sisa recalculates instantly
       setSummaries(prev => prev.map(s => {
