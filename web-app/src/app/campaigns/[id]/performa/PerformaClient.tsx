@@ -115,6 +115,19 @@ export default function CampaignPerformaClient({ campaignId }: { campaignId: num
           setInitialTotalOrganic(0);
           setInitialUnattributedGmv(0);
         }
+      } else if (currentHasSkus && creatorPerfRes?.data && Array.isArray(creatorPerfRes.data)) {
+        // Fallback: if get_performance_summary_v2 timed out on Supabase, pre-populate totals from creatorPerfRes
+        let sumViews = 0, sumLikes = 0, sumVids = 0, sumGmv = 0;
+        creatorPerfRes.data.forEach((cp: any) => {
+          sumViews += Number(cp.video_views || 0);
+          sumLikes += Number(cp.video_likes || 0);
+          sumVids += Number(cp.video_count || 0);
+          sumGmv += Number(cp.gmv_organic || 0);
+        });
+        setInitialTotalViews(sumViews);
+        setInitialTotalLikes(sumLikes);
+        setInitialTotalVideos(sumVids);
+        setInitialTotalOrganic(sumGmv);
       } else {
         setInitialTotalViews(0);
         setInitialTotalLikes(0);
@@ -134,14 +147,17 @@ export default function CampaignPerformaClient({ campaignId }: { campaignId: num
       }
       setFastCountsData(fastCounts);
 
-      // Fast video counts - ONLY valid if campaign has registered SKUs
-      let fastVideoCounts = { approved: 0, pending: 0, livestream: 0 };
+      // Fast video counts - ONLY valid if campaign has registered SKUs and RPC returned valid numbers
+      let fastVideoCounts = null;
       if (currentHasSkus && videoCountsRes.data && videoCountsRes.data.length > 0) {
-        fastVideoCounts = {
-          approved: Number(videoCountsRes.data[0].total_approved || 0),
-          pending: Number(videoCountsRes.data[0].total_pending || 0),
-          livestream: Number(videoCountsRes.data[0].total_livestream || 0),
-        };
+        const d = videoCountsRes.data[0];
+        if (Number(d.total_approved || 0) > 0 || Number(d.total_livestream || 0) > 0) {
+          fastVideoCounts = {
+            approved: Number(d.total_approved || 0),
+            pending: Number(d.total_pending || 0),
+            livestream: Number(d.total_livestream || 0),
+          };
+        }
       }
       setFastVideoCountsData(fastVideoCounts);
 
@@ -200,28 +216,21 @@ export default function CampaignPerformaClient({ campaignId }: { campaignId: num
         );
       }
 
-      // Fetch organic_videos in controlled chunks (concurrency 4) to avoid Postgres statement timeouts
+      // Fetch organic_videos reliably in batches until finished without relying on count
       const fetchOrgVideosChunked = async () => {
         const results: any[] = [];
-        if (orgCount <= 0) return results;
-        const orgConcurrency = 4;
-        for (let i = 0; i < orgCount; i += pageSize * orgConcurrency) {
-          const chunk = [];
-          for (let c = 0; c < orgConcurrency && (i + c * pageSize) < orgCount; c++) {
-            const from = i + c * pageSize;
-            const to = from + pageSize - 1;
-            chunk.push(
-              supabase
-                .from('organic_videos')
-                .select('content_uid, post_time, content_type, creator_username, video_views, video_likes, product_id')
-                .eq('campaign_id', campaignId)
-                .range(from, to)
-            );
-          }
-          const chunkResults = await Promise.all(chunk);
-          chunkResults.forEach(res => {
-            if (res.data) results.push(...res.data);
-          });
+        let from = 0;
+        const size = 1000;
+        while (true) {
+          const res = await supabase
+            .from('organic_videos')
+            .select('content_uid, post_time, content_type, creator_username, video_views, video_likes, product_id')
+            .eq('campaign_id', campaignId)
+            .range(from, from + size - 1);
+          if (res.error || !res.data || res.data.length === 0) break;
+          results.push(...res.data);
+          if (res.data.length < size) break;
+          from += size;
         }
         return results;
       };
@@ -397,12 +406,13 @@ export default function CampaignPerformaClient({ campaignId }: { campaignId: num
           if (perf.video_uids.size > 0) perf.video_count = perf.video_uids.size;
           if (perf.live_uids.size > 0) perf.live_count = perf.live_uids.size;
         }
+
+        setInitialTotalViews(calcTotalViews);
+        setInitialTotalLikes(calcTotalLikes);
+        setInitialTotalVideos(calcUniqueVideos);
+        setInitialTotalLivestreams(calcUniqueLivestreams);
       }
 
-      setInitialTotalViews(calcTotalViews);
-      setInitialTotalLikes(calcTotalLikes);
-      setInitialTotalVideos(calcUniqueVideos);
-      setInitialTotalLivestreams(calcUniqueLivestreams);
       setInitialTotalOrganic(calcOrganicGmv);
       setInitialUnattributedGmv(calcUnattributedGmv);
 
@@ -746,7 +756,9 @@ export default function CampaignPerformaClient({ campaignId }: { campaignId: num
 
   const totalApprovedVideos = !hasSkus ? 0 : (isFiltered 
     ? fbApprovedVideos 
-    : (fastVideoCountsData ? fastVideoCountsData.approved : (initialTotalVideos || Number(rpcPerformance?.total_videos || 0) || fbApprovedVideos)));
+    : (fastVideoCountsData && fastVideoCountsData.approved > 0 
+        ? fastVideoCountsData.approved 
+        : (initialTotalVideos || Number(rpcPerformance?.total_videos || 0) || fbApprovedVideos)));
 
   const totalPendingVideos = !hasSkus ? 0 : (isFiltered 
     ? fbPendingVideos 
@@ -754,10 +766,10 @@ export default function CampaignPerformaClient({ campaignId }: { campaignId: num
 
   const totalCampaignLivestreams = !hasSkus ? 0 : (isFiltered 
     ? fbLivestreams 
-    : (initialTotalLivestreams > 0 
-        ? initialTotalLivestreams 
-        : (fastVideoCountsData && fastVideoCountsData.livestream > 0 
-            ? fastVideoCountsData.livestream 
+    : (fastVideoCountsData && fastVideoCountsData.livestream > 0 
+        ? fastVideoCountsData.livestream 
+        : (initialTotalLivestreams > 0 
+            ? initialTotalLivestreams 
             : (Number(totalSales?.totalLivestreams || 0) || fbLivestreams))));
 
   const totalOrganic = !hasSkus ? 0 : (isFiltered ? fbOrganic : (initialTotalOrganic || fbOrganic));
