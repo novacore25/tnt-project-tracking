@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { createClient } from '@/utils/supabase/client';
+import { getInitialStoreData, createCampaignAction, updateCampaignAction, deleteCampaignAction, createBrandAction, createSkuAction, deleteSkuAction } from '@/app/actions/storeActions';
 import { DatabaseSchema, Creator, CreatorSnapshot, CreatorContact, CampaignCreator, Video, AuditLog, CreatorNote, CreatorPayment, AdsSpend, CreatorAddress, LiveSchedule, DailyPerformance, OrganicVideo } from '@/types/database';
 
 type DatabaseState = DatabaseSchema & {
@@ -130,62 +131,22 @@ export const useDatabaseStore = create<DatabaseState>((set, get) => ({
   fetchData: async () => {
     set({ isLoading: true, error: null });
     try {
-      const fetchAll = async (table: string, orderByCol: string = 'id') => {
-        let allData: any[] = [];
-        let from = 0;
-        let to = 999;
-        let hasMore = true;
-        while (hasMore) {
-          let query = supabase.from(table).select('*');
-          if (orderByCol) {
-            query = query.order(orderByCol, { ascending: true });
-          }
-          const { data, error } = await query.range(from, to);
-          
-          if (error) throw error;
-          if (data && data.length > 0) {
-            allData = [...allData, ...data];
-            if (data.length < 1000) hasMore = false;
-            else { from += 1000; to += 1000; }
-          } else {
-            hasMore = false;
-          }
-        }
-        return allData;
-      };
-
-      // Heavy tables (creators, campaign_creators, snapshots, videos, sales) are lazily loaded in their components
-      
-      const [
-        brandsRes, campaignsRes, nichesRes, creatorNichesRes, creatorNotesRes,
-        skusRes, vwCampaignSummaryRes, adNameMappingRes, profilesRes
-      ] = await Promise.all([
-        supabase.from('brands').select('*'),
-        supabase.from('campaigns').select('*'),
-        supabase.from('niches').select('*'),
-        fetchAll('creator_niches', 'creator_id'),
-        fetchAll('creator_notes'),
-        supabase.from('skus').select('*'),
-        supabase.from('vw_campaign_summary').select('*'), // Already includes total_gmv_achievement
-        supabase.from('ad_name_mapping').select('*'),
-        supabase.from('profiles').select('*'),
-      ]);
-
+      const data = await getInitialStoreData();
       set({
-        brands: brandsRes.data || [],
-        campaigns: campaignsRes.data || [],
-        creators: [], // Creators are now paginated in their respective pages
-        creator_snapshots: [], 
+        brands: (data.brands as any[]) || [],
+        campaigns: (data.campaigns as any[]) || [],
+        creators: [],
+        creator_snapshots: [],
         creator_contacts: [],
-        niches: nichesRes.data || [],
-        creator_niches: creatorNichesRes || [],
-        creator_notes: creatorNotesRes || [],
-        campaign_creators: [], 
+        niches: (data.niches as any[]) || [],
+        creator_niches: [],
+        creator_notes: [],
+        campaign_creators: [],
         videos: [],
         audit_logs: [],
-        skus: skusRes.data || [],
-        vw_campaign_summary: vwCampaignSummaryRes.data || [],
-        profiles: profilesRes.data || [],
+        skus: (data.skus as any[]) || [],
+        vw_campaign_summary: (data.vw_campaign_summary as any[]) || [],
+        profiles: (data.profiles as any[]) || [],
         daily_performance: [],
         payout_requests: [],
         payout_creator: [],
@@ -195,8 +156,8 @@ export const useDatabaseStore = create<DatabaseState>((set, get) => ({
         live_schedules: [],
         sales: [],
         ads_performance: [],
-        ad_name_mapping: adNameMappingRes.data || [],
-        isLoading: false
+        ad_name_mapping: (data.ad_name_mapping as any[]) || [],
+        isLoading: false,
       });
     } catch (err: any) {
       console.error("fetchData Error:", err);
@@ -473,11 +434,11 @@ export const useDatabaseStore = create<DatabaseState>((set, get) => ({
 
   addCampaign: async (campaign) => {
     try {
-      const { data, error } = await supabase.from('campaigns').insert(campaign).select().single();
-      if (error) throw error;
-      if (data) {
-        set({ campaigns: [...get().campaigns, data] });
-        return data;
+      const res = await createCampaignAction(campaign);
+      if (!res.success) throw new Error(res.error);
+      if (res.data) {
+        set({ campaigns: [...get().campaigns, res.data as any] });
+        return res.data as any;
       }
       return null;
     } catch (err) {
@@ -487,23 +448,23 @@ export const useDatabaseStore = create<DatabaseState>((set, get) => ({
   },
 
   updateCampaign: async (id, updates) => {
-    const { error } = await supabase.from('campaigns').update(updates).eq('id', id);
-    if (!error) {
+    const res = await updateCampaignAction(id, updates);
+    if (res.success) {
       set((state) => ({
-        campaigns: state.campaigns.map(c => c.id === id ? { ...c, ...updates } : c)
+        campaigns: state.campaigns.map((c) => (c.id === id ? { ...c, ...updates } : c)),
       }));
     }
   },
 
   deleteCampaign: async (id) => {
-    const { error } = await supabase.from('campaigns').delete().eq('id', id);
-    if (!error) {
+    const res = await deleteCampaignAction(id);
+    if (res.success) {
       set((state) => ({
-        campaigns: state.campaigns.filter(c => c.id !== id),
-        vw_campaign_summary: state.vw_campaign_summary.filter(c => c.campaign_id !== id)
+        campaigns: state.campaigns.filter((c) => c.id !== id),
+        vw_campaign_summary: state.vw_campaign_summary.filter((c) => c.campaign_id !== id),
       }));
     } else {
-      throw error;
+      throw new Error(res.error);
     }
   },
 
@@ -777,19 +738,19 @@ export const useDatabaseStore = create<DatabaseState>((set, get) => ({
   },
 
   addBrand: async (brand) => {
-    const { data, error } = await supabase.from('brands').insert(brand).select().single();
-    if (!error && data) {
-      set(state => ({ brands: [...state.brands, data] }));
-      return data;
+    const res = await createBrandAction(brand as any);
+    if (res.success && res.data) {
+      set((state) => ({ brands: [...state.brands, res.data as any] }));
+      return res.data as any;
     }
     return null;
   },
-  
+
   updateBrand: async (id, updates) => {
     const { error } = await supabase.from('brands').update(updates).eq('id', id);
     if (!error) {
-      set(state => ({
-        brands: state.brands.map(b => b.id === id ? { ...b, ...updates } : b)
+      set((state) => ({
+        brands: state.brands.map((b) => (b.id === id ? { ...b, ...updates } : b)),
       }));
     }
   },
@@ -797,15 +758,15 @@ export const useDatabaseStore = create<DatabaseState>((set, get) => ({
   addNiche: async (niche) => {
     const { data, error } = await supabase.from('niches').insert(niche).select().single();
     if (!error && data) {
-      set(state => ({ niches: [...state.niches, data] }));
+      set((state) => ({ niches: [...state.niches, data] }));
     }
   },
 
   updateNiche: async (id, updates) => {
     const { error } = await supabase.from('niches').update(updates).eq('id', id);
     if (!error) {
-      set(state => ({
-        niches: state.niches.map(n => n.id === id ? { ...n, ...updates } : n)
+      set((state) => ({
+        niches: state.niches.map((n) => (n.id === id ? { ...n, ...updates } : n)),
       }));
     }
   },
@@ -813,7 +774,7 @@ export const useDatabaseStore = create<DatabaseState>((set, get) => ({
   addDailyPerformance: async (record) => {
     const { data, error } = await supabase.from('daily_performance').insert(record).select().single();
     if (!error && data) {
-      set(state => ({ daily_performance: [...state.daily_performance, data] }));
+      set((state) => ({ daily_performance: [...state.daily_performance, data] }));
     } else if (error) {
       throw error;
     }
@@ -822,8 +783,8 @@ export const useDatabaseStore = create<DatabaseState>((set, get) => ({
   updateDailyPerformance: async (id, updates) => {
     const { data, error } = await supabase.from('daily_performance').update(updates).eq('id', id).select().single();
     if (!error && data) {
-      set(state => ({
-        daily_performance: state.daily_performance.map(d => d.id === id ? { ...d, ...updates } : d)
+      set((state) => ({
+        daily_performance: state.daily_performance.map((d) => (d.id === id ? { ...d, ...updates } : d)),
       }));
     } else if (error) {
       throw error;
@@ -831,10 +792,10 @@ export const useDatabaseStore = create<DatabaseState>((set, get) => ({
   },
 
   addSku: async (sku) => {
-    const { data, error } = await supabase.from('skus').insert(sku).select().single();
-    if (error) throw error;
-    if (data) {
-      set(state => ({ skus: [...state.skus, data] }));
+    const res = await createSkuAction(sku as any);
+    if (!res.success) throw new Error(res.error);
+    if (res.data) {
+      set((state) => ({ skus: [...state.skus, res.data as any] }));
     }
   },
 
@@ -842,22 +803,17 @@ export const useDatabaseStore = create<DatabaseState>((set, get) => ({
     const { data, error } = await supabase.from('skus').update(updates).eq('id', id).select().single();
     if (error) throw error;
     if (data) {
-      set(state => ({
-        skus: state.skus.map(s => s.id === id ? data : s)
+      set((state) => ({
+        skus: state.skus.map((s) => (s.id === id ? data : s)),
       }));
     }
   },
 
   deleteSku: async (id) => {
-    // Unlink foreign keys so delete succeeds without 23503 FK error
-    await supabase.from('sales').update({ sku_id: null }).eq('sku_id', id);
-    await supabase.from('campaign_concepts').update({ sku_id: null }).eq('sku_id', id);
-    await supabase.from('videos').update({ sku_id: null }).eq('sku_id', id);
-
-    const { error } = await supabase.from('skus').delete().eq('id', id);
-    if (error) throw error;
-    set(state => ({
-      skus: state.skus.filter(s => s.id !== id)
+    const res = await deleteSkuAction(id);
+    if (!res.success) throw new Error(res.error);
+    set((state) => ({
+      skus: state.skus.filter((s) => s.id !== id),
     }));
-  }
+  },
 }));

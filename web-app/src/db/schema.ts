@@ -495,6 +495,29 @@ export const auditLogs = pgTable('audit_logs', {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 });
 
+// Ad Name Mapping
+export const adNameMapping = pgTable('ad_name_mapping', {
+  id: serial('id').primaryKey(),
+  pattern: text('pattern'),
+  creatorUsername: text('creator_username'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+// Ads Performance
+export const adsPerformance = pgTable('ads_performance', {
+  id: serial('id').primaryKey(),
+  campaignId: integer('campaign_id').references(() => campaigns.id, { onDelete: 'cascade' }),
+  adId: text('ad_id'),
+  adName: text('ad_name'),
+  cost: numeric('cost'),
+  gmv: numeric('gmv'),
+  orders: integer('orders'),
+  impressions: bigint('impressions', { mode: 'number' }),
+  clicks: bigint('clicks', { mode: 'number' }),
+  date: date('date'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
 // User Campaigns Mapping
 export const userCampaigns = pgTable('user_campaigns', {
   id: serial('id').primaryKey(),
