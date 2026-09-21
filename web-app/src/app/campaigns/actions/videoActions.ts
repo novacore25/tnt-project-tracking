@@ -1,162 +1,108 @@
-'use server'
+'use server';
 
-import { createClient } from "@supabase/supabase-js";
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder-project.supabase.co";
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder-key";
-const supabase = createClient(supabaseUrl, supabaseServiceKey, {
-  global: {
-    fetch: (url, options) => {
-      return fetch(url, { ...options, cache: 'no-store' });
-    }
-  }
-});
+import { db } from '@/db';
+import {
+  campaigns,
+  skus,
+  campaignCreators,
+  creators,
+  videos,
+  creatorContacts,
+  organicVideos,
+} from '@/db/schema';
+import { eq, desc, sql } from 'drizzle-orm';
+import { getCampaignVideoStats } from '@/lib/db-queries';
 
 export async function getInternalVideoData(campaignId: number, searchKeyword: string = '') {
-  // 1. Fetch Campaign
-  const { data: campaign } = await supabase
-    .from('campaigns')
-    .select('*')
-    .eq('id', campaignId)
-    .single();
+  try {
+    // 1. Fetch Campaign
+    const [campaign] = await db
+      .select()
+      .from(campaigns)
+      .where(eq(campaigns.id, campaignId))
+      .limit(1);
 
-  if (!campaign) return null;
-  
-  // 2. Build creator query with only necessary fields (high performance)
-  let creatorsQuery = supabase
-    .from('campaign_creators')
-    .select('*, creators!inner(id, username, nama_asli, creator_contacts(nomor, status)), videos(*)')
-    .eq('campaign_id', campaignId)
-    .eq('approval', 'approved');
+    if (!campaign) return null;
 
-  if (campaign.require_client_approval) {
-    creatorsQuery = creatorsQuery.in('client_approval', ['approved', 'not_required']);
-  }
+    // 2. Fetch SKUs, Video Stats RPC, and Creators in parallel
+    const [skusList, statsData, allCcs, allOrgVideos] = await Promise.all([
+      db.select().from(skus).where(eq(skus.campaignId, campaignId)),
+      getCampaignVideoStats(campaignId),
+      db
+        .select({
+          id: campaignCreators.id,
+          campaignId: campaignCreators.campaignId,
+          creatorId: campaignCreators.creatorId,
+          tier: campaignCreators.tier,
+          price: campaignCreators.price,
+          qtyVt: campaignCreators.qtyVt,
+          approval: campaignCreators.approval,
+          picAssist: campaignCreators.picAssist,
+          notesManager: campaignCreators.notesManager,
+          notesPic: campaignCreators.notesPic,
+          notesClient: campaignCreators.notesClient,
+          sampleProgress: campaignCreators.sampleProgress,
+          creator: {
+            id: creators.id,
+            username: creators.username,
+            namaAsli: creators.namaAsli,
+          },
+        })
+        .from(campaignCreators)
+        .innerJoin(creators, eq(campaignCreators.creatorId, creators.id))
+        .where(
+          sql`${campaignCreators.campaignId} = ${campaignId} AND ${campaignCreators.approval} = 'approved'`
+        )
+        .orderBy(desc(campaignCreators.id)),
+      db
+        .select({
+          content_uid: organicVideos.videoId,
+          publish_time: organicVideos.publishTime,
+        })
+        .from(organicVideos)
+        .where(eq(organicVideos.campaignId, campaignId)),
+    ]);
 
-  if (searchKeyword && searchKeyword.trim() !== '') {
-    creatorsQuery = creatorsQuery.ilike('creators.username', `%${searchKeyword.trim()}%`);
-  }
+    // 3. Fetch all videos belonging to these creators
+    const ccIds = allCcs.map((c) => c.id);
+    const allVideosList =
+      ccIds.length > 0
+        ? await db
+            .select()
+            .from(videos)
+            .where(sql`${videos.campaignCreatorId} IN (${sql.join(ccIds.map((id) => sql`${id}`), sql`, `)})`)
+        : [];
 
-  creatorsQuery = creatorsQuery.order('id', { ascending: false }).range(0, 1999);
+    const statsList = Array.isArray(statsData) ? statsData : [];
 
-  // 3. Fetch all dependent data concurrently in parallel
-  const [skusRes, videoStatsRes, orgDataRes, creatorsRes] = await Promise.all([
-    supabase.from('skus').select('*').eq('campaign_id', campaignId),
-    supabase.rpc('get_campaign_video_stats', { p_campaign_id: campaignId }),
-    supabase.from('organic_videos').select('content_uid, post_time, product_id').eq('campaign_id', campaignId),
-    creatorsQuery
-  ]);
+    // Filter by search keyword if provided
+    const filteredCcs = searchKeyword.trim()
+      ? allCcs.filter((c) =>
+          c.creator.username.toLowerCase().includes(searchKeyword.trim().toLowerCase())
+        )
+      : allCcs;
 
-  const skus = skusRes.data || [];
-  const campaignSkuSet = new Set(skus.map((s: any) => s.product_id).filter(Boolean));
-  let statsList: any[] = videoStatsRes.data || [];
+    // Group videos
+    const videoMap = new Map<number, any[]>();
+    allVideosList.forEach((v) => {
+      if (!videoMap.has(v.campaignCreatorId)) videoMap.set(v.campaignCreatorId, []);
+      videoMap.get(v.campaignCreatorId)!.push(v);
+    });
 
-  // Gatekeeper SKU rules
-  if (skus.length === 0) {
-    // If campaign has 0 SKUs, all video stats are strictly 0 / empty
-    statsList = [];
-  } else if (campaignSkuSet.size > 0) {
-    // Only count stats matching campaign SKUs
-    statsList = statsList.filter((s: any) => !s.product_id || campaignSkuSet.has(s.product_id));
-  }
-
-  const allResults: any[] = creatorsRes.data || [];
-
-  // Map post_time and product_id from organic_videos
-  const orgData = orgDataRes.data || [];
-  const postTimeMap = new Map<string, string>();
-  const orgProductMap = new Map<string, string>();
-  orgData.forEach((o: any) => {
-    if (o.content_uid) {
-      if (o.post_time) postTimeMap.set(o.content_uid, o.post_time);
-      if (o.product_id) orgProductMap.set(o.content_uid, o.product_id);
-    }
-  });
-
-  // Map SKU IDs to DB videos
-  const allVideosFromDb = allResults.flatMap((cc: any) => (cc.videos || []).map((v: any) => {
-    let cleanConcept = v.concept;
-    if (typeof cleanConcept === 'string' && cleanConcept.includes('Auto-detected')) {
-      cleanConcept = null;
-    }
-
-    let resolvedSkuId = v.sku_id;
-    if (!resolvedSkuId && v.content_uid) {
-       const matchingStat = statsList.find((s: any) => s.content_uid === v.content_uid);
-       const pid = matchingStat?.product_id || orgProductMap.get(v.content_uid) || orgProductMap.get(v.content_uid.replace(/^video_/, ''));
-       if (pid) {
-          const matchingSku = skus.find((sku: any) => sku.product_id === pid && sku.campaign_id === campaignId);
-          if (matchingSku) {
-             resolvedSkuId = matchingSku.id;
-          }
-       }
-    }
-
-    // Fallback: If creator only has 1 assigned SKU, use it
-    if (!resolvedSkuId && cc.assigned_sku_ids && cc.assigned_sku_ids.length === 1) {
-      resolvedSkuId = cc.assigned_sku_ids[0];
-    }
+    const result = filteredCcs.map((cc) => ({
+      ...cc,
+      creators: cc.creator,
+      videos: videoMap.get(cc.id) || [],
+    }));
 
     return {
-      ...v,
-      concept: cleanConcept,
-      sku_id: resolvedSkuId || v.sku_id || null
+      campaign,
+      skus: skusList,
+      creators: result,
+      stats: statsList,
     };
-  }));
-
-  // Auto-detect videos from sales (strictly respecting campaign SKUs)
-  const autoVideos: any[] = [];
-  if (skus.length > 0 && statsList.length > 0) {
-    allResults.forEach((cc: any) => {
-      const creator = cc.creators;
-      if (!creator) return;
-
-      const creatorStats = statsList.filter((s: any) => s.username === creator.username.toLowerCase());
-
-      creatorStats.forEach((s: any) => {
-        const vid = s.content_uid;
-        if (!vid) return;
-
-        const existsInDb = allVideosFromDb.some((v: any) => 
-            v.campaign_creator_id === cc.id && 
-            (v.content_uid === vid || v.vt_code === vid)
-        );
-
-        if (!existsInDb) {
-            const matchingSku = skus.find((sku: any) => sku.product_id === s.product_id && sku.campaign_id === campaignId);
-            if (matchingSku) {
-              autoVideos.push({
-                id: `auto_${vid}`,
-                campaign_creator_id: cc.id,
-                urutan: 999, // Re-assigned sequentially in frontend
-                concept: null,
-                link_video: `https://www.tiktok.com/@${creator.username}/video/${vid}`,
-                content_uid: vid,
-                sku_id: matchingSku.id,
-                vt_approval: 'approved'
-              });
-            }
-        }
-      });
-    });
+  } catch (error: any) {
+    console.error('Error in getInternalVideoData:', error);
+    return null;
   }
-
-  const allVideos = [...allVideosFromDb, ...autoVideos];
-
-  allVideos.forEach(v => {
-    if (v.content_uid && postTimeMap.has(v.content_uid)) {
-      v.post_time = postTimeMap.get(v.content_uid);
-    }
-  });
-
-  const listingData = allResults.map((cc: any) => ({
-      ...cc,
-      _videoStats: statsList.filter((s: any) => s.username === cc.creators?.username?.toLowerCase())
-  }));
-
-  return {
-    campaign,
-    allVideos,
-    listingData
-  };
 }

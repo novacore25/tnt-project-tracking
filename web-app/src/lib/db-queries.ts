@@ -32,6 +32,16 @@ export async function getCampaignVideoStats(campaignId: number) {
 }
 
 /**
+ * Panggil RPC get_campaign_live_stats(p_campaign_id)
+ */
+export async function getCampaignLiveStats(campaignId: number) {
+  const result = await db.execute(
+    sql`SELECT public.get_campaign_live_stats(${campaignId}) AS data`
+  );
+  return result[0]?.data ?? [];
+}
+
+/**
  * Panggil RPC get_campaign_sales_stats(p_campaign_id)
  */
 export async function getCampaignSalesStats(campaignId: number) {
