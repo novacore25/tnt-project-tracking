@@ -62,22 +62,22 @@ export async function getInitialStoreData() {
       allAdNameMapping,
       campaignSummaryRes,
     ] = await Promise.all([
-      db.select().from(brands).orderBy(asc(brands.id)),
-      db.select().from(campaigns).orderBy(desc(campaigns.id)),
-      db.select().from(niches).orderBy(asc(niches.id)),
-      db.select().from(skus).orderBy(desc(skus.id)),
-      db.select().from(profiles),
-      db.select().from(adNameMapping),
+      db.execute(sql`SELECT * FROM brands ORDER BY id ASC`).catch(() => []),
+      db.execute(sql`SELECT * FROM campaigns ORDER BY id DESC`).catch(() => []),
+      db.execute(sql`SELECT * FROM niches ORDER BY id ASC`).catch(() => []),
+      db.execute(sql`SELECT * FROM skus ORDER BY id DESC`).catch(() => []),
+      db.execute(sql`SELECT id, full_name as nama, email, avatar_url, role, status FROM profiles`).catch(() => []),
+      db.execute(sql`SELECT * FROM ad_name_mapping ORDER BY id DESC`).catch(() => []),
       db.execute(sql`SELECT * FROM public.vw_campaign_summary`).catch(() => []),
     ]);
 
     return {
-      brands: allBrands || [],
-      campaigns: allCampaigns || [],
-      niches: allNiches || [],
-      skus: allSkus || [],
-      profiles: allProfiles || [],
-      ad_name_mapping: allAdNameMapping || [],
+      brands: (allBrands as any[]) || [],
+      campaigns: (allCampaigns as any[]) || [],
+      niches: (allNiches as any[]) || [],
+      skus: (allSkus as any[]) || [],
+      profiles: (allProfiles as any[]) || [],
+      ad_name_mapping: (allAdNameMapping as any[]) || [],
       vw_campaign_summary: (campaignSummaryRes as any[]) || [],
     };
   } catch (error: any) {
@@ -100,28 +100,24 @@ export async function getInitialStoreData() {
  */
 export async function createCampaignAction(data: any) {
   try {
-    const [newCampaign] = await db
-      .insert(campaigns)
-      .values({
-        brandId: data.brand_id,
-        nama: data.nama,
-        tipeCampaign: data.tipe_campaign,
-        persiapan14hari: data.persiapan_14hari || null,
-        startDate: data.start_date,
-        endDate: data.end_date,
-        targetGmv: data.target_gmv ? Number(data.target_gmv) : null,
-        targetVideo: data.target_video ? Number(data.target_video) : null,
-        targetCreator: data.target_creator ? Number(data.target_creator) : null,
-        targetViews: data.target_views ? Number(data.target_views) : null,
-        budgetCrewPlafon: Number(data.budget_creator_plafon || 0),
-        budgetAdsPlafon: Number(data.budget_ads_plafon || 0),
-        vsaGmvMax: data.vsa_gmv_max ? Number(data.vsa_gmv_max) : null,
-        pic: data.pic || null,
-        assist: data.assist || null,
-        fileConceptUrl: data.file_concept_url || null,
-        status: data.status || 'aktif',
-      })
-      .returning();
+    const [newCampaign] = await db.execute(sql`
+      INSERT INTO campaigns (
+        brand_id, nama, tipe_campaign, persiapan_14hari, start_date, end_date,
+        target_gmv, target_video, target_creator,
+        target_creator_nano, target_creator_micro, target_creator_macro, target_creator_mega,
+        target_creator_live, target_creator_live_nano, target_creator_live_micro, target_creator_live_macro, target_creator_live_mega,
+        target_views, budget_creator_plafon, budget_ads_plafon,
+        vsa_gmv_max, pic, assist, file_concept_url, status, campaign_group, require_client_approval
+      ) VALUES (
+        ${data.brand_id}, ${data.nama}, ${data.tipe_campaign}, ${data.persiapan_14hari || null}, ${data.start_date}, ${data.end_date},
+        ${data.target_gmv ? Number(data.target_gmv) : null}, ${data.target_video ? Number(data.target_video) : null}, ${data.target_creator ? Number(data.target_creator) : null},
+        ${data.target_creator_nano ? Number(data.target_creator_nano) : 0}, ${data.target_creator_micro ? Number(data.target_creator_micro) : 0}, ${data.target_creator_macro ? Number(data.target_creator_macro) : 0}, ${data.target_creator_mega ? Number(data.target_creator_mega) : 0},
+        ${data.target_creator_live ? Number(data.target_creator_live) : null}, ${data.target_creator_live_nano ? Number(data.target_creator_live_nano) : 0}, ${data.target_creator_live_micro ? Number(data.target_creator_live_micro) : 0}, ${data.target_creator_live_macro ? Number(data.target_creator_live_macro) : 0}, ${data.target_creator_live_mega ? Number(data.target_creator_live_mega) : 0},
+        ${data.target_views ? Number(data.target_views) : null}, ${Number(data.budget_creator_plafon || 0)}, ${Number(data.budget_ads_plafon || 0)},
+        ${data.vsa_gmv_max ? Number(data.vsa_gmv_max) : null}, ${data.pic || null}, ${data.assist || null}, ${data.file_concept_url || null}, ${data.status || 'aktif'}, ${data.campaign_group || 'Tim Campaign'}, ${data.require_client_approval || false}
+      )
+      RETURNING *
+    `) as any[];
 
     revalidatePath('/');
     revalidatePath('/campaigns');
@@ -137,24 +133,31 @@ export async function createCampaignAction(data: any) {
  */
 export async function updateCampaignAction(id: number, data: any) {
   try {
-    const updateValues: any = {};
-    if (data.nama !== undefined) updateValues.nama = data.nama;
-    if (data.brand_id !== undefined) updateValues.brandId = data.brand_id;
-    if (data.tipe_campaign !== undefined) updateValues.tipeCampaign = data.tipe_campaign;
-    if (data.start_date !== undefined) updateValues.startDate = data.start_date;
-    if (data.end_date !== undefined) updateValues.endDate = data.end_date;
-    if (data.target_gmv !== undefined) updateValues.targetGmv = Number(data.target_gmv);
-    if (data.target_video !== undefined) updateValues.targetVideo = Number(data.target_video);
-    if (data.target_creator !== undefined) updateValues.targetCreator = Number(data.target_creator);
-    if (data.budget_creator_plafon !== undefined)
-      updateValues.budgetCrewPlafon = Number(data.budget_creator_plafon);
-    if (data.budget_ads_plafon !== undefined)
-      updateValues.budgetAdsPlafon = Number(data.budget_ads_plafon);
-    if (data.status !== undefined) updateValues.status = data.status;
-    if (data.pic !== undefined) updateValues.pic = data.pic;
-    if (data.assist !== undefined) updateValues.assist = data.assist;
-
-    await db.update(campaigns).set(updateValues).where(eq(campaigns.id, id));
+    await db.execute(sql`
+      UPDATE campaigns SET
+        nama = COALESCE(${data.nama !== undefined ? data.nama : null}, nama),
+        brand_id = COALESCE(${data.brand_id !== undefined ? data.brand_id : null}, brand_id),
+        tipe_campaign = COALESCE(${data.tipe_campaign !== undefined ? data.tipe_campaign : null}, tipe_campaign),
+        campaign_group = COALESCE(${data.campaign_group !== undefined ? data.campaign_group : null}, campaign_group),
+        start_date = COALESCE(${data.start_date !== undefined ? data.start_date : null}, start_date),
+        end_date = COALESCE(${data.end_date !== undefined ? data.end_date : null}, end_date),
+        target_gmv = ${data.target_gmv !== undefined ? (data.target_gmv ? Number(data.target_gmv) : null) : sql`target_gmv`},
+        target_video = ${data.target_video !== undefined ? (data.target_video ? Number(data.target_video) : null) : sql`target_video`},
+        target_creator = ${data.target_creator !== undefined ? (data.target_creator ? Number(data.target_creator) : null) : sql`target_creator`},
+        target_creator_nano = ${data.target_creator_nano !== undefined ? Number(data.target_creator_nano) : sql`target_creator_nano`},
+        target_creator_micro = ${data.target_creator_micro !== undefined ? Number(data.target_creator_micro) : sql`target_creator_micro`},
+        target_creator_macro = ${data.target_creator_macro !== undefined ? Number(data.target_creator_macro) : sql`target_creator_macro`},
+        target_creator_mega = ${data.target_creator_mega !== undefined ? Number(data.target_creator_mega) : sql`target_creator_mega`},
+        target_creator_live = ${data.target_creator_live !== undefined ? (data.target_creator_live ? Number(data.target_creator_live) : null) : sql`target_creator_live`},
+        target_views = ${data.target_views !== undefined ? (data.target_views ? Number(data.target_views) : null) : sql`target_views`},
+        budget_creator_plafon = ${data.budget_creator_plafon !== undefined ? Number(data.budget_creator_plafon) : sql`budget_creator_plafon`},
+        budget_ads_plafon = ${data.budget_ads_plafon !== undefined ? Number(data.budget_ads_plafon) : sql`budget_ads_plafon`},
+        require_client_approval = ${data.require_client_approval !== undefined ? data.require_client_approval : sql`require_client_approval`},
+        status = COALESCE(${data.status !== undefined ? data.status : null}, status),
+        pic = ${data.pic !== undefined ? data.pic : sql`pic`},
+        assist = ${data.assist !== undefined ? data.assist : sql`assist`}
+      WHERE id = ${id}
+    `);
 
     revalidatePath('/');
     revalidatePath('/campaigns');
@@ -171,7 +174,7 @@ export async function updateCampaignAction(id: number, data: any) {
  */
 export async function deleteCampaignAction(id: number) {
   try {
-    await db.delete(campaigns).where(eq(campaigns.id, id));
+    await db.execute(sql`DELETE FROM campaigns WHERE id = ${id}`);
     revalidatePath('/');
     revalidatePath('/campaigns');
     return { success: true };
@@ -186,13 +189,11 @@ export async function deleteCampaignAction(id: number) {
  */
 export async function createBrandAction(data: { nama: string; status?: string }) {
   try {
-    const [newBrand] = await db
-      .insert(brands)
-      .values({
-        nama: data.nama,
-        status: data.status || 'aktif',
-      })
-      .returning();
+    const [newBrand] = await db.execute(sql`
+      INSERT INTO brands (nama, status)
+      VALUES (${data.nama}, ${data.status || 'aktif'})
+      RETURNING *
+    `) as any[];
 
     revalidatePath('/');
     return { success: true, data: newBrand };
@@ -212,16 +213,11 @@ export async function createSkuAction(data: {
   link?: string;
 }) {
   try {
-    const [newSku] = await db
-      .insert(skus)
-      .values({
-        campaignId: data.campaign_id,
-        namaProduk: data.nama_produk,
-        productId: data.product_id || null,
-        komisi: data.komisi ? String(data.komisi) : null,
-        link: data.link || null,
-      })
-      .returning();
+    const [newSku] = await db.execute(sql`
+      INSERT INTO skus (campaign_id, nama_produk, product_id, komisi, link)
+      VALUES (${data.campaign_id}, ${data.nama_produk}, ${data.product_id || null}, ${data.komisi ? String(data.komisi) : null}, ${data.link || null})
+      RETURNING *
+    `) as any[];
 
     revalidatePath(`/campaigns/${data.campaign_id}/sku`);
     return { success: true, data: newSku };
@@ -232,7 +228,7 @@ export async function createSkuAction(data: {
 
 export async function deleteSkuAction(id: number, campaignId?: number) {
   try {
-    await db.delete(skus).where(eq(skus.id, id));
+    await db.execute(sql`DELETE FROM skus WHERE id = ${id}`);
     if (campaignId) revalidatePath(`/campaigns/${campaignId}/sku`);
     return { success: true };
   } catch (error: any) {
