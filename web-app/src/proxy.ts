@@ -3,62 +3,35 @@ import { updateSession } from "@/utils/supabase/middleware";
 import { createServerClient } from "@supabase/ssr";
 
 export async function proxy(request: NextRequest) {
-  // Update session to keep it alive
-  let response = await updateSession(request);
-
-  // Create a separate supabase client to check the auth state
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll();
-        },
-        setAll(cookiesToSet) {
-          // Ignoring because we already handled cookie setting in updateSession
-        },
-      },
-    }
-  );
-
-  const { data: { user } } = await supabase.auth.getUser();
   const pathname = request.nextUrl.pathname;
 
   // Paths that do not require login
-  const isPublicPath = pathname.startsWith('/login') || 
-                       pathname.startsWith('/auth') || 
-                       pathname.startsWith('/portal');
+  const isPublicPath =
+    pathname.startsWith('/login') ||
+    pathname.startsWith('/api/auth') ||
+    pathname.startsWith('/auth') ||
+    pathname.startsWith('/portal');
+
+  // Check auth session cookie
+  const sessionToken =
+    request.cookies.get('authjs.session-token')?.value ||
+    request.cookies.get('__Secure-authjs.session-token')?.value ||
+    request.cookies.get('next-auth.session-token')?.value ||
+    request.cookies.get('__Secure-next-auth.session-token')?.value;
 
   // If user is not logged in and path is NOT public, redirect to login
-  if (!user && !isPublicPath) {
+  if (!sessionToken && !isPublicPath) {
     const url = request.nextUrl.clone();
     url.pathname = '/login';
     return NextResponse.redirect(url);
   }
-  
-  if (user) {
-    // Check user profile status
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('status')
-      .eq('id', user.id)
-      .single();
 
-    const isPending = profile?.status === 'pending' || profile?.status === 'inactive';
-    const isPendingRoute = pathname.startsWith('/pending');
-
-    if (isPending && !isPendingRoute && !isPublicPath) {
-      return NextResponse.redirect(new URL('/pending', request.url));
-    }
-
-    if (!isPending && (isPendingRoute || pathname.startsWith('/login'))) {
-      // Redirect to home if already approved and trying to access login/pending
-      return NextResponse.redirect(new URL('/', request.url));
-    }
+  // If user is logged in and tries to access /login, redirect to /
+  if (sessionToken && pathname.startsWith('/login')) {
+    return NextResponse.redirect(new URL('/', request.url));
   }
 
-  return response;
+  return NextResponse.next();
 }
 
 export const config = {

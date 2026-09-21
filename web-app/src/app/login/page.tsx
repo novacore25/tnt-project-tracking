@@ -23,27 +23,10 @@ export default function LoginPage() {
   }, []);
 
   const handleAuth = async () => {
-    if (isRegistering && !namaPanggilan.trim()) {
-      alert("Mohon isi nama panggilan terlebih dahulu.");
-      return;
-    }
-
     setIsLoading(true);
-    
-    // Jika mendaftar, simpan nama panggilan di cookie agar bisa dibaca di callback
-    if (isRegistering) {
-      document.cookie = `tnt_reg_name=${encodeURIComponent(namaPanggilan.trim())}; path=/; max-age=3600`;
-    }
-
     try {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
-        },
-      });
-
-      if (error) throw error;
+      // Login Google via Auth.js (NextAuth)
+      window.location.href = '/api/auth/signin/google';
     } catch (error: any) {
       alert("Error logging in: " + error.message);
       setIsLoading(false);
