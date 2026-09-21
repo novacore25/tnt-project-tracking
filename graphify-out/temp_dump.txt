@@ -1,0 +1,1385 @@
+﻿--- START OF C:\Users\Banzilla\Documents\DEV\Project-Tracking-System\web-app\.agents\skills\graphify\references\hooks.md ---
+# graphify reference: commit hook and native CLAUDE.md integration
+
+Load this when the user asked to install the post-commit hook or wire graphify into a project's CLAUDE.md.
+
+## For git commit hook
+
+Install a post-commit hook that auto-rebuilds the graph after every commit. No background process needed - triggers once per commit, works with any editor.
+
+```bash
+graphify hook install    # install
+graphify hook uninstall  # remove
+graphify hook status     # check
+```
+
+After every `git commit`, the hook detects which code files changed (via `git diff HEAD~1`), re-runs AST extraction on those files, and rebuilds `graph.json` and `GRAPH_REPORT.md`. Doc/image changes are ignored by the hook - run `/graphify --update` manually for those.
+
+If a post-commit hook already exists, graphify appends to it rather than replacing it.
+
+---
+
+## For native CLAUDE.md integration
+
+Run once per project to make graphify always-on in Claude Code sessions:
+
+```bash
+graphify claude install
+```
+
+This writes a `## graphify` section to the local `CLAUDE.md` that instructs Claude to check the graph before answering codebase questions and rebuild it after code changes. No manual `/graphify` needed in future sessions.
+
+```bash
+graphify claude uninstall  # remove the section
+```
+
+--- END OF C:\Users\Banzilla\Documents\DEV\Project-Tracking-System\web-app\.agents\skills\graphify\references\hooks.md ---
+
+--- START OF C:\Users\Banzilla\Documents\DEV\Project-Tracking-System\web-app\.agents\skills\graphify\references\query.md ---
+# graphify reference: query, path, explain
+
+Load this when the user asks a question against an existing graph, or runs `/graphify path` or `/graphify explain`. The core's query stub points here for the full traversal flow. These flows use the `graphify query` CLI when it is available and fall back to an inline NetworkX traversal otherwise.
+
+Two traversal modes - choose based on the question:
+
+| Mode | Flag | Best for |
+|------|------|----------|
+| BFS (default) | _(none)_ | "What is X connected to?" - broad context, nearest neighbors first |
+| DFS | `--dfs` | "How does X reach Y?" - trace a specific chain or dependency path |
+
+First check the graph exists:
+```bash
+$(cat graphify-out/.graphify_python) -c "
+from pathlib import Path
+if not Path('graphify-out/graph.json').exists():
+    print('ERROR: No graph found. Run /graphify <path> first to build the graph.')
+    raise SystemExit(1)
+"
+```
+If it fails, stop and tell the user to run `/graphify <path>` first.
+
+### Step 0 â€” Constrained query expansion (REQUIRED before traversal)
+
+graphify's `query` CLI matches nodes via case-folded substring + IDF â€” there is **no stemming, no synonyms, no cross-language match** inside the binary, and the inline fallback below matches the same way. If the user's question uses different language or different domain vocabulary than the graph's labels (user says "Ð¾Ð±Ñ€Ð°Ð±Ð¾Ñ‚Ñ‡Ð¸Ðº" / graph says "handler"; user says "authentication" / graph says "Guardian"), the literal matcher returns 0 hits and the answer collapses to noise.
+
+Fix this **without inventing tokens** by expanding the query against the actual graph vocabulary first:
+
+1. Extract the token vocabulary from node labels:
+```bash
+$(cat graphify-out/.graphify_python) -c "
+import json, re
+from pathlib import Path
+data = json.loads(Path('graphify-out/graph.json').read_text(encoding='utf-8'))
+vocab = set()
+for n in data['nodes']:
+    for c in re.findall(r'[^\W\d_]+', n.get('label','') or '', re.UNICODE):
+        parts = re.findall(r'[A-Z]+(?=[A-Z][a-z])|[A-Z]?[a-z]+|[A-Z]+', c) or [c]
+        for p in parts:
+            t = p.lower()
+            if 3 <= len(t) <= 30:
+                vocab.add(t)
+Path('graphify-out/.vocab.txt').write_text('\n'.join(sorted(vocab)), encoding='utf-8')
+print(f'vocab: {len(vocab)} tokens')
+"
+```
+
+2. Read `graphify-out/.vocab.txt`. Then for the user's question, select **up to 12 tokens from this exact list** that semantically match the query intent. Hard constraints:
+   - You MUST pick only tokens present in the vocabulary file. Do NOT invent tokens.
+   - If a query concept has no plausible token in the vocab, skip it â€” do not substitute a near-synonym from training memory.
+   - If **no** vocab tokens match the query at all, output an empty list and tell the user the corpus has no relevant vocabulary for this question. Do not fabricate a search.
+   - Translate cross-language: Russian "Ð°ÑƒÑ‚ÐµÐ½Ñ‚Ð¸Ñ„Ð¸ÐºÐ°Ñ†Ð¸Ñ" â†’ look for `auth`, `credential`, `token`, `security` IFF present in vocab.
+   - Morphology: "handlers" maps to `handler` IFF present; "todos" maps to `todo` IFF present.
+
+3. Print the selection explicitly to the user before running the query, so the expansion is auditable:
+```
+Query expanded to (from graph vocab, N tokens): [token1, token2, ...]
+```
+If the list is empty, say so plainly and stop â€” do not proceed to traversal.
+
+### Step 1 â€” Traversal
+
+Build the **expanded query string** by joining the selected tokens with spaces. Use this string as `QUESTION` below â€” NOT the original user question. (The original question is preserved only for `save-result` at the end.)
+
+Prefer the CLI when it is installed:
+```bash
+graphify query "QUESTION"
+# or: graphify query "QUESTION" --dfs --budget 3000
+```
+
+If the CLI is unavailable, load `graphify-out/graph.json` and run the traversal inline:
+
+1. Find the 1-3 nodes whose label best matches the expanded tokens.
+2. Run the appropriate traversal from each starting node.
+3. Read the subgraph - node labels, edge relations, confidence tags, source locations.
+4. Answer using **only** what the graph contains. Quote `source_location` when citing a specific fact.
+5. If the graph lacks enough information, say so - do not hallucinate edges.
+
+```bash
+$(cat graphify-out/.graphify_python) -c "
+import sys, json
+from networkx.readwrite import json_graph
+import networkx as nx
+from pathlib import Path
+
+data = json.loads(Path('graphify-out/graph.json').read_text(encoding='utf-8'))
+G = json_graph.node_link_graph(data, edges='links')
+
+question = 'QUESTION'
+mode = 'MODE'  # 'bfs' or 'dfs'
+terms = [t.lower() for t in question.split() if len(t) >= 3]  # match the vocab threshold; keeps api/jwt/ios (#1392)
+
+# Find best-matching start nodes
+scored = []
+for nid, ndata in G.nodes(data=True):
+    label = ndata.get('label', '').lower()
+    score = sum(1 for t in terms if t in label)
+    if score > 0:
+        scored.append((score, nid))
+scored.sort(reverse=True)
+start_nodes = [nid for _, nid in scored[:3]]
+
+if not start_nodes:
+    print('No matching nodes found for query terms:', terms)
+    sys.exit(0)
+
+subgraph_nodes = set()
+subgraph_edges = []
+
+if mode == 'dfs':
+    # DFS: follow one path as deep as possible before backtracking.
+    # Depth-limited to 6 to avoid traversing the whole graph.
+    visited = set()
+    stack = [(n, 0) for n in reversed(start_nodes)]
+    while stack:
+        node, depth = stack.pop()
+        if node in visited or depth > 6:
+            continue
+        visited.add(node)
+        subgraph_nodes.add(node)
+        for neighbor in G.neighbors(node):
+            if neighbor not in visited:
+                stack.append((neighbor, depth + 1))
+                subgraph_edges.append((node, neighbor))
+else:
+    # BFS: explore all neighbors layer by layer up to depth 3.
+    frontier = set(start_nodes)
+    subgraph_nodes = set(start_nodes)
+    for _ in range(3):
+        next_frontier = set()
+        for n in frontier:
+            for neighbor in G.neighbors(n):
+                if neighbor not in subgraph_nodes:
+                    next_frontier.add(neighbor)
+                    subgraph_edges.append((n, neighbor))
+        subgraph_nodes.update(next_frontier)
+        frontier = next_frontier
+
+# Token-budget aware output: rank by relevance, cut at budget (~4 chars/token)
+token_budget = BUDGET  # default 2000
+char_budget = token_budget * 4
+
+# Score each node by term overlap for ranked output
+def relevance(nid):
+    label = G.nodes[nid].get('label', '').lower()
+    return sum(1 for t in terms if t in label)
+
+ranked_nodes = sorted(subgraph_nodes, key=relevance, reverse=True)
+
+lines = [f'Traversal: {mode.upper()} | Start: {[G.nodes[n].get(\"label\",n) for n in start_nodes]} | {len(subgraph_nodes)} nodes']
+for nid in ranked_nodes:
+    d = G.nodes[nid]
+    lines.append(f'  NODE {d.get(\"label\", nid)} [src={d.get(\"source_file\",\"\")} loc={d.get(\"source_location\",\"\")}]')
+for u, v in subgraph_edges:
+    if u in subgraph_nodes and v in subgraph_nodes:
+        _raw = G[u][v]; d = next(iter(_raw.values()), {}) if isinstance(G, nx.MultiGraph) else _raw
+        lines.append(f'  EDGE {G.nodes[u].get(\"label\",u)} --{d.get(\"relation\",\"\")} [{d.get(\"confidence\",\"\")}]--> {G.nodes[v].get(\"label\",v)}')
+
+output = '\n'.join(lines)
+if len(output) > char_budget:
+    output = output[:char_budget] + f'\n... (truncated at ~{token_budget} token budget - use --budget N for more)'
+print(output)
+"
+```
+
+Replace `QUESTION` with the **expanded** query string, `MODE` with `bfs` or `dfs`, and `BUDGET` with the token budget (default `2000`, or whatever `--budget N` specifies). Then answer based on the subgraph output above, using only what the graph contains.
+
+After writing the answer, save it back into the graph so it improves future queries. Include the expanded tokens inside the `--answer` text (e.g. `"Expanded from original query via vocab: [tokens]. Then traversed..."`) so the next `--update` extracts the expansion history as a graph node:
+
+```bash
+$(cat graphify-out/.graphify_python) -m graphify save-result --question "ORIGINAL_QUESTION" --answer "ANSWER" --type query --nodes NODE1 NODE2
+```
+
+Replace `ORIGINAL_QUESTION` with the user's verbatim question, `ANSWER` with your full answer text (containing the expanded-token trace), `NODE1 NODE2` with the list of node labels you cited. This closes the feedback loop: the next `--update` will extract this Q&A as a node in the graph.
+
+**Work memory (self-improving loop).** Add an `--outcome` so future sessions learn from this one â€” append `--outcome useful|dead_end|corrected` to the `save-result` command (and `--correction "the right answer"` when correcting):
+
+- `useful` â€” the cited nodes answered the question well (they become *preferred sources*).
+- `dead_end` â€” the question/path led nowhere; don't re-derive it next time.
+- `corrected` â€” the saved answer was wrong; `--correction` records what was right.
+
+At the **start** of graph work, refresh and read the lessons: run `graphify reflect --if-stale` (cheap, deterministic, no LLM; `--if-stale` makes it a no-op when `LESSONS.md` is already newer than every input, e.g. when the git hook just refreshed it), then read `graphify-out/reflections/LESSONS.md`. It lists **preferred sources** (start there), **known dead ends** (skip them), and prior **corrections**. Running `reflect` yourself keeps the lessons current even without the git hook installed; if the post-commit hook *is* installed, `--if-stale` means your session-start run costs almost nothing.
+
+---
+
+## For /graphify path
+
+Find the shortest path between two named concepts in the graph. Prefer the CLI when installed:
+
+```bash
+graphify path "NODE_A" "NODE_B"
+```
+
+If the CLI is unavailable, run it inline:
+
+```bash
+$(cat graphify-out/.graphify_python) -c "
+import json, sys
+import networkx as nx
+from networkx.readwrite import json_graph
+from pathlib import Path
+
+data = json.loads(Path('graphify-out/graph.json').read_text(encoding='utf-8'))
+G = json_graph.node_link_graph(data, edges='links')
+
+a_term = 'NODE_A'
+b_term = 'NODE_B'
+
+def find_node(term):
+    term = term.lower()
+    scored = sorted(
+        [(sum(1 for w in term.split() if w in G.nodes[n].get('label','').lower()), n)
+         for n in G.nodes()],
+        reverse=True
+    )
+    return scored[0][1] if scored and scored[0][0] > 0 else None
+
+src = find_node(a_term)
+tgt = find_node(b_term)
+
+if not src or not tgt:
+    print(f'Could not find nodes matching: {a_term!r} or {b_term!r}')
+    sys.exit(0)
+
+try:
+    path = nx.shortest_path(G, src, tgt)
+    print(f'Shortest path ({len(path)-1} hops):')
+    for i, nid in enumerate(path):
+        label = G.nodes[nid].get('label', nid)
+        if i < len(path) - 1:
+            _raw = G[nid][path[i+1]]; edge = next(iter(_raw.values()), {}) if isinstance(G, nx.MultiGraph) else _raw
+            rel = edge.get('relation', '')
+            conf = edge.get('confidence', '')
+            print(f'  {label} --{rel}--> [{conf}]')
+        else:
+            print(f'  {label}')
+except nx.NetworkXNoPath:
+    print(f'No path found between {a_term!r} and {b_term!r}')
+except nx.NodeNotFound as e:
+    print(f'Node not found: {e}')
+"
+```
+
+Replace `NODE_A` and `NODE_B` with the actual concept names from the user. Then explain the path in plain language - what each hop means, why it's significant.
+
+After writing the explanation, save it back:
+
+```bash
+$(cat graphify-out/.graphify_python) -m graphify save-result --question "Path from NODE_A to NODE_B" --answer "ANSWER" --type path_query --nodes NODE_A NODE_B
+```
+
+---
+
+## For /graphify explain
+
+Give a plain-language explanation of a single node - everything connected to it. Prefer the CLI when installed:
+
+```bash
+graphify explain "NODE_NAME"
+```
+
+If the CLI is unavailable, run it inline:
+
+```bash
+$(cat graphify-out/.graphify_python) -c "
+import json, sys
+import networkx as nx
+from networkx.readwrite import json_graph
+from pathlib import Path
+
+data = json.loads(Path('graphify-out/graph.json').read_text(encoding='utf-8'))
+G = json_graph.node_link_graph(data, edges='links')
+
+term = 'NODE_NAME'
+term_lower = term.lower()
+
+# Find best matching node
+scored = sorted(
+    [(sum(1 for w in term_lower.split() if w in G.nodes[n].get('label','').lower()), n)
+     for n in G.nodes()],
+    reverse=True
+)
+if not scored or scored[0][0] == 0:
+    print(f'No node matching {term!r}')
+    sys.exit(0)
+
+nid = scored[0][1]
+data_n = G.nodes[nid]
+print(f'NODE: {data_n.get(\"label\", nid)}')
+print(f'  source: {data_n.get(\"source_file\",\"unknown\")}')
+print(f'  type: {data_n.get(\"file_type\",\"unknown\")}')
+print(f'  degree: {G.degree(nid)}')
+print()
+print('CONNECTIONS:')
+for neighbor in G.neighbors(nid):
+    _raw = G[nid][neighbor]; edge = next(iter(_raw.values()), {}) if isinstance(G, nx.MultiGraph) else _raw
+    nlabel = G.nodes[neighbor].get('label', neighbor)
+    rel = edge.get('relation', '')
+    conf = edge.get('confidence', '')
+    src_file = G.nodes[neighbor].get('source_file', '')
+    print(f'  --{rel}--> {nlabel} [{conf}] ({src_file})')
+"
+```
+
+Replace `NODE_NAME` with the concept the user asked about. Then write a 3-5 sentence explanation of what this node is, what it connects to, and why those connections are significant. Use the source locations as citations.
+
+After writing the explanation, save it back:
+
+```bash
+$(cat graphify-out/.graphify_python) -m graphify save-result --question "Explain NODE_NAME" --answer "ANSWER" --type explain --nodes NODE_NAME
+```
+
+--- END OF C:\Users\Banzilla\Documents\DEV\Project-Tracking-System\web-app\.agents\skills\graphify\references\query.md ---
+
+--- START OF C:\Users\Banzilla\Documents\DEV\Project-Tracking-System\web-app\.agents\skills\graphify\references\transcribe.md ---
+# graphify reference: transcribe video and audio
+
+Load this only when `detect` reported one or more `video` files. A corpus with no video never reads this.
+
+### Step 2.5 - Transcribe video / audio files (only if video files detected)
+
+Skip this step entirely if `detect` returned zero `video` files.
+
+Video and audio files cannot be read directly. Transcribe them to text first, then treat the transcripts as doc files in Step 3.
+
+**Strategy:** Read the god nodes from `graphify-out/.graphify_detect.json` (or the analysis file if it exists from a previous run). You are already a language model â€” write a one-sentence domain hint yourself from those labels. Then pass it to Whisper as the initial prompt. No separate API call needed.
+
+**However**, if the corpus has *only* video files and no other docs/code, use the generic fallback prompt: `"Use proper punctuation and paragraph breaks."`
+
+**Step 1 - Write the Whisper prompt yourself.**
+
+Read the top god node labels from detect output or analysis, then compose a short domain hint sentence, for example:
+
+- Labels: `transformer, attention, encoder, decoder` â†’ `"Machine learning research on transformer architectures and attention mechanisms. Use proper punctuation and paragraph breaks."`
+- Labels: `kubernetes, deployment, pod, helm` â†’ `"DevOps discussion about Kubernetes deployments and Helm charts. Use proper punctuation and paragraph breaks."`
+
+**Export** it as `GRAPHIFY_WHISPER_PROMPT` (the exact name the transcriber reads â€” and it must be `export`ed so the child Python process sees it) for the next command.
+
+**Step 2 - Transcribe:**
+
+```bash
+export GRAPHIFY_WHISPER_MODEL=base  # or whatever --whisper-model the user passed (must be exported)
+export GRAPHIFY_WHISPER_PROMPT="<the one-sentence domain hint you composed in Step 1>"
+$(cat graphify-out/.graphify_python) -c "
+import json, os, sys
+from pathlib import Path
+from graphify.transcribe import transcribe_all
+
+detect = json.loads(Path('graphify-out/.graphify_detect.json').read_text(encoding=\"utf-8\"))
+video_files = detect.get('files', {}).get('video', [])
+prompt = os.environ.get('GRAPHIFY_WHISPER_PROMPT', 'Use proper punctuation and paragraph breaks.')
+
+transcript_paths = transcribe_all(video_files, initial_prompt=prompt)
+# Write the JSON from Python (NOT a shell '>' redirect): transcribe_all/Whisper
+# print progress to stdout, which would otherwise corrupt the JSON file (#1392).
+Path('graphify-out/.graphify_transcripts.json').write_text(json.dumps(transcript_paths, ensure_ascii=False), encoding=\"utf-8\")
+print(f'Transcribed {len(transcript_paths)} file(s)', file=sys.stderr)
+"
+```
+
+After transcription:
+- Read the transcript paths from `graphify-out/.graphify_transcripts.json`
+- Add them to the docs list before dispatching semantic subagents in Step 3B
+- Print how many transcripts were created: `Transcribed N video file(s) -> treating as docs`
+- If transcription fails for a file, print a warning and continue with the rest
+
+**Whisper model:** Default is `base`. If the user passed `--whisper-model <name>`, `export GRAPHIFY_WHISPER_MODEL=<name>` (it must be exported, not just assigned) before running the command above.
+
+--- END OF C:\Users\Banzilla\Documents\DEV\Project-Tracking-System\web-app\.agents\skills\graphify\references\transcribe.md ---
+
+--- START OF C:\Users\Banzilla\Documents\DEV\Project-Tracking-System\web-app\.agents\skills\graphify\references\update.md ---
+# graphify reference: incremental update and cluster-only
+
+Load this only when the user passed `--update` or `--cluster-only`. A first-time full build never reads this file.
+
+## For --update (incremental re-extraction)
+
+Use when you've added or modified files since the last run. Only re-extracts changed files - saves tokens and time.
+
+```bash
+$(cat graphify-out/.graphify_python) -c "
+import sys, json
+from graphify.detect import detect_incremental, save_manifest
+from pathlib import Path
+
+result = detect_incremental(Path('INPUT_PATH'))
+new_total = result.get('new_total', 0)
+print(json.dumps(result, indent=2, ensure_ascii=False))
+Path('graphify-out/.graphify_incremental.json').write_text(json.dumps(result, ensure_ascii=False), encoding=\"utf-8\")
+deleted = list(result.get('deleted_files', []))
+if new_total == 0 and not deleted:
+    print('No files changed since last run. Nothing to update.')
+    raise SystemExit(0)
+if deleted:
+    print(f'{len(deleted)} deleted file(s) to prune.')
+if new_total > 0:
+    print(f'{new_total} new/changed file(s) to re-extract.')
+"
+```
+
+Then populate `.graphify_detect.json` so Steps 3Aâ€“6 (which read it unconditionally) see the right state for an incremental run. `files` carries the changed subset (drives Step 3A AST + Step 3B0 cache check on only what changed); `all_files` carries the full corpus for any step that needs corpus-wide context:
+
+```bash
+$(cat graphify-out/.graphify_python) -c "
+import json
+from pathlib import Path
+r = json.loads(Path('graphify-out/.graphify_incremental.json').read_text(encoding=\"utf-8\"))
+Path('graphify-out/.graphify_detect.json').write_text(json.dumps({
+    'files': r.get('new_files', {}),
+    'all_files': r.get('files', {}),
+    'total_files': r.get('new_total', 0),
+    'total_words': r.get('total_words', 0),
+    'skipped_sensitive': r.get('skipped_sensitive', []),
+    'needs_graph': True,
+}, ensure_ascii=False), encoding=\"utf-8\")
+"
+```
+
+If new files exist, first check whether all changed files are code files:
+
+```bash
+$(cat graphify-out/.graphify_python) -c "
+import json
+from pathlib import Path
+
+result = json.loads(open('graphify-out/.graphify_incremental.json', encoding='utf-8').read()) if Path('graphify-out/.graphify_incremental.json').exists() else {}
+code_exts = {'.py','.ts','.js','.go','.rs','.java','.cpp','.c','.rb','.swift','.kt','.cs','.scala','.php','.cc','.cxx','.hpp','.h','.kts','.lua','.toc','.f','.F','.f90','.F90','.f95','.F95','.f03','.F03','.f08','.F08'}
+new_files = result.get('new_files', {})
+all_changed = [f for files in new_files.values() for f in files]
+code_only = all(Path(f).suffix.lower() in code_exts for f in all_changed)
+print('code_only:', code_only)
+"
+```
+
+If `code_only` is True: print `[graphify update] Code-only changes detected - skipping semantic extraction (no LLM needed)`, run only Step 3A (AST) on the changed files, skip Step 3B entirely (no subagents), then go straight to merge and Steps 4â€“8.
+
+If `code_only` is False (any changed file is a doc/paper/image/video): **first, if any changed file is in `new_files['video']`, run `references/transcribe.md` (Step 2.5) on those files, then rewrite `.graphify_detect.json` to move the resulting transcript paths into `files['document']` and drop `files['video']`** â€” otherwise raw `.mp4/.mp3` paths are fed to semantic subagents as unreadable media (#1392). Then run the full Steps 3Aâ€“3C pipeline as normal.
+
+
+If no new files exist (only deletions), create an empty extraction so the merge step can prune:
+
+```bash
+if [ ! -f graphify-out/.graphify_extract.json ]; then
+    echo '[graphify update] Only deletions -- creating empty extraction for merge.'
+    $(cat graphify-out/.graphify_python) -c "
+import json
+from pathlib import Path
+Path('graphify-out/.graphify_extract.json').write_text(json.dumps({'nodes':[],'edges':[],'hyperedges':[],'input_tokens':0,'output_tokens':0}), encoding='utf-8')
+"
+fi
+```
+
+
+Then:
+
+```bash
+$(cat graphify-out/.graphify_python) -c "
+import json
+from pathlib import Path
+from graphify.build import build_merge
+from graphify.detect import save_manifest
+
+# Load new extraction and incremental state
+new_extraction = json.loads(Path('graphify-out/.graphify_extract.json').read_text(encoding=\"utf-8\"))
+incremental = json.loads(Path('graphify-out/.graphify_incremental.json').read_text(encoding=\"utf-8\"))
+deleted = list(incremental.get('deleted_files', []))
+# prune_sources is ONLY for genuinely DELETED files. Changed/re-extracted files are
+# handled by build_merge's replace-on-re-extract (#1344): every source_file in
+# new_chunks is dropped from the base before merge, so old/stale nodes don't survive.
+# Do NOT add `changed` here: with root= passed, prune_set relativizes to the same base
+# as the freshly merged nodes and would DELETE the re-extracted content (#1178 is moot
+# now that replace â€” not the dedup pass â€” reconciles changed files).
+prune = list(deleted) or None
+
+# Use build_merge() â€” reads graph.json directly without NetworkX round-trip
+# so edge direction (calls, implements, imports) is always preserved (#801).
+# Pass root= so prune_sources (absolute paths from detect_incremental) are
+# relativized to match the graph's relative source_file values; without it
+# nothing is pruned and stale nodes accumulate on every update (#1361).
+# directed=IS_DIRECTED: replace IS_DIRECTED with True if --directed was given, else
+# False. Without it a --directed --update silently rebuilds undirected and collapses
+# reciprocal A<->B edges (#1392).
+G = build_merge(
+    [new_extraction],
+    graph_path='graphify-out/graph.json',
+    prune_sources=prune,
+    root='INPUT_PATH',
+    directed=IS_DIRECTED,
+)
+print(f'[graphify update] Merged: {G.number_of_nodes()} nodes, {G.number_of_edges()} edges')
+
+# Write merged result back to .graphify_extract.json so Step 4 sees the full graph
+merged_out = {
+    'nodes': [{'id': n, **d} for n, d in G.nodes(data=True)],
+    'edges': [
+        # Explicit source/target last so they win over any stale attrs in d.
+        {**{k: val for k, val in d.items() if k not in ('_src', '_tgt', 'source', 'target')},
+         'source': d.get('_src', u), 'target': d.get('_tgt', v)}
+        for u, v, d in G.edges(data=True)
+    ],
+    # G.graph["hyperedges"] holds hyperedges from both existing graph.json
+    # and new_extraction (build_merge combines them). Falling back to
+    # new_extraction only would silently drop prior-run hyperedges (#801).
+    'hyperedges': list(G.graph.get('hyperedges', [])),
+    'input_tokens': new_extraction.get('input_tokens', 0),
+    'output_tokens': new_extraction.get('output_tokens', 0),
+}
+Path('graphify-out/.graphify_extract.json').write_text(json.dumps(merged_out, ensure_ascii=False), encoding=\"utf-8\")
+print(f'[graphify update] Merged extraction written ({len(merged_out[\"nodes\"])} nodes, {len(merged_out[\"edges\"])} edges)')
+
+# Save manifest so next --update diffs against today's state, not the
+# prior run's baseline (prevents ghost-node reports on subsequent updates).
+# root= matches the build_merge call above so the manifest keys stay relative to
+# the scan root â€” portable across clones/machines, so --update keeps matching
+# cached files instead of missing every one after a move (#1417).
+#
+# Only stamp semantic files (docs/papers/images) that ACTUALLY produced output
+# THIS run (new_extraction is this run's fresh extraction, read above before the
+# merge overwrote the file): a changed doc whose chunk failed must stay unstamped
+# so the next --update re-queues it, otherwise it is marked done and its content
+# is lost forever (#2015). Mirrors the library extract path
+# (cli._stamped_manifest_files + clear_semantic + scan_corpus).
+from graphify.cli import _stamped_manifest_files
+_manifest_files = _stamped_manifest_files(incremental['files'], new_extraction, Path('INPUT_PATH'))
+# Changed semantic files dispatched this run but NOT stamped had their chunk fail
+# or be omitted; clear any stale semantic_hash so they are re-queued (#1948).
+_sem_types = ('document', 'paper', 'image')
+_dispatched = {f for t, fl in incremental.get('new_files', {}).items() if t in _sem_types for f in fl}
+_stamped = {f for fl in _manifest_files.values() for f in fl}
+_cleared = _dispatched - _stamped
+# scan_corpus = the RAW full corpus so in-root files newly excluded since last run
+# are dropped rather than masquerading as deletions; untouched rows preserved (#1908).
+_scan = {f for fl in incremental['files'].values() for f in fl}
+save_manifest(_manifest_files, root='INPUT_PATH', scan_corpus=_scan, clear_semantic=_cleared or None)
+print('[graphify update] Manifest saved.')
+"
+```
+
+Then run Steps 4â€“8 on the merged graph as normal.
+
+After Step 4, show the graph diff:
+
+```bash
+$(cat graphify-out/.graphify_python) -c "
+import json
+from graphify.analyze import graph_diff
+from graphify.build import build_from_json
+from networkx.readwrite import json_graph
+import networkx as nx
+from pathlib import Path
+
+# Load old graph (before update) from backup written before merge
+old_data = json.loads(Path('graphify-out/.graphify_old.json').read_text(encoding=\"utf-8\")) if Path('graphify-out/.graphify_old.json').exists() else None
+new_extract = json.loads(Path('graphify-out/.graphify_extract.json').read_text(encoding=\"utf-8\"))
+G_new = build_from_json(new_extract, directed=IS_DIRECTED)
+
+if old_data:
+    G_old = json_graph.node_link_graph(old_data, edges='links')
+    diff = graph_diff(G_old, G_new)
+    print(diff['summary'])
+    if diff['new_nodes']:
+        print('New nodes:', ', '.join(n['label'] for n in diff['new_nodes'][:5]))
+    if diff['new_edges']:
+        print('New edges:', len(diff['new_edges']))
+"
+```
+
+Before the merge step, save the old graph: `cp graphify-out/graph.json graphify-out/.graphify_old.json`
+Clean up after: `rm -f graphify-out/.graphify_old.json`
+
+---
+
+## For --cluster-only
+
+Skip Steps 1â€“3. Re-run clustering on the existing graph:
+
+```bash
+graphify cluster-only .
+```
+
+`graphify cluster-only .` is **self-contained**: it re-clusters, names communities, and regenerates `GRAPH_REPORT.md`, `graph.json`, and `graph.html` from the existing graph. **Do not re-run Steps 5â€“9** â€” they read intermediate files (`.graphify_extract.json`, `.graphify_detect.json`, `.graphify_analysis.json`) that a prior build's cleanup (Step 9) already deleted, so they raise `FileNotFoundError` (#1392). When it finishes, present the refreshed `GRAPH_REPORT.md` summary as usual.
+
+--- END OF C:\Users\Banzilla\Documents\DEV\Project-Tracking-System\web-app\.agents\skills\graphify\references\update.md ---
+
+--- START OF C:\Users\Banzilla\Documents\DEV\Project-Tracking-System\web-app\.agents\skills\ponytail\SKILL.md ---
+\---
+
+name: ponytail
+
+description: Mengoptimalkan penulisan kode agar minimalis, mencegah over-engineering, dan menghemat token.
+
+\---
+
+
+
+\# Ponytail Core Instructions
+
+Setiap kali Anda menulis, merefaktor, atau mengubah kode di PC ini, Anda wajib mematuhi aturan ketat berikut:
+
+1\. \*\*Native First\*\*: Utamakan solusi bawaan bahasa pemrograman (vanilla features) dan standard library yang sudah ada. Jangan instal library atau package pihak ketiga baru kecuali sangat terpaksa dan saya izinkan.
+
+2\. \*\*Minimalist Code\*\*: Tulis baris kode sesedikit mungkin tanpa merusak keterbacaan (readability). Jika suatu logika bisa diselesaikan dalam 1-2 baris secara bersih, jangan buat fungsi 10 baris.
+
+3\. \*\*Reusability\*\*: Manfaatkan fungsi, variabel, atau komponen yang sudah ada di dalam codebase terlebih dahulu sebelum membuat yang baru.
+
+4\. \*\*Anti-Boilerplate\*\*: Jangan membuat wrapper class, folder baru, atau lapisan abstraksi yang tidak perlu jika fungsi dasarnya sudah mencukupi kebutuhan fitur.
+
+
+
+
+--- END OF C:\Users\Banzilla\Documents\DEV\Project-Tracking-System\web-app\.agents\skills\ponytail\SKILL.md ---
+
+--- START OF C:\Users\Banzilla\Documents\DEV\Project-Tracking-System\web-app\.agents\workflows\graphify.md ---
+---
+name: graphify
+description: Turn any folder of files into a navigable knowledge graph
+---
+
+# Workflow: graphify
+
+Follow the graphify skill to run the full pipeline.
+
+If no path argument is given, use `.` (current directory).
+
+--- END OF C:\Users\Banzilla\Documents\DEV\Project-Tracking-System\web-app\.agents\workflows\graphify.md ---
+
+--- START OF C:\Users\Banzilla\Documents\DEV\Project-Tracking-System\web-app\AGENTS.md ---
+<!-- BEGIN:nextjs-agent-rules -->
+# This is NOT the Next.js you know
+
+This version has breaking changes â€” APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
+<!-- END:nextjs-agent-rules -->
+
+--- END OF C:\Users\Banzilla\Documents\DEV\Project-Tracking-System\web-app\AGENTS.md ---
+
+--- START OF C:\Users\Banzilla\Documents\DEV\Project-Tracking-System\web-app\CLAUDE.md ---
+@AGENTS.md
+
+--- END OF C:\Users\Banzilla\Documents\DEV\Project-Tracking-System\web-app\CLAUDE.md ---
+
+--- START OF C:\Users\Banzilla\Documents\DEV\Project-Tracking-System\web-app\README.md ---
+This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+
+## Getting Started
+
+First, run the development server:
+
+```bash
+npm run dev
+# or
+yarn dev
+# or
+pnpm dev
+# or
+bun dev
+```
+
+Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+
+You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+
+This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+
+## Learn More
+
+To learn more about Next.js, take a look at the following resources:
+
+- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
+- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+
+You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+
+## Deploy on Vercel
+
+The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+
+Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+#   t n t - p r o j e c t - s y s t e m  
+ #   t n t - p r o j e c t - s y s t e m  
+ 
+--- END OF C:\Users\Banzilla\Documents\DEV\Project-Tracking-System\web-app\README.md ---
+
+--- START OF C:\Users\Banzilla\Documents\DEV\Project-Tracking-System\web-app\chrome-extension\popup.html ---
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TNT Creator Scraper</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg:       #0d0d14;
+      --surface:  #16161f;
+      --surface2: #1e1e2d;
+      --surface3: #262638;
+      --border:   rgba(255,255,255,0.08);
+      --accent:   #7c3aed;
+      --accent-l: #9d5cf6;
+      --accent-d: rgba(124,58,237,0.15);
+      --text:     #f0f0f8;
+      --muted:    #8888a8;
+      --sub:      #555570;
+      --success:  #10b981;
+      --warning:  #f59e0b;
+      --danger:   #ef4444;
+      --nano:     #06b6d4;
+      --micro:    #10b981;
+      --macro:    #f59e0b;
+      --mega:     #ef4444;
+      --radius:   10px;
+      --tr:       0.15s ease;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      width: 380px;
+      min-height: 200px;
+      max-height: 600px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* â”€â”€ Header â”€â”€ */
+    .header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 14px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+    .logo {
+      width: 30px; height: 30px;
+      background: linear-gradient(135deg, var(--accent), var(--accent-l));
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 800; color: #fff;
+      flex-shrink: 0;
+      box-shadow: 0 2px 10px rgba(124,58,237,0.4);
+    }
+    .header-text { flex: 1; }
+    .header-text .title  { font-size: 13px; font-weight: 700; }
+    .header-text .sub    { font-size: 10px; color: var(--muted); margin-top: 1px; }
+    .queue-badge {
+      background: var(--accent-d);
+      border: 1px solid rgba(124,58,237,0.3);
+      color: var(--accent-l);
+      border-radius: 99px;
+      padding: 2px 8px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    /* â”€â”€ Current Profile Card â”€â”€ */
+    .current-card {
+      margin: 10px 12px 0;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 14px;
+      flex-shrink: 0;
+    }
+    .current-card .label {
+      font-size: 9px; font-weight: 700; letter-spacing: 0.08em;
+      text-transform: uppercase; color: var(--muted); margin-bottom: 8px;
+    }
+    .profile-row {
+      display: flex; align-items: center; gap: 10px;
+    }
+    .profile-avatar {
+      width: 36px; height: 36px;
+      background: linear-gradient(135deg, #4c1d95, #7c3aed);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px; font-weight: 800; color: #fff;
+      flex-shrink: 0;
+    }
+    .profile-info { flex: 1; min-width: 0; }
+    .profile-username { font-size: 13px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .profile-nickname { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .profile-stats    { display: flex; gap: 10px; margin-top: 6px; }
+    .stat-pill {
+      display: flex; align-items: center; gap: 4px;
+      font-size: 11px; color: var(--muted);
+    }
+    .stat-pill strong { color: var(--text); font-size: 12px; }
+    .tier-pill {
+      display: inline-flex; align-items: center;
+      padding: 2px 8px; border-radius: 99px;
+      font-size: 9px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase;
+    }
+    .tier-nano  { background: rgba(6,182,212,0.12);  color: var(--nano);  border: 1px solid rgba(6,182,212,0.25); }
+    .tier-micro { background: rgba(16,185,129,0.12); color: var(--micro); border: 1px solid rgba(16,185,129,0.25); }
+    .tier-macro { background: rgba(245,158,11,0.12); color: var(--macro); border: 1px solid rgba(245,158,11,0.25); }
+    .tier-mega  { background: rgba(239,68,68,0.12);  color: var(--mega);  border: 1px solid rgba(239,68,68,0.25); }
+    .tier-under { background: rgba(239,68,68,0.12);  color: var(--danger); border: 1px solid rgba(239,68,68,0.25); }
+
+    .btn-add {
+      background: linear-gradient(135deg, var(--accent), var(--accent-l));
+      color: #fff; border: none; border-radius: 8px;
+      padding: 7px 12px; font-size: 12px; font-weight: 700;
+      cursor: pointer; transition: all var(--tr);
+      white-space: nowrap; flex-shrink: 0;
+      box-shadow: 0 2px 8px rgba(124,58,237,0.4);
+    }
+    .btn-add:hover { opacity: 0.85; }
+    .btn-add:disabled { opacity: 0.35; cursor: not-allowed; }
+
+    .no-profile {
+      font-size: 12px; color: var(--muted); text-align: center;
+      padding: 14px 0; font-style: italic;
+    }
+
+    /* â”€â”€ Status Messages â”€â”€ */
+    .status-msg {
+      margin: 6px 12px 0;
+      padding: 7px 12px;
+      border-radius: 8px;
+      font-size: 11px;
+      font-weight: 600;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .status-msg.success { background: rgba(16,185,129,0.1); color: var(--success); border: 1px solid rgba(16,185,129,0.2); }
+    .status-msg.warning { background: rgba(245,158,11,0.1); color: var(--warning); border: 1px solid rgba(245,158,11,0.2); }
+    .status-msg.error   { background: rgba(239,68,68,0.1);  color: var(--danger);  border: 1px solid rgba(239,68,68,0.2); }
+
+    /* â”€â”€ Divider â”€â”€ */
+    .section-label {
+      font-size: 9px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+      color: var(--sub); padding: 10px 14px 4px;
+      display: flex; align-items: center; justify-content: space-between;
+      flex-shrink: 0;
+    }
+    .clear-btn {
+      font-size: 10px; color: var(--danger); cursor: pointer; font-weight: 600;
+      background: none; border: none;
+    }
+    .clear-btn:hover { opacity: 0.7; }
+
+    /* â”€â”€ Queue List â”€â”€ */
+    .queue-scroll {
+      flex: 1;
+      overflow-y: auto;
+      padding: 4px 12px 8px;
+      min-height: 0;
+    }
+    .queue-scroll::-webkit-scrollbar { width: 4px; }
+    .queue-scroll::-webkit-scrollbar-thumb { background: var(--surface3); border-radius: 99px; }
+
+    .queue-item {
+      display: flex; align-items: center; gap: 8px;
+      padding: 8px 10px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px; margin-bottom: 5px;
+      transition: border-color var(--tr);
+    }
+    .queue-item.duplicate { border-color: rgba(245,158,11,0.4); background: rgba(245,158,11,0.04); }
+    .queue-item.rejected  { border-color: rgba(239,68,68,0.4);  background: rgba(239,68,68,0.04);  opacity: 0.7; }
+
+    .q-num { font-size: 10px; color: var(--sub); font-weight: 700; width: 16px; text-align: center; flex-shrink: 0; }
+    .q-info { flex: 1; min-width: 0; }
+    .q-username { font-size: 12px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .q-meta    { font-size: 10px; color: var(--muted); margin-top: 1px; }
+    .q-status  { display: flex; gap: 4px; flex-shrink: 0; align-items: center; }
+    .q-del { background: none; border: none; color: var(--sub); cursor: pointer; font-size: 14px; padding: 2px 4px; transition: color var(--tr); }
+    .q-del:hover { color: var(--danger); }
+
+    .status-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+    }
+    .dot-new      { background: var(--success); }
+    .dot-duplicate{ background: var(--warning); }
+    .dot-rejected { background: var(--danger); }
+
+    .empty-queue {
+      text-align: center; padding: 20px; color: var(--sub); font-size: 12px;
+    }
+    .empty-queue .emoji { font-size: 24px; margin-bottom: 6px; display: block; }
+
+    /* â”€â”€ Footer â”€â”€ */
+    .footer {
+      padding: 10px 12px;
+      border-top: 1px solid var(--border);
+      background: var(--surface);
+      display: flex; gap: 8px; align-items: center;
+      flex-shrink: 0;
+    }
+    .footer-stats { flex: 1; font-size: 11px; color: var(--muted); }
+    .footer-stats strong { color: var(--text); }
+
+    .btn-send {
+      background: linear-gradient(135deg, var(--accent), var(--accent-l));
+      color: #fff; border: none; border-radius: 8px;
+      padding: 9px 16px; font-size: 12px; font-weight: 700;
+      cursor: pointer; transition: all var(--tr);
+      display: flex; align-items: center; gap: 5px;
+      box-shadow: 0 2px 10px rgba(124,58,237,0.4);
+      white-space: nowrap;
+    }
+    .btn-send:hover   { opacity: 0.85; transform: translateY(-1px); }
+    .btn-send:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
+
+    .btn-ghost {
+      background: var(--surface3); color: var(--muted);
+      border: 1px solid var(--border); border-radius: 8px;
+      padding: 8px 12px; font-size: 11px; font-weight: 600;
+      cursor: pointer; transition: all var(--tr);
+    }
+    .btn-ghost:hover { color: var(--text); border-color: rgba(255,255,255,0.15); }
+  </style>
+</head>
+<body>
+  <!-- Header -->
+  <div class="header">
+    <div class="logo">TNT</div>
+    <div class="header-text">
+      <div class="title">Creator Scraper</div>
+      <div class="sub">TNT Media Â· TikTok Profile Reader</div>
+    </div>
+    <div class="queue-badge" id="queue-count">0 queued</div>
+  </div>
+
+  <!-- Current Tab Profile -->
+  <div id="current-section"></div>
+
+  <!-- Status Message -->
+  <div id="status-msg"></div>
+
+  <!-- Queue Section Label -->
+  <div class="section-label">
+    <span>ðŸ“‹ Staging Queue</span>
+    <button class="clear-btn" id="clear-queue">Clear All</button>
+  </div>
+
+  <!-- Queue Items -->
+  <div class="queue-scroll" id="queue-list">
+    <div class="empty-queue">
+      <span class="emoji">ðŸ‘€</span>
+      Open a TikTok profile and click<br/><strong>Add to Queue</strong> to start collecting creators.
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">
+    <div class="footer-stats" id="footer-stats">Queue is empty</div>
+    <button class="btn-ghost" id="btn-refresh" title="Re-scan current tab">â†º Refresh</button>
+    <button class="btn-send" id="btn-send" disabled>
+      âš¡ Send to App
+    </button>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
+
+--- END OF C:\Users\Banzilla\Documents\DEV\Project-Tracking-System\web-app\chrome-extension\popup.html ---
+
+--- START OF C:\Users\Banzilla\Documents\DEV\Project-Tracking-System\web-app\curl_output.html ---
+<!DOCTYPE html><html lang="id"><head><meta charSet="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="stylesheet" href="/_next/static/chunks/20_xvv9lhap56.css" data-precedence="next"/><link rel="preload" as="script" fetchPriority="low" href="/_next/static/chunks/3yiddnbtmgj46.js"/><script src="/_next/static/chunks/27jktro2p5rq9.js" async=""></script><script src="/_next/static/chunks/3n7dm2ojtyzwn.js" async=""></script><script src="/_next/static/chunks/0vc5ll91764mx.js" async=""></script><script src="/_next/static/chunks/turbopack-3i15iad0iwal8.js" async=""></script><script src="/_next/static/chunks/058dkee9ygnbq.js" async=""></script><script src="/_next/static/chunks/33odjlw7vn0b-.js" async=""></script><script src="/_next/static/chunks/14mrh2-p_w84d.js" async=""></script><script src="/_next/static/chunks/3e64za85hsj6h.js" async=""></script><title>TNT Campaign Management</title><meta name="description" content="Internal dashboard for TNT affiliate campaigns"/><link rel="icon" href="/favicon.ico?favicon.2vob68tjqpejf.ico" sizes="256x256" type="image/x-icon"/><script src="/_next/static/chunks/0cz1d0mv5g_q7.js" noModule=""></script></head><body class="font-sans bg-slate-50 text-slate-900 min-h-screen flex"><div hidden=""><!--$--><!--/$--></div><div class="w-64 bg-slate-900 text-slate-300 h-screen flex flex-col fixed left-0 top-0"><div class="p-6 border-b border-slate-800"><h1 class="text-xl font-bold text-white tracking-tight">TNT App</h1><p class="text-xs text-slate-500 mt-1">Campaign Management</p></div><nav class="flex-1 p-4 space-y-1 overflow-y-auto"><a class="flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-sm font-medium bg-blue-600 text-white" href="/"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-layout-dashboard w-4 h-4" aria-hidden="true"><rect width="7" height="9" x="3" y="3" rx="1"></rect><rect width="7" height="5" x="14" y="3" rx="1"></rect><rect width="7" height="9" x="14" y="12" rx="1"></rect><rect width="7" height="5" x="3" y="16" rx="1"></rect></svg>Dashboard</a><a class="flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-sm font-medium hover:bg-slate-800 hover:text-white" href="/creator-pool"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-users w-4 h-4" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><path d="M16 3.128a4 4 0 0 1 0 7.744"></path><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><circle cx="9" cy="7" r="4"></circle></svg>Creator Pool</a><a class="flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-sm font-medium hover:bg-slate-800 hover:text-white" href="/campaigns"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-folder-kanban w-4 h-4" aria-hidden="true"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"></path><path d="M8 10v4"></path><path d="M12 10v2"></path><path d="M16 10v6"></path></svg>Campaign</a><a class="flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-sm font-medium hover:bg-slate-800 hover:text-white" href="/input-penjualan"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-receipt w-4 h-4" aria-hidden="true"><path d="M12 17V7"></path><path d="M16 8h-6a2 2 0 0 0 0 4h4a2 2 0 0 1 0 4H8"></path><path d="M4 3a1 1 0 0 1 1-1 1.3 1.3 0 0 1 .7.2l.933.6a1.3 1.3 0 0 0 1.4 0l.934-.6a1.3 1.3 0 0 1 1.4 0l.933.6a1.3 1.3 0 0 0 1.4 0l.933-.6a1.3 1.3 0 0 1 1.4 0l.934.6a1.3 1.3 0 0 0 1.4 0l.933-.6A1.3 1.3 0 0 1 19 2a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1 1.3 1.3 0 0 1-.7-.2l-.933-.6a1.3 1.3 0 0 0-1.4 0l-.934.6a1.3 1.3 0 0 1-1.4 0l-.933-.6a1.3 1.3 0 0 0-1.4 0l-.933.6a1.3 1.3 0 0 1-1.4 0l-.934-.6a1.3 1.3 0 0 0-1.4 0l-.933.6a1.3 1.3 0 0 1-.7.2 1 1 0 0 1-1-1z"></path></svg>Input Penjualan</a><a class="flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-sm font-medium hover:bg-slate-800 hover:text-white" href="/budgeting"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-wallet w-4 h-4" aria-hidden="true"><path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"></path><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"></path></svg>Budgeting &amp; Topup</a><a class="flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-sm font-medium hover:bg-slate-800 hover:text-white" href="/invoice"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-receipt w-4 h-4" aria-hidden="true"><path d="M12 17V7"></path><path d="M16 8h-6a2 2 0 0 0 0 4h4a2 2 0 0 1 0 4H8"></path><path d="M4 3a1 1 0 0 1 1-1 1.3 1.3 0 0 1 .7.2l.933.6a1.3 1.3 0 0 0 1.4 0l.934-.6a1.3 1.3 0 0 1 1.4 0l.933.6a1.3 1.3 0 0 0 1.4 0l.933-.6a1.3 1.3 0 0 1 1.4 0l.934.6a1.3 1.3 0 0 0 1.4 0l.933-.6A1.3 1.3 0 0 1 19 2a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1 1.3 1.3 0 0 1-.7-.2l-.933-.6a1.3 1.3 0 0 0-1.4 0l-.934.6a1.3 1.3 0 0 1-1.4 0l-.933-.6a1.3 1.3 0 0 0-1.4 0l-.933.6a1.3 1.3 0 0 1-1.4 0l-.934-.6a1.3 1.3 0 0 0-1.4 0l-.933.6a1.3 1.3 0 0 1-.7.2 1 1 0 0 1-1-1z"></path></svg>Invoice &amp; Payout</a><a class="flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-sm font-medium opacity-50 cursor-not-allowed" href="#"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-settings w-4 h-4" aria-hidden="true"><path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"></path><circle cx="12" cy="12" r="3"></circle></svg>Brand Portal<span class="ml-auto text-[10px] bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded">Lock</span></a><a class="flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-sm font-medium opacity-50 cursor-not-allowed" href="#"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-settings w-4 h-4" aria-hidden="true"><path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"></path><circle cx="12" cy="12" r="3"></circle></svg>Pengaturan<span class="ml-auto text-[10px] bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded">Lock</span></a></nav><div class="p-4 border-t border-slate-800 text-xs text-center text-slate-500">TNT Agency ┬⌐ <!-- -->2026</div></div><main class="flex-1 ml-64 min-w-0 flex flex-col h-screen overflow-y-auto bg-slate-50"><div class="p-8 mx-auto w-full max-w-7xl"><div class="space-y-6"><div><h1 class="text-3xl font-bold tracking-tight">Main Dashboard</h1><p class="text-slate-500">Ringkasan performa seluruh campaign aktif.</p></div><div class="rounded-xl border border-slate-200 text-slate-950 shadow-sm p-8 text-center bg-slate-50"><p class="text-slate-500">Belum ada data campaign atau database belum disinkronisasi.</p></div></div><!--$--><!--/$--></div></main><script src="/_next/static/chunks/3yiddnbtmgj46.js" id="_R_" async=""></script><script>(self.__next_f=self.__next_f||[]).push([0])</script><script>self.__next_f.push([1,"1:\"$Sreact.fragment\"\n2:I[38758,[\"/_next/static/chunks/058dkee9ygnbq.js\",\"/_next/static/chunks/33odjlw7vn0b-.js\",\"/_next/static/chunks/14mrh2-p_w84d.js\"],\"DataLoader\"]\n3:I[22140,[\"/_next/static/chunks/058dkee9ygnbq.js\",\"/_next/static/chunks/33odjlw7vn0b-.js\",\"/_next/static/chunks/14mrh2-p_w84d.js\"],\"Sidebar\"]\n4:I[39756,[\"/_next/static/chunks/058dkee9ygnbq.js\",\"/_next/static/chunks/33odjlw7vn0b-.js\",\"/_next/static/chunks/14mrh2-p_w84d.js\"],\"default\"]\n5:I[37457,[\"/_next/static/chunks/058dkee9ygnbq.js\",\"/_next/static/chunks/33odjlw7vn0b-.js\",\"/_next/static/chunks/14mrh2-p_w84d.js\"],\"default\"]\n6:I[47257,[\"/_next/static/chunks/058dkee9ygnbq.js\",\"/_next/static/chunks/33odjlw7vn0b-.js\",\"/_next/static/chunks/14mrh2-p_w84d.js\"],\"ClientPageRoot\"]\n7:I[52683,[\"/_next/static/chunks/058dkee9ygnbq.js\",\"/_next/static/chunks/33odjlw7vn0b-.js\",\"/_next/static/chunks/14mrh2-p_w84d.js\",\"/_next/static/chunks/3e64za85hsj6h.js\"],\"default\"]\na:I[97367,[\"/_next/static/chunks/058dkee9ygnbq.js\",\"/_next/static/chunks/33odjlw7vn0b-.js\",\"/_next/static/chunks/14mrh2-p_w84d.js\"],\"OutletBoundary\"]\nb:\"$Sreact.suspense\"\nd:I[97367,[\"/_next/static/chunks/058dkee9ygnbq.js\",\"/_next/static/chunks/33odjlw7vn0b-.js\",\"/_next/static/chunks/14mrh2-p_w84d.js\"],\"ViewportBoundary\"]\nf:I[97367,[\"/_next/static/chunks/058dkee9ygnbq.js\",\"/_next/static/chunks/33odjlw7vn0b-.js\",\"/_next/static/chunks/14mrh2-p_w84d.js\"],\"MetadataBoundary\"]\n11:I[68027,[\"/_next/static/chunks/058dkee9ygnbq.js\",\"/_next/static/chunks/33odjlw7vn0b-.js\",\"/_next/static/chunks/14mrh2-p_w84d.js\"],\"default\",1]\n:HL[\"/_next/static/chunks/20_xvv9lhap56.css\",\"style\"]\n"])</script><script>self.__next_f.push([1,"0:{\"P\":null,\"c\":[\"\",\"\"],\"q\":\"\",\"i\":false,\"f\":[[[\"\",{\"children\":[\"__PAGE__\",{}]},\"$undefined\",\"$undefined\",16],[[\"$\",\"$1\",\"c\",{\"children\":[[[\"$\",\"link\",\"0\",{\"rel\":\"stylesheet\",\"href\":\"/_next/static/chunks/20_xvv9lhap56.css\",\"precedence\":\"next\",\"crossOrigin\":\"$undefined\",\"nonce\":\"$undefined\"}],[\"$\",\"script\",\"script-0\",{\"src\":\"/_next/static/chunks/058dkee9ygnbq.js\",\"async\":true,\"nonce\":\"$undefined\"}],[\"$\",\"script\",\"script-1\",{\"src\":\"/_next/static/chunks/33odjlw7vn0b-.js\",\"async\":true,\"nonce\":\"$undefined\"}],[\"$\",\"script\",\"script-2\",{\"src\":\"/_next/static/chunks/14mrh2-p_w84d.js\",\"async\":true,\"nonce\":\"$undefined\"}]],[\"$\",\"html\",null,{\"lang\":\"id\",\"children\":[\"$\",\"body\",null,{\"className\":\"font-sans bg-slate-50 text-slate-900 min-h-screen flex\",\"children\":[[\"$\",\"$L2\",null,{}],[\"$\",\"$L3\",null,{}],[\"$\",\"main\",null,{\"className\":\"flex-1 ml-64 min-w-0 flex flex-col h-screen overflow-y-auto bg-slate-50\",\"children\":[\"$\",\"div\",null,{\"className\":\"p-8 mx-auto w-full max-w-7xl\",\"children\":[\"$\",\"$L4\",null,{\"parallelRouterKey\":\"children\",\"error\":\"$undefined\",\"errorStyles\":\"$undefined\",\"errorScripts\":\"$undefined\",\"template\":[\"$\",\"$L5\",null,{}],\"templateStyles\":\"$undefined\",\"templateScripts\":\"$undefined\",\"notFound\":[[[\"$\",\"title\",null,{\"children\":\"404: This page could not be found.\"}],[\"$\",\"div\",null,{\"style\":{\"fontFamily\":\"system-ui,\\\"Segoe UI\\\",Roboto,Helvetica,Arial,sans-serif,\\\"Apple Color Emoji\\\",\\\"Segoe UI Emoji\\\"\",\"height\":\"100vh\",\"textAlign\":\"center\",\"display\":\"flex\",\"flexDirection\":\"column\",\"alignItems\":\"center\",\"justifyContent\":\"center\"},\"children\":[\"$\",\"div\",null,{\"children\":[[\"$\",\"style\",null,{\"dangerouslySetInnerHTML\":{\"__html\":\"body{color:#000;background:#fff;margin:0}.next-error-h1{border-right:1px solid rgba(0,0,0,.3)}@media (prefers-color-scheme:dark){body{color:#fff;background:#000}.next-error-h1{border-right:1px solid rgba(255,255,255,.3)}}\"}}],[\"$\",\"h1\",null,{\"className\":\"next-error-h1\",\"style\":{\"display\":\"inline-block\",\"margin\":\"0 20px 0 0\",\"padding\":\"0 23px 0 0\",\"fontSize\":24,\"fontWeight\":500,\"verticalAlign\":\"top\",\"lineHeight\":\"49px\"},\"children\":404}],[\"$\",\"div\",null,{\"style\":{\"display\":\"inline-block\"},\"children\":[\"$\",\"h2\",null,{\"style\":{\"fontSize\":14,\"fontWeight\":400,\"lineHeight\":\"49px\",\"margin\":0},\"children\":\"This page could not be found.\"}]}]]}]}]],[]],\"forbidden\":\"$undefined\",\"unauthorized\":\"$undefined\"}]}]}]]}]}]]}],{\"children\":[[\"$\",\"$1\",\"c\",{\"children\":[[\"$\",\"$L6\",null,{\"Component\":\"$7\",\"serverProvidedParams\":{\"searchParams\":{},\"params\":{},\"promises\":[\"$@8\",\"$@9\"]}}],[[\"$\",\"script\",\"script-0\",{\"src\":\"/_next/static/chunks/3e64za85hsj6h.js\",\"async\":true,\"nonce\":\"$undefined\"}]],[\"$\",\"$La\",null,{\"children\":[\"$\",\"$b\",null,{\"name\":\"Next.MetadataOutlet\",\"children\":\"$@c\"}]}]]}],{},null,false,null]},null,false,null],[\"$\",\"$1\",\"h\",{\"children\":[null,[\"$\",\"$Ld\",null,{\"children\":\"$Le\"}],[\"$\",\"div\",null,{\"hidden\":true,\"children\":[\"$\",\"$Lf\",null,{\"children\":[\"$\",\"$b\",null,{\"name\":\"Next.Metadata\",\"children\":\"$L10\"}]}]}],null]}],false]],\"m\":\"$undefined\",\"G\":[\"$11\",[[\"$\",\"link\",\"0\",{\"rel\":\"stylesheet\",\"href\":\"/_next/static/chunks/20_xvv9lhap56.css\",\"precedence\":\"next\",\"crossOrigin\":\"$undefined\",\"nonce\":\"$undefined\"}]]],\"S\":true,\"h\":null,\"s\":\"$undefined\",\"l\":\"$undefined\",\"p\":\"$undefined\",\"d\":\"$undefined\",\"b\":\"ckaLw03F7-fDLX8Gp4kke\"}\n"])</script><script>self.__next_f.push([1,"8:{}\n9:\"$0:f:0:1:1:children:0:props:children:0:props:serverProvidedParams:params\"\n"])</script><script>self.__next_f.push([1,"e:[[\"$\",\"meta\",\"0\",{\"charSet\":\"utf-8\"}],[\"$\",\"meta\",\"1\",{\"name\":\"viewport\",\"content\":\"width=device-width, initial-scale=1\"}]]\n"])</script><script>self.__next_f.push([1,"12:I[27201,[\"/_next/static/chunks/058dkee9ygnbq.js\",\"/_next/static/chunks/33odjlw7vn0b-.js\",\"/_next/static/chunks/14mrh2-p_w84d.js\"],\"IconMark\"]\nc:null\n10:[[\"$\",\"title\",\"0\",{\"children\":\"TNT Campaign Management\"}],[\"$\",\"meta\",\"1\",{\"name\":\"description\",\"content\":\"Internal dashboard for TNT affiliate campaigns\"}],[\"$\",\"link\",\"2\",{\"rel\":\"icon\",\"href\":\"/favicon.ico?favicon.2vob68tjqpejf.ico\",\"sizes\":\"256x256\",\"type\":\"image/x-icon\"}],[\"$\",\"$L12\",\"3\",{}]]\n"])</script></body></html>
+
+--- END OF C:\Users\Banzilla\Documents\DEV\Project-Tracking-System\web-app\curl_output.html ---
+
+--- START OF C:\Users\Banzilla\Documents\DEV\Project-Tracking-System\web-app\old_creator_row.txt ---
+
+--- END OF C:\Users\Banzilla\Documents\DEV\Project-Tracking-System\web-app\old_creator_row.txt ---
+
+--- START OF C:\Users\Banzilla\Documents\DEV\Project-Tracking-System\web-app\old_creator_row2.txt ---
+
+--- END OF C:\Users\Banzilla\Documents\DEV\Project-Tracking-System\web-app\old_creator_row2.txt ---
+
+--- START OF C:\Users\Banzilla\Documents\DEV\Project-Tracking-System\web-app\scripts\audit_report.txt ---
+=== AUDIT REPORT ===
+
+ðŸ” Found 532 Phone Numbers shared by MULTIPLE different normalized usernames.
+
+ðŸ“± Phone: 81375495494
+   -> Username: gabolegalakya (Raw in excel: gabolegalakya in tab ISWHITE)
+   -> Username: mardiyanti (Raw in excel: mardi_yanti in tab OMG MAKEUP)
+
+ðŸ“± Phone: 87746514165
+   -> Username: itscendi (Raw in excel: itscendi in tab ISWHITE)
+   -> Username: anitru7 (Raw in excel: anitru7 in tab WARDAH)
+
+ðŸ“± Phone: 85640025088
+   -> Username: wulanmaulida056 (Raw in excel: wulanmaulida056 in tab ISWHITE)
+   -> Username: wulanagemoy (Raw in excel: wulana.gemoy in tab Database KIMME)
+
+ðŸ“± Phone: 85719216803
+   -> Username: moonhaloho (Raw in excel: moon_haloho in tab ISWHITE)
+   -> Username: dindaaaaaaaaa (Raw in excel: dindaaaaaaaaa_____ in tab Database KIMME)
+
+ðŸ“± Phone: 85226956975
+   -> Username: innaahhiyan (Raw in excel: innaahhiyan in tab ISWHITE)
+   -> Username: innahhiyan (Raw in excel: Innahhiyan in tab OMG SKINCARE)
+
+ðŸ“± Phone: 82118716575
+   -> Username: ekbardiary (Raw in excel: ekbardiary in tab ISWHITE)
+   -> Username: afifahmlna (Raw in excel: afifahmlna in tab Database KIMME)
+
+ðŸ“± Phone: 83832817842
+   -> Username: queengembredek (Raw in excel: queen.gembredek in tab ISWHITE)
+   -> Username: elsaamalia19real (Raw in excel: elsaamalia19real in tab KIMME)
+
+ðŸ“± Phone: 82243401932
+   -> Username: feronicawulandari (Raw in excel: feronicawulandari in tab ISWHITE)
+   -> Username: qiabeautyskincare (Raw in excel: Qia Beauty Skincareâœ¨ in tab Database KIMME)
+   -> Username: realglowbest (Raw in excel: realglow.best in tab Database KIMME)
+
+ðŸ“± Phone: 87721316159
+   -> Username: nris9 (Raw in excel: nris9 in tab ISWHITE)
+   -> Username: mamoli (Raw in excel: ma_mo_li in tab Database KIMME)
+
+ðŸ“± Phone: 85784945833
+   -> Username: nabillmusthafa (Raw in excel: nabillmusthafa in tab ISWHITE)
+   -> Username: nabillmushtafa (Raw in excel: nabillmushtafa in tab KIMME)
+
+ðŸ“± Phone: 82244689998
+   -> Username: ikasetiana12 (Raw in excel: ika.setiana12 in tab ISWHITE)
+   -> Username: ikastiana2 (Raw in excel: ikastiana2 in tab Database KIMME)
+
+ðŸ“± Phone: 82269863399
+   -> Username: kikiromli89 (Raw in excel: kikiromli89 in tab ISWHITE)
+   -> Username: kikiyantishop89 (Raw in excel: Kiki_YantiShop89 in tab Database KIMME)
+
+ðŸ“± Phone: 87733517156
+   -> Username: iniicaaaaa19 (Raw in excel: Iniicaaaaa_19 in tab ISWHITE)
+   -> Username: gallerycantiiiik (Raw in excel: gallery_cantiiiik in tab Database KIMME)
+
+ðŸ“± Phone: 89636619781
+   -> Username: ariffratnaa (Raw in excel: ariff.ratnaa in tab ISWHITE)
+   -> Username: ariffratna (Raw in excel: ariff.ratna in tab Database KIMME)
+
+ðŸ“± Phone: 85211520489
+   -> Username: olinshop789 (Raw in excel: olinshop789 in tab ISWHITE)
+   -> Username: olinolshop789 (Raw in excel: olinolshop789 in tab Database KIMME)
+
+ðŸ“± Phone: 85755657495
+   -> Username: abhizarsel (Raw in excel: abhizarsel in tab ISWHITE)
+   -> Username: cheyllachellyu (Raw in excel: cheyllachellyu in tab Database KIMME)
+
+ðŸ“± Phone: 85158411516
+   -> Username: yumiharizuki (Raw in excel: yumi.harizuki in tab ISWHITE)
+   -> Username: tehracyunspill (Raw in excel: teh_racyun_spill in tab PWS)
+
+ðŸ“± Phone: 85877363141
+   -> Username: vaziass (Raw in excel: vaziass in tab ISWHITE)
+   -> Username: auliavv52 (Raw in excel: auliavv52 in tab Database KIMME)
+
+ðŸ“± Phone: 85659024812
+   -> Username: chiccandsassy (Raw in excel: chiccandsassy in tab ISWHITE)
+   -> Username: sarahylnh (Raw in excel: sarahylnh in tab OMG MAKEUP)
+
+ðŸ“± Phone: 85743166243
+   -> Username: notyourbaeee6 (Raw in excel: notyourbaeee6 in tab ISWHITE)
+   -> Username: glowin9992 (Raw in excel: glowin9992 in tab Database KIMME)
+
+ðŸ“± Phone: 83853789141
+   -> Username: mawarinddah (Raw in excel: mawarinddah in tab SYB)
+   -> Username: inddah (Raw in excel: Inddah in tab Database KIMME)
+
+ðŸ“± Phone: 81222236202
+   -> Username: lilyisnotflowerrr (Raw in excel: lilyisnotflowerrr in tab ISWHITE)
+   -> Username: flawlessfemme (Raw in excel: flawlessfemme_ in tab Database KIMME)
+
+ðŸ“± Phone: 82310268988
+   -> Username: edelweisssharma (Raw in excel: edelweiss.sharma in tab SYB)
+   -> Username: reviewerna27 (Raw in excel: review.erna27 in tab PWS)
+
+ðŸ“± Phone: 82276692229
+   -> Username: sooonyaaaa (Raw in excel: sooonyaaaa_ in tab SYB)
+   -> Username: sonyasinaga (Raw in excel: sonyasinaga_ in tab KIMME)
+
+ðŸ“± Phone: 85814141139
+   -> Username: msnha92 (Raw in excel: Msnha92 in tab SYB)
+   -> Username: msna92 (Raw in excel: Msna92 in tab KIMME)
+
+ðŸ“± Phone: 882005110743
+   -> Username: missjoovy (Raw in excel: miss_joovy in tab SYB)
+   -> Username: jovybeauty (Raw in excel: Jovy_beauty in tab Database KIMME)
+
+ðŸ“± Phone: 85760916245
+   -> Username: itsmecaaacadump (Raw in excel: _itsmecaaacadump_ in tab SYB)
+   -> Username: itsmecaacadump (Raw in excel: _itsmecaacadump_ in tab Database KIMME)
+
+ðŸ“± Phone: 85219372676
+   -> Username: rositaramdani7 (Raw in excel: rositaramdani7 in tab SYB)
+   -> Username: aiiross2 (Raw in excel: aiiross2 in tab Database KIMME)
+
+ðŸ“± Phone: 81459126211
+   -> Username: uusofficial0 (Raw in excel: uusofficial0 in tab SYB)
+   -> Username: httpswwwtiktokcomuusofficial0r1tzs95hecrt6cxs (Raw in excel: https://www.tiktok.com/@uusofficial0?_r=1&_t=ZS-95hEcRt6cXS in tab Database KIMME)
+   -> Username: httpswwwtiktokcomuusofficial0r1tzs95k1k8urmip (Raw in excel: https://www.tiktok.com/@uusofficial0?_r=1&_t=ZS-95k1K8UrmIp in tab Database KIMME)
+   -> Username: httpswwwtiktokcomuusofficial0r1tzs961mfs66qjk (Raw in excel: https://www.tiktok.com/@uusofficial0?_r=1&_t=ZS-961mfs66QjK in tab Database KIMME)
+
+ðŸ“± Phone: 82275670668
+   -> Username: karisma01 (Raw in excel: _karisma__01 in tab SYB)
+   -> Username: 895351795802 (Raw in excel: 895351795802 in tab KIMME)
+
+ðŸ“± Phone: 88220053069
+   -> Username: rahasiakunih (Raw in excel: rahasiakunih in tab SYB)
+   -> Username: nacantik126 (Raw in excel: nacantik126 in tab Database KIMME)
+
+ðŸ“± Phone: 87797559661
+   -> Username: anjelina5600 (Raw in excel: anjelina5600 in tab OMG SKINCARE)
+   -> Username: bilqiesky (Raw in excel: bilqiesky in tab OMG MAKEUP)
+
+ðŸ“± Phone: 81287688118
+   -> Username: racunwithdivani (Raw in excel: racunwithdivani in tab OMG SKINCARE)
+   -> Username: dreygonball (Raw in excel: dreygonball in tab OMG SKINCARE)
+   -> Username: ramyadsha (Raw in excel: ramyadsha in tab Database KIMME)
+   -> Username: allowfla (Raw in excel: allowfla in tab Database KIMME)
+   -> Username: crescentiads (Raw in excel: crescentiads in tab Database KIMME)
+
+ðŸ“± Phone: 82188059466
+   -> Username: arnilawati (Raw in excel: arnilawati in tab OMG SKINCARE)
+   -> Username: arnillawati (Raw in excel: arnillawati in tab OMG MAKEUP)
+
+ðŸ“± Phone: 8126685182
+   -> Username: queenhannisss (Raw in excel: queenhannisss in tab OMG SKINCARE)
+   -> Username: hasyaas (Raw in excel: hasyaas__ in tab OMG MAKEUP)
+
+ðŸ“± Phone: 81242092003
+   -> Username: indysabillah (Raw in excel: indysabillah in tab OMG SKINCARE)
+   -> Username: indisabillah (Raw in excel: indisabillah in tab Database KIMME)
+
+ðŸ“± Phone: 85776666279
+   -> Username: liansseptiana (Raw in excel: liansseptiana in tab OMG SKINCARE)
+   -> Username: rmstarkies (Raw in excel: rmstarkies in tab Database KIMME)
+
+ðŸ“± Phone: 85890005040
+   -> Username: pinkskieslova (Raw in excel: Pinkskieslova in tab OMG SKINCARE)
+   -> Username: skaterint (Raw in excel: skaterint in tab Database KIMME)
+
+ðŸ“± Phone: 87834575611
+   -> Username: bygurlsspil (Raw in excel: bygurlsspil in tab OMG SKINCARE)
+   -> Username: bygurlsspill (Raw in excel: bygurlsspill in tab SALSA COSME)
+
+ðŸ“± Phone: 81936933668
+   -> Username: prettygirlswww (Raw in excel: prettygirls.www in tab OMG SKINCARE)
+   -> Username: bytitaaa (Raw in excel: by.titaaa in tab OMG SKINCARE)
+
+ðŸ“± Phone: 87731128125
+   -> Username: karaskinbeauty (Raw in excel: karaskinbeauty in tab OMG SKINCARE)
+   -> Username: littleboy0103 (Raw in excel: littleboy0103 in tab Database KIMME)
+
+ðŸ“± Phone: 895620646522
+   -> Username: arsykhumairah27 (Raw in excel: arsykhumairah27 in tab OMG SKINCARE)
+   -> Username: dvnarini (Raw in excel: dvnarini in tab Database KIMME)
+
+ðŸ“± Phone: 85773624738
+   -> Username: skincaredaily96 (Raw in excel: skincaredaily96 in tab OMG SKINCARE)
+   -> Username: fashionbynovi (Raw in excel: fashionbynovi in tab Database KIMME)
+
+ðŸ“± Phone: 82119145119
+   -> Username: ginafathonah (Raw in excel: ginafathonah_ in tab OMG SKINCARE)
+   -> Username: ginafatonah (Raw in excel: ginafatonah_ in tab SALSA COSME)
+   -> Username: harumrice (Raw in excel: harumrice in tab KIMME)
+
+ðŸ“± Phone: 87751035800
+   -> Username: angelmatondang14 (Raw in excel: angelmatondang14 in tab OMG SKINCARE)
+   -> Username: hanisasarah18 (Raw in excel: hanisasarah18 in tab SYB)
+
+ðŸ“± Phone: 87719140967
+   -> Username: andine (Raw in excel: andine__ in tab OMG SKINCARE)
+   -> Username: andinee (Raw in excel: andinee__ in tab OMG MAKEUP)
+
+ðŸ“± Phone: 85640945392
+   -> Username: edelweise20 (Raw in excel: edelweise20 in tab OMG SKINCARE)
+   -> Username: selenophile20 (Raw in excel: selenophile20_ in tab Database KIMME)
+
+ðŸ“± Phone: 81238564205
+   -> Username: tiwif989 (Raw in excel: Tiwif.989 in tab OMG SKINCARE)
+   -> Username: kaktiiwii (Raw in excel: kak_tiiwii in tab Database KIMME)
+
+ðŸ“± Phone: 82112694700
+   -> Username: byshofuraadz (Raw in excel: byshofuraadz in tab OMG SKINCARE)
+   -> Username: yourlittlejelly (Raw in excel: yourlittlejelly in tab OMG SKINCARE)
+
+ðŸ“± Phone: 85783508172
+   -> Username: seeputriaqnhania (Raw in excel: seeputriaqnhania in tab OMG SKINCARE)
+   -> Username: clariselle18 (Raw in excel: clariselle18 in tab KIMME)
+
+... and 482 more phone conflicts.
+
+
+ðŸ” Found 34 Links shared by MULTIPLE different normalized usernames.
+
+ðŸ”— Link: /@ptsabbythrds
+   -> Username: ptsabbythrds (Raw in excel: ptsabbythrds in tab ISWHITE)
+   -> Username: internal (Raw in excel: Internal in tab SYB)
+   -> Username: mellnt (Raw in excel: mell.nt in tab ISWHITE)
+   -> Username: meiarifin180899 (Raw in excel: mei_arifin180899 in tab SYB)
+   -> Username: cipirut (Raw in excel: cipirut in tab SYB)
+   -> Username: mamizainhomedecor (Raw in excel: mamizain.homedecor in tab SYB)
+   -> Username: risarivia (Raw in excel: risarivia in tab SYB)
+   -> Username: wulandaribul4n (Raw in excel: wulandaribul4n in tab SYB)
+   -> Username: violinajasronadi18 (Raw in excel: violinajasronadi18 in tab ISWHITE)
+   -> Username: ayun1708 (Raw in excel: ayun_1708 in tab SYB)
+   -> Username: mamakkao (Raw in excel: mamak_kao in tab ISWHITE)
+   -> Username: tata81692 (Raw in excel: tata81692 in tab SYB)
+   -> Username: mawarinddah (Raw in excel: mawarinddah in tab SYB)
+
+ðŸ”— Link: /@ayun_1708
+   -> Username: yodaasiiii (Raw in excel: yodaasiiii in tab QAHIRA)
+   -> Username: ayun1708 (Raw in excel: ayun_1708 in tab SYB)
+
+ðŸ”— Link: /@mamanyacila28
+   -> Username: mamanyacila28 (Raw in excel: mamanyacila28 in tab SALSA BABY CARE)
+   -> Username: mamanyacila28live (Raw in excel: mamanyacila28 (LIVE) in tab SALSA BABY CARE)
+
+ðŸ”— Link: /@biinbiinstore
+   -> Username: biinbiinstore (Raw in excel: Biinbiinstore in tab SALSA BABY CARE)
+   -> Username: biinbiinstorelive (Raw in excel: Biinbiinstore (LIVE) in tab SALSA BABY CARE)
+
+ðŸ”— Link: /@dheaaa261918
+   -> Username: dheaaa261918 (Raw in excel: dheaaa261918 in tab PWS)
+   -> Username: nissaputeri (Raw in excel: nissaputeri in tab Database KIMME)
+
+ðŸ”— Link: /@mbakernand
+   -> Username: mbakernand (Raw in excel: mbakernand in tab PWS)
+   -> Username: bellacan02 (Raw in excel: bellacan_02 in tab Database KIMME)
+
+ðŸ”— Link: /@retnowahyuni93
+   -> Username: retnowahyuni93 (Raw in excel: retnowahyuni93 in tab PWS)
+   -> Username: jenooott (Raw in excel: jenooott in tab Database KIMME)
+
+ðŸ”— Link: /@priskaphiliciaanindita
+   -> Username: priskaphiliciaanindita (Raw in excel: priskaphiliciaanindita in tab PWS)
+   -> Username: renidwiastutiii (Raw in excel: renidwiastutiii in tab Database KIMME)
+
+ðŸ”— Link: /@callmesusek
+   -> Username: callmesusek (Raw in excel: callmesusek in tab PWS)
+   -> Username: ayurasya2612 (Raw in excel: ayurasya_2612 in tab Database KIMME)
+
+ðŸ”— Link: /@bellacan_02
+   -> Username: bellacan02 (Raw in excel: bellacan_02 in tab Database KIMME)
+   -> Username: leniiymakeup (Raw in excel: leniiymakeup in tab Database KIMME)
+
+ðŸ”— Link: /@cattleya_rinjani
+   -> Username: cattleyarinjani (Raw in excel: cattleya_rinjani in tab Database KIMME)
+   -> Username: fashionlyid (Raw in excel: fashionly.id in tab Database KIMME)
+
+ðŸ”— Link: /@didiies.nailss
+   -> Username: didiiesnailss (Raw in excel: didiies.nailss in tab Database KIMME)
+   -> Username: bandarparfum2 (Raw in excel: bandarparfum2 in tab Database KIMME)
+
+ðŸ”— Link: /@chieindry
+   -> Username: chieindry (Raw in excel: chieindry in tab Database KIMME)
+   -> Username: enuzaiin (Raw in excel: enuzaiin in tab Database KIMME)
+
+ðŸ”— Link: /@bismaarkanantaa
+   -> Username: bismaarkanantaa (Raw in excel: bismaarkanantaa in tab Database KIMME)
+   -> Username: mkarenam (Raw in excel: mkarenam in tab Database KIMME)
+
+ðŸ”— Link: /@owner_isna_flova
+   -> Username: lenyanggraini705 (Raw in excel: lenyanggraini705 in tab Database KIMME)
+   -> Username: ownerisnaflova (Raw in excel: owner_isna_flova in tab Database KIMME)
+
+ðŸ”— Link: /@dvianasusila
+   -> Username: dvianasusila (Raw in excel: dvianasusila in tab Database KIMME)
+   -> Username: mutiaraa56 (Raw in excel: mutiara.a56 in tab Database KIMME)
+
+ðŸ”— Link: /@haerudgy4ss
+   -> Username: haerudgy4ss (Raw in excel: haerudgy4ss in tab Database KIMME)
+   -> Username: faradianaervina (Raw in excel: faradianaervina in tab Database KIMME)
+
+ðŸ”— Link: /@siigoodgirl
+   -> Username: siigoodgirl (Raw in excel: siigoodgirl in tab Database KIMME)
+   -> Username: tiapharingopi (Raw in excel: tiapharingopi in tab Database KIMME)
+
+ðŸ”— Link: /@arsyshop31
+   -> Username: arsyshop31 (Raw in excel: arsyshop31 in tab Database KIMME)
+   -> Username: edlncitra (Raw in excel: edlncitra in tab Database KIMME)
+
+ðŸ”— Link: /@ica.ahsan
+   -> Username: syavibarbermanmitasalon (Raw in excel: syavibarberman_mitasalon in tab Database KIMME)
+   -> Username: icaahsan (Raw in excel: ica.ahsan in tab Database KIMME)
+
+ðŸ”— Link: /@fitrivivi20
+   -> Username: fitrivivi20 (Raw in excel: fitrivivi20 in tab Database KIMME)
+   -> Username: rianghufran (Raw in excel: rian_ghufran in tab Database KIMME)
+
+ðŸ”— Link: /@dsptraaa
+   -> Username: dsptraaa (Raw in excel: dsptraaa in tab Database KIMME)
+   -> Username: epoyyy (Raw in excel: e_poyyy in tab Database KIMME)
+
+ðŸ”— Link: /@dianadhie11
+   -> Username: dianadhie11 (Raw in excel: dianadhie11 in tab Database KIMME)
+   -> Username: pancadwi308 (Raw in excel: pancadwi308 in tab Database KIMME)
+
+ðŸ”— Link: /@callmita2
+   -> Username: callmita2 (Raw in excel: callmita2 in tab Database KIMME)
+   -> Username: shintyaaaa05 (Raw in excel: shintyaaaa_05 in tab Database KIMME)
+
+ðŸ”— Link: /@arbi_cilacap
+   -> Username: arbicilacap (Raw in excel: arbi_cilacap in tab Database KIMME)
+   -> Username: rharamario1 (Raw in excel: rharamario1 in tab Database KIMME)
+
+ðŸ”— Link: /@lilmiuwx
+   -> Username: lilmiuwx (Raw in excel: lilmiuwx in tab Database KIMME)
+   -> Username: risachaaaaa (Raw in excel: risachaaaaa in tab Database KIMME)
+
+ðŸ”— Link: /@risachaaaaa
+   -> Username: ikhalistyarini (Raw in excel: ikhalistyarini in tab Database KIMME)
+   -> Username: risachaaaaa (Raw in excel: risachaaaaa in tab Database KIMME)
+
+ðŸ”— Link: /@ayurasya_2612
+   -> Username: khoirohummah1 (Raw in excel: khoiroh_ummah1 in tab Database KIMME)
+   -> Username: ayurasya2612 (Raw in excel: ayurasya_2612 in tab Database KIMME)
+
+ðŸ”— Link: /@gitamakeup.17
+   -> Username: gitamakeup17 (Raw in excel: gitamakeup.17 in tab Database KIMME)
+   -> Username: lenykusumawati718 (Raw in excel: lenykusumawati718 in tab Database KIMME)
+
+ðŸ”— Link: /@lenykusumawati718
+   -> Username: natbar (Raw in excel: natbar__ in tab Database KIMME)
+   -> Username: lenykusumawati718 (Raw in excel: lenykusumawati718 in tab Database KIMME)
+
+ðŸ”— Link: /@niarshoop
+   -> Username: niarshoop (Raw in excel: niarshoop in tab Database KIMME)
+   -> Username: selvysu (Raw in excel: selvysu in tab Database KIMME)
+
+ðŸ”— Link: /@ayuckmua
+   -> Username: ayuckmua (Raw in excel: ayuckmua in tab Database KIMME)
+   -> Username: chbeautyalldays (Raw in excel: ch_beautyalldays in tab Database KIMME)
+
+ðŸ”— Link: /@jnoviena
+   -> Username: jnoviena (Raw in excel: jnoviena in tab Database KIMME)
+   -> Username: j0ournei (Raw in excel: j0ournei in tab Database KIMME)
+
+ðŸ”— Link: /@https://www.tiktok.com/@uusofficial0
+   -> Username: httpswwwtiktokcomuusofficial0r1tzs95hecrt6cxs (Raw in excel: https://www.tiktok.com/@uusofficial0?_r=1&_t=ZS-95hEcRt6cXS in tab Database KIMME)
+   -> Username: httpswwwtiktokcomuusofficial0r1tzs95k1k8urmip (Raw in excel: https://www.tiktok.com/@uusofficial0?_r=1&_t=ZS-95k1K8UrmIp in tab Database KIMME)
+   -> Username: httpswwwtiktokcomuusofficial0r1tzs961mfs66qjk (Raw in excel: https://www.tiktok.com/@uusofficial0?_r=1&_t=ZS-961mfs66QjK in tab Database KIMME)
+
+--- END OF C:\Users\Banzilla\Documents\DEV\Project-Tracking-System\web-app\scripts\audit_report.txt ---
+
