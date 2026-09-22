@@ -1,8 +1,7 @@
 import NextAuth from 'next-auth';
 import Google from 'next-auth/providers/google';
 import { db } from '@/db';
-import { profiles, whitelistedEmails } from '@/db/schema';
-import { eq } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   secret:
@@ -28,21 +27,14 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       const email = user.email.toLowerCase();
 
       try {
-        // Check if email is in whitelisted_emails or profiles
-        const [whitelist] = await db
-          .select()
-          .from(whitelistedEmails)
-          .where(eq(whitelistedEmails.email, email))
-          .limit(1);
+        const [whitelist] = (await db.execute(sql`
+          SELECT * FROM whitelisted_emails WHERE LOWER(email) = ${email} LIMIT 1
+        `).catch(() => [])) as any[];
 
-        const [existingProfile] = await db
-          .select()
-          .from(profiles)
-          .where(eq(profiles.email, email))
-          .limit(1);
+        const [existingProfile] = (await db.execute(sql`
+          SELECT * FROM profiles WHERE LOWER(email) = ${email} LIMIT 1
+        `).catch(() => [])) as any[];
 
-        // Determine default role: if whitelist specified, use it.
-        // If known executive email or existing profile, use it; default to 'executive' for primary admin or 'staff'
         let role = whitelist?.role || existingProfile?.role;
         if (!role) {
           if (email === 'hibban25nzl@gmail.com' || email.includes('admin') || email.includes('executive')) {
@@ -51,28 +43,31 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             role = 'staff';
           }
         }
-        const brandId = whitelist?.brandId ?? existingProfile?.brandId ?? null;
+        const brandId = whitelist?.brand_id ?? existingProfile?.brand_id ?? null;
+        const fullName = user.name || existingProfile?.nama || email.split('@')[0];
+        const avatarUrl = user.image || existingProfile?.avatar_url || '';
 
         if (existingProfile) {
-          await db
-            .update(profiles)
-            .set({
-              fullName: user.name || existingProfile.fullName,
-              avatarUrl: user.image || existingProfile.avatarUrl,
-              role,
-              brandId,
-              updatedAt: new Date(),
-            })
-            .where(eq(profiles.email, email));
+          await db.execute(sql`
+            UPDATE profiles SET
+              nama = ${fullName},
+              avatar_url = ${avatarUrl},
+              role = ${role},
+              brand_id = ${brandId},
+              updated_at = NOW()
+            WHERE LOWER(email) = ${email}
+          `).catch(() => {});
         } else {
-          await db.insert(profiles).values({
-            id: user.id || crypto.randomUUID(),
-            email,
-            fullName: user.name || email.split('@')[0],
-            avatarUrl: user.image || '',
-            role,
-            brandId,
-          });
+          const newId = user.id || crypto.randomUUID();
+          await db.execute(sql`
+            INSERT INTO profiles (id, email, nama, avatar_url, role, brand_id, status)
+            VALUES (${newId}, ${email}, ${fullName}, ${avatarUrl}, ${role}, ${brandId}, 'active')
+            ON CONFLICT (email) DO UPDATE SET
+              nama = EXCLUDED.nama,
+              avatar_url = EXCLUDED.avatar_url,
+              role = EXCLUDED.role,
+              updated_at = NOW()
+          `).catch(() => {});
         }
 
         return true;
@@ -83,20 +78,20 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     },
     async jwt({ token, user }) {
       if (user?.email || token?.email) {
-        const email = (user?.email || token?.email as string).toLowerCase();
+        const email = (user?.email || (token?.email as string)).toLowerCase();
         try {
-          const [profile] = await db
-            .select()
-            .from(profiles)
-            .where(eq(profiles.email, email))
-            .limit(1);
+          const [profile] = (await db.execute(sql`
+            SELECT id, nama, email, avatar_url, role, brand_id FROM profiles WHERE LOWER(email) = ${email} LIMIT 1
+          `).catch(() => [])) as any[];
 
           if (profile) {
             token.id = profile.id;
             token.role = profile.role;
-            token.brandId = profile.brandId;
-            token.name = profile.fullName || token.name;
-            token.picture = profile.avatarUrl || token.picture;
+            token.brandId = profile.brand_id;
+            token.name = profile.nama || token.name;
+            token.picture = profile.avatar_url || token.picture;
+          } else if (email === 'hibban25nzl@gmail.com') {
+            token.role = 'executive';
           }
         } catch (err) {
           console.error('Error fetching profile in jwt callback:', err);
@@ -107,7 +102,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     async session({ session, token }) {
       if (token && session.user) {
         session.user.id = token.id as string;
-        (session.user as any).role = token.role || 'staff';
+        (session.user as any).role = token.role || (session.user.email === 'hibban25nzl@gmail.com' ? 'executive' : 'staff');
         (session.user as any).brandId = token.brandId || null;
       }
       return session;

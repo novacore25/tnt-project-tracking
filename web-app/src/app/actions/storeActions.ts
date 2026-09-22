@@ -24,15 +24,18 @@ export async function getAuthProfileAction() {
     }
 
     const email = session.user.email.toLowerCase();
-    let [profile] = await db.select().from(profiles).where(eq(profiles.email, email)).limit(1);
-    
+    const rows = (await db.execute(sql`
+      SELECT id, nama, email, avatar_url, role, brand_id, status FROM profiles WHERE LOWER(email) = ${email} LIMIT 1
+    `).catch(() => [])) as any[];
+
+    let profile = rows[0];
+
     // Auto-create profile if authenticated session exists but profiles row is missing
     if (!profile) {
-      const [whitelist] = await db
-        .select()
-        .from(whitelistedEmails)
-        .where(eq(whitelistedEmails.email, email))
-        .limit(1);
+      const whitelistRows = (await db.execute(sql`
+        SELECT * FROM whitelisted_emails WHERE LOWER(email) = ${email} LIMIT 1
+      `).catch(() => [])) as any[];
+      const whitelist = whitelistRows[0];
 
       let role = whitelist?.role;
       if (!role) {
@@ -42,49 +45,41 @@ export async function getAuthProfileAction() {
           role = 'staff';
         }
       }
-      const brandId = whitelist?.brandId ?? null;
+      const brandId = whitelist?.brand_id ?? null;
       const newId = (session.user as any).id || crypto.randomUUID();
+      const fullName = session.user.name || email.split('@')[0];
+      const avatarUrl = session.user.image || '';
 
-      await db.insert(profiles).values({
-        id: newId,
-        email,
-        fullName: session.user.name || email.split('@')[0],
-        avatarUrl: session.user.image || '',
-        role,
-        brandId,
-      }).catch(() => {});
+      await db.execute(sql`
+        INSERT INTO profiles (id, email, nama, avatar_url, role, brand_id, status)
+        VALUES (${newId}, ${email}, ${fullName}, ${avatarUrl}, ${role}, ${brandId}, 'active')
+        ON CONFLICT (email) DO UPDATE SET
+          nama = EXCLUDED.nama,
+          avatar_url = EXCLUDED.avatar_url,
+          role = EXCLUDED.role
+      `).catch(() => {});
 
-      const [created] = await db.select().from(profiles).where(eq(profiles.email, email)).limit(1);
-      profile = created;
+      const createdRows = (await db.execute(sql`
+        SELECT id, nama, email, avatar_url, role, brand_id, status FROM profiles WHERE LOWER(email) = ${email} LIMIT 1
+      `).catch(() => [])) as any[];
+      profile = createdRows[0];
     }
 
-    if (!profile) {
-      return {
-        profile: {
-          id: (session.user as any).id || 'user_fallback',
-          nama: session.user.name || email.split('@')[0],
-          email: email,
-          avatar_url: session.user.image || null,
-          role: (session.user as any).role || (email === 'hibban25nzl@gmail.com' ? 'executive' : 'staff'),
-          status: 'active'
-        },
-        userCampaigns: []
-      };
-    }
+    const userProfile = {
+      id: profile?.id || (session.user as any).id || 'user_fallback',
+      nama: profile?.nama || session.user.name || email.split('@')[0],
+      email: profile?.email || email,
+      avatar_url: profile?.avatar_url || session.user.image || null,
+      role: profile?.role || (email === 'hibban25nzl@gmail.com' ? 'executive' : 'staff'),
+      status: profile?.status || 'active'
+    };
 
-    const userCampaignsRes = await db.execute(sql`
+    const userCampaignsRes = profile?.id ? await db.execute(sql`
       SELECT campaign_id, all_campaigns FROM user_campaigns WHERE user_id = ${profile.id}
-    `).catch(() => []);
+    `).catch(() => []) : [];
 
     return {
-      profile: {
-        id: profile.id,
-        nama: profile.fullName || session.user.name || email.split('@')[0],
-        email: profile.email,
-        avatar_url: profile.avatarUrl || session.user.image || null,
-        role: profile.role || (email === 'hibban25nzl@gmail.com' ? 'executive' : 'staff'),
-        status: 'active'
-      },
+      profile: userProfile,
       userCampaigns: (userCampaignsRes as any[]) || []
     };
   } catch (err) {

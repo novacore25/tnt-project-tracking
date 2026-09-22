@@ -408,9 +408,10 @@ export const paymentItems = pgTable('payment_items', {
 export const profiles = pgTable('profiles', {
   id: text('id').primaryKey(),
   email: text('email').notNull().unique(),
-  fullName: text('full_name'),
+  fullName: text('nama'),
   avatarUrl: text('avatar_url'),
   role: text('role').default('staff').notNull(), // 'admin' | 'staff' | 'client' | 'kol_lead'
+  status: text('status').default('active'),
   brandId: integer('brand_id').references(() => brands.id, { onDelete: 'set null' }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
