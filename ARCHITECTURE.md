@@ -154,7 +154,27 @@ flowchart TD
 
 ---
 
-### E. Modul Smart Import & Sales Attribution (`/import-data`, `/input-penjualan`)
+### E. Modul Analitik & Performa Campaign (`/campaigns/[id]/performa`)
+- **Fungsi Utama**: Hub analitik terpusat yang memantau performa menyeluruh (Total GMV, Organic vs Ads GMV, Total Views, Likes, CPR/CPM, ROAS, dan ringkasan per kreator).
+- **Arsitektur Pengambilan & Agregasi Data**:
+  - `fetchPerformaPageFullDataAction` menarik seluruh dataset esensial secara paralel:
+    - **Metadata Campaign & Master Konsep**: `campaigns` & `campaign_concepts`.
+    - **SKU Campaign**: `skus` (sebagai basis atribusi produk).
+    - **Kreator Campaign**: `campaign_creators` + `creators` (status `approved`, `pending`, `alternate`).
+    - **Produksi Video**: `videos` (link video, content UID, urutan, approval).
+    - **Transaksi Penjualan**: `sales` (GMV, kuantitas order, tipe konten).
+    - **Performa Iklan**: `ads_performance` (Spend USD, GMV Ads USD, Purchases, Kurs konversi IDR).
+    - **Video Organik**: `organic_videos` (Views, Likes, Durasi, Post Time).
+  - Agregasi dilakukan secara in-memory di level client dengan pemetaan $O(1)$ Hash Map, memungkinkan filter dinamis (Global Creator Filter, Pencarian, Konsep, Status) tanpa round-trip fetch ulang.
+- **Kalkulasi & Metrik Utama**:
+  - $\text{Total GMV} = \text{GMV Organik} + \text{GMV Ads}$
+  - $\text{ROAS} = \frac{\text{GMV Ads (IDR)}}{\text{Total Spend Ads (IDR)}}$
+  - $\text{Cost Per View (CPV)} = \frac{\text{Budget Terpakai}}{\text{Total Views}}$
+  - $\text{Kurs Konversi Ads}$: Dapat disesuaikan per entri ads secara real-time via `updateAdsPerformanceKursAction`.
+
+---
+
+### F. Modul Smart Import & Sales Attribution (`/import-data`, `/input-penjualan`)
 - **Routing Hierarki Penjualan**:
   1. *Priority 1*: Berdasarkan `product_id` yang terdaftar pada tabel `skus` campaign.
   2. *Priority 2*: Berdasarkan `tiktok_campaign_id` campaign.
