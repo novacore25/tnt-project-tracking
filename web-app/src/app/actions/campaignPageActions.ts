@@ -325,36 +325,36 @@ export async function fetchPerformaPageFullDataAction(campaignId: number) {
         LEFT JOIN skus sk ON cc.sku_id = sk.id
         WHERE cc.campaign_id = ${campaignId}
         ORDER BY cc.no_konsep ASC
-      `) as Promise<any[]>,
-      db.execute(sql`SELECT id, product_id, nama_produk FROM skus WHERE campaign_id = ${campaignId}`) as Promise<any[]>,
+      `).catch(() => []) as Promise<any[]>,
+      db.execute(sql`SELECT id, product_id, nama_produk FROM skus WHERE campaign_id = ${campaignId}`).catch(() => []) as Promise<any[]>,
       db.execute(sql`
         SELECT 
-          cc.id, cc.creator_id, cc.approval, cc.created_at, cc.approved_at, cc.content_type, cc.slot as qty_vt,
-          c.id as c_id, c.username, c.nama_lengkap as nama_asli, c.link_portofolio as link_account
+          cc.id, cc.creator_id, cc.approval, cc.created_at, cc.approved_at, cc.content_type, cc.qty_vt, cc.qty_live, cc.tier, cc.price,
+          c.id as c_id, c.username, c.nama_asli, c.link_account
         FROM campaign_creators cc
         LEFT JOIN creators c ON cc.creator_id = c.id
         WHERE cc.campaign_id = ${campaignId}
-          AND cc.approval IN ('approved', 'pending', 'alternate')
+          AND LOWER(cc.approval) IN ('approved', 'pending', 'alternate')
         ORDER BY cc.id ASC
-      `) as Promise<any[]>,
+      `).catch(() => []) as Promise<any[]>,
       db.execute(sql`
-        SELECT v.id, v.campaign_creator_id, v.link as content_uid, v.vt_approval, v.urutan, v.link as link_video
+        SELECT v.id, v.campaign_creator_id, v.content_uid, v.vt_approval, v.urutan, v.link_video, v.link_draft, v.concept, v.sku_id
         FROM videos v
         JOIN campaign_creators cc ON v.campaign_creator_id = cc.id
         WHERE cc.campaign_id = ${campaignId}
         ORDER BY v.id ASC
-      `) as Promise<any[]>,
+      `).catch(() => []) as Promise<any[]>,
       db.execute(sql`
         SELECT tanggal, gmv, quantity, creator_username, content_uid, content_type, product_id
         FROM sales
         WHERE campaign_id = ${campaignId}
-      `) as Promise<any[]>,
+      `).catch(() => []) as Promise<any[]>,
       db.execute(sql`
         SELECT ap.*, c.username
         FROM ads_performance ap
         LEFT JOIN creators c ON ap.creator_id = c.id
         WHERE ap.campaign_id = ${campaignId}
-      `) as Promise<any[]>,
+      `).catch(() => []) as Promise<any[]>,
       db.execute(sql`
         SELECT content_uid, post_time, content_type, creator_username, video_views, video_likes, product_id
         FROM organic_videos
