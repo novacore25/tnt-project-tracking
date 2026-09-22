@@ -133,6 +133,25 @@ flowchart TD
   2. **Semua Video**: Tabel flat semua video yang telah diupload, filter rentang tanggal posting, SKU terkait, dan metrik GPM (Gross Revenue Per Mille: `(GMV / Views) * 1000`).
   3. **Draft Video**: Tampilan khusus review draft dengan tombol play Google Drive / video preview, serta modal catatan revisi (`campaign_creator_notes` dengan role `draft_revisi_[urutan]`).
   4. **Per Tanggal**: Agregasi performa posting video per hari.
+- **Fitur Bulk Import Link Video**:
+  ```mermaid
+  flowchart TD
+      InputLinks[Paste Baris Link TikTok / vt.tiktok.com] --> ExpandCheck{Link Pendek vt.tiktok.com?}
+      ExpandCheck -- Ya --> ExpandAPI[/api/expand-tiktok + oEmbed/]
+      ExpandCheck -- Tidak --> ParseURL[Regex Extract: @username & video_id]
+      ExpandAPI --> ParseURL
+      ParseURL --> DupCheck{Link / Video ID Sudah Terdaftar?}
+      DupCheck -- Ya --> MarkDup[Tandai Duplikat]
+      DupCheck -- Tidak --> MatchCreator{Kreator Terdaftar di Campaign?}
+      MatchCreator -- Ya --> MarkValid[Tandai Valid: cc_id Terkait]
+      MatchCreator -- Tidak --> MarkAutoDetect[Tandai Auto-Detect: Buat Baru]
+      MarkValid --> BatchInsert[bulkInsertVideosAction]
+      MarkAutoDetect --> AutoRegister[insertCreatorsAndCcAction] --> BatchInsert
+      BatchInsert --> SaveDB[(videos)]
+  ```
+  - **Batch Expansion & Anti-Rate Limit**: Memproses tautan dalam chunk 3 link dengan jeda delay 1 detik untuk menghindari *HTTP 429 Too Many Requests* dari TikTok. Jika redirect URL bersifat anonim (`/@/video/id`), rute `/api/expand-tiktok` otomatis meminta endpoint TikTok oEmbed untuk mendapatkan `author_unique_id`.
+  - **Auto-Detect Kreator Baru**: Bila link berasal dari kreator yang belum terdaftar di campaign, sistem otomatis membuat master kreator di `creators` dan mengaitkannya ke `campaign_creators` (tier: `Nano`, status: `pending`).
+  - **Audit & Riwayat Upload**: Dilengkapi modal riwayat upload video massal beserta kapabilitas *batch delete* untuk membatalkan impor yang salah.
 - **Algoritma Snowflake TikTok**:
   - Mengekstrak timestamp upload secara presisi dari ID Video TikTok (`content_uid`) tanpa memerlukan pemanggilan API eksternal:
     $$\text{timestamp} = \left(\text{videoId} \gg 32\right) \times 1000$$
