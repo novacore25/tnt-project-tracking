@@ -2,9 +2,11 @@
 
 import { db } from '@/db';
 import { sql } from 'drizzle-orm';
+import { ensureVideoColumns } from '@/app/actions/campaignPageActions';
 
 export async function getInternalVideoData(campaignId: number, searchKeyword: string = '') {
   try {
+    await ensureVideoColumns();
     // 1. Fetch Campaign
     const campaignRows = (await db.execute(sql`
       SELECT * FROM campaigns WHERE id = ${campaignId} LIMIT 1

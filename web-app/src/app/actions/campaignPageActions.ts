@@ -593,6 +593,45 @@ export async function upsertRevisionNoteAction(params: {
 // ============================================================
 // VIDEO OPERATIONS (Server Actions)
 // ============================================================
+let videoColumnsEnsured = false;
+export async function ensureVideoColumns() {
+  if (videoColumnsEnsured) return;
+  try {
+    await db.execute(sql`
+      ALTER TABLE videos ADD COLUMN IF NOT EXISTS link_draft text;
+      ALTER TABLE videos ADD COLUMN IF NOT EXISTS vt_approved_by text;
+      ALTER TABLE videos ADD COLUMN IF NOT EXISTS vt_approved_at timestamptz;
+      ALTER TABLE videos ADD COLUMN IF NOT EXISTS vt_approval text DEFAULT 'pending';
+      ALTER TABLE videos ADD COLUMN IF NOT EXISTS concept text;
+      ALTER TABLE videos ADD COLUMN IF NOT EXISTS concept_updated_at timestamptz;
+      ALTER TABLE videos ADD COLUMN IF NOT EXISTS concept_updated_by text;
+      ALTER TABLE videos ADD COLUMN IF NOT EXISTS link_video text;
+      ALTER TABLE videos ADD COLUMN IF NOT EXISTS content_uid text;
+      ALTER TABLE videos ADD COLUMN IF NOT EXISTS sku_id integer;
+    `);
+
+    await db.execute(sql`
+      DO $$
+      DECLARE
+        r RECORD;
+      BEGIN
+        FOR r IN (
+          SELECT conname 
+          FROM pg_constraint 
+          WHERE conrelid = 'videos'::regclass 
+            AND contype = 'c' 
+            AND conname ILIKE '%vt_approval%'
+        ) LOOP
+          EXECUTE 'ALTER TABLE videos DROP CONSTRAINT IF EXISTS ' || quote_ident(r.conname);
+        END LOOP;
+      END $$;
+    `);
+    videoColumnsEnsured = true;
+  } catch (err) {
+    console.error('ensureVideoColumns error:', err);
+  }
+}
+
 export async function upsertVideoAction(params: {
   id?: number;
   campaign_creator_id: number;
@@ -609,6 +648,7 @@ export async function upsertVideoAction(params: {
   vt_approved_at?: string;
 }) {
   try {
+    await ensureVideoColumns();
     if (params.id) {
       // Update
       const sets: any[] = [];
@@ -667,6 +707,7 @@ export async function insertVideoAction(params: {
   vt_approval?: string;
 }) {
   try {
+    await ensureVideoColumns();
     const rows = await db.execute(sql`
       INSERT INTO videos (campaign_creator_id, urutan, concept, link_video, content_uid, sku_id, vt_approval)
       VALUES (${params.campaign_creator_id}, ${params.urutan}, ${params.concept || ''}, ${params.link_video || ''}, ${params.content_uid || null}, ${params.sku_id || null}, ${params.vt_approval || 'pending'})
@@ -707,6 +748,7 @@ export async function bulkInsertVideosAction(videoList: Array<{
 }>) {
   if (!videoList || videoList.length === 0) return { success: true };
   try {
+    await ensureVideoColumns();
     for (const v of videoList) {
       await db.execute(sql`
         INSERT INTO videos (campaign_creator_id, urutan, concept, link_video, content_uid, vt_approval)

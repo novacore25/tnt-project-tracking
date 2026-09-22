@@ -726,7 +726,10 @@ export default function CampaignVideoPage({
         ...cleanFields
       });
 
-      if (res.success && res.data) {
+      if (!res.success) {
+        console.error('Failed to update video:', res.error);
+        alert('Gagal menyimpan perubahan video ke database: ' + (res.error || 'Unknown error'));
+      } else if (res.data) {
         setLocalVideos((prev: any[]) => {
           const exists = prev.some(v => v.campaign_creator_id === ccId && v.urutan === video.urutan);
           if (exists) {
@@ -740,9 +743,25 @@ export default function CampaignVideoPage({
             return [...prev, res.data];
           }
         });
+
+        // Also sync listingData cc.videos
+        setListingData((prevList: any[]) => {
+          return prevList.map(cc => {
+            if (cc.id === ccId) {
+              const prevVids = cc.videos || [];
+              const vExists = prevVids.some((v: any) => v.urutan === video.urutan);
+              const nextVids = vExists
+                ? prevVids.map((v: any) => v.urutan === video.urutan ? { ...v, ...res.data } : v)
+                : [...prevVids, res.data];
+              return { ...cc, videos: nextVids };
+            }
+            return cc;
+          });
+        });
       }
-    } catch (err) {
-      console.warn('Background sync video field warning:', err);
+    } catch (err: any) {
+      console.error('Background sync video field error:', err);
+      alert('Gagal menyimpan video: ' + (err?.message || 'Error'));
     }
   };
 
