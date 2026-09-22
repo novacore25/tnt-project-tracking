@@ -673,6 +673,8 @@ export async function ensureVideoColumns() {
   try {
     await db.execute(sql`
       ALTER TABLE videos ADD COLUMN IF NOT EXISTS link_draft text;
+      ALTER TABLE videos ADD COLUMN IF NOT EXISTS link_draft_updated_by text;
+      ALTER TABLE videos ADD COLUMN IF NOT EXISTS link_draft_updated_at timestamptz;
       ALTER TABLE videos ADD COLUMN IF NOT EXISTS vt_approved_by text;
       ALTER TABLE videos ADD COLUMN IF NOT EXISTS vt_approved_at timestamptz;
       ALTER TABLE videos ADD COLUMN IF NOT EXISTS vt_approval text DEFAULT 'pending';
@@ -717,6 +719,8 @@ export async function upsertVideoAction(params: {
   concept_updated_at?: string;
   concept_updated_by?: string;
   link_draft?: string;
+  link_draft_updated_by?: string;
+  link_draft_updated_at?: string;
   link_video?: string;
   content_uid?: string;
   sku_id?: number | null;
@@ -736,6 +740,8 @@ export async function upsertVideoAction(params: {
       if (params.concept_updated_at !== undefined) sets.push(sql`concept_updated_at = ${params.concept_updated_at}`);
       if (params.concept_updated_by !== undefined) sets.push(sql`concept_updated_by = ${params.concept_updated_by}`);
       if (params.link_draft !== undefined) sets.push(sql`link_draft = ${params.link_draft}`);
+      if (params.link_draft_updated_by !== undefined) sets.push(sql`link_draft_updated_by = ${params.link_draft_updated_by}`);
+      if (params.link_draft_updated_at !== undefined) sets.push(sql`link_draft_updated_at = ${params.link_draft_updated_at ? new Date(params.link_draft_updated_at) : null}`);
       if (params.link_video !== undefined) sets.push(sql`link_video = ${params.link_video}`);
       if (params.content_uid !== undefined) sets.push(sql`content_uid = ${params.content_uid}`);
       if (params.sku_id !== undefined) sets.push(sql`sku_id = ${params.sku_id}`);
@@ -764,13 +770,16 @@ export async function upsertVideoAction(params: {
       const rows = await db.execute(sql`
         INSERT INTO videos (
           campaign_creator_id, urutan, concept, concept_updated_at, concept_updated_by,
-          link_draft, link_video, content_uid, sku_id, vt_approval, vt_approved_by, vt_approved_at,
+          link_draft, link_draft_updated_by, link_draft_updated_at,
+          link_video, content_uid, sku_id, vt_approval, vt_approved_by, vt_approved_at,
           revision_notes, revision_notes_updated_by, revision_notes_updated_at
         ) VALUES (
           ${params.campaign_creator_id}, ${params.urutan}, ${params.concept || ''},
           ${params.concept_updated_at ? new Date(params.concept_updated_at) : null},
           ${params.concept_updated_by || null},
           ${params.link_draft || null},
+          ${params.link_draft_updated_by || null},
+          ${params.link_draft_updated_at ? new Date(params.link_draft_updated_at) : null},
           ${params.link_video || null},
           ${params.content_uid || null},
           ${params.sku_id || null},

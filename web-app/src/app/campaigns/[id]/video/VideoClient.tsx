@@ -2914,25 +2914,67 @@ export default function CampaignVideoPage({
                                 )}
                                 <div className="flex-1">
                                   {hasAccess && v.vt_approval !== 'approved' ? (
-                                    <input 
-                                      key={`draft_input_${v.ccId}_${v.urutan}_${v.id || 'new'}`}
-                                      type="text" 
-                                      className="input w-full !text-[12px] !p-1.5"
-                                      placeholder="Tempel link GDrive..."
-                                      defaultValue={v.link_draft || ''}
-                                      onBlur={(e) => {
-                                        const val = e.target.value.trim();
-                                        if (val !== (v.link_draft || '')) {
-                                          handleUpdateSingleVideoField(v.ccId, v, { link_draft: val });
-                                        }
-                                      }}
-                                      onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-                                    />
+                                    <>
+                                      <input 
+                                        key={`draft_input_${v.ccId}_${v.urutan}_${v.id || 'new'}`}
+                                        type="text" 
+                                        className="input w-full !text-[12px] !p-1.5"
+                                        placeholder="Tempel link GDrive..."
+                                        defaultValue={v.link_draft || ''}
+                                        onBlur={(e) => {
+                                          const val = e.target.value.trim();
+                                          if (val !== (v.link_draft || '')) {
+                                            handleUpdateSingleVideoField(v.ccId, v, { 
+                                              link_draft: val,
+                                              link_draft_updated_by: profile?.nama || (isExecutive ? 'Executive' : 'Manager'),
+                                              link_draft_updated_at: new Date().toISOString()
+                                            });
+                                          }
+                                        }}
+                                        onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                                      />
+                                      {v.link_draft && v.link_draft.trim() !== '' && (
+                                        <div className="text-[10px] text-slate-500 leading-tight mt-1 pl-0.5">
+                                          {v.link_draft_updated_by ? (
+                                            <>Oleh: <span className="font-semibold text-slate-700">{v.link_draft_updated_by}</span></>
+                                          ) : null}
+                                          {v.link_draft_updated_at && (
+                                            <div className="text-[9px] text-slate-400">
+                                              {new Date(v.link_draft_updated_at).toLocaleDateString('id-ID', {
+                                                day: 'numeric',
+                                                month: 'short',
+                                                year: 'numeric',
+                                                hour: '2-digit',
+                                                minute: '2-digit'
+                                              })}
+                                            </div>
+                                          )}
+                                        </div>
+                                      )}
+                                    </>
                                   ) : (
                                     v.link_draft ? (
-                                      <a href={v.link_draft} target="_blank" rel="noreferrer" className="text-[12px] text-indigo-600 hover:underline break-all">
-                                        {v.link_draft}
-                                      </a>
+                                      <div>
+                                        <a href={v.link_draft} target="_blank" rel="noreferrer" className="text-[12px] text-indigo-600 hover:underline break-all">
+                                          {v.link_draft}
+                                        </a>
+                                        {(v.link_draft_updated_by || v.link_draft_updated_at) && (
+                                          <div className="text-[10px] text-slate-500 leading-tight mt-1">
+                                            {v.link_draft_updated_by && <>Oleh: <span className="font-semibold text-slate-700">{v.link_draft_updated_by}</span></>}
+                                            {v.link_draft_updated_at && (
+                                              <div className="text-[9px] text-slate-400">
+                                                {new Date(v.link_draft_updated_at).toLocaleDateString('id-ID', {
+                                                  day: 'numeric',
+                                                  month: 'short',
+                                                  year: 'numeric',
+                                                  hour: '2-digit',
+                                                  minute: '2-digit'
+                                                })}
+                                              </div>
+                                            )}
+                                          </div>
+                                        )}
+                                      </div>
                                     ) : <span className="text-slate-300 italic text-[12px]">- Belum diisi -</span>
                                   )}
                                 </div>

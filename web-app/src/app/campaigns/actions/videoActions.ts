@@ -73,6 +73,8 @@ export async function getInternalVideoData(campaignId: number, searchKeyword: st
             'concept_updated_by', v.concept_updated_by,
             'link_video', v.link_video,
             'link_draft', v.link_draft,
+            'link_draft_updated_by', v.link_draft_updated_by,
+            'link_draft_updated_at', v.link_draft_updated_at,
             'vt_approval', v.vt_approval,
             'vt_approved_by', v.vt_approved_by,
             'vt_approved_at', v.vt_approved_at,

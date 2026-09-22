@@ -773,27 +773,53 @@ export const CreatorRow = React.memo(({
                                   )}
                                   <div className="flex-1">
                                     {hasAccess && v.vt_approval !== 'approved' ? (
-                                      <input 
-                                        type="text" 
-                                        className="input w-full !text-[12px] !p-1.5"
-                                        placeholder="Tempel link GDrive..."
-                                        defaultValue={v.link_draft || ''}
-                                        onBlur={(e) => {
-                                          if (e.target.value !== (v.link_draft || '')) {
-                                            if (isPhantom) {
-                                              if (addAndSetVideoField) addAndSetVideoField(cc.id, v.urutan, { link_draft: e.target.value });
-                                            } else {
-                                              if (updateVideoField) updateVideoField(v.id, cc.id, { link_draft: e.target.value });
+                                      <>
+                                        <input 
+                                          type="text" 
+                                          className="input w-full !text-[12px] !p-1.5"
+                                          placeholder="Tempel link GDrive..."
+                                          defaultValue={v.link_draft || ''}
+                                          onBlur={(e) => {
+                                            const val = e.target.value.trim();
+                                            if (val !== (v.link_draft || '')) {
+                                              const payload = { 
+                                                link_draft: val,
+                                                link_draft_updated_by: profile?.nama || 'User',
+                                                link_draft_updated_at: new Date().toISOString()
+                                              };
+                                              if (isPhantom) {
+                                                if (addAndSetVideoField) addAndSetVideoField(cc.id, v.urutan, payload);
+                                              } else {
+                                                if (updateVideoField) updateVideoField(v.id, cc.id, payload);
+                                              }
                                             }
-                                          }
-                                        }}
-                                        onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-                                      />
+                                          }}
+                                          onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                                        />
+                                        {v.link_draft && v.link_draft.trim() !== '' && (
+                                          <p className="text-[9px] text-slate-400 leading-tight mt-1">
+                                            {v.link_draft_updated_by && <>Diinput oleh: <span className="font-medium text-slate-500">{v.link_draft_updated_by}</span></>}
+                                            {v.link_draft_updated_at && (
+                                              <> {v.link_draft_updated_by ? '• ' : 'Diinput pd '}<span>{formatDateTimeShort(v.link_draft_updated_at)}</span></>
+                                            )}
+                                          </p>
+                                        )}
+                                      </>
                                     ) : (
                                       v.link_draft ? (
-                                        <a href={v.link_draft} target="_blank" rel="noreferrer" className="text-[12px] text-p300 hover:underline break-all">
-                                          {v.link_draft}
-                                        </a>
+                                        <div>
+                                          <a href={v.link_draft} target="_blank" rel="noreferrer" className="text-[12px] text-p300 hover:underline break-all">
+                                            {v.link_draft}
+                                          </a>
+                                          {(v.link_draft_updated_by || v.link_draft_updated_at) && (
+                                            <p className="text-[9px] text-slate-400 leading-tight mt-1">
+                                              {v.link_draft_updated_by && <>Diinput oleh: <span className="font-medium text-slate-500">{v.link_draft_updated_by}</span></>}
+                                              {v.link_draft_updated_at && (
+                                                <> {v.link_draft_updated_by ? '• ' : 'Diinput pd '}<span>{formatDateTimeShort(v.link_draft_updated_at)}</span></>
+                                              )}
+                                            </p>
+                                          )}
+                                        </div>
                                       ) : <span className="text-slate-300">-</span>
                                     )}
                                   </div>
