@@ -711,6 +711,12 @@ export async function ensureVideoColumns() {
   }
 }
 
+function safeDate(val: any): Date | null {
+  if (!val) return null;
+  const d = new Date(val);
+  return isNaN(d.getTime()) ? null : d;
+}
+
 export async function upsertVideoAction(params: {
   id?: number;
   campaign_creator_id: number;
@@ -737,20 +743,20 @@ export async function upsertVideoAction(params: {
       // Update
       const sets: any[] = [];
       if (params.concept !== undefined) sets.push(sql`concept = ${params.concept}`);
-      if (params.concept_updated_at !== undefined) sets.push(sql`concept_updated_at = ${params.concept_updated_at}`);
+      if (params.concept_updated_at !== undefined) sets.push(sql`concept_updated_at = ${safeDate(params.concept_updated_at)}`);
       if (params.concept_updated_by !== undefined) sets.push(sql`concept_updated_by = ${params.concept_updated_by}`);
       if (params.link_draft !== undefined) sets.push(sql`link_draft = ${params.link_draft}`);
       if (params.link_draft_updated_by !== undefined) sets.push(sql`link_draft_updated_by = ${params.link_draft_updated_by}`);
-      if (params.link_draft_updated_at !== undefined) sets.push(sql`link_draft_updated_at = ${params.link_draft_updated_at ? new Date(params.link_draft_updated_at) : null}`);
+      if (params.link_draft_updated_at !== undefined) sets.push(sql`link_draft_updated_at = ${safeDate(params.link_draft_updated_at)}`);
       if (params.link_video !== undefined) sets.push(sql`link_video = ${params.link_video}`);
       if (params.content_uid !== undefined) sets.push(sql`content_uid = ${params.content_uid}`);
       if (params.sku_id !== undefined) sets.push(sql`sku_id = ${params.sku_id}`);
       if (params.vt_approval !== undefined) sets.push(sql`vt_approval = ${params.vt_approval}`);
       if (params.vt_approved_by !== undefined) sets.push(sql`vt_approved_by = ${params.vt_approved_by}`);
-      if (params.vt_approved_at !== undefined) sets.push(sql`vt_approved_at = ${params.vt_approved_at}`);
+      if (params.vt_approved_at !== undefined) sets.push(sql`vt_approved_at = ${safeDate(params.vt_approved_at)}`);
       if (params.revision_notes !== undefined) sets.push(sql`revision_notes = ${params.revision_notes}`);
       if (params.revision_notes_updated_by !== undefined) sets.push(sql`revision_notes_updated_by = ${params.revision_notes_updated_by}`);
-      if (params.revision_notes_updated_at !== undefined) sets.push(sql`revision_notes_updated_at = ${params.revision_notes_updated_at}`);
+      if (params.revision_notes_updated_at !== undefined) sets.push(sql`revision_notes_updated_at = ${safeDate(params.revision_notes_updated_at)}`);
 
       if (sets.length === 0) return { success: true, data: null };
       const rows = await db.execute(sql`
@@ -775,20 +781,20 @@ export async function upsertVideoAction(params: {
           revision_notes, revision_notes_updated_by, revision_notes_updated_at
         ) VALUES (
           ${params.campaign_creator_id}, ${params.urutan}, ${params.concept || ''},
-          ${params.concept_updated_at ? new Date(params.concept_updated_at) : null},
+          ${safeDate(params.concept_updated_at)},
           ${params.concept_updated_by || null},
           ${params.link_draft || null},
           ${params.link_draft_updated_by || null},
-          ${params.link_draft_updated_at ? new Date(params.link_draft_updated_at) : null},
+          ${safeDate(params.link_draft_updated_at)},
           ${params.link_video || null},
           ${params.content_uid || null},
           ${params.sku_id || null},
           ${params.vt_approval || 'pending'},
           ${params.vt_approved_by || null},
-          ${params.vt_approved_at ? new Date(params.vt_approved_at) : null},
+          ${safeDate(params.vt_approved_at)},
           ${params.revision_notes || null},
           ${params.revision_notes_updated_by || null},
-          ${params.revision_notes_updated_at ? new Date(params.revision_notes_updated_at) : null}
+          ${safeDate(params.revision_notes_updated_at)}
         ) RETURNING *
       `) as any[];
       return { success: true, data: rows[0] || null };
