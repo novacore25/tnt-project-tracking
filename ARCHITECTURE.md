@@ -192,7 +192,31 @@ flowchart TD
 
 ---
 
-### G. Modul Smart Import & Sales Attribution (`/import-data`, `/input-penjualan`)
+---
+
+### G. Modul Manajemen Keuangan & Pembayaran Kreator (`/campaigns/[id]/keuangan`)
+- **Fungsi Utama**: Manajemen pengajuan batch pembayaran kreator (*Payment Stepper*), monitoring kreator belum lunas (*Unpaid Creators*), log mutasi rekening kreator (*Creator Mutations*), serta top-up saldo iklan (*Ads Top Up*).
+- **Arsitektur Batching & Stepper Persetujuan Bertingkat**:
+  ```mermaid
+  flowchart LR
+      Draft[1. Draft / Submission PIC] --> Manager[2. Review Manager]
+      Manager --> Exec1[3. Review Executive 1]
+      Exec1 --> Finance[4. Review Finance & Selection]
+      Finance --> Exec2[5. Final Approval Executive 2]
+      Exec2 --> Paid[6. Disbursement / Paid]
+  ```
+- **Relasi Tabel Inti**:
+  - `payment_batches`: Menyimpan master batch pengajuan (`batch_label`, `campaign_id`, `status`, approval timestamps dari manager/executive/finance, bukti transfer URL, rekening pengirim).
+  - `payment_items`: Detail setiap kreator dalam batch (`ratecard_awal`, `nominal`, `biaya_transfer`, `actual_transfer`, `payment_type`: `100_akhir`, `50_awal`, `50_akhir`, `ads`, `ops`, `status_bayar`, data bank rekening, KTP, kontrak).
+  - `creator_bank_accounts`: Master rekening bank kreator (`bank_name`, `account_number`, `account_holder`, `is_primary`).
+- **Fitur-Fitur Kunci**:
+  1. **Unpaid Creators Tab (`fetchUnpaidCreators`)**: Memfilter seluruh kreator berstatus `approved` yang belum lunas (`price > 0`), mengecek riwayat pembayaran yang sudah ada, serta mendeteksi aktivitas live dari tabel `sales` & `organic_videos`.
+  2. **Mutasi Kreator Tab (`fetchCampaignCreatorMutations`)**: Log transaksi transfer yang sudah berstatus `final_status = 'paid'`, lengkap dengan nomor batch dan link bukti transfer.
+  3. **Batch Creator & Ads Form**: Pembuatan batch pembayaran khusus kreator atau top-up saldo ads dengan validasi bank account otomatis.
+
+---
+
+### H. Modul Smart Import & Sales Attribution (`/import-data`, `/input-penjualan`)
 - **Routing Hierarki Penjualan**:
   1. *Priority 1*: Berdasarkan `product_id` yang terdaftar pada tabel `skus` campaign.
   2. *Priority 2*: Berdasarkan `tiktok_campaign_id` campaign.
