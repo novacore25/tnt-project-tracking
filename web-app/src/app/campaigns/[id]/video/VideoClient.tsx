@@ -180,6 +180,7 @@ export default function CampaignVideoPage({
 
   // Draft Video Revision Notes states
   const [revisionNotes, setRevisionNotes] = useState<Record<string, any>>(initialRevisionNotes || {});
+  const [savingFields, setSavingFields] = useState<Record<string, boolean>>({});
   const [revisionModalState, setRevisionModalState] = useState<{
     open: boolean;
     video: any | null;
@@ -676,6 +677,8 @@ export default function CampaignVideoPage({
     fields: Record<string, any>
   ) => {
     const realNumericId = typeof video.id === 'number' ? video.id : null;
+    const saveKey = `${ccId}_${video.urutan}`;
+    setSavingFields(prev => ({ ...prev, [saveKey]: true }));
     
     // 1. Optimistic update in localVideos
     setLocalVideos((prev: any[]) => {
@@ -764,6 +767,8 @@ export default function CampaignVideoPage({
     } catch (err: any) {
       console.error('Background sync video field error:', err);
       alert('Gagal menyimpan video: ' + (err?.message || 'Error'));
+    } finally {
+      setSavingFields(prev => ({ ...prev, [saveKey]: false }));
     }
   };
 
@@ -772,10 +777,12 @@ export default function CampaignVideoPage({
       alert('Hanya Manager dan Eksekutif yang memiliki hak akses untuk mengedit catatan revisi.');
       return;
     }
-    const existingNote = revisionNotes[`${video.campaign_creator_id}_${video.urutan}`]?.isi || '';
+    const ccId = Number(video.campaign_creator_id || video.ccId || video.cc?.id);
+    const urutan = Number(video.urutan || 1);
+    const existingNote = revisionNotes[`${ccId}_${urutan}`]?.isi || revisionNotes[`${video.ccId}_${urutan}`]?.isi || '';
     setRevisionModalState({
       open: true,
-      video,
+      video: { ...video, campaign_creator_id: ccId, ccId, urutan },
       noteText: existingNote,
       isSaving: false
     });
@@ -786,18 +793,20 @@ export default function CampaignVideoPage({
       alert('Hanya Manager dan Eksekutif yang dapat mengubah status approval video.');
       return;
     }
+    const ccId = Number(video.campaign_creator_id || video.ccId || video.cc?.id);
+    const urutan = Number(video.urutan || 1);
     const fields: Record<string, any> = {
       vt_approval: newStatus,
       vt_approved_by: profile?.nama || (isExecutive ? 'Executive' : 'Manager'),
       vt_approved_at: new Date().toISOString()
     };
-    handleUpdateSingleVideoField(video.campaign_creator_id, video, fields);
+    handleUpdateSingleVideoField(ccId, { ...video, campaign_creator_id: ccId, urutan }, fields);
 
     if (newStatus === 'revisi') {
-      const existingNote = revisionNotes[`${video.campaign_creator_id}_${video.urutan}`]?.isi || '';
+      const existingNote = revisionNotes[`${ccId}_${urutan}`]?.isi || revisionNotes[`${video.ccId}_${urutan}`]?.isi || '';
       setRevisionModalState({
         open: true,
-        video,
+        video: { ...video, campaign_creator_id: ccId, ccId, urutan },
         noteText: existingNote,
         isSaving: false
       });
@@ -811,11 +820,12 @@ export default function CampaignVideoPage({
     }
     if (!revisionModalState.video) return;
     const { video, noteText } = revisionModalState;
-    const ccId = video.campaign_creator_id;
-    const urutan = video.urutan;
-    const existing = revisionNotes[`${ccId}_${urutan}`];
+    const ccId = Number(video.campaign_creator_id || video.ccId || video.cc?.id);
+    const urutan = Number(video.urutan || 1);
+    const existing = revisionNotes[`${ccId}_${urutan}`] || revisionNotes[`${video.ccId}_${urutan}`];
 
     setRevisionModalState(prev => ({ ...prev, isSaving: true }));
+    setSavingFields(prev => ({ ...prev, [`${ccId}_${urutan}_note`]: true }));
 
     try {
       const res = await upsertRevisionNoteAction({
@@ -829,13 +839,19 @@ export default function CampaignVideoPage({
 
       if (!res.success) throw new Error(res.error);
       if (res.data) {
-        setRevisionNotes(prev => ({ ...prev, [`${ccId}_${urutan}`]: res.data }));
+        setRevisionNotes(prev => ({ 
+          ...prev, 
+          [`${ccId}_${urutan}`]: res.data,
+          [`${video.ccId}_${urutan}`]: res.data 
+        }));
       }
       setRevisionModalState(prev => ({ ...prev, open: false, isSaving: false }));
     } catch (err: any) {
       console.error("Error saving revision note:", err);
       alert("Gagal menyimpan catatan revisi: " + (err?.message || 'Error'));
       setRevisionModalState(prev => ({ ...prev, isSaving: false }));
+    } finally {
+      setSavingFields(prev => ({ ...prev, [`${ccId}_${urutan}_note`]: false }));
     }
   };
 
@@ -2922,19 +2938,25 @@ export default function CampaignVideoPage({
                           <td className="p-4">
                             {canManageRevisionNotes ? (
                               <div className="flex flex-col gap-1">
-                                <select 
-                                  className={`select !p-1.5 w-[125px] font-bold !text-[12px] border rounded-md shadow-sm transition-colors ${
-                                    v.vt_approval === 'approved' ? 'text-emerald-700 bg-emerald-50 border-emerald-300' :
-                                    v.vt_approval === 'revisi' ? 'text-rose-700 bg-rose-50 border-rose-300' :
-                                    'text-amber-700 bg-amber-50 border-amber-300'
-                                  }`}
-                                  value={v.vt_approval || 'pending'}
-                                  onChange={(e) => handleVtApprovalChange(v, e.target.value)}
-                                >
-                                  <option value="pending">⏳ Pending</option>
-                                  <option value="approved">✅ Approved</option>
-                                  <option value="revisi">🔄 Revisi</option>
-                                </select>
+                                <div className="flex items-center gap-1.5">
+                                  <select 
+                                    className={`select !p-1.5 w-[125px] font-bold !text-[12px] border rounded-md shadow-sm transition-colors ${
+                                      v.vt_approval === 'approved' ? 'text-emerald-700 bg-emerald-50 border-emerald-300' :
+                                      v.vt_approval === 'revisi' ? 'text-rose-700 bg-rose-50 border-rose-300' :
+                                      'text-amber-700 bg-amber-50 border-amber-300'
+                                    }`}
+                                    value={v.vt_approval || 'pending'}
+                                    disabled={savingFields[`${v.ccId}_${v.urutan}`]}
+                                    onChange={(e) => handleVtApprovalChange(v, e.target.value)}
+                                  >
+                                    <option value="pending">⏳ Pending</option>
+                                    <option value="approved">✅ Approved</option>
+                                    <option value="revisi">🔄 Revisi</option>
+                                  </select>
+                                  {savingFields[`${v.ccId}_${v.urutan}`] && (
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-600 shrink-0" title="Menyimpan ke database..." />
+                                  )}
+                                </div>
                                 
                                 {v.vt_approved_by ? (
                                   <div className="text-[10px] text-slate-500 leading-tight mt-0.5">
@@ -2970,8 +2992,18 @@ export default function CampaignVideoPage({
                           {/* Notes Revisi */}
                           <td className="p-4 align-top">
                             {(() => {
-                              const revNote = revisionNotes[`${v.ccId}_${v.urutan}`];
+                              const isSavingNote = savingFields[`${v.ccId}_${v.urutan}_note`];
+                              const revNote = revisionNotes[`${v.ccId}_${v.urutan}`] || revisionNotes[`${v.campaign_creator_id}_${v.urutan}`];
                               const isRevisiStatus = v.vt_approval === 'revisi';
+
+                              if (isSavingNote) {
+                                return (
+                                  <div className="p-2.5 rounded-lg border border-rose-200 bg-rose-50/70 text-xs flex items-center gap-1.5 text-rose-700 font-semibold shadow-sm animate-pulse">
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                    <span>Menyimpan catatan ke database...</span>
+                                  </div>
+                                );
+                              }
 
                               if (revNote && revNote.isi && revNote.isi.trim() !== '') {
                                 return (
@@ -3039,7 +3071,7 @@ export default function CampaignVideoPage({
                                       className="opacity-0 hover:opacity-100 group-hover:opacity-100 text-slate-400 hover:text-slate-600 p-1 hover:bg-slate-100 rounded transition-opacity"
                                       title="Tambah Catatan Revisi"
                                     >
-                                      <Plus className="w-3 h-3" />
+                                      <Plus className="w-3.5 h-3.5" />
                                     </button>
                                   )}
                                 </div>
