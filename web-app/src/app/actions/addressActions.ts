@@ -43,7 +43,7 @@ export async function fetchCampaignCreatorsForAddressAction(campaignId: number, 
         'alamat_kodepos', cr.alamat_kodepos,
         'creator_contacts', COALESCE(
           (
-            SELECT json_agg(json_build_object('nomor', cco.nomor, 'status', cco.status))
+            SELECT json_agg(json_build_object('nomor', cco.nomor, 'status', cco.status) ORDER BY cco.id DESC)
             FROM creator_contacts cco
             WHERE cco.creator_id = cr.id
           ),
@@ -53,11 +53,11 @@ export async function fetchCampaignCreatorsForAddressAction(campaignId: number, 
     FROM campaign_creators cc
     JOIN creators cr ON cc.creator_id = cr.id
     WHERE cc.campaign_id = ${campaignId}
-      AND cc.approval = 'approved'
+      AND LOWER(cc.approval) IN ('approved', 'approve')
   `;
 
   if (requireClientApproval) {
-    query = sql`${query} AND cc.client_approval IN ('approved', 'not_required')`;
+    query = sql`${query} AND LOWER(cc.client_approval) IN ('approved', 'not_required', 'approve')`;
   }
 
   query = sql`${query} ORDER BY cc.id ASC`;
@@ -245,7 +245,7 @@ export async function syncMissingCampaignAddressesAction(campaignId: number) {
     FROM campaign_creators cc
     JOIN creators cr ON cc.creator_id = cr.id
     WHERE cc.campaign_id = ${campaignId}
-      AND cc.approval = 'approved'
+      AND LOWER(cc.approval) IN ('approved', 'approve')
       AND NOT EXISTS (
         SELECT 1 FROM creator_addresses ca WHERE ca.campaign_creator_id = cc.id
       )

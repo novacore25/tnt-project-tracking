@@ -247,7 +247,41 @@ flowchart TD
 
 ---
 
-### I. Modul Smart Import & Sales Attribution (`/import-data`, `/input-penjualan`)
+### I. Modul Alamat & Logistik Pengiriman Sampel (`/campaigns/[id]/alamat`, `/campaigns/[id]/alamat/import`)
+- **Fungsi Utama**: Manajemen alamat pengiriman sampel produk untuk kreator yang disetujui (*Approved*), pemetaan SKU sampel (`assigned_sku_ids`), pelacakan nomor resi, ekspedisi, status proses pengiriman, buku alamat kreator (*Address Book*), dan import massal alamat spreadsheet.
+- **Arsitektur Pengambilan & Sinkronisasi Data**:
+  ```mermaid
+  flowchart TD
+      ApprovedCC[Kreator Approved di Campaign] --> SyncMissing{Punya Record Alamat?}
+      SyncMissing -- Belum --> AutoSync[syncMissingCampaignAddressesAction]
+      AutoSync --> FallbackBook[Tarik dari creator_address_book / Master Profil]
+      FallbackBook --> CreateAddr[Buat Record creator_addresses]
+      SyncMissing -- Sudah --> TableView[Tabel Alamat Pengiriman]
+      TableView --> InlineEdit[Inline Edit Alamat / Resi / SKU]
+      InlineEdit --> SaveDetails[saveAddressDetailsAction]
+      SaveDetails --> TblAddresses[(creator_addresses)]
+      SaveDetails --> TblBook[(creator_address_book)]
+      SaveDetails --> TblContacts[(creator_contacts)]
+      SaveDetails --> TblCC[(campaign_creators.assigned_sku_ids)]
+  ```
+- **Relasi Database & Tabel Inti**:
+  - `creator_addresses`: Data alamat spesifik pengiriman sampel campaign (`campaign_creator_id`, `nama_penerima`, `nama_jalan`, `provinsi`, `kabupaten_kota`, `kecamatan`, `kelurahan`, `kode_pos`, `proses`, `tanggal_kirim`, `resi`, `ekspedisi`, `notes`, `resi_updated_at`, `resi_updated_by`).
+  - `creator_address_book`: Buku alamat permanen kreator (`creator_id`, `label`, `nama_penerima`, `alamat_jalan`, `provinsi`, `kota`, `kecamatan`, `kodepos`).
+  - `campaign_creators.assigned_sku_ids`: Array JSONB berisi ID SKU yang ditugaskan untuk dikirimkan kepada kreator.
+  - `creator_contacts`: Sinkronisasi nomor WhatsApp aktif kreator secara otomatis saat diperbarui pada form alamat.
+- **Fitur-Fitur Kunci**:
+  1. **Auto-Sync Missing Addresses (`syncMissingCampaignAddressesAction`)**: Ketika halaman alamat dibuka, sistem secara otomatis memeriksa kreator `approved` yang belum memiliki baris alamat dan memuat alamat dari `creator_address_book` atau profil master kreator.
+  2. **Inline Edit & Address Book Selector**: Pengguna dapat memilih alamat tersimpan dari *Address Book* atau mengetik alamat baru yang secara otomatis dapat disimpan kembali ke *Address Book* kreator.
+  3. **Multi-Select SKU Sampel**: Pemetaan produk SKU campaign langsung ke kreator yang disimpan dalam format JSONB (`assigned_sku_ids`).
+  4. **Tracking Resi & Audit Timestamp**: Saat nomor resi diinput atau diubah, sistem mencatat `resi_updated_at` dan `resi_updated_by = 'Internal TNT'` untuk audit log pengiriman.
+  5. **Spreadsheet Mass Import Alamat (`/campaigns/[id]/alamat/import`)**:
+     - *Bulk Auto-Detect*: Mendeteksi otomatis username yang terdaftar di campaign.
+     - *Paste Parser*: Mendukung copy-paste multi-kolom langsung dari file pengiriman/ekspedisi Excel.
+     - *Batch Upsert*: Mengupdate resi, ekspedisi, status proses, dan nomor WhatsApp secara massal via `importSpreadsheetAddressesAction`.
+
+---
+
+### J. Modul Smart Import & Sales Attribution (`/import-data`, `/input-penjualan`)
 - **Routing Hierarki Penjualan**:
   1. *Priority 1*: Berdasarkan `product_id` yang terdaftar pada tabel `skus` campaign.
   2. *Priority 2*: Berdasarkan `tiktok_campaign_id` campaign.
