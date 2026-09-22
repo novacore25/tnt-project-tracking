@@ -851,9 +851,12 @@ export const CreatorRow = React.memo(({
                           <td className="py-[12px] align-top">
                             {(() => {
                               const revNote = revisionNotes[`${cc.id}_${v.urutan}`];
+                              const noteContent = revNote?.isi || revNote?.notes || v.revision_notes || '';
+                              const noteAuthor = revNote?.author_name || revNote?.updated_by || v.revision_notes_updated_by || 'Manager';
+                              const noteDate = revNote?.updated_at || revNote?.created_at || v.revision_notes_updated_at;
                               const isRevisiStatus = v.vt_approval === 'revisi';
 
-                              if (revNote && revNote.isi && revNote.isi.trim() !== '') {
+                              if (noteContent && noteContent.trim() !== '') {
                                 return (
                                   <div className={`p-2 rounded-lg border text-xs shadow-sm transition-all max-w-[260px] ${
                                     isRevisiStatus 
@@ -878,12 +881,12 @@ export const CreatorRow = React.memo(({
                                       )}
                                     </div>
                                     <p className="whitespace-pre-wrap text-[11px] leading-relaxed break-words font-medium">
-                                      {revNote.isi}
+                                      {noteContent}
                                     </p>
-                                    {(revNote.author_name || revNote.created_at || revNote.updated_at) && (
+                                    {(noteAuthor || noteDate) && (
                                       <div className="text-[9px] text-slate-500 mt-1 pt-1 border-t border-slate-200/60 flex items-center justify-between">
-                                        <span>Oleh: <strong className="text-slate-700">{revNote.author_name || 'Manager'}</strong></span>
-                                        <span>{formatDateTimeShort(revNote.updated_at || revNote.created_at)}</span>
+                                        <span>Oleh: <strong className="text-slate-700">{noteAuthor}</strong></span>
+                                        {noteDate && <span>{formatDateTimeShort(noteDate)}</span>}
                                       </div>
                                     )}
                                   </div>
@@ -1176,9 +1179,16 @@ export const CreatorRow = React.memo(({
                 autoFocus
               />
               <p className="text-[11px] text-slate-400 mt-1">
-                Catatan ini akan tetap tersimpan dan dapat dilihat meskipun status video nantinya diubah menjadi Approved.
+                Catatan ini akan tetap tersimpan ke database VPS dan dapat dilihat meskipun status video nantinya diubah menjadi Approved.
               </p>
             </div>
+
+            {revisionModalState.isSaving && (
+              <div className="flex items-center gap-2.5 p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold animate-pulse shadow-sm">
+                <Loader2 className="w-4 h-4 animate-spin text-rose-600 shrink-0" />
+                <span>Sedang menyimpan catatan ke database VPS... Mohon tunggu sebentar.</span>
+              </div>
+            )}
           </div>
 
           <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
@@ -1199,7 +1209,7 @@ export const CreatorRow = React.memo(({
               {revisionModalState.isSaving ? (
                 <>
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  <span>Menyimpan...</span>
+                  <span>Menyimpan ke database...</span>
                 </>
               ) : (
                 <>

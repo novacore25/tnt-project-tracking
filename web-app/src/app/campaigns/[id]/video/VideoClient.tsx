@@ -844,6 +844,43 @@ export default function CampaignVideoPage({
           [`${ccId}_${urutan}`]: res.data,
           [`${video.ccId}_${urutan}`]: res.data 
         }));
+
+        // Immediately update localVideos and listingData state
+        setLocalVideos((prev: any[]) => {
+          return prev.map(v => {
+            const vCcId = Number(v.campaign_creator_id || v.ccId);
+            if (vCcId === ccId && v.urutan === urutan) {
+              return {
+                ...v,
+                revision_notes: noteText,
+                revision_notes_updated_by: res.data.author_name,
+                revision_notes_updated_at: res.data.updated_at,
+              };
+            }
+            return v;
+          });
+        });
+
+        setListingData((prevList: any[]) => {
+          return prevList.map(cc => {
+            if (cc.id === ccId) {
+              const prevVids = cc.videos || [];
+              const nextVids = prevVids.map((v: any) => {
+                if (v.urutan === urutan) {
+                  return {
+                    ...v,
+                    revision_notes: noteText,
+                    revision_notes_updated_by: res.data.author_name,
+                    revision_notes_updated_at: res.data.updated_at,
+                  };
+                }
+                return v;
+              });
+              return { ...cc, videos: nextVids };
+            }
+            return cc;
+          });
+        });
       }
       setRevisionModalState(prev => ({ ...prev, open: false, isSaving: false }));
     } catch (err: any) {
@@ -2954,7 +2991,10 @@ export default function CampaignVideoPage({
                                     <option value="revisi">🔄 Revisi</option>
                                   </select>
                                   {savingFields[`${v.ccId}_${v.urutan}`] && (
-                                    <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-600 shrink-0" title="Menyimpan ke database..." />
+                                    <div className="flex items-center gap-1.5 text-[10px] text-indigo-700 font-semibold animate-pulse bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200 shrink-0">
+                                      <Loader2 className="w-3 h-3 animate-spin text-indigo-600" />
+                                      <span>Menyimpan ke database...</span>
+                                    </div>
                                   )}
                                 </div>
                                 
@@ -2992,20 +3032,23 @@ export default function CampaignVideoPage({
                           {/* Notes Revisi */}
                           <td className="p-4 align-top">
                             {(() => {
-                              const isSavingNote = savingFields[`${v.ccId}_${v.urutan}_note`];
+                              const isSavingNote = savingFields[`${v.ccId}_${v.urutan}_note`] || savingFields[`${v.campaign_creator_id}_${v.urutan}_note`];
                               const revNote = revisionNotes[`${v.ccId}_${v.urutan}`] || revisionNotes[`${v.campaign_creator_id}_${v.urutan}`];
+                              const noteContent = revNote?.isi || revNote?.notes || v.revision_notes || '';
+                              const noteAuthor = revNote?.author_name || revNote?.updated_by || v.revision_notes_updated_by || 'Manager';
+                              const noteDate = revNote?.updated_at || revNote?.created_at || v.revision_notes_updated_at;
                               const isRevisiStatus = v.vt_approval === 'revisi';
 
                               if (isSavingNote) {
                                 return (
-                                  <div className="p-2.5 rounded-lg border border-rose-200 bg-rose-50/70 text-xs flex items-center gap-1.5 text-rose-700 font-semibold shadow-sm animate-pulse">
-                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                    <span>Menyimpan catatan ke database...</span>
+                                  <div className="p-2.5 rounded-lg border border-rose-300 bg-rose-50 text-xs flex items-center gap-2 text-rose-700 font-semibold shadow-sm animate-pulse">
+                                    <Loader2 className="w-4 h-4 animate-spin text-rose-600 shrink-0" />
+                                    <span>Sedang menyimpan catatan ke database...</span>
                                   </div>
                                 );
                               }
 
-                              if (revNote && revNote.isi && revNote.isi.trim() !== '') {
+                              if (noteContent && noteContent.trim() !== '') {
                                 return (
                                   <div className={`p-2.5 rounded-lg border text-xs shadow-sm transition-all ${
                                     isRevisiStatus 
@@ -3030,12 +3073,12 @@ export default function CampaignVideoPage({
                                       )}
                                     </div>
                                     <p className="whitespace-pre-wrap text-[12px] leading-relaxed break-words font-medium">
-                                      {revNote.isi}
+                                      {noteContent}
                                     </p>
-                                    {(revNote.author_name || revNote.created_at || revNote.updated_at) && (
+                                    {(noteAuthor || noteDate) && (
                                       <div className="text-[9px] text-slate-500 mt-1.5 pt-1 border-t border-slate-200/60 flex items-center justify-between">
-                                        <span>Oleh: <strong className="text-slate-700">{revNote.author_name || 'Manager'}</strong></span>
-                                        <span>{formatDateTimeShort(revNote.updated_at || revNote.created_at)}</span>
+                                        <span>Oleh: <strong className="text-slate-700">{noteAuthor}</strong></span>
+                                        {noteDate && <span>{formatDateTimeShort(noteDate)}</span>}
                                       </div>
                                     )}
                                   </div>
@@ -3471,9 +3514,16 @@ export default function CampaignVideoPage({
                 autoFocus
               />
               <p className="text-[11px] text-slate-400 mt-1">
-                Catatan ini akan tetap tersimpan dan dapat dilihat meskipun status video nantinya diubah menjadi Approved.
+                Catatan ini akan tetap tersimpan ke database VPS dan dapat dilihat meskipun status video nantinya diubah menjadi Approved.
               </p>
             </div>
+
+            {revisionModalState.isSaving && (
+              <div className="flex items-center gap-2.5 p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold animate-pulse shadow-sm">
+                <Loader2 className="w-4 h-4 animate-spin text-rose-600 shrink-0" />
+                <span>Sedang menyimpan catatan ke database VPS... Mohon tunggu sebentar.</span>
+              </div>
+            )}
           </div>
 
           <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
@@ -3494,7 +3544,7 @@ export default function CampaignVideoPage({
               {revisionModalState.isSaving ? (
                 <>
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  <span>Menyimpan...</span>
+                  <span>Menyimpan ke database...</span>
                 </>
               ) : (
                 <>

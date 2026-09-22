@@ -616,6 +616,21 @@ export async function upsertRevisionNoteAction(params: {
         WHERE id = ${noteId}
         RETURNING id, campaign_creator_id, COALESCE(role, field_name) as role, COALESCE(isi, notes) as isi, COALESCE(author_id, updated_by) as author_id, COALESCE(author_name, updated_by, 'Manager') as author_name, created_at, COALESCE(updated_at, created_at) as updated_at
       `)) as any[];
+
+      // Dual-write directly to videos table
+      try {
+        await ensureVideoColumns();
+        await db.execute(sql`
+          UPDATE videos 
+          SET revision_notes = ${params.noteText},
+              revision_notes_updated_by = ${authorName},
+              revision_notes_updated_at = NOW()
+          WHERE campaign_creator_id = ${params.ccId} AND urutan = ${params.urutan}
+        `);
+      } catch (vErr) {
+        console.error('Error syncing revision_notes to videos table:', vErr);
+      }
+
       return { success: true, data: rows[0] };
     } else {
       const rows = (await db.execute(sql`
@@ -626,6 +641,21 @@ export async function upsertRevisionNoteAction(params: {
         )
         RETURNING id, campaign_creator_id, COALESCE(role, field_name) as role, COALESCE(isi, notes) as isi, COALESCE(author_id, updated_by) as author_id, COALESCE(author_name, updated_by, 'Manager') as author_name, created_at, COALESCE(updated_at, created_at) as updated_at
       `)) as any[];
+
+      // Dual-write directly to videos table
+      try {
+        await ensureVideoColumns();
+        await db.execute(sql`
+          UPDATE videos 
+          SET revision_notes = ${params.noteText},
+              revision_notes_updated_by = ${authorName},
+              revision_notes_updated_at = NOW()
+          WHERE campaign_creator_id = ${params.ccId} AND urutan = ${params.urutan}
+        `);
+      } catch (vErr) {
+        console.error('Error syncing revision_notes to videos table:', vErr);
+      }
+
       return { success: true, data: rows[0] };
     }
   } catch (err: any) {
@@ -646,6 +676,9 @@ export async function ensureVideoColumns() {
       ALTER TABLE videos ADD COLUMN IF NOT EXISTS vt_approved_by text;
       ALTER TABLE videos ADD COLUMN IF NOT EXISTS vt_approved_at timestamptz;
       ALTER TABLE videos ADD COLUMN IF NOT EXISTS vt_approval text DEFAULT 'pending';
+      ALTER TABLE videos ADD COLUMN IF NOT EXISTS revision_notes text;
+      ALTER TABLE videos ADD COLUMN IF NOT EXISTS revision_notes_updated_by text;
+      ALTER TABLE videos ADD COLUMN IF NOT EXISTS revision_notes_updated_at timestamptz;
       ALTER TABLE videos ADD COLUMN IF NOT EXISTS concept text;
       ALTER TABLE videos ADD COLUMN IF NOT EXISTS concept_updated_at timestamptz;
       ALTER TABLE videos ADD COLUMN IF NOT EXISTS concept_updated_by text;
@@ -690,6 +723,9 @@ export async function upsertVideoAction(params: {
   vt_approval?: string;
   vt_approved_by?: string;
   vt_approved_at?: string;
+  revision_notes?: string;
+  revision_notes_updated_by?: string;
+  revision_notes_updated_at?: string;
 }) {
   try {
     await ensureVideoColumns();
@@ -706,6 +742,9 @@ export async function upsertVideoAction(params: {
       if (params.vt_approval !== undefined) sets.push(sql`vt_approval = ${params.vt_approval}`);
       if (params.vt_approved_by !== undefined) sets.push(sql`vt_approved_by = ${params.vt_approved_by}`);
       if (params.vt_approved_at !== undefined) sets.push(sql`vt_approved_at = ${params.vt_approved_at}`);
+      if (params.revision_notes !== undefined) sets.push(sql`revision_notes = ${params.revision_notes}`);
+      if (params.revision_notes_updated_by !== undefined) sets.push(sql`revision_notes_updated_by = ${params.revision_notes_updated_by}`);
+      if (params.revision_notes_updated_at !== undefined) sets.push(sql`revision_notes_updated_at = ${params.revision_notes_updated_at}`);
 
       if (sets.length === 0) return { success: true, data: null };
       const rows = await db.execute(sql`
@@ -725,13 +764,22 @@ export async function upsertVideoAction(params: {
       const rows = await db.execute(sql`
         INSERT INTO videos (
           campaign_creator_id, urutan, concept, concept_updated_at, concept_updated_by,
-          link_draft, link_video, content_uid, sku_id, vt_approval, vt_approved_by, vt_approved_at
-        ) VALUES (\
+          link_draft, link_video, content_uid, sku_id, vt_approval, vt_approved_by, vt_approved_at,
+          revision_notes, revision_notes_updated_by, revision_notes_updated_at
+        ) VALUES (
           ${params.campaign_creator_id}, ${params.urutan}, ${params.concept || ''},
-          ${params.concept_updated_at || null}, ${params.concept_updated_by || null},
-          ${params.link_draft || null}, ${params.link_video || null}, ${params.content_uid || null},
-          ${params.sku_id || null}, ${params.vt_approval || 'pending'},
-          ${params.vt_approved_by || null}, ${params.vt_approved_at || null}
+          ${params.concept_updated_at ? new Date(params.concept_updated_at) : null},
+          ${params.concept_updated_by || null},
+          ${params.link_draft || null},
+          ${params.link_video || null},
+          ${params.content_uid || null},
+          ${params.sku_id || null},
+          ${params.vt_approval || 'pending'},
+          ${params.vt_approved_by || null},
+          ${params.vt_approved_at ? new Date(params.vt_approved_at) : null},
+          ${params.revision_notes || null},
+          ${params.revision_notes_updated_by || null},
+          ${params.revision_notes_updated_at ? new Date(params.revision_notes_updated_at) : null}
         ) RETURNING *
       `) as any[];
       return { success: true, data: rows[0] || null };

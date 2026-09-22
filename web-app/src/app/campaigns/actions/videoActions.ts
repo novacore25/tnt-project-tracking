@@ -76,6 +76,9 @@ export async function getInternalVideoData(campaignId: number, searchKeyword: st
             'vt_approval', v.vt_approval,
             'vt_approved_by', v.vt_approved_by,
             'vt_approved_at', v.vt_approved_at,
+            'revision_notes', v.revision_notes,
+            'revision_notes_updated_by', v.revision_notes_updated_by,
+            'revision_notes_updated_at', v.revision_notes_updated_at,
             'content_uid', v.content_uid,
             'sku_id', v.sku_id,
             'created_at', v.created_at
@@ -180,13 +183,33 @@ export async function getInternalVideoData(campaignId: number, searchKeyword: st
 
       (notesRows || []).forEach((n: any) => {
         const roleStr = n.role || '';
-        const match = roleStr.match(/^draft_revisi_(\d+)$/);
+        const match = roleStr.match(/draft_revisi_(\d+)/i);
         if (match) {
           const urutan = parseInt(match[1]);
           initialRevisionNotes[`${n.campaign_creator_id}_${urutan}`] = n;
         }
       });
     }
+
+    // Also populate initialRevisionNotes from videos table if any video has revision_notes
+    (ccsRows || []).forEach((cc: any) => {
+      (cc.videos || []).forEach((v: any) => {
+        const key = `${cc.id}_${v.urutan}`;
+        if (v.revision_notes && (!initialRevisionNotes[key] || !initialRevisionNotes[key].isi)) {
+          initialRevisionNotes[key] = {
+            id: v.id,
+            campaign_creator_id: cc.id,
+            role: `draft_revisi_${v.urutan}`,
+            isi: v.revision_notes,
+            notes: v.revision_notes,
+            author_id: null,
+            author_name: v.revision_notes_updated_by || 'Manager',
+            created_at: v.revision_notes_updated_at || v.created_at,
+            updated_at: v.revision_notes_updated_at || v.created_at,
+          };
+        }
+      });
+    });
 
     return {
       campaign,
