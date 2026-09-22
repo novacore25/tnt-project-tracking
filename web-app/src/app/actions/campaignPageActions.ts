@@ -1139,7 +1139,27 @@ export async function fetchListingPagePaginatedAction(params: {
           WHERE cn.creator_id = cc.creator_id
         ) as creator_niches,
         (
-          SELECT json_agg(jsonb_build_object('id', v.id, 'urutan', v.urutan, 'concept', v.concept, 'concept_updated_at', v.concept_updated_at, 'concept_updated_by', v.concept_updated_by, 'link_video', v.link_video, 'vt_approval', v.vt_approval, 'content_uid', v.content_uid))
+          SELECT json_agg(jsonb_build_object(
+            'id', v.id, 
+            'campaign_creator_id', v.campaign_creator_id,
+            'urutan', v.urutan, 
+            'concept', v.concept, 
+            'concept_updated_at', v.concept_updated_at, 
+            'concept_updated_by', v.concept_updated_by, 
+            'link_draft', v.link_draft,
+            'link_draft_updated_by', v.link_draft_updated_by,
+            'link_draft_updated_at', v.link_draft_updated_at,
+            'link_video', v.link_video, 
+            'vt_approval', v.vt_approval, 
+            'vt_approved_by', v.vt_approved_by,
+            'vt_approved_at', v.vt_approved_at,
+            'revision_notes', v.revision_notes,
+            'revision_notes_updated_by', v.revision_notes_updated_by,
+            'revision_notes_updated_at', v.revision_notes_updated_at,
+            'content_uid', v.content_uid,
+            'sku_id', v.sku_id,
+            'created_at', v.created_at
+          ) ORDER BY v.urutan ASC)
           FROM videos v 
           WHERE v.campaign_creator_id = cc.id
         ) as videos

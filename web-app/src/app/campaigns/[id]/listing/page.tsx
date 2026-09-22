@@ -477,17 +477,38 @@ function CampaignListingContent() {
     if (ccIds.length === 0) return;
 
     fetchRevisionNotesAction(ccIds).then((res) => {
+      const map: Record<string, any> = {};
       if (res.success && res.data) {
-        const map: Record<string, any> = {};
         res.data.forEach((n: any) => {
-          const match = n.role.match(/^draft_revisi_(\d+)$/);
+          const roleStr = n.role || n.field_name || '';
+          const match = roleStr.match(/draft_revisi_(\d+)/i);
           if (match) {
             const urutan = parseInt(match[1]);
             map[`${n.campaign_creator_id}_${urutan}`] = n;
           }
         });
-        setRevisionNotes(map);
       }
+
+      // Fallback from videos table if populated
+      listingData.forEach((cc: any) => {
+        (cc.videos || []).forEach((v: any) => {
+          const key = `${cc.id}_${v.urutan}`;
+          if (v.revision_notes && (!map[key] || !map[key].isi)) {
+            map[key] = {
+              id: v.id,
+              campaign_creator_id: cc.id,
+              role: `draft_revisi_${v.urutan}`,
+              isi: v.revision_notes,
+              notes: v.revision_notes,
+              author_name: v.revision_notes_updated_by || 'Manager',
+              created_at: v.revision_notes_updated_at || v.created_at,
+              updated_at: v.revision_notes_updated_at || v.created_at,
+            };
+          }
+        });
+      });
+
+      setRevisionNotes(prev => ({ ...prev, ...map }));
     });
   }, [campaignId, listingData]);
 
@@ -1245,12 +1266,30 @@ function CampaignListingContent() {
     );
 
     try {
-      await upsertVideoAction({
-        id: videoId,
+      const res = await upsertVideoAction({
+        id: typeof videoId === 'number' ? videoId : undefined,
         campaign_creator_id: ccId,
         urutan: fields.urutan || 1,
         ...fields
       });
+      if (res.success && res.data) {
+        setListingData((prev) => 
+          prev.map(cc => {
+            if (cc.id === ccId) {
+              return {
+                ...cc,
+                videos: (cc.videos || []).map((v: any) => {
+                  if (v.id === videoId || (fields.urutan && v.urutan === fields.urutan)) {
+                    return { ...v, ...res.data };
+                  }
+                  return v;
+                })
+              };
+            }
+            return cc;
+          })
+        );
+      }
     } catch (err) {
       console.warn('Failed to update video:', err);
     }
@@ -1366,16 +1405,35 @@ function CampaignListingContent() {
         urutan,
         noteText,
         authorId: profile?.id,
-        authorName: profile?.nama || 'Manager',
+        authorName: profile?.nama || (profile?.role === 'executive' ? 'Executive' : 'Manager'),
       });
 
       if (!res.success) throw new Error(res.error);
       if (res.data) {
         setRevisionNotes(prev => ({ ...prev, [`${ccId}_${urutan}`]: res.data }));
+        setListingData(prev => prev.map(c => {
+          if (c.id === ccId) {
+            return {
+              ...c,
+              videos: (c.videos || []).map((v: any) => {
+                if (v.urutan === urutan) {
+                  return {
+                    ...v,
+                    revision_notes: noteText,
+                    revision_notes_updated_by: res.data.author_name,
+                    revision_notes_updated_at: res.data.updated_at
+                  };
+                }
+                return v;
+              })
+            };
+          }
+          return c;
+        }));
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to save revision note:", err);
-      alert("Gagal menyimpan catatan revisi");
+      alert("Gagal menyimpan catatan revisi: " + (err?.message || 'Error'));
     }
   }, [revisionNotes, profile]);
 
