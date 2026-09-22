@@ -486,13 +486,13 @@ export const CreatorRow = React.memo(({
                   name = profile?.nama || 'Unknown';
                   dateStr = formatDateTime(new Date());
                 } else if (approvalVal === 'pending') {
-                  name = staffProfiles.find((p: any) => p.id === cc.added_by)?.nama || 'System';
+                  name = staffProfiles.find((p: any) => p.id === cc.added_by)?.nama || cc.added_by_profile?.nama || 'System';
                   dateStr = cc.created_at ? formatDateTime(cc.created_at) : '-';
                 } else if (approvalVal === 'approved') {
-                  name = staffProfiles.find((p: any) => p.id === (cc.approved_by || cc.added_by))?.nama || 'System';
+                  name = staffProfiles.find((p: any) => p.id === (cc.approved_by || cc.added_by))?.nama || cc.approved_by_profile?.nama || cc.added_by_profile?.nama || 'System';
                   dateStr = (cc.approved_at || cc.created_at) ? formatDateTime(cc.approved_at || cc.created_at) : '-';
                 } else if (approvalVal === 'not_approved' || approvalVal === 'alternate') {
-                  name = staffProfiles.find((p: any) => p.id === (cc.not_approved_by || cc.added_by))?.nama || 'System';
+                  name = staffProfiles.find((p: any) => p.id === (cc.not_approved_by || cc.added_by))?.nama || cc.not_approved_by_profile?.nama || cc.added_by_profile?.nama || 'System';
                   dateStr = (cc.not_approved_at || cc.created_at) ? formatDateTime(cc.not_approved_at || cc.created_at) : '-';
                 }
 
@@ -1018,24 +1018,24 @@ export const CreatorRow = React.memo(({
                           <div>
                             <span className="text-text-soft block mb-[2px]">Ditambahkan Oleh:</span>
                             <span className="font-semibold text-text">
-                              {staffProfiles.find((p: any) => p.id === cc.added_by)?.nama || 'Unknown'}
+                              {staffProfiles.find((p: any) => p.id === cc.added_by)?.nama || cc.added_by_profile?.nama || 'Unknown'}
                               {cc.created_at && <span className="text-text-soft font-normal ml-1">({formatDateTimeShort(cc.created_at)})</span>}
                             </span>
                           </div>
-                          {cc.approval === 'approved' && cc.approved_by && (
+                          {cc.approval === 'approved' && (cc.approved_by || cc.approved_by_profile) && (
                             <div>
                               <span className="text-text-soft block mb-[2px]">Di-approve Oleh:</span>
                               <span className="font-semibold text-green-600">
-                                {staffProfiles.find((p: any) => p.id === cc.approved_by)?.nama || '-'} 
+                                {staffProfiles.find((p: any) => p.id === cc.approved_by)?.nama || cc.approved_by_profile?.nama || '-'} 
                                 {cc.approved_at && <span className="text-text-soft ml-[4px] font-normal">({formatDateTimeShort(cc.approved_at)})</span>}
                               </span>
                             </div>
                           )}
-                          {cc.approval === 'not_approved' && cc.not_approved_by && (
+                          {(cc.approval === 'not_approved' || cc.approval === 'alternate') && (cc.not_approved_by || cc.not_approved_by_profile) && (
                             <div>
-                              <span className="text-text-soft block mb-[2px]">Ditolak Oleh:</span>
+                              <span className="text-text-soft block mb-[2px]">{cc.approval === 'alternate' ? 'Alternate Oleh:' : 'Ditolak Oleh:'}</span>
                               <span className="font-semibold text-red-600">
-                                {staffProfiles.find((p: any) => p.id === cc.not_approved_by)?.nama || '-'} 
+                                {staffProfiles.find((p: any) => p.id === cc.not_approved_by)?.nama || cc.not_approved_by_profile?.nama || '-'} 
                                 {cc.not_approved_at && <span className="text-text-soft ml-[4px] font-normal">({formatDateTimeShort(cc.not_approved_at)})</span>}
                               </span>
                             </div>
