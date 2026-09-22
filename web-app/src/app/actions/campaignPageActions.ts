@@ -239,33 +239,33 @@ export async function updateAdsPerformanceKursAction(id: number, kurs: number) {
 export async function fetchDailyPerformancePageDataAction(campaignId: number) {
   try {
     const [campaignRes, skusRes, ccRes, vidRes, adsRes, salesRes, orgRes] = await Promise.all([
-      db.execute(sql`SELECT * FROM campaigns WHERE id = ${campaignId} LIMIT 1`) as Promise<any[]>,
-      db.execute(sql`SELECT product_id FROM skus WHERE campaign_id = ${campaignId}`) as Promise<any[]>,
+      db.execute(sql`SELECT * FROM campaigns WHERE id = ${campaignId} LIMIT 1`).catch(() => []) as Promise<any[]>,
+      db.execute(sql`SELECT product_id FROM skus WHERE campaign_id = ${campaignId}`).catch(() => []) as Promise<any[]>,
       db.execute(sql`
         SELECT 
-          cc.id, cc.creator_id, cc.tier, cc.approval, cc.created_at, cc.approved_at, cc.content_type, cc.slot as qty_vt,
+          cc.id, cc.creator_id, cc.tier, cc.approval, cc.created_at, cc.approved_at, cc.content_type, cc.qty_vt, cc.qty_live,
           c.username
         FROM campaign_creators cc
         LEFT JOIN creators c ON cc.creator_id = c.id
         WHERE cc.campaign_id = ${campaignId}
-      `) as Promise<any[]>,
+      `).catch(() => []) as Promise<any[]>,
       db.execute(sql`
-        SELECT v.id, v.campaign_creator_id, v.created_at, v.link as link_video
+        SELECT v.id, v.campaign_creator_id, v.created_at, v.link_video
         FROM videos v
         JOIN campaign_creators cc ON v.campaign_creator_id = cc.id
         WHERE cc.campaign_id = ${campaignId}
-      `) as Promise<any[]>,
+      `).catch(() => []) as Promise<any[]>,
       db.execute(sql`
         SELECT ad_id, tanggal, gross_revenue_usd, kurs
         FROM ads_performance
         WHERE campaign_id = ${campaignId}
         ORDER BY tanggal ASC
-      `) as Promise<any[]>,
+      `).catch(() => []) as Promise<any[]>,
       db.execute(sql`
         SELECT tanggal, gmv, quantity, creator_username, content_uid, content_type, product_id
         FROM sales
         WHERE campaign_id = ${campaignId}
-      `) as Promise<any[]>,
+      `).catch(() => []) as Promise<any[]>,
       db.execute(sql`
         SELECT content_uid, post_time, content_type, creator_username, product_id
         FROM organic_videos
