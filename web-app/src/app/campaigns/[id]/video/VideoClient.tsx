@@ -709,8 +709,10 @@ export default function CampaignVideoPage({
       const cleanFields: Record<string, any> = {};
       const allowedKeys = [
         'concept', 'concept_updated_at', 'concept_updated_by',
-        'link_draft', 'link_video', 'content_uid', 'sku_id',
-        'vt_approval', 'vt_approved_by', 'vt_approved_at'
+        'link_draft', 'link_draft_updated_by', 'link_draft_updated_at',
+        'link_video', 'content_uid', 'sku_id',
+        'vt_approval', 'vt_approved_by', 'vt_approved_at',
+        'revision_notes', 'revision_notes_updated_by', 'revision_notes_updated_at'
       ];
       for (const k of allowedKeys) {
         if (k in fields && fields[k] !== undefined) {
@@ -726,8 +728,15 @@ export default function CampaignVideoPage({
         concept_updated_at: video.concept_updated_at || null,
         concept_updated_by: video.concept_updated_by || null,
         link_draft: video.link_draft || null,
+        link_draft_updated_by: video.link_draft_updated_by || null,
+        link_draft_updated_at: video.link_draft_updated_at || null,
         link_video: video.link_video || null,
         vt_approval: video.vt_approval || 'pending',
+        vt_approved_by: video.vt_approved_by || null,
+        vt_approved_at: video.vt_approved_at || null,
+        revision_notes: video.revision_notes || null,
+        revision_notes_updated_by: video.revision_notes_updated_by || null,
+        revision_notes_updated_at: video.revision_notes_updated_at || null,
         ...cleanFields
       });
 
