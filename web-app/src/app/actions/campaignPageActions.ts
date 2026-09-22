@@ -1044,8 +1044,8 @@ export async function insertCreatorsAndCcAction(campaignId: number, creatorPaylo
     // Upsert creators
     for (const c of creatorPayloads) {
       await db.execute(sql`
-        INSERT INTO creators (username, link_account, added_by, status)
-        VALUES (${c.username}, ${c.link_account}, ${c.added_by || null}, 'active')
+        INSERT INTO creators (username, link_account, added_by)
+        VALUES (${c.username}, ${c.link_account}, ${c.added_by || null})
         ON CONFLICT (username) DO UPDATE SET link_account = EXCLUDED.link_account
         RETURNING id
       `);
