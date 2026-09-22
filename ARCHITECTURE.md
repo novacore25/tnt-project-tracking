@@ -174,12 +174,30 @@ flowchart TD
 
 ---
 
-### F. Modul Smart Import & Sales Attribution (`/import-data`, `/input-penjualan`)
+### F. Modul Daily Performance & Timeline Target (`/campaigns/[id]/daily`)
+- **Fungsi Utama**: Tracking performa harian dan bulanan, kecepatan pencapaian target (*Velocity Tracking*), serta visualisasi *Timeline Target* interaktif.
+- **Arsitektur Pengambilan & Agregasi Data**:
+  - `fetchDailyPerformancePageDataAction` mengambil data multi-tabel (`campaigns`, `skus`, `campaign_creators`, `videos`, `ads_performance`, `sales`, `organic_videos`).
+  - Menghitung statistik harian dalam zona waktu **WIB (UTC+7)** (`toWIBDateStr`) untuk memastikan konsistensi tanggal transaksi TikTok dan posting video.
+- **Agregasi Metrik Harian (`grouped[dateStr]`)**:
+  - **Kreator Baru (Pending)**: Dihitung berdasarkan `cc.created_at` dan dikelompokkan per tier (Nano, Micro, Macro, Mega).
+  - **Kreator Disetujui (Approved)**: Dihitung berdasarkan `cc.approved_at`.
+  - **Video Baru**: Dihitung dari `videos.created_at` dan `organic_videos.post_time` (didukung deduplikasi ID Video TikTok untuk mencegah *double counting*).
+  - **Live Streaming**: Sesi live unik harian dari `organic_videos` (`content_type = 'Livestream'`).
+  - **GMV VT vs Live**: Pemisahan akurat antara GMV video (`gmv_vt`) dan GMV siaran langsung (`gmv_live`).
+  - **GMV Ads Harian**: Dihitung dari delta kenaikan harian revenue iklan (`gross_revenue_usd * kurs`).
+- **Komponen Timeline Target (`TimelineTarget.tsx`)**:
+  - Menghitung **Target Velocity** harian dan mingguan berdasarkan hari kerja efektif (Senin–Jumat).
+  - Menampilkan progres kumulatif target GMV, kuota video, dan target kreator lengkap dengan status pacing (*on-track*, *ahead*, *behind*).
+
+---
+
+### G. Modul Smart Import & Sales Attribution (`/import-data`, `/input-penjualan`)
 - **Routing Hierarki Penjualan**:
   1. *Priority 1*: Berdasarkan `product_id` yang terdaftar pada tabel `skus` campaign.
   2. *Priority 2*: Berdasarkan `tiktok_campaign_id` campaign.
   3. *Priority 3 (Unmapped)*: Disimpan dengan `campaign_id = NULL` agar riwayat transaksi tidak hilang.
-- **Auto-Sync Trigger**: Saat SKU baru didaftarkan, fungsi `syncUnmappedForProduct()` otomatis mengaitkan data penjualan unmapped sebelumnya ke campaign tersebut.
+  4. *Auto-Sync Trigger*: Saat SKU baru didaftarkan, fungsi `syncUnmappedForProduct()` otomatis mengaitkan data penjualan unmapped sebelumnya ke campaign tersebut.
 
 ---
 
