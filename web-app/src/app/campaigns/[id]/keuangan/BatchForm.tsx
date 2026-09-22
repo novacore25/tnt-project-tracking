@@ -49,12 +49,14 @@ export function BatchForm({
     pending: string[];
     notApproved: string[];
     alternate: string[];
+    alreadyPending: string[];
     addedCount: number;
   }>({
     notFound: [],
     pending: [],
     notApproved: [],
     alternate: [],
+    alreadyPending: [],
     addedCount: 0
   });
 
@@ -75,6 +77,11 @@ export function BatchForm({
   const handleToggleCreator = async (cc: any, isChecked: boolean, prefill?: any) => {
     if (!isChecked) {
       handleRemoveCreator(cc.id);
+      return;
+    }
+
+    if (cc.hasPendingPayment && !prefill) {
+      alert(`Peringatan: @${cc.creators?.username} saat ini sedang ada pengajuan aktif di "${cc.pendingBatchLabel || 'Batch Lain'}". Tidak dapat diajukan ganda untuk menghindari double payment.`);
       return;
     }
     
@@ -165,12 +172,15 @@ export function BatchForm({
     const pending: string[] = [];
     const notApproved: string[] = [];
     const alternate: string[] = [];
+    const alreadyPending: string[] = [];
     const toAdd: any[] = [];
     
     uniqueRawList.forEach(username => {
       const cc = creators.find(c => c.creators?.username?.toLowerCase() === username);
       if (!cc) {
         notFound.push(username);
+      } else if (cc.hasPendingPayment) {
+        alreadyPending.push(`${username}${cc.pendingBatchLabel ? ` (${cc.pendingBatchLabel})` : ''}`);
       } else if (cc.approval === 'approved') {
         toAdd.push(cc);
       } else if (cc.approval === 'pending') {
@@ -194,10 +204,11 @@ export function BatchForm({
       pending,
       notApproved,
       alternate,
+      alreadyPending,
       addedCount: toAdd.length
     });
 
-    if (notFound.length === 0 && pending.length === 0 && notApproved.length === 0 && alternate.length === 0) {
+    if (notFound.length === 0 && pending.length === 0 && notApproved.length === 0 && alternate.length === 0 && alreadyPending.length === 0) {
       setBulkText("");
       setShowBulkSelect(false);
     }
@@ -427,6 +438,16 @@ export function BatchForm({
                 </div>
               )}
 
+              {bulkStatusWarnings.alreadyPending && bulkStatusWarnings.alreadyPending.length > 0 && (
+                <div className="p-3 bg-amber-50 border border-amber-200 text-amber-900 rounded-lg text-xs font-medium flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold">Sedang Dalam Proses di Batch Lain ({bulkStatusWarnings.alreadyPending.length}):</span> {bulkStatusWarnings.alreadyPending.map(u => `@${u}`).join(', ')}
+                    <div className="text-amber-800 text-[11px] mt-0.5">Kreator ini tidak dimasukkan ke batch baru untuk mencegah pembayaran ganda (double payment).</div>
+                  </div>
+                </div>
+              )}
+
               <label className="block text-xs font-semibold text-slate-600">Paste list username (dipisah baris baru atau koma)</label>
               <textarea 
                 className="w-full p-3 border border-slate-300 rounded-md outline-none focus:ring-2 focus:ring-blue-500 text-sm h-32"
@@ -434,8 +455,8 @@ export function BatchForm({
                 value={bulkText}
                 onChange={e => {
                   setBulkText(e.target.value);
-                  if (bulkStatusWarnings.addedCount > 0 || bulkStatusWarnings.notFound.length > 0 || bulkStatusWarnings.pending.length > 0) {
-                    setBulkStatusWarnings({ notFound: [], pending: [], notApproved: [], alternate: [], addedCount: 0 });
+                  if (bulkStatusWarnings.addedCount > 0 || bulkStatusWarnings.notFound.length > 0 || bulkStatusWarnings.pending.length > 0 || bulkStatusWarnings.alreadyPending.length > 0) {
+                    setBulkStatusWarnings({ notFound: [], pending: [], notApproved: [], alternate: [], alreadyPending: [], addedCount: 0 });
                   }
                 }}
               />
@@ -474,20 +495,27 @@ export function BatchForm({
                 ) : (
                   filteredCreators.map(c => {
                     const isSelected = !!selectedCreators.find(s => s.id === c.id);
+                    const isDisabled = c.isFullyPaid || c.hasPendingPayment;
                     return (
-                      <tr key={c.id} className={`hover:bg-slate-50 ${isSelected ? 'bg-blue-50/50' : ''}`}>
+                      <tr key={c.id} className={`hover:bg-slate-50 ${isSelected ? 'bg-blue-50/50' : ''} ${c.hasPendingPayment ? 'bg-amber-50/20' : ''}`}>
                         <td className="px-4 py-2 text-center">
                           <input 
                             type="checkbox" 
-                            className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer"
+                            className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
                             checked={isSelected}
+                            disabled={isDisabled}
                             onChange={(e) => handleToggleCreator(c, e.target.checked)}
                           />
                         </td>
                         <td className="px-4 py-2 font-medium">
                           @{c.creators?.username}
                         </td>
-                        <td className="px-4 py-2 text-right font-semibold text-slate-700 flex items-center justify-end gap-2">
+                        <td className="px-4 py-2 text-right font-semibold text-slate-700 flex items-center justify-end gap-2 flex-wrap">
+                          {c.hasPendingPayment && (
+                            <span className="text-xs font-semibold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full" title={`Sedang diproses di ${c.pendingBatchLabel || 'Batch Lain'}`}>
+                              Sedang Diproses ({c.pendingBatchLabel || 'Batch Lain'})
+                            </span>
+                          )}
                           {c.isFullyPaid && <span className="text-xs font-semibold text-orange-700 bg-orange-100 px-2 py-0.5 rounded-full">Ratecard Lunas</span>}
                           {Number(c.price || 0).toLocaleString()}
                         </td>

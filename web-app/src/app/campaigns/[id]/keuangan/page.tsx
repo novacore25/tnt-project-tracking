@@ -78,7 +78,9 @@ function CampaignKeuanganContent() {
             const baseNominal = item.actual_transfer != null ? Number(item.actual_transfer) : Number(item.nominal || 0);
             creatorHistory[item.campaign_creator_id].push({
               id: item.id,
+              batch_id: b.id,
               batch_label: b.batch_label,
+              batch_status: b.status,
               date: b.created_at,
               nominal: baseNominal + Number(item.biaya_transfer || 0),
               payment_type: item.payment_type,
@@ -92,6 +94,13 @@ function CampaignKeuanganContent() {
         const history = creatorHistory[cc.id] || [];
         const types = history.map(h => h.payment_type);
         const isFullyPaid = types.includes('100_akhir') || (types.includes('50_awal') && types.includes('50_akhir'));
+        const pendingItem = history.find(h => 
+          h.status !== 'paid' && 
+          h.status !== 'rejected' && 
+          h.status !== 'cancelled' && 
+          h.batch_status !== 'paid' && 
+          h.batch_status !== 'cancelled'
+        );
         
         // Cek ratecard dari campaign_creators.price, jika 0/kosong fallback ke snapshot terbaru
         let effectivePrice = Number(cc.price || 0);
@@ -105,7 +114,9 @@ function CampaignKeuanganContent() {
         return {
           ...cc,
           price: effectivePrice,
-          isFullyPaid
+          isFullyPaid,
+          hasPendingPayment: !!pendingItem,
+          pendingBatchLabel: pendingItem?.batch_label || ''
         };
       });
 

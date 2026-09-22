@@ -69,8 +69,11 @@ export function BatchDetail({ batch, creatorHistory, onBack, onRefresh, onRefres
     setSavingFinanceId(id);
     try {
       const { financeUpdateAmounts } = await import('../../actions/paymentActions');
-      const actualTransfer = edits.actual_transfer.trim() !== '' ? Number(edits.actual_transfer) : null;
-      await financeUpdateAmounts(id, actualTransfer, Number(edits.biaya_transfer));
+      const cleanActual = edits.actual_transfer ? edits.actual_transfer.replace(/[^0-9]/g, '') : '';
+      const actualTransfer = cleanActual !== '' ? Number(cleanActual) : null;
+      const cleanBiaya = edits.biaya_transfer ? edits.biaya_transfer.replace(/[^0-9]/g, '') : '0';
+      const biayaTransfer = Number(cleanBiaya) || 0;
+      await financeUpdateAmounts(id, actualTransfer, biayaTransfer);
       await onRefresh();
       
       // Clear edit state for this item
@@ -110,8 +113,11 @@ export function BatchDetail({ batch, creatorHistory, onBack, onRefresh, onRefres
         for (const idStr of Object.keys(financeEdits)) {
           const id = Number(idStr);
           const edits = financeEdits[id];
-          const actualTransfer = edits.actual_transfer.trim() !== '' ? Number(edits.actual_transfer) : null;
-          await financeUpdateAmounts(id, actualTransfer, Number(edits.biaya_transfer));
+          const cleanActual = edits.actual_transfer ? edits.actual_transfer.replace(/[^0-9]/g, '') : '';
+          const actualTransfer = cleanActual !== '' ? Number(cleanActual) : null;
+          const cleanBiaya = edits.biaya_transfer ? edits.biaya_transfer.replace(/[^0-9]/g, '') : '0';
+          const biayaTransfer = Number(cleanBiaya) || 0;
+          await financeUpdateAmounts(id, actualTransfer, biayaTransfer);
         }
         setFinanceEdits({});
       }
@@ -264,6 +270,10 @@ export function BatchDetail({ batch, creatorHistory, onBack, onRefresh, onRefres
   };
 
   const handleDeleteBatch = async () => {
+    if (batch.status === 'paid' && profile?.role !== 'executive' && profile?.role !== 'admin') {
+      alert("Akses Ditolak: Batch yang sudah berstatus PAID hanya dapat dihapus oleh Executive atau Admin.");
+      return;
+    }
     if (!confirm("YAKIN INGIN MENGHAPUS BATCH INI BESERTA SELURUH ITEM DI DALAMNYA? Data yang dihapus tidak bisa dikembalikan.")) return;
     setIsFinalizing(true);
     try {
@@ -389,14 +399,16 @@ export function BatchDetail({ batch, creatorHistory, onBack, onRefresh, onRefres
           <div>
             <h2 className="text-xl font-bold text-slate-800 flex items-center gap-3">
               {batch.batch_label}
-              <button 
-                onClick={handleDeleteBatch} 
-                disabled={isFinalizing}
-                className="text-red-500 hover:bg-red-50 p-2 rounded-lg transition-colors"
-                title="Hapus Batch"
-              >
-                {isFinalizing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-              </button>
+              {!(batch.status === 'paid' && profile?.role !== 'executive' && profile?.role !== 'admin') && (
+                <button 
+                  onClick={handleDeleteBatch} 
+                  disabled={isFinalizing}
+                  className="text-red-500 hover:bg-red-50 p-2 rounded-lg transition-colors"
+                  title="Hapus Batch"
+                >
+                  {isFinalizing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                </button>
+              )}
             </h2>
             <p className="text-sm text-slate-500 mt-1">Campaign: {batch.campaigns?.nama}</p>
           </div>

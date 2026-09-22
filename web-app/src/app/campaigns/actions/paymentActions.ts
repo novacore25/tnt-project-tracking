@@ -616,8 +616,29 @@ export async function deletePaymentItem(itemId: number) {
 }
 
 export async function deletePaymentBatch(batchId: number) {
+  const session = await auth();
+  const userId = session?.user?.id;
+  if (!userId) throw new Error('Not authenticated');
+
+  const batchRows = await db.execute(sql`SELECT status, campaign_id FROM payment_batches WHERE id = ${batchId}`) as any[];
+  const batch = batchRows[0];
+  if (!batch) throw new Error('Batch tidak ditemukan');
+
+  if (batch.status === 'paid') {
+    const profileRows = await db.execute(sql`SELECT role FROM profiles WHERE id = ${userId}`) as any[];
+    const role = (profileRows[0]?.role || '').toLowerCase();
+    if (role !== 'executive' && role !== 'admin') {
+      throw new Error('Akses Ditolak: Batch yang sudah berstatus PAID hanya dapat dihapus oleh Executive atau Admin.');
+    }
+  }
+
   await db.execute(sql`DELETE FROM payment_items WHERE batch_id = ${batchId}`);
   await db.execute(sql`DELETE FROM payment_batches WHERE id = ${batchId}`);
+
+  if (batch.campaign_id) {
+    revalidatePath(`/campaigns/${batch.campaign_id}/keuangan`);
+  }
+  revalidatePath('/budgeting');
 }
 
 export async function submitBatchToManager(batchId: number) {
@@ -848,6 +869,43 @@ export async function financeSubmitToExecutive(batchId: number) {
   revalidatePath('/budgeting');
 }
 
+async function syncPaidItemsToCampaignCreators(paymentItemIds: number[], actualPaymentDate?: string) {
+  if (!paymentItemIds || paymentItemIds.length === 0) return;
+  try {
+    const paidItemsRes = (await db.execute(sql`
+      SELECT campaign_creator_id, payment_type, nominal, actual_transfer
+      FROM payment_items
+      WHERE id = ANY(${paymentItemIds}) AND campaign_creator_id IS NOT NULL
+    `)) as any[];
+
+    const dateStr = actualPaymentDate || new Date().toISOString();
+
+    for (const item of paidItemsRes) {
+      const finalNominal = item.actual_transfer != null ? Number(item.actual_transfer) : Number(item.nominal || 0);
+      const pType = String(item.payment_type || '').toLowerCase();
+
+      if (pType === '100_akhir' || pType === '50_akhir') {
+        await db.execute(sql`
+          UPDATE campaign_creators
+          SET status_bayar = 'lunas',
+              nominal_pelunasan = COALESCE(nominal_pelunasan, 0) + ${finalNominal},
+              tgl_pembayaran = ${dateStr}
+          WHERE id = ${item.campaign_creator_id}
+        `);
+      } else if (pType === '50_awal') {
+        await db.execute(sql`
+          UPDATE campaign_creators
+          SET status_bayar = 'sebagian',
+              tgl_pembayaran = ${dateStr}
+          WHERE id = ${item.campaign_creator_id}
+        `);
+      }
+    }
+  } catch (err) {
+    console.error('Error in syncPaidItemsToCampaignCreators:', err);
+  }
+}
+
 export async function autoSplitUnpaidBatchItems(batchId: number) {
   const batchRows = await db.execute(sql`SELECT * FROM payment_batches WHERE id = ${batchId}`);
   const batch = (batchRows as any[])[0];
@@ -871,16 +929,13 @@ export async function autoSplitUnpaidBatchItems(batchId: number) {
 
   const hasPendingManager = unpaidItems.some(i => i.final_status === 'pending');
   const hasPendingExec1 = unpaidItems.some(i => i.final_status === 'manager_approved');
-  const hasPendingFinance = unpaidItems.some(i => ['executive_1_approved', 'pending_finance_outstanding'].includes(i.final_status));
-  const hasPendingExecFinal = unpaidItems.some(i => i.final_status === 'finance_selected');
 
+  // Termin 2 returned to pending_finance so Finance can review budget and re-select payable items
   let newBatchStatus = 'pending_finance';
   if (hasPendingManager) newBatchStatus = 'pending_manager';
   else if (hasPendingExec1) newBatchStatus = 'pending_executive_1';
-  else if (hasPendingFinance) newBatchStatus = 'pending_finance';
-  else if (hasPendingExecFinal) newBatchStatus = 'pending_executive';
 
-  const newNotes = batch.notes ? `${batch.notes} (Pemisahan dari ${batch.batch_label})` : `Pemisahan sisa dari ${batch.batch_label}`;
+  const newNotes = batch.notes ? `${batch.notes} (Pemisahan sisa dari ${batch.batch_label})` : `Pemisahan sisa dari ${batch.batch_label}`;
 
   const newBatchRes = await db.execute(sql`
     INSERT INTO payment_batches (
@@ -895,9 +950,17 @@ export async function autoSplitUnpaidBatchItems(batchId: number) {
   if (!newBatchId) return;
 
   const unpaidItemIds = unpaidItems.map(i => i.id);
+  
+  // Move items to new batch. If returning to pending_finance, reset items to executive_1_approved
+  // and finance_selected = false so Finance can toggle which ones are payable in this new Termin!
   await db.execute(sql`
     UPDATE payment_items
-    SET batch_id = ${newBatchId}
+    SET batch_id = ${newBatchId},
+        finance_selected = false,
+        final_status = CASE 
+          WHEN final_status IN ('ready_to_pay', 'executive_approved', 'finance_selected', 'pending_finance_outstanding') THEN 'executive_1_approved'
+          ELSE final_status 
+        END
     WHERE id = ANY(${unpaidItemIds})
   `);
 }
@@ -906,11 +969,23 @@ export async function financeMarkPaid(batchId: number, payload: { actualPaymentD
   const session = await auth();
   const userId = session?.user?.id;
 
-  await db.execute(sql`
-    UPDATE payment_items
-    SET final_status = 'paid'
-    WHERE batch_id = ${batchId} AND final_status = 'executive_approved'
-  `);
+  // Support both executive_approved and ready_to_pay so items never get skipped
+  const itemsToPayRes = await db.execute(sql`
+    SELECT id FROM payment_items
+    WHERE batch_id = ${batchId} AND (final_status = 'executive_approved' OR final_status = 'ready_to_pay' OR final_status = 'finance_selected')
+  `) as any[];
+  const itemIdsToPay = (itemsToPayRes || []).map(i => i.id);
+
+  if (itemIdsToPay.length > 0) {
+    await db.execute(sql`
+      UPDATE payment_items
+      SET final_status = 'paid'
+      WHERE id = ANY(${itemIdsToPay})
+    `);
+
+    // Auto-sync status_bayar to campaign_creators
+    await syncPaidItemsToCampaignCreators(itemIdsToPay, payload.actualPaymentDate);
+  }
 
   await autoSplitUnpaidBatchItems(batchId);
 
@@ -926,6 +1001,11 @@ export async function financeMarkPaid(batchId: number, payload: { actualPaymentD
     WHERE id = ${batchId}
   `);
 
+  const batchInfo = (await db.execute(sql`SELECT campaign_id FROM payment_batches WHERE id = ${batchId}`)) as any[];
+  if (batchInfo[0]?.campaign_id) {
+    revalidatePath(`/campaigns/${batchInfo[0].campaign_id}/keuangan`);
+    revalidatePath(`/campaigns/${batchInfo[0].campaign_id}/listing`);
+  }
   revalidatePath('/budgeting');
 }
 
@@ -933,11 +1013,16 @@ export async function financeBulkMarkPaidItems(batchId: number, itemIds: number[
   const session = await auth();
   const userId = session?.user?.id;
 
-  await db.execute(sql`
-    UPDATE payment_items
-    SET final_status = 'paid'
-    WHERE id = ANY(${itemIds}) AND batch_id = ${batchId}
-  `);
+  if (itemIds && itemIds.length > 0) {
+    await db.execute(sql`
+      UPDATE payment_items
+      SET final_status = 'paid'
+      WHERE id = ANY(${itemIds}) AND batch_id = ${batchId}
+    `);
+
+    // Auto-sync status_bayar to campaign_creators
+    await syncPaidItemsToCampaignCreators(itemIds, payload.actualPaymentDate);
+  }
 
   await autoSplitUnpaidBatchItems(batchId);
 
@@ -953,6 +1038,11 @@ export async function financeBulkMarkPaidItems(batchId: number, itemIds: number[
     WHERE id = ${batchId}
   `);
 
+  const batchInfo = (await db.execute(sql`SELECT campaign_id FROM payment_batches WHERE id = ${batchId}`)) as any[];
+  if (batchInfo[0]?.campaign_id) {
+    revalidatePath(`/campaigns/${batchInfo[0].campaign_id}/keuangan`);
+    revalidatePath(`/campaigns/${batchInfo[0].campaign_id}/listing`);
+  }
   revalidatePath('/budgeting');
 }
 
@@ -1193,6 +1283,9 @@ export async function bulkMarkPaidFinance(itemIds: number[], payload: { actualPa
     SET final_status = 'paid'
     WHERE id = ANY(${itemIds})
   `);
+
+  // Auto-sync status_bayar to campaign_creators
+  await syncPaidItemsToCampaignCreators(itemIds, payload.actualPaymentDate);
 
   const itemsRes = await db.execute(sql`SELECT DISTINCT batch_id FROM payment_items WHERE id = ANY(${itemIds})`);
   const batchIds = (itemsRes as any[]).map(i => i.batch_id);
