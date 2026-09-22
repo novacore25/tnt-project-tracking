@@ -1036,15 +1036,15 @@ function CampaignListingContent() {
         pageNum,
         pageSize: PAGE_SIZE,
         statusFilter,
-        tierFilter,
-        levelFilter,
-        nicheFilter,
-        addedByFilter,
-        actionByFilter,
-        contentTypeFilter,
-        conceptFilter,
-        search: debouncedSearch,
-        actionDateFilter,
+        tierFilter: filterTier || undefined,
+        levelFilter: filterLevel || undefined,
+        nicheFilter: filterNiche || undefined,
+        addedByFilter: filterAddedBy || undefined,
+        actionByFilter: filterActionBy || undefined,
+        contentTypeFilter: filterContentType || undefined,
+        conceptFilter: filterConcept || undefined,
+        search: debouncedSearch || undefined,
+        actionDateFilter: filterActionDate || undefined,
       });
 
       if (currentFetchId !== fetchIdRef.current) return;
@@ -1163,13 +1163,9 @@ function CampaignListingContent() {
   }, [campaignId, filterType, statusFilter, debouncedSearch, sortConfig, filterTier, filterLevel, filterNiche, filterAddedBy, filterActionBy, filterPendingWithVideo, filterUnattributed, filterContentType, filterNotes, filterConcept, filterActionDate]);
 
   useEffect(() => {
-    fetchListing(page);
-  }, [page, campaignId, filterType, statusFilter, debouncedSearch, sortConfig, filterTier, filterLevel, filterNiche, filterAddedBy, filterActionBy, filterPendingWithVideo, filterUnattributed, filterContentType, filterNotes, filterConcept, filterActionDate]);
-
-  useEffect(() => {
     setPage(0);
     fetchListing(0, true);
-  }, [debouncedSearch, filterType, statusFilter, sortConfig, fetchListing, filterTier, filterLevel, filterNiche, filterAddedBy, filterActionBy, filterPendingWithVideo, filterUnattributed, filterContentType, filterNotes, filterConcept, filterActionDate]);
+  }, [campaignId, filterType, statusFilter, debouncedSearch, sortConfig, filterTier, filterLevel, filterNiche, filterAddedBy, filterActionBy, filterPendingWithVideo, filterUnattributed, filterContentType, filterNotes, filterConcept, filterActionDate]);
 
   const handleLoadMore = () => {
     const next = page + 1;

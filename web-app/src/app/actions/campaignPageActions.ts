@@ -847,22 +847,33 @@ export async function fetchListingPagePaginatedAction(params: {
         cc.*,
         c.id as creator_db_id, c.username, c.nama_asli, c.link_account,
         p_add.nama as added_by_name, p_app.nama as approved_by_name, p_rej.nama as not_approved_by_name,
-        json_agg(DISTINCT jsonb_build_object('id', ct.id, 'nomor', ct.nomor, 'status', ct.status)) FILTER (WHERE ct.id IS NOT NULL) as creator_contacts,
-        json_agg(DISTINCT jsonb_build_object('id', cs.id, 'audience_age', cs.audience_age, 'level', cs.level, 'gmv_30d', cs.gmv_30d, 'gmv_30d_video', cs.gmv_30d_video, 'gmv_30d_live', cs.gmv_30d_live, 'tanggal_update', cs.tanggal_update, 'followers', cs.followers, 'tier', cs.tier, 'ratecard', cs.ratecard)) FILTER (WHERE cs.id IS NOT NULL) as creator_snapshots,
-        json_agg(DISTINCT jsonb_build_object('niche_id', cn.niche_id, 'nama', n.nama)) FILTER (WHERE cn.niche_id IS NOT NULL) as creator_niches,
-        json_agg(DISTINCT jsonb_build_object('id', v.id, 'urutan', v.urutan, 'concept', v.concept, 'concept_updated_at', v.concept_updated_at, 'concept_updated_by', v.concept_updated_by, 'link_video', v.link_video, 'vt_approval', v.vt_approval, 'content_uid', v.content_uid)) FILTER (WHERE v.id IS NOT NULL) as videos
+        (
+          SELECT json_agg(jsonb_build_object('id', ct.id, 'nomor', ct.nomor, 'status', ct.status))
+          FROM creator_contacts ct 
+          WHERE ct.creator_id = cc.creator_id
+        ) as creator_contacts,
+        (
+          SELECT json_agg(jsonb_build_object('id', cs.id, 'audience_age', cs.audience_age, 'level', cs.level, 'gmv_30d', cs.gmv_30d, 'gmv_30d_video', cs.gmv_30d_video, 'gmv_30d_live', cs.gmv_30d_live, 'tanggal_update', cs.tanggal_update, 'followers', cs.followers, 'tier', cs.tier, 'ratecard', cs.ratecard))
+          FROM creator_snapshots cs 
+          WHERE cs.creator_id = cc.creator_id
+        ) as creator_snapshots,
+        (
+          SELECT json_agg(jsonb_build_object('niche_id', cn.niche_id, 'nama', n.nama))
+          FROM creator_niches cn 
+          LEFT JOIN niches n ON cn.niche_id = n.id 
+          WHERE cn.creator_id = cc.creator_id
+        ) as creator_niches,
+        (
+          SELECT json_agg(jsonb_build_object('id', v.id, 'urutan', v.urutan, 'concept', v.concept, 'concept_updated_at', v.concept_updated_at, 'concept_updated_by', v.concept_updated_by, 'link_video', v.link_video, 'vt_approval', v.vt_approval, 'content_uid', v.content_uid))
+          FROM videos v 
+          WHERE v.campaign_creator_id = cc.id
+        ) as videos
       FROM campaign_creators cc
       LEFT JOIN creators c ON cc.creator_id = c.id
       LEFT JOIN profiles p_add ON cc.added_by = p_add.id
       LEFT JOIN profiles p_app ON cc.approved_by = p_app.id
       LEFT JOIN profiles p_rej ON cc.not_approved_by = p_rej.id
-      LEFT JOIN creator_contacts ct ON ct.creator_id = cc.creator_id
-      LEFT JOIN creator_snapshots cs ON cs.creator_id = cc.creator_id
-      LEFT JOIN creator_niches cn ON cn.creator_id = cc.creator_id
-      LEFT JOIN niches n ON cn.niche_id = n.id
-      LEFT JOIN videos v ON v.campaign_creator_id = cc.id
       ${whereClause}
-      GROUP BY cc.id, c.id, p_add.nama, p_app.nama, p_rej.nama
       ORDER BY cc.id DESC
       LIMIT ${pageSize} OFFSET ${offset}
     `) as any[];
