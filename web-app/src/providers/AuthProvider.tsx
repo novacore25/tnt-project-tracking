@@ -71,17 +71,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const canEditCampaign = (campaignId: number) => {
     if (isLoading) return false;
     if (!profile) return false;
-    if (['manager', 'finance', 'executive'].includes(profile.role)) return true;
+    if (['manager', 'finance', 'executive', 'admin'].includes(profile.role)) return true;
     
-    // Anggota checks
+    // Anggota / staff checks
     if (userCampaigns.some(uc => uc.all_campaigns)) return true;
     return userCampaigns.some(uc => uc.campaign_id === campaignId);
   };
 
-  const isManager = profile?.role === 'manager';
-  const isFinance = profile?.role === 'finance';
-  const isExecutive = profile?.role === 'executive';
-  const isAnggota = profile?.role === 'anggota';
+  const isManager = profile?.role === 'manager' || profile?.role === 'admin';
+  const isFinance = profile?.role === 'finance' || profile?.role === 'executive' || profile?.role === 'admin';
+  const isExecutive = profile?.role === 'executive' || profile?.role === 'admin';
+  const isAnggota = profile?.role === 'anggota' || profile?.role === 'staff';
 
   return (
     <AuthContext.Provider value={{ profile, userCampaigns, isLoading, canEditCampaign, isManager, isFinance, isExecutive, isAnggota }}>

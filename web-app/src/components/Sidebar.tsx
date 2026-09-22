@@ -133,13 +133,13 @@ export function Sidebar() {
             );
           })}
           
-          {/* Khusus Manager, Finance, Executive */}
-          {['manager', 'finance', 'executive'].includes(profile?.role) && (
+          {/* Khusus Manager, Finance, Executive, Admin */}
+          {['manager', 'finance', 'executive', 'admin'].includes(profile?.role) && (
             <div className="mt-2">
               <div className="navsection">Manager Tools</div>
               
-              {/* Manajemen Akun: Hanya Manager & Executive */}
-              {['manager', 'executive'].includes(profile?.role) && (
+              {/* Manajemen Akun: Hanya Manager, Executive, Admin */}
+              {['manager', 'executive', 'admin'].includes(profile?.role) && (
                 <Link
                   href="/manajemen-akun"
                   className={cn(
@@ -169,8 +169,8 @@ export function Sidebar() {
             </div>
           )}
 
-          {/* Khusus Finance & Executive */}
-          {['finance', 'executive'].includes(profile?.role) && (
+          {/* Khusus Finance, Executive, Admin */}
+          {['finance', 'executive', 'admin'].includes(profile?.role) && (
             <div className="mt-2">
               <div className="navsection">Finance</div>
               <Link

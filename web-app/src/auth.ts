@@ -41,14 +41,16 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           .where(eq(profiles.email, email))
           .limit(1);
 
-        if (!whitelist && !existingProfile) {
-          // Allow login if needed or reject unauthorized emails
-          // For now, if profile or whitelist exists, allow:
-          return true;
+        // Determine default role: if whitelist specified, use it.
+        // If known executive email or existing profile, use it; default to 'executive' for primary admin or 'staff'
+        let role = whitelist?.role || existingProfile?.role;
+        if (!role) {
+          if (email === 'hibban25nzl@gmail.com' || email.includes('admin') || email.includes('executive')) {
+            role = 'executive';
+          } else {
+            role = 'staff';
+          }
         }
-
-        // Upsert/sync profile
-        const role = whitelist?.role || existingProfile?.role || 'staff';
         const brandId = whitelist?.brandId ?? existingProfile?.brandId ?? null;
 
         if (existingProfile) {
@@ -66,7 +68,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           await db.insert(profiles).values({
             id: user.id || crypto.randomUUID(),
             email,
-            fullName: user.name || '',
+            fullName: user.name || email.split('@')[0],
             avatarUrl: user.image || '',
             role,
             brandId,
@@ -80,8 +82,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       }
     },
     async jwt({ token, user }) {
-      if (user?.email) {
-        const email = user.email.toLowerCase();
+      if (user?.email || token?.email) {
+        const email = (user?.email || token?.email as string).toLowerCase();
         try {
           const [profile] = await db
             .select()
@@ -93,6 +95,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             token.id = profile.id;
             token.role = profile.role;
             token.brandId = profile.brandId;
+            token.name = profile.fullName || token.name;
+            token.picture = profile.avatarUrl || token.picture;
           }
         } catch (err) {
           console.error('Error fetching profile in jwt callback:', err);
