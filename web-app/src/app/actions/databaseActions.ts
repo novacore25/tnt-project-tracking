@@ -347,8 +347,29 @@ export async function deleteCreatorAddressBookAction(id: number, creatorId: numb
 // ============================================================
 // CAMPAIGN CREATORS
 // ============================================================
+let ccColumnsEnsured = false;
+async function ensureCampaignCreatorColumns() {
+  if (ccColumnsEnsured) return;
+  try {
+    await db.execute(sql`
+      ALTER TABLE campaign_creators ADD COLUMN IF NOT EXISTS approved_by text;
+      ALTER TABLE campaign_creators ADD COLUMN IF NOT EXISTS approved_at timestamptz;
+      ALTER TABLE campaign_creators ADD COLUMN IF NOT EXISTS not_approved_by text;
+      ALTER TABLE campaign_creators ADD COLUMN IF NOT EXISTS not_approved_at timestamptz;
+      ALTER TABLE campaign_creators ADD COLUMN IF NOT EXISTS content_type text DEFAULT 'Video';
+      ALTER TABLE campaign_creators ADD COLUMN IF NOT EXISTS qty_live integer DEFAULT 0;
+      ALTER TABLE campaign_creators ADD COLUMN IF NOT EXISTS client_approval text DEFAULT 'not_required';
+      ALTER TABLE campaign_creators ADD COLUMN IF NOT EXISTS assigned_sku_ids jsonb;
+    `);
+    ccColumnsEnsured = true;
+  } catch (err) {
+    console.error('ensureCampaignCreatorColumns error:', err);
+  }
+}
+
 export async function addCampaignCreatorAction(cc: any) {
   try {
+    await ensureCampaignCreatorColumns();
     const contentType = cc.content_type || cc.tipe_konten || 'Video';
     const price = Number(cc.price ?? cc.rate_card ?? 0);
     const qtyVt = Number(cc.qty_vt ?? cc.slot ?? 1);
@@ -377,6 +398,7 @@ export async function addCampaignCreatorAction(cc: any) {
 
 export async function updateCampaignCreatorAction(id: number, updates: any) {
   try {
+    await ensureCampaignCreatorColumns();
     const sets: any[] = [];
     if (updates.price !== undefined || updates.rate_card !== undefined) {
       sets.push(sql`price = ${updates.price ?? updates.rate_card}`);

@@ -252,6 +252,16 @@ function CampaignListingContent() {
       };
       (existing as any)[field] = value;
 
+      // Auto-compute content_type when qty_vt or qty_live changes
+      if (field === 'qty_vt' || field === 'qty_live') {
+        const curVt = Number(field === 'qty_vt' ? value : (existing.qty_vt ?? orig.qty_vt)) || 0;
+        const curLive = Number(field === 'qty_live' ? value : (existing.qty_live ?? orig.qty_live)) || 0;
+        if (curVt > 0 && curLive > 0) (existing as any).content_type = 'Video & Live';
+        else if (curVt > 0 && curLive === 0) (existing as any).content_type = 'Video';
+        else if (curVt === 0 && curLive > 0) (existing as any).content_type = 'Live';
+        else (existing as any).content_type = '-';
+      }
+
       // Check if all changed fields match original
       const orig = existing.original;
       const fields = ['price', 'qty_vt', 'qty_live', 'approval', 'client_approval', 'assigned_sku_ids', 'content_type', 'followers', 'level', 'gmv_30d', 'gmv_30d_video', 'gmv_30d_live'] as const;
@@ -290,6 +300,17 @@ function CampaignListingContent() {
         if (change.qty_live !== undefined) updates.qty_live = change.qty_live;
         if (change.assigned_sku_ids !== undefined) updates.assigned_sku_ids = change.assigned_sku_ids;
         if (change.content_type !== undefined) updates.content_type = change.content_type;
+        
+        // Auto-calculate content_type on save if Qty VT or Qty Live changed
+        if (updates.qty_vt !== undefined || updates.qty_live !== undefined) {
+          const effVt = updates.qty_vt !== undefined ? Number(updates.qty_vt) : Number(change.original.qty_vt || 0);
+          const effLive = updates.qty_live !== undefined ? Number(updates.qty_live) : Number(change.original.qty_live || 0);
+          if (effVt > 0 && effLive > 0) updates.content_type = 'Video & Live';
+          else if (effVt > 0 && effLive === 0) updates.content_type = 'Video';
+          else if (effVt === 0 && effLive > 0) updates.content_type = 'Live';
+          else updates.content_type = '-';
+        }
+
         if (change.approval !== undefined) {
           updates.approval = change.approval;
           if (change.approval !== change.original.approval) {
