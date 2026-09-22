@@ -11,10 +11,100 @@ import { getPaymentBatchesRpc } from '@/lib/db-queries';
 // ==========================================
 
 export async function getPaymentBatches(campaignId?: number, status?: string) {
-  return await getPaymentBatchesRpc({
-    p_campaign_id: campaignId,
-    p_status_in: status ? [status] : undefined,
-  });
+  try {
+    let whereConditions: any[] = [];
+    if (campaignId) {
+      whereConditions.push(sql`pb.campaign_id = ${campaignId}`);
+    }
+    if (status) {
+      whereConditions.push(sql`pb.status = ${status}`);
+    }
+
+    const whereClause = whereConditions.length > 0
+      ? sql`WHERE ${sql.join(whereConditions, sql` AND `)}`
+      : sql``;
+
+    const rows = await db.execute(sql`
+      SELECT 
+        pb.*,
+        json_build_object('id', c.id, 'nama', c.nama) as campaigns,
+        (
+          SELECT json_agg(jsonb_build_object(
+            'id', pi.id,
+            'batch_id', pi.batch_id,
+            'campaign_creator_id', pi.campaign_creator_id,
+            'payment_type', pi.payment_type,
+            'ratecard_awal', pi.ratecard_awal,
+            'nominal', pi.nominal,
+            'actual_transfer', pi.actual_transfer,
+            'biaya_transfer', pi.biaya_transfer,
+            'bank_account_id', pi.bank_account_id,
+            'metode_pembayaran', pi.metode_pembayaran,
+            'nomor_rekening', pi.nomor_rekening,
+            'nama_penerima', pi.nama_penerima,
+            'nama_wa_pic', pi.nama_wa_pic,
+            'nomor_wa_dealing', pi.nomor_wa_dealing,
+            'alamat_ktp', pi.alamat_ktp,
+            'nik', pi.nik,
+            'link_ktp', pi.link_ktp,
+            'link_kontrak', pi.link_kontrak,
+            'manager_status', pi.manager_status,
+            'manager_note', pi.manager_note,
+            'manager_acted_by', pi.manager_acted_by,
+            'manager_acted_at', pi.manager_acted_at,
+            'executive_1_status', pi.executive_1_status,
+            'executive_1_note', pi.executive_1_note,
+            'executive_1_acted_by', pi.executive_1_acted_by,
+            'executive_1_acted_at', pi.executive_1_acted_at,
+            'finance_selected', pi.finance_selected,
+            'executive_status', pi.executive_status,
+            'executive_note', pi.executive_note,
+            'executive_acted_by', pi.executive_acted_by,
+            'executive_acted_at', pi.executive_acted_at,
+            'final_status', pi.final_status,
+            'transaction_id', pi.transaction_id,
+            'notes', pi.notes,
+            'created_at', pi.created_at,
+            'campaign_creators', (
+              SELECT jsonb_build_object(
+                'id', cc.id,
+                'tier', cc.tier,
+                'price', cc.price,
+                'qty_vt', cc.qty_vt,
+                'creators', jsonb_build_object(
+                  'id', cr.id,
+                  'username', cr.username,
+                  'nama_asli', cr.nama_asli,
+                  'avatar_url', cr.avatar_url
+                )
+              )
+              FROM campaign_creators cc
+              LEFT JOIN creators cr ON cc.creator_id = cr.id
+              WHERE cc.id = pi.campaign_creator_id
+            ),
+            'creator_bank_accounts', (
+              SELECT jsonb_build_object(
+                'bank_name', cba.bank_name,
+                'account_number', cba.account_number,
+                'account_holder', cba.account_holder
+              )
+              FROM creator_bank_accounts cba WHERE cba.id = pi.bank_account_id
+            )
+          ) ORDER BY pi.id ASC)
+          FROM payment_items pi
+          WHERE pi.batch_id = pb.id
+        ) as payment_items
+      FROM payment_batches pb
+      LEFT JOIN campaigns c ON pb.campaign_id = c.id
+      ${whereClause}
+      ORDER BY pb.id DESC
+    `);
+
+    return (rows as unknown as any[]) || [];
+  } catch (err: any) {
+    console.error("Error getPaymentBatches:", err);
+    return [];
+  }
 }
 
 export async function fetchPendingAdsTopUp() {
@@ -74,28 +164,28 @@ export async function fetchUnpaidCreators(campaignId: number) {
           'nama_asli', cr.nama_asli,
           'avatar_url', cr.avatar_url,
           'creator_snapshots', (
-            SELECT json_agg(json_build_object(
+            SELECT json_agg(jsonb_build_object(
               'id', cs.id, 'followers', cs.followers, 'level', cs.level,
-              'gmv_30d', cs.gmv_30d, 'gmv_30d_video', cs.gmv_30d_organic, 'gmv_30d_live', cs.gmv_30d_live,
+              'gmv_30d', cs.gmv_30d, 'gmv_30d_video', cs.gmv_30d_video, 'gmv_30d_live', cs.gmv_30d_live,
               'ratecard', cs.ratecard, 'tanggal_update', cs.tanggal_update
             ))
             FROM creator_snapshots cs WHERE cs.creator_id = cr.id
           ),
           'creator_bank_accounts', (
-            SELECT json_agg(json_build_object(
+            SELECT json_agg(jsonb_build_object(
               'id', cba.id, 'bank_name', cba.bank_name, 'account_number', cba.account_number, 'account_holder', cba.account_holder
             ))
             FROM creator_bank_accounts cba WHERE cba.creator_id = cr.id
           )
         ) as creators,
         (
-          SELECT json_agg(json_build_object(
-            'id', v.id, 'link_video', v.link, 'content_uid', v.content_uid, 'urutan', v.urutan, 'vt_approval', v.approval_link
+          SELECT json_agg(jsonb_build_object(
+            'id', v.id, 'link_video', v.link_video, 'content_uid', v.content_uid, 'urutan', v.urutan, 'vt_approval', v.vt_approval
           ))
           FROM videos v WHERE v.campaign_creator_id = cc.id
         ) as videos,
         (
-          SELECT json_agg(json_build_object(
+          SELECT json_agg(jsonb_build_object(
             'id', pi.id, 'final_status', pi.final_status, 'payment_type', pi.payment_type, 'nominal', pi.nominal
           ))
           FROM payment_items pi WHERE pi.campaign_creator_id = cc.id
@@ -103,7 +193,7 @@ export async function fetchUnpaidCreators(campaignId: number) {
       FROM campaign_creators cc
       JOIN creators cr ON cc.creator_id = cr.id
       WHERE cc.campaign_id = ${campaignId}
-        AND cc.approval = 'approved'
+        AND LOWER(cc.approval) = 'approved'
       ORDER BY cc.created_at DESC
       LIMIT 5000
     `);
