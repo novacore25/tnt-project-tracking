@@ -19,15 +19,22 @@ export async function getInternalVideoData(campaignId: number, searchKeyword: st
     `).catch(() => [])) as any[];
 
     // 3. Fetch Organic Video stats
-    const statsList = (await db.execute(sql`
-      SELECT video_id as content_uid, publish_time, video_title, views, likes, comments, shares
+    const organicRows = (await db.execute(sql`
+      SELECT content_uid, creator_username, product_id, video_views as views, video_likes as likes, post_time
       FROM organic_videos WHERE campaign_id = ${campaignId}
     `).catch(() => [])) as any[];
 
-    // 4. Fetch Approved Campaign Creators with snapshots and relations
+    // 4. Fetch Sales stats for this campaign
+    const salesRows = (await db.execute(sql`
+      SELECT content_uid, creator_username, product_id, SUM(COALESCE(gmv, 0)) as gmv
+      FROM sales WHERE campaign_id = ${campaignId}
+      GROUP BY content_uid, creator_username, product_id
+    `).catch(() => [])) as any[];
+
+    // 5. Fetch Approved Campaign Creators with snapshots and relations
     const whereConditions = [
       sql`cc.campaign_id = ${campaignId}`,
-      sql`cc.approval = 'approved'`
+      sql`LOWER(cc.approval) = 'approved'`
     ];
 
     if (searchKeyword && searchKeyword.trim()) {
@@ -62,12 +69,13 @@ export async function getInternalVideoData(campaignId: number, searchKeyword: st
             'concept_updated_at', v.concept_updated_at,
             'concept_updated_by', v.concept_updated_by,
             'link_video', v.link_video,
+            'link_draft', v.link_draft,
             'vt_approval', v.vt_approval,
+            'vt_approved_by', v.vt_approved_by,
+            'vt_approved_at', v.vt_approved_at,
             'content_uid', v.content_uid,
-            'draft_url', v.draft_url,
-            'notes', v.notes,
-            'views', v.views,
-            'likes', v.likes
+            'sku_id', v.sku_id,
+            'created_at', v.created_at
           ) ORDER BY v.urutan ASC)
           FROM videos v WHERE v.campaign_creator_id = cc.id
         ) as videos
@@ -75,31 +83,77 @@ export async function getInternalVideoData(campaignId: number, searchKeyword: st
       LEFT JOIN creators c ON cc.creator_id = c.id
       ${whereClause}
       ORDER BY cc.id DESC
-    `).catch(() => [])) as any[];
+    `).catch((err) => {
+      console.error('Error querying campaign creators in getInternalVideoData:', err);
+      return [];
+    })) as any[];
 
-    // 5. Fetch all videos for the campaign creators
+    // 6. Fetch all videos for the approved campaign creators
     const allVideosList = (await db.execute(sql`
       SELECT v.* 
       FROM videos v
       JOIN campaign_creators cc ON v.campaign_creator_id = cc.id
-      WHERE cc.campaign_id = ${campaignId}
+      WHERE cc.campaign_id = ${campaignId} AND LOWER(cc.approval) = 'approved'
       ORDER BY v.urutan ASC
     `).catch(() => [])) as any[];
 
-    const mapped = (ccsRows || []).map((r: any) => ({
-      ...r,
-      creator_id: r.creator_id || r.creator_db_id,
-      creators: {
-        id: r.creator_db_id,
-        username: r.username,
-        nama_asli: r.nama_asli,
-        link_account: r.link_account,
-        creator_contacts: r.creator_contacts || [],
-        creator_snapshots: r.creator_snapshots || [],
-        creator_niches: r.creator_niches || [],
-      },
-      videos: r.videos || [],
-    }));
+    // 7. Build stats map by creator_username
+    const videoStatsMap = new Map<string, any[]>();
+    
+    // Process organic videos
+    (organicRows || []).forEach((row: any) => {
+      const uname = (row.creator_username || '').toLowerCase().trim();
+      if (!uname) return;
+      if (!videoStatsMap.has(uname)) videoStatsMap.set(uname, []);
+      videoStatsMap.get(uname)!.push({
+        content_uid: row.content_uid,
+        product_id: row.product_id,
+        views: Number(row.views) || 0,
+        likes: Number(row.likes) || 0,
+        gmv: 0,
+        post_time: row.post_time,
+      });
+    });
+
+    // Process sales GMV
+    (salesRows || []).forEach((row: any) => {
+      const uname = (row.creator_username || '').toLowerCase().trim();
+      if (!uname) return;
+      if (!videoStatsMap.has(uname)) videoStatsMap.set(uname, []);
+      const list = videoStatsMap.get(uname)!;
+      const existing = list.find((item: any) => item.content_uid === row.content_uid);
+      if (existing) {
+        existing.gmv = (existing.gmv || 0) + (Number(row.gmv) || 0);
+        if (!existing.product_id && row.product_id) existing.product_id = row.product_id;
+      } else {
+        list.push({
+          content_uid: row.content_uid,
+          product_id: row.product_id,
+          gmv: Number(row.gmv) || 0,
+          views: 0,
+          likes: 0,
+        });
+      }
+    });
+
+    const mapped = (ccsRows || []).map((r: any) => {
+      const uname = (r.username || '').toLowerCase().trim();
+      return {
+        ...r,
+        creator_id: r.creator_id || r.creator_db_id,
+        creators: {
+          id: r.creator_db_id,
+          username: r.username,
+          nama_asli: r.nama_asli,
+          link_account: r.link_account,
+          creator_contacts: r.creator_contacts || [],
+          creator_snapshots: r.creator_snapshots || [],
+          creator_niches: r.creator_niches || [],
+        },
+        videos: r.videos || [],
+        _videoStats: videoStatsMap.get(uname) || [],
+      };
+    });
 
     return {
       campaign,
@@ -107,11 +161,10 @@ export async function getInternalVideoData(campaignId: number, searchKeyword: st
       creators: mapped,
       listingData: mapped,
       allVideos: allVideosList,
-      stats: statsList,
+      stats: organicRows,
     };
   } catch (error: any) {
     console.error('Error in getInternalVideoData:', error);
     return null;
   }
 }
-
