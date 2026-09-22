@@ -57,8 +57,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
               updated_at = NOW()
             WHERE LOWER(email) = ${email}
           `).catch(() => {});
-        } else {
-          const newId = user.id || crypto.randomUUID();
+          const isValidUuid = (val?: any): boolean => typeof val === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(val);
+          const newId = isValidUuid(user.id) ? user.id : crypto.randomUUID();
           await db.execute(sql`
             INSERT INTO profiles (id, email, nama, avatar_url, role, brand_id, status)
             VALUES (${newId}, ${email}, ${fullName}, ${avatarUrl}, ${role}, ${brandId}, 'active')

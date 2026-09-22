@@ -500,9 +500,35 @@ export async function fetchListingPageDataAction(campaignId: number) {
 // ============================================================
 // REVISION NOTES (Campaign Creator Notes)
 // ============================================================
+let notesTableEnsured = false;
+async function ensureNotesTable() {
+  if (notesTableEnsured) return;
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS campaign_creator_notes (
+        id SERIAL PRIMARY KEY,
+        campaign_creator_id INTEGER REFERENCES campaign_creators(id) ON DELETE CASCADE,
+        role VARCHAR(50) NOT NULL,
+        isi TEXT NOT NULL,
+        author_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
+        author_name VARCHAR(255),
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      );
+      ALTER TABLE campaign_creator_notes ADD COLUMN IF NOT EXISTS author_name VARCHAR(255);
+      ALTER TABLE campaign_creator_notes ADD COLUMN IF NOT EXISTS role VARCHAR(50);
+      ALTER TABLE campaign_creator_notes ADD COLUMN IF NOT EXISTS isi TEXT;
+    `);
+    notesTableEnsured = true;
+  } catch (err) {
+    console.error('ensureNotesTable error:', err);
+  }
+}
+
 export async function fetchRevisionNotesAction(ccIds: number[]) {
   if (!ccIds || ccIds.length === 0) return { success: true, data: [] };
   try {
+    await ensureNotesTable();
     const data = await db.execute(sql`
       SELECT * FROM campaign_creator_notes
       WHERE campaign_creator_id = ANY(${ccIds})
@@ -523,11 +549,26 @@ export async function upsertRevisionNoteAction(params: {
   authorName?: string;
 }) {
   try {
+    await ensureNotesTable();
+    const isValidUuid = (val?: any): boolean => typeof val === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(val);
+    let authorIdVal = isValidUuid(params.authorId) ? params.authorId : null;
+
+    if (!authorIdVal && params.authorName) {
+      try {
+        const found = (await db.execute(sql`
+          SELECT id FROM profiles WHERE LOWER(nama) = ${params.authorName.toLowerCase()} LIMIT 1
+        `)) as any[];
+        if (found && found[0]?.id && isValidUuid(found[0].id)) {
+          authorIdVal = found[0].id;
+        }
+      } catch {}
+    }
+
     if (params.existingId) {
       const rows = await db.execute(sql`
         UPDATE campaign_creator_notes
         SET isi = ${params.noteText},
-            author_id = ${params.authorId || null},
+            author_id = ${authorIdVal},
             author_name = ${params.authorName || 'Manager'},
             updated_at = NOW()
         WHERE id = ${params.existingId}
@@ -538,12 +579,13 @@ export async function upsertRevisionNoteAction(params: {
       const roleKey = `draft_revisi_${params.urutan}`;
       const rows = await db.execute(sql`
         INSERT INTO campaign_creator_notes (campaign_creator_id, role, isi, author_id, author_name, created_at, updated_at)
-        VALUES (${params.ccId}, ${roleKey}, ${params.noteText}, ${params.authorId || null}, ${params.authorName || 'Manager'}, NOW(), NOW())
+        VALUES (${params.ccId}, ${roleKey}, ${params.noteText}, ${authorIdVal}, ${params.authorName || 'Manager'}, NOW(), NOW())
         RETURNING *
       `) as any[];
       return { success: true, data: rows[0] };
     }
   } catch (err: any) {
+    console.error('upsertRevisionNoteAction error:', err);
     return { success: false, error: err.message };
   }
 }

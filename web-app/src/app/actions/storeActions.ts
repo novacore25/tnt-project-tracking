@@ -46,7 +46,8 @@ export async function getAuthProfileAction() {
         }
       }
       const brandId = whitelist?.brand_id ?? null;
-      const newId = (session.user as any).id || crypto.randomUUID();
+      const isValidUuid = (val?: any): boolean => typeof val === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(val);
+      const newId = isValidUuid((session.user as any).id) ? (session.user as any).id : crypto.randomUUID();
       const fullName = session.user.name || email.split('@')[0];
       const avatarUrl = session.user.image || '';
 
@@ -65,8 +66,11 @@ export async function getAuthProfileAction() {
       profile = createdRows[0];
     }
 
+    const isValidUuid = (val?: any): boolean => typeof val === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(val);
+    const validProfileId = isValidUuid(profile?.id) ? profile.id : (isValidUuid((session.user as any).id) ? (session.user as any).id : null);
+
     const userProfile = {
-      id: profile?.id || (session.user as any).id || 'user_fallback',
+      id: validProfileId,
       nama: profile?.nama || session.user.name || email.split('@')[0],
       email: profile?.email || email,
       avatar_url: profile?.avatar_url || session.user.image || null,
