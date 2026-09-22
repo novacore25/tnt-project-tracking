@@ -277,6 +277,60 @@ export async function addCreatorNoteAction(note: any) {
   }
 }
 
+export async function fetchCreatorNotesAction(creatorId: number) {
+  try {
+    const data = await db.execute(sql`
+      SELECT * FROM creator_notes WHERE creator_id = ${creatorId} ORDER BY created_at DESC
+    `) as any[];
+    return { success: true, data: data || [] };
+  } catch (err: any) {
+    return { success: false, data: [], error: err.message };
+  }
+}
+
+export async function saveCreatorAddressBookAction(payload: any) {
+  try {
+    if (payload.id) {
+      const [updated] = await db.execute(sql`
+        UPDATE creator_address_book SET
+          label = COALESCE(${payload.label ?? null}, label),
+          nama_penerima = COALESCE(${payload.nama_penerima ?? null}, nama_penerima),
+          alamat_jalan = COALESCE(${payload.alamat_jalan ?? null}, alamat_jalan),
+          kecamatan = COALESCE(${payload.kecamatan ?? null}, kecamatan),
+          kota = COALESCE(${payload.kota ?? null}, kota),
+          provinsi = COALESCE(${payload.provinsi ?? null}, provinsi),
+          kodepos = COALESCE(${payload.kodepos ?? null}, kodepos)
+        WHERE id = ${payload.id}
+        RETURNING *
+      `) as any[];
+      return { success: true, data: updated };
+    } else {
+      const [inserted] = await db.execute(sql`
+        INSERT INTO creator_address_book (creator_id, label, nama_penerima, alamat_jalan, kecamatan, kota, provinsi, kodepos)
+        VALUES (${payload.creator_id}, ${payload.label || null}, ${payload.nama_penerima || null},
+                ${payload.alamat_jalan || null}, ${payload.kecamatan || null}, ${payload.kota || null},
+                ${payload.provinsi || null}, ${payload.kodepos || null})
+        RETURNING *
+      `) as any[];
+      return { success: true, data: inserted };
+    }
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
+export async function deleteCreatorAddressBookAction(id: number, creatorId: number) {
+  try {
+    await db.execute(sql`DELETE FROM creator_address_book WHERE id = ${id}`);
+    const data = await db.execute(sql`
+      SELECT * FROM creator_address_book WHERE creator_id = ${creatorId} ORDER BY id DESC
+    `) as any[];
+    return { success: true, data: data || [] };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
 // ============================================================
 // CAMPAIGN CREATORS
 // ============================================================

@@ -87,7 +87,7 @@ export default function CampaignPerformaClient({ campaignId }: { campaignId: num
         }
       }
 
-      const skuSet = new Set<string>((skusRes.data || []).map((s: any) => s.product_id).filter(Boolean));
+      const skuSet = new Set<string>(skuList);
       const perfMap = new Map<string, any>();
 
       const getOrCreatePerf = (usernameLower: string) => {
@@ -106,21 +106,6 @@ export default function CampaignPerformaClient({ campaignId }: { campaignId: num
         }
         return perfMap.get(usernameLower)!;
       };
-
-      // Pre-seed perfMap with fast aggregated creator performance from PostgreSQL RPC (only if hasSkus)
-      if (currentHasSkus && creatorPerfRes?.data && Array.isArray(creatorPerfRes.data)) {
-        creatorPerfRes.data.forEach((cp: any) => {
-          const u = (cp.username || '').toLowerCase();
-          if (!u) return;
-          const perf = getOrCreatePerf(u);
-          perf.gmv_organic = Number(cp.gmv_organic || 0);
-          perf.items_sold = Number(cp.items_sold || 0);
-          perf.video_views = Number(cp.video_views || 0);
-          perf.video_likes = Number(cp.video_likes || 0);
-          perf.video_count = Number(cp.video_count || 0);
-          perf.live_count = Number(cp.live_count || 0);
-        });
-      }
 
       let calcOrganicGmv = 0;
       let calcUnattributedGmv = 0;

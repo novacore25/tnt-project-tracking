@@ -4,6 +4,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { useDatabaseStore } from "@/store/useDatabaseStore";
 import { Search, Radio, Loader2, ChevronLeft, ChevronRight, User, Calendar, Users, Eye, ShoppingCart, DollarSign, ChevronDown, ChevronUp, Clock } from 'lucide-react';
 import { useCampaignFilter } from "@/providers/CampaignFilterProvider";
+import { fetchLivePageDataAction } from "@/app/actions/campaignPageActions";
 
 export default function CampaignLiveStreamClient({
   campaign,
@@ -96,20 +97,17 @@ export default function CampaignLiveStreamClient({
   const [pageSize, setPageSize] = useState(50);
   
   const { isCreatorVisible } = useCampaignFilter();
-  const supabase = createClient();
 
-  // ─── Fetch Actual Lives via RPC (background refresh if initial was empty) ──
+  // ─── Fetch Actual Lives via Server Action (background refresh if initial was empty) ──
   useEffect(() => {
     if (!campaignId) return;
     // Only refetch if initialLiveStats was empty
     if (!initialLiveStats || initialLiveStats.length === 0) {
       const fetchActualLives = async () => {
         try {
-          const { data, error } = await supabase.rpc('get_campaign_live_stats', {
-            p_campaign_id: campaignId,
-          });
-          if (!error && data && Array.isArray(data) && data.length > 0) {
-            setActualLives(data);
+          const res = await fetchLivePageDataAction(campaignId);
+          if (res.success && res.actualLives && res.actualLives.length > 0) {
+            setActualLives(res.actualLives);
           }
         } catch (e) {
           console.warn("Client live stats fetch skipped:", e);

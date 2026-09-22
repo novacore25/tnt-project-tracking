@@ -12,6 +12,16 @@ import { Dialog, DialogContent } from "@/components/ui/Dialog";
 import { useAuth } from "@/providers/AuthProvider";
 import { useCampaignFilter } from "@/providers/CampaignFilterProvider";
 import { getInternalVideoData } from "../../actions/videoActions";
+import {
+  fetchCampaignConceptsAction,
+  fetchRevisionNotesAction,
+  upsertRevisionNoteAction,
+  upsertVideoAction,
+  deleteVideosAction,
+  fetchVideosByCcIdsAction,
+  insertCreatorsAndCcAction,
+  bulkInsertVideosAction
+} from "@/app/actions/campaignPageActions";
 import * as XLSX from "xlsx";
 
 const extractGDriveId = (url: string) => {
@@ -136,8 +146,6 @@ export default function CampaignVideoPage({
     }, 100);
     return () => clearTimeout(timer);
   }, [previewOpen, previewUrl]);
-
-  const supabase = createClient();
 
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(false);
@@ -277,17 +285,12 @@ export default function CampaignVideoPage({
   // Fetch master concepts for this campaign
   useEffect(() => {
     if (!campaignId) return;
-    supabase
-      .from('campaign_concepts')
-      .select('*, skus(nama_produk)')
-      .eq('campaign_id', campaignId)
-      .order('no_konsep', { ascending: true })
-      .then(res => {
-        if (res.data) {
-          const sorted = [...res.data].sort((a: any, b: any) => (Number(a.no_konsep) || 0) - (Number(b.no_konsep) || 0));
-          setMasterConcepts(sorted);
-        }
-      });
+    fetchCampaignConceptsAction(campaignId).then(res => {
+      if (res.success && res.data) {
+        const sorted = [...res.data].sort((a: any, b: any) => (Number(a.no_konsep) || 0) - (Number(b.no_konsep) || 0));
+        setMasterConcepts(sorted);
+      }
+    });
   }, [campaignId]);
 
   // Fetch draft revision notes for creators in this campaign
@@ -296,24 +299,19 @@ export default function CampaignVideoPage({
     const ccIds = listingData.map((cc: any) => cc.id).filter(Boolean);
     if (ccIds.length === 0) return;
 
-    supabase
-      .from('campaign_creator_notes')
-      .select('*')
-      .in('campaign_creator_id', ccIds)
-      .ilike('role', 'draft_revisi_%')
-      .then(({ data, error }) => {
-        if (!error && data) {
-          const map: Record<string, any> = {};
-          data.forEach((n: any) => {
-            const match = n.role.match(/^draft_revisi_(\d+)$/);
-            if (match) {
-              const urutan = parseInt(match[1]);
-              map[`${n.campaign_creator_id}_${urutan}`] = n;
-            }
-          });
-          setRevisionNotes(map);
-        }
-      });
+    fetchRevisionNotesAction(ccIds).then(res => {
+      if (res.success && res.data) {
+        const map: Record<string, any> = {};
+        res.data.forEach((n: any) => {
+          const match = n.role.match(/^draft_revisi_(\d+)$/);
+          if (match) {
+            const urutan = parseInt(match[1]);
+            map[`${n.campaign_creator_id}_${urutan}`] = n;
+          }
+        });
+        setRevisionNotes(map);
+      }
+    });
   }, [campaignId, listingData]);
 
   // Reset clientPage when filters change
@@ -615,7 +613,10 @@ export default function CampaignVideoPage({
         }
 
         if (v.id && typeof v.id === 'number') {
-          const updatePayload: any = {
+          await upsertVideoAction({
+            id: v.id,
+            campaign_creator_id: ccId,
+            urutan: v.urutan,
             concept: v.concept,
             concept_updated_at: v.concept_updated_at,
             concept_updated_by: v.concept_updated_by,
@@ -626,18 +627,9 @@ export default function CampaignVideoPage({
             vt_approved_at: v.vt_approved_at || null,
             content_uid: finalContentUid,
             sku_id: v.sku_id ? Number(v.sku_id) : null
-          };
-          try {
-            const { error: updErr } = await supabase.from('videos').update(updatePayload).eq('id', v.id);
-            if (updErr) throw updErr;
-          } catch (e) {
-            delete updatePayload.link_draft;
-            delete updatePayload.vt_approved_by;
-            delete updatePayload.vt_approved_at;
-            await supabase.from('videos').update(updatePayload).eq('id', v.id);
-          }
+          });
         } else {
-          const insertPayload: any = {
+          await upsertVideoAction({
             campaign_creator_id: ccId,
             urutan: v.urutan,
             concept: v.concept,
@@ -650,23 +642,15 @@ export default function CampaignVideoPage({
             vt_approval: v.vt_approval || 'approved',
             vt_approved_by: v.vt_approved_by || null,
             vt_approved_at: v.vt_approved_at || null
-          };
-          try {
-            const { error: insErr } = await supabase.from('videos').insert(insertPayload);
-            if (insErr) throw insErr;
-          } catch (e) {
-            delete insertPayload.link_draft;
-            delete insertPayload.vt_approved_by;
-            delete insertPayload.vt_approved_at;
-            await supabase.from('videos').insert(insertPayload);
-          }
+          });
         }
       }
       
       await fetchData(); 
       
       // Ambil ulang data video dari DB untuk kreator ini agar ID terupdate
-      const { data: updatedDbVideos } = await supabase.from('videos').select('*').eq('campaign_creator_id', ccId);
+      const vidRes = await fetchVideosByCcIdsAction([ccId]);
+      const updatedDbVideos = vidRes.data || [];
       
       // Update local storage dengan data segar dari DB (termasuk ID asli dari auto-detect yang baru disave)
       setLocalVideos((prev: any[]) => {
@@ -715,9 +699,8 @@ export default function CampaignVideoPage({
       }
     });
 
-    // 2. Persist to Supabase with schema resilience
+    // 2. Persist to DB
     try {
-      // Build clean payload with only allowed video columns
       const cleanFields: Record<string, any> = {};
       const allowedKeys = [
         'concept', 'concept_updated_at', 'concept_updated_by',
@@ -730,98 +713,33 @@ export default function CampaignVideoPage({
         }
       }
 
-      const executeDbUpdate = async (targetId: number, payload: Record<string, any>) => {
-        try {
-          const res = await supabase.from('videos').update(payload).eq('id', targetId).select().maybeSingle();
-          if (res.error) throw res.error;
-          return res.data;
-        } catch (firstErr: any) {
-          // Fallback if newer columns don't exist yet on DB
-          const fallbackPayload = { ...payload };
-          delete fallbackPayload.vt_approved_by;
-          delete fallbackPayload.vt_approved_at;
-          delete fallbackPayload.link_draft;
-          const fallbackRes = await supabase.from('videos').update(fallbackPayload).eq('id', targetId).select().maybeSingle();
-          if (fallbackRes.error) {
-            console.warn('Fallback update also returned warning:', fallbackRes.error);
-          }
-          return fallbackRes.data;
-        }
-      };
+      const res = await upsertVideoAction({
+        id: realNumericId || undefined,
+        campaign_creator_id: ccId,
+        urutan: video.urutan,
+        concept: video.concept || '',
+        concept_updated_at: video.concept_updated_at || null,
+        concept_updated_by: video.concept_updated_by || null,
+        link_draft: video.link_draft || null,
+        link_video: video.link_video || null,
+        vt_approval: video.vt_approval || 'pending',
+        ...cleanFields
+      });
 
-      const executeDbInsert = async (payload: Record<string, any>) => {
-        try {
-          const res = await supabase.from('videos').insert(payload).select().maybeSingle();
-          if (res.error) throw res.error;
-          return res.data;
-        } catch (firstErr: any) {
-          const fallbackPayload = { ...payload };
-          delete fallbackPayload.vt_approved_by;
-          delete fallbackPayload.vt_approved_at;
-          delete fallbackPayload.link_draft;
-          const fallbackRes = await supabase.from('videos').insert(fallbackPayload).select().maybeSingle();
-          if (fallbackRes.error) {
-            console.warn('Fallback insert also returned warning:', fallbackRes.error);
-          }
-          return fallbackRes.data;
-        }
-      };
-
-      if (realNumericId) {
-        await executeDbUpdate(realNumericId, cleanFields);
-      } else {
-        // Check if row already exists in DB for this ccId and urutan
-        const { data: existingRow } = await supabase
-          .from('videos')
-          .select('id')
-          .eq('campaign_creator_id', ccId)
-          .eq('urutan', video.urutan)
-          .maybeSingle();
-
-        if (existingRow && existingRow.id) {
-          const updatedData = await executeDbUpdate(existingRow.id, cleanFields);
-          if (updatedData) {
-            setLocalVideos((prev: any[]) => {
-              return prev.map(v => {
-                if (v.campaign_creator_id === ccId && v.urutan === video.urutan) {
-                  return { ...v, ...updatedData };
-                }
-                return v;
-              });
-            });
-          }
-        } else {
-          // Insert new row into videos
-          const insertData: any = {
-            campaign_creator_id: ccId,
-            urutan: video.urutan,
-            concept: video.concept || '',
-            concept_updated_at: video.concept_updated_at || null,
-            concept_updated_by: video.concept_updated_by || null,
-            link_draft: video.link_draft || null,
-            link_video: video.link_video || null,
-            vt_approval: video.vt_approval || 'pending',
-            ...cleanFields
-          };
-          const insertedData = await executeDbInsert(insertData);
-          
-          if (insertedData) {
-            // Replace phantom video with real database row
-            setLocalVideos((prev: any[]) => {
-              const exists = prev.some(v => v.campaign_creator_id === ccId && v.urutan === video.urutan);
-              if (exists) {
-                return prev.map(v => {
-                  if (v.campaign_creator_id === ccId && v.urutan === video.urutan) {
-                    return { ...v, ...insertedData };
-                  }
-                  return v;
-                });
-              } else {
-                return [...prev, insertedData];
+      if (res.success && res.data) {
+        setLocalVideos((prev: any[]) => {
+          const exists = prev.some(v => v.campaign_creator_id === ccId && v.urutan === video.urutan);
+          if (exists) {
+            return prev.map(v => {
+              if (v.campaign_creator_id === ccId && v.urutan === video.urutan) {
+                return { ...v, ...res.data };
               }
+              return v;
             });
+          } else {
+            return [...prev, res.data];
           }
-        }
+        });
       }
     } catch (err) {
       console.warn('Background sync video field warning:', err);
@@ -874,48 +792,23 @@ export default function CampaignVideoPage({
     const { video, noteText } = revisionModalState;
     const ccId = video.campaign_creator_id;
     const urutan = video.urutan;
-    const roleKey = `draft_revisi_${urutan}`;
     const existing = revisionNotes[`${ccId}_${urutan}`];
 
     setRevisionModalState(prev => ({ ...prev, isSaving: true }));
 
     try {
-      if (existing?.id) {
-        const { data, error } = await supabase
-          .from('campaign_creator_notes')
-          .update({
-            isi: noteText,
-            author_id: profile?.id || null,
-            author_name: profile?.nama || (isExecutive ? 'Executive' : 'Manager'),
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', existing.id)
-          .select()
-          .single();
+      const res = await upsertRevisionNoteAction({
+        existingId: existing?.id,
+        ccId,
+        urutan,
+        noteText,
+        authorId: profile?.id,
+        authorName: profile?.nama || (isExecutive ? 'Executive' : 'Manager'),
+      });
 
-        if (error) throw error;
-        if (data) {
-          setRevisionNotes(prev => ({ ...prev, [`${ccId}_${urutan}`]: data }));
-        }
-      } else {
-        const { data, error } = await supabase
-          .from('campaign_creator_notes')
-          .insert({
-            campaign_creator_id: ccId,
-            role: roleKey,
-            isi: noteText,
-            author_id: profile?.id || null,
-            author_name: profile?.nama || (isExecutive ? 'Executive' : 'Manager'),
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          })
-          .select()
-          .single();
-
-        if (error) throw error;
-        if (data) {
-          setRevisionNotes(prev => ({ ...prev, [`${ccId}_${urutan}`]: data }));
-        }
+      if (!res.success) throw new Error(res.error);
+      if (res.data) {
+        setRevisionNotes(prev => ({ ...prev, [`${ccId}_${urutan}`]: res.data }));
       }
       setRevisionModalState(prev => ({ ...prev, open: false, isSaving: false }));
     } catch (err: any) {
@@ -1050,7 +943,6 @@ export default function CampaignVideoPage({
     if (validExisting.length === 0 && validNewCreator.length === 0) return;
     
     setBulkProcessing(true);
-    const supabaseClient = createClient();
     const newDbEntries: any[] = [];
     const ccIdGroups: Record<number, any[]> = {};
     
@@ -1062,38 +954,26 @@ export default function CampaignVideoPage({
     if (validNewCreator.length > 0) {
       try {
         const newUsernames = Array.from(new Set(validNewCreator.map(r => r.username)));
-        for (const username of newUsernames) {
-           let creatorId = null;
-           const { data: existingCreator } = await supabaseClient.from('creators').select('id').eq('username', username).maybeSingle();
-           
-           if (existingCreator) {
-              creatorId = existingCreator.id;
-           } else {
-              const { data: insertedCreator } = await supabaseClient.from('creators').insert({
-                 username: username,
-                 source: 'Bulk Import Video'
-              }).select('id').single();
-              if (insertedCreator) creatorId = insertedCreator.id;
-           }
-           
-           if (creatorId) {
-             const { data: newCc } = await supabaseClient.from('campaign_creators').insert({
-                campaign_id: campaignId,
-                creator_id: creatorId,
-                tier: 'Nano',
-                approval: 'pending',
-                client_approval: 'not_required',
-                status_bayar: 'belum',
-                qty_vt: validNewCreator.filter(r => r.username === username).length,
-                price: 0
-             }).select('id').single();
-             
-             if (newCc) {
-                const newCcId = newCc.id;
-                ccIdGroups[newCcId] = validNewCreator.filter(r => r.username === username);
-             }
-           }
-        }
+        const creatorPayloads = newUsernames.map(u => ({
+          username: u,
+          link_account: `https://www.tiktok.com/@${u}`,
+          added_by: profile?.id
+        }));
+        const ccPayloads = newUsernames.map(u => ({
+          username: u,
+          tier: 'Nano',
+          price: 0,
+          qty_vt: validNewCreator.filter(r => r.username === u).length,
+          qty_live: 0,
+          content_type: 'Video',
+          pic_assist: profile?.nama || '-',
+          client_approval: 'not_required',
+          added_by: profile?.id,
+          hasSnapshot: false
+        }));
+
+        await insertCreatorsAndCcAction(campaignId, creatorPayloads, ccPayloads);
+        await fetchData();
       } catch (err) {
         console.error('Error creating new creators:', err);
       }
@@ -1119,14 +999,15 @@ export default function CampaignVideoPage({
     
     try {
       if (newDbEntries.length > 0) {
-        await supabaseClient.from('videos').insert(newDbEntries);
+        await bulkInsertVideosAction(newDbEntries);
         await fetchData();
         const ccIds = Object.keys(ccIdGroups).map(Number);
-        const { data: updatedDbVideos } = await supabaseClient.from('videos').select('*').in('campaign_creator_id', ccIds);
+        const vidRes = await fetchVideosByCcIdsAction(ccIds);
+        const updatedDbVideos = vidRes.data || [];
         
         setLocalVideos((prev: any[]) => {
            const others = prev.filter(v => !ccIds.includes(v.campaign_creator_id));
-           return [...others, ...(updatedDbVideos || [])];
+           return [...others, ...updatedDbVideos];
         });
         
         alert(`Berhasil menyimpan ${newDbEntries.length} video baru!`);
@@ -1148,9 +1029,9 @@ export default function CampaignVideoPage({
     setDeletingHistory(true);
     try {
       const idsToDelete = Array.from(selectedHistoryIds);
-      const { error } = await supabase.from('videos').delete().in('id', idsToDelete);
+      const res = await deleteVideosAction(idsToDelete);
       
-      if (error) throw error;
+      if (!res.success) throw new Error(res.error);
       
       setLocalVideos(prev => prev.filter(v => !selectedHistoryIds.has(v.id)));
       setSelectedHistoryIds(new Set());

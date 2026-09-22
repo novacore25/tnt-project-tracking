@@ -99,6 +99,8 @@ export async function getInternalVideoData(campaignId: number, searchKeyword: st
       campaign,
       skus: skusList,
       creators: result,
+      listingData: result,
+      allVideos: allVideosList,
       stats: statsList,
     };
   } catch (error: any) {

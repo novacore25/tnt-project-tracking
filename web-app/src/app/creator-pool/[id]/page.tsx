@@ -16,6 +16,8 @@ import React from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/Dialog";
 import { Edit2 } from "lucide-react";
 import { fetchCreatorProfile } from "@/app/actions/creatorActions";
+import { saveCreatorAddressBookAction, deleteCreatorAddressBookAction, fetchCreatorNotesAction } from "@/app/actions/databaseActions";
+import { useAuth } from "@/providers/AuthProvider";
 
 export default function CreatorProfilePage() {
   const { id } = useParams();
@@ -367,27 +369,28 @@ export default function CreatorProfilePage() {
         kodepos: addressForm.kodepos
       };
 
-      if (addressForm.id) {
-        await supabase.from('creator_address_book').update(payload).eq('id', addressForm.id);
-      } else {
-        await supabase.from('creator_address_book').insert(payload);
+      const res = await saveCreatorAddressBookAction(payload);
+      if (res.success) {
+        setLocalData(prev => prev ? { 
+          ...prev, 
+          addressBook: payload.id 
+            ? (prev.addressBook || []).map(a => a.id === payload.id ? res.data : a)
+            : [res.data, ...(prev.addressBook || [])]
+        } : null);
       }
-
-      // refresh address book
-      const { data } = await supabase.from('creator_address_book').select('*').eq('creator_id', creatorId).order('id', { ascending: false });
-      setLocalData(prev => prev ? { ...prev, addressBook: data || [] } : null);
       
       setAddressOpen(false);
     } catch (err: any) {
-      alert("Gagal update alamat: " + e.message);
+      alert("Gagal update alamat: " + err.message);
     }
   };
 
   const handleDeleteAddress = async (id: number) => {
     if(!confirm('Yakin hapus alamat ini?')) return;
-    await supabase.from('creator_address_book').delete().eq('id', id);
-    const { data } = await supabase.from('creator_address_book').select('*').eq('creator_id', creatorId).order('id', { ascending: false });
-    setLocalData(prev => prev ? { ...prev, addressBook: data || [] } : null);
+    const res = await deleteCreatorAddressBookAction(id, creatorId);
+    if (res.success) {
+      setLocalData(prev => prev ? { ...prev, addressBook: res.data } : null);
+    }
   };
 
   const handleUpdateNiche = async () => {
@@ -405,9 +408,9 @@ export default function CreatorProfilePage() {
     });
     
     // Also re-fetch the notes so UI updates immediately
-    const { data: newNotes } = await supabase.from('creator_notes').select('*').eq('creator_id', creatorId);
-    if (newNotes) {
-      setLocalData(prev => prev ? { ...prev, notes: newNotes } : prev);
+    const res = await fetchCreatorNotesAction(creatorId);
+    if (res.success && res.data) {
+      setLocalData(prev => prev ? { ...prev, notes: res.data } : prev);
     }
 
     setNoteOpen(false);

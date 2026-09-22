@@ -17,6 +17,30 @@ import { MultiSelect } from "@/components/MultiSelect";
 import { useCampaignFilter } from "@/providers/CampaignFilterProvider";
 import { NotesTimeline } from "@/components/NotesTimeline";
 import { CreatorRow } from "./CreatorRow";
+import {
+  fetchCampaignConceptsAction,
+  fetchRevisionNotesAction,
+  upsertRevisionNoteAction,
+  upsertVideoAction,
+  insertVideoAction,
+  deleteVideoAction,
+  fetchCampaignCreatorCountsAction,
+  fetchCampaignCreatorsRecapAction,
+  fetchCampaignCreatorsDuplicateCheckAction,
+  fetchDuplicateCcDetailsAction,
+  mergeCampaignCreatorsAction,
+  fetchListingPagePaginatedAction,
+  searchCreatorsWithSnapshotsAction,
+  fetchCreatorSnapshotsBatchAction,
+  fetchExistingCcUsernamesAction,
+  insertCreatorsAndCcAction,
+  fetchExportCampaignCreatorsAction,
+  fetchStaffProfilesAction,
+  fetchSalesByCreatorUsernamesAction,
+  batchUpdateCampaignCreatorsApprovalAction,
+  batchDeleteCampaignCreatorsAction,
+  deleteSingleDuplicateCampaignCreatorAction,
+} from "@/app/actions/campaignPageActions";
 
 const PAGE_SIZE = 100;
 
@@ -132,15 +156,12 @@ function CampaignListingContent() {
 
   useEffect(() => {
     if (campaignId) {
-      supabase
-        .from('campaign_concepts')
-        .select('*')
-        .eq('campaign_id', campaignId)
-        .order('no_konsep', { ascending: true })
-        .then(({ data }) => {
-          const sorted = (data || []).sort((a: any, b: any) => (Number(a.no_konsep) || 0) - (Number(b.no_konsep) || 0));
+      fetchCampaignConceptsAction(campaignId).then((res) => {
+        if (res.success && res.data) {
+          const sorted = (res.data || []).sort((a: any, b: any) => (Number(a.no_konsep) || 0) - (Number(b.no_konsep) || 0));
           setMasterConcepts(sorted);
-        });
+        }
+      });
     }
   }, [campaignId]);
 
@@ -404,8 +425,8 @@ function CampaignListingContent() {
   const [exportProgress, setExportProgress] = useState<{current: number, total: number | null}>({ current: 0, total: null });
 
   useEffect(() => {
-    supabase.from('profiles').select('id, nama').order('nama').then(({data}) => {
-      if (data) setStaffProfiles(data);
+    fetchStaffProfilesAction().then(res => {
+      if (res.success && res.data) setStaffProfiles(res.data);
     });
   }, []);
 
@@ -434,24 +455,19 @@ function CampaignListingContent() {
     const ccIds = listingData.map((cc: any) => cc.id).filter(Boolean);
     if (ccIds.length === 0) return;
 
-    supabase
-      .from('campaign_creator_notes')
-      .select('*')
-      .in('campaign_creator_id', ccIds)
-      .ilike('role', 'draft_revisi_%')
-      .then(({ data, error }) => {
-        if (!error && data) {
-          const map: Record<string, any> = {};
-          data.forEach((n: any) => {
-            const match = n.role.match(/^draft_revisi_(\d+)$/);
-            if (match) {
-              const urutan = parseInt(match[1]);
-              map[`${n.campaign_creator_id}_${urutan}`] = n;
-            }
-          });
-          setRevisionNotes(map);
-        }
-      });
+    fetchRevisionNotesAction(ccIds).then((res) => {
+      if (res.success && res.data) {
+        const map: Record<string, any> = {};
+        res.data.forEach((n: any) => {
+          const match = n.role.match(/^draft_revisi_(\d+)$/);
+          if (match) {
+            const urutan = parseInt(match[1]);
+            map[`${n.campaign_creator_id}_${urutan}`] = n;
+          }
+        });
+        setRevisionNotes(map);
+      }
+    });
   }, [campaignId, listingData]);
 
   // Counts State
@@ -494,9 +510,8 @@ function CampaignListingContent() {
     
     setIsAutoDetecting(true);
     try {
-      const { data: matchedCreators } = await supabase.from('creators')
-        .select('id, username, creator_snapshots(ratecard, id)')
-        .in('username', usernames);
+      const res = await searchCreatorsWithSnapshotsAction(usernames);
+      const matchedCreators = res.data || [];
         
       if (matchedCreators && matchedCreators.length > 0) {
         setDynamicRows(currentRows => {
@@ -652,64 +667,38 @@ function CampaignListingContent() {
   }, [tableSearch]);
 
   const checkDuplicates = useCallback(async () => {
-    let allData: any[] = [];
-    const pageSize = 1000;
-    
-    const { count } = await supabase
-      .from('campaign_creators')
-      .select('id', { count: 'exact', head: true })
-      .eq('campaign_id', campaignId);
-      
-    if (count && count > 0) {
-      const promises = [];
-      for (let i = 0; i < count; i += pageSize) {
-        promises.push(
-          supabase
-            .from('campaign_creators')
-            .select('id, campaign_id, creator_id, creators!inner(username)')
-            .eq('campaign_id', campaignId)
-            .order('id', { ascending: true })
-            .range(i, i + pageSize - 1)
-        );
+    try {
+      const res = await fetchCampaignCreatorsDuplicateCheckAction(campaignId);
+      const allData = res.data || [];
+
+      const groupings: Record<string, any[]> = {};
+      for (const row of allData) {
+        const uname = row.username?.toLowerCase() || `unknown_${row.id}`;
+        const key = `${row.campaign_id}_${uname}`;
+        if (!groupings[key]) groupings[key] = [];
+        groupings[key].push(row);
       }
-      const results = await Promise.all(promises);
-      results.forEach(res => {
-        if (res.data) allData = allData.concat(res.data);
-      });
-    }
 
-    const groupings: Record<string, any[]> = {};
-    for (const row of allData) {
-      const uname = (row.creators as any)?.username?.toLowerCase() || `unknown_${row.id}`;
-      const key = `${row.campaign_id}_${uname}`;
-      if (!groupings[key]) groupings[key] = [];
-      groupings[key].push(row);
-    }
-
-    const dups: any[] = [];
-    for (const [key, rows] of Object.entries(groupings)) {
-      if (rows.length > 1) {
-        dups.push(rows);
+      const dups: any[] = [];
+      for (const [key, rows] of Object.entries(groupings)) {
+        if (rows.length > 1) {
+          dups.push(rows);
+        }
       }
-    }
 
-    // Hanya jika ada duplikat, ambil detail lengkap (video, notes, status) untuk baris duplikat tersebut saja
-    if (dups.length > 0) {
-      const allDupIds = dups.flat().map(r => r.id);
-      const { data: fullDupRows } = await supabase
-        .from('campaign_creators')
-        .select(`
-          id, campaign_id, creator_id, price, qty_vt, approval, sample_progress, status_bayar, notes_manager, notes_pic,
-          creators ( username ),
-          videos ( id, urutan, concept, concept_updated_at, concept_updated_by, link_video, vt_approval )
-        `)
-        .in('id', allDupIds);
-      
-      const fullMap = new Map((fullDupRows || []).map(r => [r.id, r]));
-      const fullDups = dups.map(group => group.map(r => fullMap.get(r.id) || r));
-      setDuplicateGroups(fullDups);
-    } else {
-      setDuplicateGroups([]);
+      // Hanya jika ada duplikat, ambil detail lengkap (video, notes, status) untuk baris duplikat tersebut saja
+      if (dups.length > 0) {
+        const allDupIds = dups.flat().map(r => r.id);
+        const { data: fullDupRows } = await fetchDuplicateCcDetailsAction(allDupIds);
+        
+        const fullMap = new Map((fullDupRows || []).map((r: any) => [r.id, r]));
+        const fullDups = dups.map(group => group.map(r => fullMap.get(r.id) || r));
+        setDuplicateGroups(fullDups);
+      } else {
+        setDuplicateGroups([]);
+      }
+    } catch (err) {
+      console.warn("Check duplicates error:", err);
     }
   }, [campaignId]);
 
@@ -719,7 +708,7 @@ function CampaignListingContent() {
 
   const handleMergeDuplicateGroup = async (group: any[], gIdx: number) => {
     if (!group || group.length < 2) return;
-    const username = group[0]?.creators?.username || 'kreator';
+    const username = group[0]?.creators?.username || group[0]?.username || 'kreator';
     
     if (!confirm(`Gabungkan (Merge) semua data dobel untuk @${username}? \n\nSistem akan mengambil data tertinggi / paling lengkap, memindahkan semua video ke satu baris utama, dan menghapus baris duplikat lainnya.`)) {
       return;
@@ -731,6 +720,7 @@ function CampaignListingContent() {
       const sortedGroup = [...group].sort((a, b) => a.id - b.id);
       const survivingRow = sortedGroup[0];
       const otherRows = sortedGroup.slice(1);
+      const otherIds = otherRows.map(r => r.id);
 
       // 2. Hitung nilai gabungan (ambil nilai tertinggi / terlengkap)
       const mergedPrice = Math.max(...group.map(r => Number(r.price) || 0));
@@ -814,16 +804,6 @@ function CampaignListingContent() {
       const picNotes = Array.from(new Set(group.map(r => r.notes_pic).filter(Boolean))).join(' | ');
       const allSkus = Array.from(new Set(group.flatMap(r => r.assigned_sku_ids || [])));
 
-      // 3. Pindahkan semua video dari baris lain ke baris utama
-      for (const r of otherRows) {
-        if (r.videos && r.videos.length > 0) {
-          for (const v of r.videos) {
-            await supabase.from('videos').update({ campaign_creator_id: survivingRow.id }).eq('id', v.id);
-          }
-        }
-      }
-
-      // 4. Update baris utama dengan nilai gabungan tertinggi
       const updateData: any = {
         price: mergedPrice,
         qty_vt: mergedQtyVt,
@@ -842,23 +822,10 @@ function CampaignListingContent() {
       if (notApprovedBy) updateData.not_approved_by = notApprovedBy;
       if (notApprovedAt) updateData.not_approved_at = notApprovedAt;
 
-      const { error: updateErr } = await supabase
-        .from('campaign_creators')
-        .update(updateData)
-        .eq('id', survivingRow.id);
+      const res = await mergeCampaignCreatorsAction(survivingRow.id, otherIds, updateData);
+      if (!res.success) throw new Error(res.error);
 
-      if (updateErr) throw updateErr;
-
-      // 5. Hapus baris duplikat lainnya
-      const otherIds = otherRows.map(r => r.id);
-      const { error: delErr } = await supabase
-        .from('campaign_creators')
-        .delete()
-        .in('id', otherIds);
-
-      if (delErr) throw delErr;
-
-      // 6. Update UI
+      // Update UI
       setDuplicateGroups(prev => prev.filter((_, idx) => idx !== gIdx));
       await fetchListing(0, true);
       await fetchCounts();
@@ -872,13 +839,11 @@ function CampaignListingContent() {
   };
 
   const fetchCounts = useCallback(async () => {
-    // 1. Try fast RPC for instant counts (only if no action date filter is applied)
     let hasRpcSucceeded = false;
     if (!filterActionDate) {
       try {
-        const { data: rpcData, error: rpcError } = await supabase.rpc('get_campaign_creator_counts', { p_campaign_id: campaignId });
-        if (!rpcError && rpcData && rpcData.length > 0) {
-          const res = rpcData[0];
+        const res = await fetchCampaignCreatorCountsAction(campaignId);
+        if (res.success) {
           setCounts({
             approved: Number(res.approved || 0),
             pending: Number(res.pending || 0),
@@ -889,42 +854,15 @@ function CampaignListingContent() {
           hasRpcSucceeded = true;
         }
       } catch (err) {
-        console.warn("RPC failed, falling back to JS counter", err);
+        console.warn("Counts fetch failed", err);
       }
     }
 
-    // 2. Fetch all data for daily recap (with progressive loading)
-    let allRecapData: any[] = [];
-    const pageSize = 1000;    
+    // 2. Fetch recap data
     setRecapLoadingProgress(0);
-    const { count } = await supabase
-      .from('campaign_creators')
-      .select('id', { count: 'exact', head: true })
-      .eq('campaign_id', campaignId);
-      
-    if (count && count > 0) {
-      const promises = [];
-      for (let i = 0; i < count; i += pageSize) {
-        promises.push(
-          supabase
-            .from('campaign_creators')
-            .select(`
-              id, approval, approved_at, not_approved_at, created_at, added_by, tier, creator_id,
-              creators!inner ( username )
-            `)
-            .eq('campaign_id', campaignId)
-            .order('id', { ascending: true })
-            .range(i, i + pageSize - 1)
-        );
-      }
-      const results = await Promise.all(promises);
-      results.forEach(res => {
-        if (res.data) {
-          allRecapData = allRecapData.concat(res.data);
-          setRecapLoadingProgress(prev => (prev || 0) + (res.data?.length || 0));
-        }
-      });
-    }
+    const recapRes = await fetchCampaignCreatorsRecapAction(campaignId);
+    let allRecapData: any[] = recapRes.data || [];
+    setRecapLoadingProgress(allRecapData.length);
 
     // Resolusi fallback snapshot untuk kreator yang tier-nya masih kosong secara batch cepat
     const missingTierCreatorIds = Array.from(new Set(
@@ -932,30 +870,16 @@ function CampaignListingContent() {
     ));
     if (missingTierCreatorIds.length > 0) {
       const snapMap = new Map();
-      const BATCH = 500;
-      const snapPromises = [];
-      for (let i = 0; i < missingTierCreatorIds.length; i += BATCH) {
-        const batchIds = missingTierCreatorIds.slice(i, i + BATCH);
-        snapPromises.push(
-          supabase
-            .from('creator_snapshots')
-            .select('creator_id, tier, followers')
-            .in('creator_id', batchIds)
-            .order('tanggal_update', { ascending: false })
-        );
-      }
-      const snapResults = await Promise.all(snapPromises);
-      snapResults.forEach(res => {
-        (res.data || []).forEach((s: any) => {
-          if (!snapMap.has(s.creator_id)) {
-            let t = s.tier;
-            if (!t && s.followers !== null) {
-              const f = Number(s.followers);
-              t = f < 10000 ? 'Nano' : f < 100000 ? 'Micro' : f < 1000000 ? 'Macro' : 'Mega';
-            }
-            snapMap.set(s.creator_id, t || 'Nano');
+      const snapRes = await fetchCreatorSnapshotsBatchAction(missingTierCreatorIds);
+      (snapRes.data || []).forEach((s: any) => {
+        if (!snapMap.has(s.creator_id)) {
+          let t = s.tier;
+          if (!t && s.followers !== null) {
+            const f = Number(s.followers);
+            t = f < 10000 ? 'Nano' : f < 100000 ? 'Micro' : f < 1000000 ? 'Macro' : 'Mega';
           }
-        });
+          snapMap.set(s.creator_id, t || 'Nano');
+        }
       });
       allRecapData.forEach(r => {
         if (!r.tier) {
@@ -1107,219 +1031,49 @@ function CampaignListingContent() {
     const currentFetchId = ++fetchIdRef.current;
     setIsLoading(true);
     try {
-      let selectQuery = `
-        id, creator_id, price, qty_vt, qty_live, content_type, approval, client_approval, tier,
-        sample_progress, status_bayar, notes_manager, notes_pic,
-        created_at, approved_at, not_approved_at,
-        added_by, approved_by, not_approved_by,
-        added_by_profile:profiles!campaign_creators_added_by_fkey ( nama ),
-        approved_by_profile:profiles!campaign_creators_approved_by_fkey ( nama ),
-        not_approved_by_profile:profiles!campaign_creators_not_approved_by_fkey ( nama ),
-        creators!inner (
-          id, username, nama_asli, link_account,
-          creator_contacts ( id, nomor, status ),
-          creator_snapshots${filterLevel ? '!inner' : ''} ( id, audience_age, level, gmv_30d, gmv_30d_video, gmv_30d_live, tanggal_update, followers, tier ),
-          creator_niches${filterNiche ? '!inner' : ''} ( niche_id, niches ( nama ) )
-        ),
-        videos${filterConcept ? '!inner' : ''} (
-          id, urutan, concept, concept_updated_at, concept_updated_by, link_video, vt_approval
-        )
-      `;
+      const res = await fetchListingPagePaginatedAction({
+        campaignId,
+        pageNum,
+        pageSize: PAGE_SIZE,
+        statusFilter,
+        tierFilter,
+        levelFilter,
+        nicheFilter,
+        addedByFilter,
+        actionByFilter,
+        contentTypeFilter,
+        conceptFilter,
+        search: debouncedSearch,
+        actionDateFilter,
+      });
 
-      let query: any = supabase.from('campaign_creators').select(selectQuery).eq('campaign_id', campaignId);
+      if (currentFetchId !== fetchIdRef.current) return;
+      if (!res.success) throw new Error(res.error);
 
-      // Filters
-      if (filterType === 'auto_detect') query = query.or('added_by.is.null,tier.eq.Auto-Detect');
-      if (filterType === 'regular') query = query.and('added_by.not.is.null,tier.neq.Auto-Detect');
-      
-      if (filterPendingWithVideo) {
-        query = query.neq('approval', 'approved');
-        
-        // Fetch ALL organic usernames (bypass 1000 limit)
-        const orgUsernamesSet = new Set<string>();
-        let orgPage = 0;
-        while (true) {
-          const { data } = await supabase.from('organic_videos').select('creator_username').eq('campaign_id', campaignId).range(orgPage * 1000, (orgPage + 1) * 1000 - 1);
-          if (!data || data.length === 0) break;
-          data.forEach(d => { if (d.creator_username) orgUsernamesSet.add(d.creator_username.toLowerCase()); });
-          if (data.length < 1000) break;
-          orgPage++;
-        }
-        
-        // Fetch ALL sales usernames
-        const salesUsernamesSet = new Set<string>();
-        let salesPage = 0;
-        while (true) {
-          const { data } = await supabase.from('sales').select('creator_username').eq('campaign_id', campaignId).not('content_uid', 'is', null).range(salesPage * 1000, (salesPage + 1) * 1000 - 1);
-          if (!data || data.length === 0) break;
-          data.forEach(d => { if (d.creator_username) salesUsernamesSet.add(d.creator_username.toLowerCase()); });
-          if (data.length < 1000) break;
-          salesPage++;
-        }
-        
-        const combinedUsernames = Array.from(new Set([...Array.from(orgUsernamesSet), ...Array.from(salesUsernamesSet)]));
-        let allVideoCreatorIds: number[] = [];
-        
-        if (combinedUsernames.length > 0) {
-          // Fetch creator IDs in chunks of 500 to avoid URL too long error
-          for (let i = 0; i < combinedUsernames.length; i += 500) {
-            const chunk = combinedUsernames.slice(i, i + 500);
-            const { data: cData } = await supabase.from('creators').select('id').in('username', chunk);
-            (cData || []).forEach(c => allVideoCreatorIds.push(c.id));
-          }
-        }
-        
-        // Fetch ALL creators who ALREADY have rows in `videos` table
-        let vPage = 0;
-        while (true) {
-          const { data: vData } = await supabase.from('videos')
-            .select('campaign_creator_id, campaign_creators!inner(campaign_id, creator_id)')
-            .eq('campaign_creators.campaign_id', campaignId)
-            .range(vPage * 1000, (vPage + 1) * 1000 - 1);
-            
-          if (!vData || vData.length === 0) break;
-          vData.forEach((v: any) => {
-            if (v.campaign_creators?.creator_id) allVideoCreatorIds.push(v.campaign_creators.creator_id);
-          });
-          if (vData.length < 1000) break;
-          vPage++;
-        }
-        
-        allVideoCreatorIds = Array.from(new Set(allVideoCreatorIds));
-        
-        if (allVideoCreatorIds.length > 0) {
-          // PostgREST max URL size can be an issue if there are thousands of IDs, but usually 2000 IDs is fine.
-          query = query.in('creator_id', allVideoCreatorIds);
-        } else {
-          query = query.eq('id', -1); // Force empty result if nobody has videos
-        }
-      } else if (filterUnattributed) {
-        query = query.neq('approval', 'approved');
-        
-        const salesUsernamesSet = new Set<string>();
-        let salesPage = 0;
-        while (true) {
-          const { data } = await supabase
-            .from('campaign_sales_summary')
-            .select('creator_username')
-            .eq('campaign_id', campaignId)
-            .gt('gmv_organic', 0)
-            .range(salesPage * 1000, (salesPage + 1) * 1000 - 1);
-            
-          if (!data || data.length === 0) break;
-          data.forEach(c => { if (c.creator_username) salesUsernamesSet.add(c.creator_username.toLowerCase()); });
-          if (data.length < 1000) break;
-          salesPage++;
-        }
-        
-        const salesUsernames = Array.from(salesUsernamesSet);
-        
-        if (salesUsernames.length > 0) {
-          // split into chunks if > 500
-          if (salesUsernames.length > 500) {
-             query = query.in('creators.username', salesUsernames.slice(0, 500)); // We'll just take first 500 to avoid URI too long. Ideally should use RPC.
-          } else {
-             query = query.in('creators.username', salesUsernames);
-          }
-        } else {
-          query = query.eq('id', -1);
-        }
-      } else if (statusFilter !== 'all') {
-        query = query.eq('approval', statusFilter);
-      }
-      
-      // Multi-dimensional filters
-      if (filterTier) {
-        query = query.ilike('tier', filterTier);
-      }
-      if (filterLevel) query = query.eq('creators.creator_snapshots.level', filterLevel);
-      if (filterNiche) query = query.eq('creators.creator_niches.niche_id', filterNiche);
-      if (filterAddedBy) query = query.eq('added_by', filterAddedBy);
-      if (filterActionBy) query = query.or(`approved_by.eq.${filterActionBy},not_approved_by.eq.${filterActionBy}`);
-      if (filterContentType) {
-        if (filterContentType === 'Video') {
-          query = query.or('content_type.eq.Video,and(content_type.in.("-",""),qty_vt.gte.1,qty_live.eq.0),and(content_type.is.null,qty_vt.gte.1,qty_live.eq.0)');
-        } else if (filterContentType === 'Live') {
-          query = query.or('content_type.eq.Live,and(content_type.in.("-",""),qty_vt.eq.0,qty_live.gte.1),and(content_type.is.null,qty_vt.eq.0,qty_live.gte.1)');
-        } else if (filterContentType === 'Video & Live') {
-          query = query.or('content_type.eq."Video & Live",and(content_type.in.("-",""),qty_vt.gte.1,qty_live.gte.1),and(content_type.is.null,qty_vt.gte.1,qty_live.gte.1)');
-        }
-      }
-      if (filterConcept) {
-        query = query.eq('videos.concept', filterConcept);
-      }
+      let finalData = res.data || [];
 
-      if (filterActionDate) {
-        // Gunakan toISOString agar format UTC (Z) yang dihasilkan aman untuk URL (tanpa karakter +)
-        const start = new Date(`${filterActionDate}T00:00:00+07:00`).toISOString();
-        const end = new Date(`${filterActionDate}T23:59:59+07:00`).toISOString();
-        
-        // PostgREST parser: Jika data diubah lewat bulk action versi lawas, approved_at/not_approved_at mungkin NULL.
-        // Maka kita beri fallback ke created_at jika field tersebut NULL, sama persis seperti fallback di UI.
-        const qApproved = `and(approval.eq.approved,or(and(approved_at.gte.${start},approved_at.lte.${end}),and(approved_at.is.null,created_at.gte.${start},created_at.lte.${end})))`;
-        const qRejected = `and(approval.in.(not_approved,alternate),or(and(not_approved_at.gte.${start},not_approved_at.lte.${end}),and(not_approved_at.is.null,created_at.gte.${start},created_at.lte.${end})))`;
-        const qPending = `and(approval.eq.pending,created_at.gte.${start},created_at.lte.${end})`;
-        
-        query = query.or(`${qApproved},${qRejected},${qPending}`);
-      }
-      
-      if (filterNotes === 'Ada Notes') {
-        query = query.or('and(notes_manager.not.is.null,notes_manager.neq.""),and(notes_pic.not.is.null,notes_pic.neq."")');
-      }
+      // Auto-detect videos from sales
+      if (finalData.length > 0 && campaignSkus.length > 0) {
+        const skuList = campaignSkus.map((s: any) => s.product_id).filter(Boolean);
+        const creatorUsernames = finalData.map((cc: any) => cc.creators?.username).filter(Boolean);
 
-      if (debouncedSearch) {
-        query = query.or(`username.ilike.%${debouncedSearch}%,nama_asli.ilike.%${debouncedSearch}%`, { foreignTable: 'creators' });
-      }
+        if (skuList.length > 0 && creatorUsernames.length > 0) {
+          const salesRes = await fetchSalesByCreatorUsernamesAction(campaignId, creatorUsernames, skuList);
+          const sData = salesRes.data || [];
 
-      // Pagination
-      const from = pageNum * PAGE_SIZE;
-      const to = from + PAGE_SIZE - 1;
-      
-      // Always sort backend by ID desc to get newest first, then sort accurately on frontend
-      if (filterNotes === 'Ada Notes') {
-        query = query.order('id', { ascending: false }); // Fetch all matching notes to sort properly on frontend
-      } else {
-        query = query.order('id', { ascending: false }).range(from, to);
-      }
-
-      const { data, error } = await query;
-      if (currentFetchId !== fetchIdRef.current) return; // Ignore stale fetch result
-      if (error) throw error;
-
-      let finalData = data || [];
-
-      // Auto-detect videos from sales (strictly filtered by campaign SKUs)
-      if (finalData.length > 0) {
-        const { data: campaignSkus } = await supabase.from('skus')
-          .select('product_id')
-          .eq('campaign_id', campaignId);
-        
-        const skuList = (campaignSkus || []).map((s: any) => s.product_id).filter(Boolean);
-
-        if (skuList.length > 0) {
-          const creatorUsernames = finalData.map((cc: any) => cc.creators?.username).filter(Boolean);
-          if (creatorUsernames.length > 0) {
-            const { data: sData } = await supabase.from('sales')
-              .select('content_uid, creator_username, product_id')
-              .eq('campaign_id', campaignId)
-              .in('creator_username', creatorUsernames)
-              .in('product_id', skuList)
-              .not('content_uid', 'is', null)
-              .neq('content_uid', '');
-            
-          if (sData && sData.length > 0) {
+          if (sData.length > 0) {
             finalData = finalData.map((cc: any) => {
               if (!cc.creators) return cc;
               const cName = cc.creators.username;
-              const cSales = sData.filter(s => s.creator_username === cName);
-              const uniqueUids = Array.from(new Set(cSales.map(s => s.content_uid)));
+              const cSales = sData.filter((s: any) => s.creator_username === cName);
+              const uniqueUids = Array.from(new Set(cSales.map((s: any) => s.content_uid)));
               
               const existingVids = cc.videos || [];
-              const autoVids = [];
+              const autoVids: any[] = [];
               
               for (const uid of uniqueUids) {
                 if (!uid) continue;
-                const exists = existingVids.some((v:any) => v.content_uid === uid);
+                const exists = existingVids.some((v: any) => v.content_uid === uid);
                 if (!exists) {
                   autoVids.push({
                     id: `auto_${uid}`,
@@ -1340,16 +1094,14 @@ function CampaignListingContent() {
           }
         }
       }
-    }
 
-      // Deduplicate finalData by username to hide duplicates from the table UI
+      // Deduplicate finalData by username
       const uniqueMap = new Map();
       for (const row of finalData) {
          const uname = row.creators?.username?.toLowerCase() || `unknown_${row.id}`;
          if (!uniqueMap.has(uname)) {
             uniqueMap.set(uname, row);
          } else {
-            // Keep the approved one if there's a conflict
             const existing = uniqueMap.get(uname);
             if (existing.approval !== 'approved' && row.approval === 'approved') {
                uniqueMap.set(uname, row);
@@ -1384,15 +1136,14 @@ function CampaignListingContent() {
             if (validDates.length > 0) {
               return Math.max(...validDates);
             }
-            return 0; // If no valid dates, treat as old
+            return 0;
           };
           return getLatest(b) - getLatest(a);
         });
 
-        // Do not slice/paginate for this filter so user can see all at once
         setHasMore(false);
       } else {
-        setHasMore((data || []).length === PAGE_SIZE);
+        setHasMore(res.hasMore);
       }
 
       if (isReset || filterNotes === 'Ada Notes') {
@@ -1476,29 +1227,18 @@ function CampaignListingContent() {
       })
     );
 
-    // Save to DB with fallback
     try {
-      const payload = { ...fields };
-      const { error } = await supabase
-        .from('videos')
-        .update(payload)
-        .eq('id', videoId);
-      
-      if (error) {
-        // Fallback without new columns
-        delete payload.vt_approved_by;
-        delete payload.vt_approved_at;
-        delete payload.link_draft;
-        const fallbackRes = await supabase.from('videos').update(payload).eq('id', videoId);
-        if (fallbackRes.error) {
-          console.warn('Fallback update error:', fallbackRes.error);
-        }
-      }
+      await upsertVideoAction({
+        id: videoId,
+        campaign_creator_id: ccId,
+        urutan: fields.urutan || 1,
+        ...fields
+      });
     } catch (err) {
       console.warn('Failed to update video:', err);
     }
     setIsSavingVideo(false);
-  }, [profile, fetchListing]);
+  }, []);
 
   const addEmptyVideoRow = useCallback(async (ccId: number) => {
     try {
@@ -1507,19 +1247,19 @@ function CampaignListingContent() {
       const currentVideos = cc.videos || [];
       const nextUrutan = currentVideos.length > 0 ? Math.max(...currentVideos.map((v: any) => v.urutan)) + 1 : 1;
       
-      const { data, error } = await supabase.from('videos').insert({
+      const res = await insertVideoAction({
         campaign_creator_id: ccId,
         urutan: nextUrutan,
         concept: '',
         link_video: '',
         vt_approval: 'pending'
-      }).select().single();
+      });
       
-      if (error) throw error;
+      if (!res.success) throw new Error(res.error);
       
       setListingData(prev => prev.map(c => {
         if (c.id === ccId) {
-          return { ...c, videos: [...(c.videos || []), data] };
+          return { ...c, videos: [...(c.videos || []), res.data] };
         }
         return c;
       }));
@@ -1545,7 +1285,7 @@ function CampaignListingContent() {
 
     if (typeof videoId === 'number') {
       try {
-        await supabase.from('videos').delete().eq('id', videoId);
+        await deleteVideoAction(videoId);
       } catch (err) {
         console.error('Failed to delete video row', err);
         alert('Gagal menghapus slot dari database');
@@ -1575,27 +1315,19 @@ function CampaignListingContent() {
     }));
 
     try {
-      const payload: any = {
+      const res = await upsertVideoAction({
         campaign_creator_id: ccId,
         urutan,
         ...fields,
         vt_approval: fields.vt_approval || 'pending'
-      };
-      let result = await supabase.from('videos').insert(payload).select().single();
+      });
       
-      if (result.error) {
-        delete payload.vt_approved_by;
-        delete payload.vt_approved_at;
-        delete payload.link_draft;
-        result = await supabase.from('videos').insert(payload).select().single();
-      }
-      
-      if (result.data) {
+      if (res.success && res.data) {
         setListingData(prev => prev.map(c => {
           if (c.id === ccId) {
             return {
               ...c,
-              videos: (c.videos || []).map((v: any) => v.id === tempId ? result.data : v)
+              videos: (c.videos || []).map((v: any) => v.id === tempId ? res.data : v)
             };
           }
           return c;
@@ -1605,49 +1337,24 @@ function CampaignListingContent() {
       console.warn('Failed to add and set video field', err);
     }
     setIsSavingVideo(false);
-  }, [profile, fetchListing]);
+  }, []);
 
   const saveRevisionNote = useCallback(async (ccId: number, urutan: number, noteText: string) => {
-    const roleKey = `draft_revisi_${urutan}`;
     const existing = revisionNotes[`${ccId}_${urutan}`];
 
     try {
-      if (existing?.id) {
-        const { data, error } = await supabase
-          .from('campaign_creator_notes')
-          .update({
-            isi: noteText,
-            author_id: profile?.id || null,
-            author_name: profile?.nama || 'Manager',
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', existing.id)
-          .select()
-          .single();
+      const res = await upsertRevisionNoteAction({
+        existingId: existing?.id,
+        ccId,
+        urutan,
+        noteText,
+        authorId: profile?.id,
+        authorName: profile?.nama || 'Manager',
+      });
 
-        if (error) throw error;
-        if (data) {
-          setRevisionNotes(prev => ({ ...prev, [`${ccId}_${urutan}`]: data }));
-        }
-      } else {
-        const { data, error } = await supabase
-          .from('campaign_creator_notes')
-          .insert({
-            campaign_creator_id: ccId,
-            role: roleKey,
-            isi: noteText,
-            author_id: profile?.id || null,
-            author_name: profile?.nama || 'Manager',
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          })
-          .select()
-          .single();
-
-        if (error) throw error;
-        if (data) {
-          setRevisionNotes(prev => ({ ...prev, [`${ccId}_${urutan}`]: data }));
-        }
+      if (!res.success) throw new Error(res.error);
+      if (res.data) {
+        setRevisionNotes(prev => ({ ...prev, [`${ccId}_${urutan}`]: res.data }));
       }
     } catch (err) {
       console.error("Failed to save revision note:", err);
@@ -1689,19 +1396,10 @@ function CampaignListingContent() {
       const uniqueUsernames = Array.from(new Set(usernames));
 
       // Fetch existing creators
-      const { data: existingData, error: fetchErr } = await supabase.from('creators')
-        .select(`
-          id, username, added_by,
-          creator_contacts(id, nomor, status),
-          creator_snapshots(id),
-          creator_niches(niche_id),
-          campaign_creators( campaign_id, campaigns(nama) )
-        `)
-        .in('username', uniqueUsernames);
+      const res = await searchCreatorsWithSnapshotsAction(uniqueUsernames);
+      const existingData = res.data || [];
 
-      if (fetchErr) throw fetchErr;
-
-      const existingMap = new Map((existingData || []).map(c => [c.username.toLowerCase(), c]));
+      const existingMap = new Map((existingData || []).map((c: any) => [c.username.toLowerCase(), c]));
       
       const missing: any[] = [];
       const existing: any[] = [];
@@ -1733,26 +1431,16 @@ function CampaignListingContent() {
     setIsAddingBulk(true);
     try {
       const usernames = missingCreators.map(m => m.username.replace('@', '').trim().toLowerCase());
-      
-      const { data: foundInDb, error: fetchErr } = await supabase.from('creators')
-        .select(`
-          id, username, added_by,
-          creator_contacts(id, nomor, status),
-          creator_snapshots(id),
-          creator_niches(niche_id),
-          campaign_creators( campaign_id, campaigns(nama) )
-        `)
-        .in('username', usernames);
+      const res = await searchCreatorsWithSnapshotsAction(usernames);
+      const foundInDb = res.data || [];
         
-      if (fetchErr) throw fetchErr;
-      
       if (foundInDb && foundInDb.length > 0) {
-        const foundUsernames = new Set(foundInDb.map(c => c.username.toLowerCase()));
+        const foundUsernames = new Set(foundInDb.map((c: any) => c.username.toLowerCase()));
         
         const newExisting = missingCreators
           .filter(m => foundUsernames.has(m.username.replace('@', '').trim().toLowerCase()))
           .map(m => {
-            const dbData = foundInDb.find(d => d.username.toLowerCase() === m.username.replace('@', '').trim().toLowerCase());
+            const dbData = foundInDb.find((d: any) => d.username.toLowerCase() === m.username.replace('@', '').trim().toLowerCase());
             return { ...m, ...dbData };
           });
           
@@ -1776,61 +1464,13 @@ function CampaignListingContent() {
       const rowsToProcess = group === 'existing' ? existingCreators : missingCreators;
       if (rowsToProcess.length === 0) return;
 
-      let allCreators = [...rowsToProcess];
+      const creatorPayloads = rowsToProcess.map(r => ({
+        username: r.username.replace('@', '').trim().toLowerCase(),
+        link_account: `https://www.tiktok.com/@${r.username.replace('@', '').trim().toLowerCase()}`,
+        added_by: profile?.id
+      }));
 
-      if (group === 'missing') {
-        const payloads = rowsToProcess.map(r => ({
-          username: r.username.replace('@', '').trim().toLowerCase(),
-          link_account: `https://www.tiktok.com/@${r.username.replace('@', '').trim().toLowerCase()}`,
-          added_by: profile?.id
-        }));
-
-        const usernames = payloads.map(p => p.username);
-        const { data: existingInDb } = await supabase.from('creators').select('id, username, added_by').in('username', usernames);
-        const existingUsernames = new Set((existingInDb || []).map(c => c.username.toLowerCase()));
-        
-        const toInsert = payloads.filter(p => !existingUsernames.has(p.username.toLowerCase()));
-        
-        let insertedData: any[] = [];
-        if (toInsert.length > 0) {
-           const { data, error: insErr } = await supabase.from('creators').insert(toInsert).select('id, username, added_by');
-           if (insErr) throw insErr;
-           insertedData = data || [];
-        }
-
-        const allFetchedCreators = [...(existingInDb || []), ...insertedData];
-        const insertedMap = new Map(allFetchedCreators.map(c => [c.username.toLowerCase(), c]));
-        
-        allCreators = rowsToProcess.map(r => {
-          const uname = r.username.replace('@', '').trim().toLowerCase();
-          return { ...r, ...insertedMap.get(uname) };
-        });
-      }
-
-      // 3. Fetch latest snapshots for all creators to get accurate tier/followers data
-      const creatorIds = allCreators.map(c => c.id).filter(Boolean);
-      const snapshotMap = new Map<number, any>();
-      
-      if (creatorIds.length > 0) {
-        for (let i = 0; i < creatorIds.length; i += 50) {
-          const batch = creatorIds.slice(i, i + 50);
-          const { data: snapData } = await supabase.from('creator_snapshots')
-            .select('id, creator_id, followers, gmv_30d, gmv_30d_video, gmv_30d_live, tier, ratecard, level, audience_age, tanggal_update')
-            .in('creator_id', batch)
-            .order('id', { ascending: false });
-          
-          if (snapData) {
-            for (const snap of snapData) {
-              // Only keep the latest snapshot per creator (first one since ordered DESC)
-              if (!snapshotMap.has(snap.creator_id)) {
-                snapshotMap.set(snap.creator_id, snap);
-              }
-            }
-          }
-        }
-      }
-
-      // Helper to calculate tier from followers count
+      // Calculate Tier
       const calculateTier = (followers: number): string => {
         if (followers < 10000) return 'Nano';
         if (followers < 100000) return 'Micro';
@@ -1838,93 +1478,35 @@ function CampaignListingContent() {
         return 'Mega';
       };
 
-      // 4. Prepare campaign creators bulk payload with accurate tier from snapshots
-      const campaignPayloads = allCreators.map(c => {
-        const snap = snapshotMap.get(c.id);
-        const followers = snap?.followers || 0;
+      const campaignPayloads = rowsToProcess.map(c => {
+        const snaps = c.creator_snapshots || [];
+        const followers = snaps[0]?.followers || 0;
         const tier = calculateTier(followers);
-        
+
         return {
-          campaign_id: campaignId,
+          username: c.username.replace('@', '').trim().toLowerCase(),
           creator_id: c.id,
           tier,
           price: Number(c.price),
           qty_vt: Number(c.qtyVt),
           qty_live: Number(c.qtyLive) || 0,
           content_type: c.contentType || 'Video',
-          approval: 'pending',
           pic_assist: profile?.nama || '-',
-          notes_manager: '',
-          notes_pic: '',
-          sample_progress: 'Belum',
-          gmv_organic_legacy: 0,
-          gmv_ads_legacy: 0,
-          status_bayar: 'belum',
-          nominal_pelunasan: 0,
-          tgl_pembayaran: null,
           client_approval: isClientApprovalRequired ? 'pending' : 'not_required',
           added_by: profile?.id || null,
-          approved_by: null,
-          approved_at: null,
-          not_approved_by: null,
-          not_approved_at: null,
-          payment_updated_by: null,
-          payment_updated_at: null
+          hasSnapshot: snaps.length > 0
         };
       });
 
-      // 5. Check if their USERNAME is already in the campaign to absolutely avoid duplication
-      const { data: existingCcData } = await supabase.from('campaign_creators')
-        .select(`
-          creator_id,
-          creators ( username )
-        `)
-        .eq('campaign_id', campaignId);
-      
-      const existingUsernames = new Set(
-        (existingCcData || [])
-          .map((cc: any) => cc.creators?.username?.toLowerCase())
-          .filter(Boolean)
-      );
-
-      // Create a map to quickly look up usernames for the payloads
-      const payloadUsernames = new Map(allCreators.map(c => [c.id, c.username?.toLowerCase()]));
-
-      const newCampaignPayloads = campaignPayloads.filter(p => {
-        const uname = payloadUsernames.get(p.creator_id);
-        return uname ? !existingUsernames.has(uname) : true;
-      });
-
-      if (newCampaignPayloads.length > 0) {
-        const { error: ccErr } = await supabase.from('campaign_creators').insert(newCampaignPayloads);
-        if (ccErr) throw ccErr;
-
-        // 6. Create initial snapshot for creators that don't have any snapshot yet
-        const creatorsNeedingSnapshot = newCampaignPayloads
-          .filter(p => !snapshotMap.has(p.creator_id))
-          .map(p => ({
-            creator_id: p.creator_id,
-            followers: 0,
-            gmv_30d: 0,
-            gmv_30d_video: 0,
-            gmv_30d_live: 0,
-            ratecard: p.price || 0,
-            tier: 'Nano',
-            tanggal_update: new Date().toISOString().split('T')[0],
-            updated_by: profile?.nama || 'System'
-          }));
-
-        if (creatorsNeedingSnapshot.length > 0) {
-          await supabase.from('creator_snapshots').insert(creatorsNeedingSnapshot);
-        }
-      }
+      const res = await insertCreatorsAndCcAction(campaignId, creatorPayloads, campaignPayloads);
+      if (!res.success) throw new Error(res.error);
 
       // Refresh to show changes immediately
       setPage(0);
       fetchListing(0, true);
       fetchCounts();
 
-      alert(`Berhasil menambahkan ${newCampaignPayloads.length} kreator ke campaign!`);
+      alert(`Berhasil menambahkan ${rowsToProcess.length} kreator ke campaign!`);
 
       if (group === 'existing') {
         setExistingCreators([]);
@@ -1966,43 +1548,15 @@ function CampaignListingContent() {
         return;
       }
 
-      let allData: any[] = [];
-      let fetchMore = true;
-      let from = 0;
-      const PAGE_SIZE = 1000;
-
-      // Ambil total data
-      let countQuery = supabase
-        .from('campaign_creators')
-        .select('*', { count: 'exact', head: true })
-        .eq('campaign_id', campaignId)
-        .in('approval', selectedStatuses);
-        
-      const { count } = await countQuery;
-      setExportProgress({ current: 0, total: count || 0 });
-
-      if (count && count > 0) {
-        const promises = [];
-        for (let i = 0; i < count; i += PAGE_SIZE) {
-          promises.push(
-            supabase
-              .from('campaign_creators')
-              .select('*, creators(username, nama_asli, link_account, creator_contacts(nomor, status), creator_snapshots(id, level, followers, gmv_30d, gmv_30d_video, gmv_30d_live, tanggal_update))')
-              .eq('campaign_id', campaignId)
-              .in('approval', selectedStatuses)
-              .order('id', { ascending: false })
-              .range(i, i + PAGE_SIZE - 1)
-          );
-        }
-        
-        const results = await Promise.all(promises);
-        results.forEach(res => {
-          if (res.data) {
-            allData = [...allData, ...res.data];
-            setExportProgress(prev => ({ ...prev, current: allData.length }));
-          }
-        });
+      const exportRes = await fetchExportCampaignCreatorsAction(campaignId, selectedStatuses);
+      if (!exportRes.success) {
+        alert("Gagal mengambil data ekspor: " + exportRes.error);
+        setIsExporting(false);
+        return;
       }
+
+      const allData: any[] = exportRes.data || [];
+      setExportProgress({ current: allData.length, total: allData.length });
 
       const formattedData = allData.map((cc: any, index: number) => {
         const creator = cc.creators || {};
@@ -2227,8 +1781,8 @@ function CampaignListingContent() {
         updatePayload.not_approved_at = now;
       }
 
-      const { error } = await supabase.from('campaign_creators').update(updatePayload).in('id', creatorIds);
-      if (error) throw error;
+      const res = await batchUpdateCampaignCreatorsApprovalAction(creatorIds, status, profile?.id);
+      if (!res.success) throw new Error(res.error);
       
       setSelectedCreators(new Set());
       // Refetch from DB with await to get the freshly written data
@@ -2247,8 +1801,8 @@ function CampaignListingContent() {
     setBulkActionProcessing(true);
     try {
       const creatorIds = Array.from(selectedCreators);
-      const { error } = await supabase.from('campaign_creators').delete().in('id', creatorIds);
-      if (error) throw error;
+      const res = await batchDeleteCampaignCreatorsAction(creatorIds);
+      if (!res.success) throw new Error(res.error);
       
       setListingData(prev => prev.filter(c => !creatorIds.includes(c.id)));
       setSelectedCreators(new Set());
@@ -3203,12 +2757,8 @@ function CampaignListingContent() {
                                       if (confirm(`Yakin ingin MENGHAPUS baris ID ${row.id} ini? \n\n(Jika ada video di baris ini, akan dipindahkan ke baris lain)`)) {
                                         const keepRow = group.find((r: any) => r.id !== row.id);
                                         try {
-                                          if (row.videos && row.videos.length > 0 && keepRow) {
-                                            for (const v of row.videos) {
-                                              await supabase.from('videos').update({ campaign_creator_id: keepRow.id }).eq('id', v.id);
-                                            }
-                                          }
-                                          await supabase.from('campaign_creators').delete().eq('id', row.id);
+                                          const res = await deleteSingleDuplicateCampaignCreatorAction(row.id, keepRow?.id);
+                                          if (!res.success) throw new Error(res.error);
                                           
                                           setDuplicateGroups(prev => {
                                             const next = [...prev];
@@ -3218,8 +2768,8 @@ function CampaignListingContent() {
                                           });
                                           fetchListing(0, true);
                                           fetchCounts();
-                                        } catch (err) {
-                                          alert("Gagal menghapus data dobel.");
+                                        } catch (err: any) {
+                                          alert("Gagal menghapus data dobel: " + (err.message || ''));
                                         }
                                       }
                                     }}

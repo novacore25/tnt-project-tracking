@@ -8,6 +8,12 @@ import { ArrowLeft, Save, Plus, AlertCircle, CheckCircle2, Wand2, Loader2, Downl
 import * as XLSX from "xlsx";
 import { useDatabaseStore } from "@/store/useDatabaseStore";
 import { useAuth } from "@/providers/AuthProvider";
+import {
+  fetchCreatorsWithSnapshotsForImportAction,
+  fetchCampaignCreatorsForImportAction,
+  fetchCampaignCreatorsFullForImportAction,
+  saveCreatorImportBatchAction,
+} from "@/app/actions/campaignPageActions";
 
 type SpreadsheetRow = {
   id: string;
@@ -347,16 +353,11 @@ export default function SpreadsheetImportCreatorClient() {
       const uniqueUsernames = Array.from(new Set(pastedUsernames));
       if (uniqueUsernames.length > 0) {
         try {
-          const { data: dbCreators } = await supabase.from('creators')
-            .select('id, username, creator_snapshots(followers, gmv_30d, gmv_30d_video, gmv_30d_live, ratecard, level), creator_contacts(nomor, status)')
-            .in('username', uniqueUsernames);
+          const { data: dbCreators } = await fetchCreatorsWithSnapshotsForImportAction(uniqueUsernames);
             
           if (dbCreators && dbCreators.length > 0) {
             const creatorIds = dbCreators.map((c: any) => c.id);
-            const { data: ccDatas } = await supabase.from('campaign_creators')
-              .select('creator_id, price, qty_vt, qty_live')
-              .eq('campaign_id', campaignId)
-              .in('creator_id', creatorIds);
+            const { data: ccDatas } = await fetchCampaignCreatorsForImportAction(campaignId, creatorIds);
               
             setRows(prev => {
               const updatedRows = [...prev];
@@ -436,10 +437,8 @@ export default function SpreadsheetImportCreatorClient() {
     
     try {
       // Fetch DB
-      const { data: dbCreator } = await supabase.from('creators')
-        .select('id, creator_snapshots(followers, gmv_30d, gmv_30d_video, gmv_30d_live, ratecard, level), creator_contacts(nomor, status)')
-        .eq('username', uname)
-        .single();
+      const { data: dbCreators } = await fetchCreatorsWithSnapshotsForImportAction([uname]);
+      const dbCreator = (dbCreators || [])[0];
         
       if (!dbCreator) return;
       
@@ -447,11 +446,8 @@ export default function SpreadsheetImportCreatorClient() {
       const lastSnap = snaps[0] || {};
       const activeContact = (dbCreator.creator_contacts || []).find((c: any) => c.status === 'aktif');
       
-      const { data: ccData } = await supabase.from('campaign_creators')
-        .select('price, qty_vt, qty_live')
-        .eq('campaign_id', campaignId)
-        .eq('creator_id', dbCreator.id)
-        .single();
+      const { data: ccDatas } = await fetchCampaignCreatorsForImportAction(campaignId, [dbCreator.id]);
+      const ccData = (ccDatas || [])[0];
 
       setRows(prev => {
         const newRows = [...prev];
@@ -536,9 +532,7 @@ export default function SpreadsheetImportCreatorClient() {
     setIsAutoDetecting(true);
     try {
       const usernames = validRows.map(r => (r.username || '').trim());
-      const { data: matchedCreators } = await supabase.from('creators')
-        .select('username, creator_snapshots(ratecard, id)')
-        .in('username', usernames);
+      const { data: matchedCreators } = await fetchCreatorsWithSnapshotsForImportAction(usernames);
         
       if (matchedCreators && matchedCreators.length > 0) {
         setRows(currentRows => {
@@ -581,30 +575,9 @@ export default function SpreadsheetImportCreatorClient() {
     setIsLoadingAuto(true);
     setShowAutoFilterMenu(false);
     try {
-      // 1. Ambil seluruh kreator pada campaign ini, filter status/tier sesuai pilihan
-      let query = supabase
-        .from('campaign_creators')
-        .select(`
-          id, creator_id, price, qty_vt, qty_live, content_type, tier, approval,
-          creators!inner (
-            id, username,
-            creator_contacts ( id, nomor, status ),
-            creator_snapshots ( id, followers, level, gmv_30d, gmv_30d_video, gmv_30d_live, ratecard, tanggal_update )
-          )
-        `)
-        .eq('campaign_id', campaignId);
+      const { data: autoList, error: autoErr } = await fetchCampaignCreatorsFullForImportAction(campaignId, approvalFilter);
 
-      // Apply filter
-      if (approvalFilter === 'approve') query = query.eq('approval', 'approve');
-      else if (approvalFilter === 'not_approve') query = query.eq('approval', 'not_approve');
-      else if (approvalFilter === 'pending') query = query.eq('approval', 'pending');
-      else if (approvalFilter === 'alternate') query = query.eq('approval', 'alternate');
-      else if (approvalFilter === 'auto_detect') query = query.eq('tier', 'Auto-Detect');
-      // 'all' = tidak filter, tampilkan semua
-
-      const { data: autoList, error: autoErr } = await query;
-
-      if (autoErr) throw autoErr;
+      if (autoErr) throw new Error(autoErr);
 
       const filterLabel: Record<string, string> = {
         all: 'semua kreator',
@@ -774,36 +747,17 @@ export default function SpreadsheetImportCreatorClient() {
     const uniqueUsernames = [...new Set(toCheckUsernames)];
     
     // Fetch central creators DB for snapshot data (case-insensitive)
-    let allExistingCreators: any[] = [];
-    for (let i = 0; i < uniqueUsernames.length; i += 50) {
-      const batch = uniqueUsernames.slice(i, i + 50);
-      const { data } = await supabase.from('creators')
-        .select('id, username, creator_snapshots(id, ratecard, followers, gmv_30d, gmv_30d_video, gmv_30d_live)')
-        .in('username', batch);
-      if (data) allExistingCreators.push(...data);
-      
-      // Also try case variations - fetch by ilike for ones not found
-      const foundUsernames = new Set((data || []).map((c: any) => (c.username || '').toLowerCase()));
-      const notFound = batch.filter(u => !foundUsernames.has(u));
-      for (const u of notFound) {
-        const { data: ilikeData } = await supabase.from('creators')
-          .select('id, username, creator_snapshots(id, ratecard, followers, gmv_30d, gmv_30d_video, gmv_30d_live)')
-          .ilike('username', u)
-          .limit(1);
-        if (ilikeData && ilikeData.length > 0) allExistingCreators.push(...ilikeData);
-      }
-    }
+    const { data: allExistingCreators } = await fetchCreatorsWithSnapshotsForImportAction(uniqueUsernames);
+    const creatorIds = (allExistingCreators || []).map((c: any) => c.id);
       
     // Fetch existing campaign_creators for dup check
-    const { data: campaignCreatorsData } = await supabase.from('campaign_creators')
-      .select('creator_id, price, qty_vt, qty_live, creators(username)')
-      .eq('campaign_id', campaignId);
+    const { data: campaignCreatorsData } = await fetchCampaignCreatorsForImportAction(campaignId, creatorIds);
       
     const campaignMap = new Map((campaignCreatorsData || []).map((cc: any) => {
-      const u = Array.isArray(cc.creators) ? cc.creators[0]?.username : cc.creators?.username;
+      const u = cc.username;
       return [u ? u.toLowerCase() : '', cc];
     }));
-    const existingMap = new Map(allExistingCreators.map((c: any) => [(c.username || '').toLowerCase(), c]));
+    const existingMap = new Map((allExistingCreators || []).map((c: any) => [(c.username || '').toLowerCase(), c]));
 
     let hasDuplicates = false;
     let hasIncompletes = false;
@@ -974,129 +928,59 @@ export default function SpreadsheetImportCreatorClient() {
     const BATCH_SIZE = 25;
     let successCount = 0;
     
+    const calculateTier = (followers: number): string => {
+      if (followers < 10000) return 'Nano';
+      if (followers < 100000) return 'Micro';
+      if (followers < 1000000) return 'Macro';
+      return 'Mega';
+    };
+
     for (let i = 0; i < dataToSave.length; i += BATCH_SIZE) {
       const batch = dataToSave.slice(i, i + BATCH_SIZE);
       
-      await Promise.all(batch.map(async (row) => {
-        try {
-          let cid = row.creatorId;
-          
-          if (!cid) {
-            const { data: newCreator, error: insErr } = await supabase.from('creators').insert({
-              username: row.username.trim(),
-              link_account: `https://www.tiktok.com/@${row.username.trim()}`,
-              added_by: profile?.id
-            }).select('id').single();
-            
-            if (insErr) {
-              const { data: existingCreator } = await supabase.from('creators')
-                .select('id').ilike('username', row.username.trim()).limit(1);
-              if (existingCreator && existingCreator.length > 0) cid = existingCreator[0].id;
-              else throw insErr;
-            } else cid = newCreator.id;
-          }
-          
-          if (row.status === 'duplicate_campaign' && row.action === 'skip') {
-            setRows(prev => prev.map(r => r.id === row.id ? { ...r, status: 'berhasil' } : r));
-            return;
-          }
-          
-          const { data: existingSnaps } = await supabase.from('creator_snapshots')
-            .select('id, followers, gmv_30d, gmv_30d_video, gmv_30d_live, ratecard, level')
-            .eq('creator_id', cid)
-            .order('id', { ascending: false })
-            .limit(1);
-            
-          const lastSnap = existingSnaps?.[0];
-          const newFollowers = Number(row.followers) || (lastSnap?.followers || 0);
-          const newGmv = Number(row.gmv_30_days) || (lastSnap?.gmv_30d || 0);
-          const newGmvVid = Number(row.gmv_30_days_video) || (lastSnap?.gmv_30d_video || 0);
-          const newGmvLive = Number(row.gmv_30_days_live) || (lastSnap?.gmv_30d_live || 0);
-          const newRateCard = Number(row.rate_card) || (lastSnap?.ratecard || 0);
-          
-          let calculatedTier = 'Nano';
-          if (newFollowers < 10000) calculatedTier = 'Nano';
-          else if (newFollowers < 100000) calculatedTier = 'Micro';
-          else if (newFollowers < 1000000) calculatedTier = 'Macro';
-          else calculatedTier = 'Mega';
-          
-          const newLevel = row.level ? Number(row.level) : null;
-          
-          if (!lastSnap || lastSnap.followers !== newFollowers || lastSnap.gmv_30d !== newGmv || lastSnap.gmv_30d_video !== newGmvVid || lastSnap.gmv_30d_live !== newGmvLive || lastSnap.ratecard !== newRateCard || lastSnap.level !== newLevel) {
-            await supabase.from('creator_snapshots').insert({
-              creator_id: cid,
-              followers: newFollowers,
-              gmv_30d: newGmv,
-              gmv_30d_video: newGmvVid,
-              gmv_30d_live: newGmvLive,
-              ratecard: newRateCard,
-              tier: calculatedTier,
-              level: newLevel,
-              tanggal_update: new Date().toISOString().split('T')[0],
-              updated_by: profile?.nama || 'System'
-            });
-          }
-
-          if (row.no_wa && row.no_wa.trim()) {
-            const newNomor = row.no_wa.trim();
-            const { data: activeContacts } = await supabase.from('creator_contacts')
-              .select('id, nomor').eq('creator_id', cid).eq('status', 'aktif');
-            
-            if (!activeContacts || activeContacts.length === 0 || activeContacts[0].nomor !== newNomor) {
-              const today = new Date().toISOString().split('T')[0];
-              if (activeContacts && activeContacts.length > 0) {
-                await supabase.from('creator_contacts').update({ status: 'arsip', tanggal_diganti: today }).eq('id', activeContacts[0].id);
-              }
-              const { data: existingArchived } = await supabase.from('creator_contacts').select('id').eq('creator_id', cid).eq('nomor', newNomor).single();
-              if (existingArchived) {
-                 await supabase.from('creator_contacts').update({ status: 'aktif', tanggal_mulai: today, tanggal_diganti: null }).eq('id', existingArchived.id);
-              } else {
-                 await supabase.from('creator_contacts').insert({ creator_id: cid, nomor: newNomor, status: 'aktif', tanggal_mulai: today });
-              }
-            }
-          }
-
-          const updateData = {
-            tier: calculatedTier,
-            price: newRateCard,
-            qty_vt: Number(row.qty_vt) || 0,
-            qty_live: Number(row.qty_live) || 0,
-            content_type: row.content_type,
-            pic_assist: profile?.nama || '-',
-          };
-
-          if (row.status === 'duplicate_campaign' && row.action === 'update') {
-            await supabase.from('campaign_creators').update(updateData).eq('campaign_id', campaignId).eq('creator_id', cid);
-          } else {
-            const { data: existingCC } = await supabase.from('campaign_creators').select('id').eq('campaign_id', campaignId).eq('creator_id', cid).limit(1);
-            if (existingCC && existingCC.length > 0) {
-              await supabase.from('campaign_creators').update(updateData).eq('campaign_id', campaignId).eq('creator_id', cid);
-            } else {
-              const insertData = {
-                campaign_id: campaignId,
-                creator_id: cid,
-                tier: calculatedTier,
-                price: newRateCard,
-                qty_vt: Number(row.qty_vt) || 0,
-                qty_live: Number(row.qty_live) || 0,
-                content_type: row.content_type,
-                approval: 'pending',
-                pic_assist: profile?.nama || '-',
-                status_bayar: 'belum',
-                client_approval: isClientApprovalRequired ? 'pending' : 'not_required',
-                added_by: profile?.id
-              };
-              await supabase.from('campaign_creators').insert(insertData);
-            }
-          }
-          
-          successCount++;
-          setRows(prev => prev.map(r => r.id === row.id ? { ...r, status: 'berhasil' } : r));
-        } catch (err: any) {
-          console.error(err);
-          setRows(prev => prev.map(r => r.id === row.id ? { ...r, status: 'error', errorMsg: err.message } : r));
-        }
+      const rowsForBatch = batch.map(row => ({
+        username: row.username.trim(),
+        creatorId: row.creatorId,
+        status: row.status || '',
+        action: row.action,
+        followers: Number(row.followers) || 0,
+        gmv_30_days: Number(row.gmv_30_days) || 0,
+        gmv_30_days_video: Number(row.gmv_30_days_video) || 0,
+        gmv_30_days_live: Number(row.gmv_30_days_live) || 0,
+        ratecard: Number(row.rate_card) || 0,
+        tier: calculateTier(Number(row.followers) || 0),
+        level: row.level ? Number(row.level) : null,
+        no_wa: row.no_wa || '',
+        qty_vt: Number(row.qty_vt) || 0,
+        qty_live: Number(row.qty_live) || 0,
+        content_type: row.content_type || 'Video',
       }));
+
+      try {
+        const res = await saveCreatorImportBatchAction({
+          campaignId,
+          isClientApprovalRequired,
+          picName: profile?.nama,
+          picId: profile?.id,
+          rows: rowsForBatch as any
+        });
+
+        if (res.success) {
+          successCount += res.successCount || 0;
+          const errorMap = new Map((res.errors || []).map((e: any) => [e.username.toLowerCase(), e.error]));
+          
+          setRows(prev => prev.map(r => {
+            const inBatch = batch.some(b => b.id === r.id);
+            if (!inBatch) return r;
+            const err = errorMap.get(r.username.trim().toLowerCase());
+            if (err) return { ...r, status: 'error', errorMsg: err };
+            return { ...r, status: 'berhasil' };
+          }));
+        }
+      } catch (err: any) {
+        console.error('Batch import error:', err);
+      }
+
       setSaveProgress(prev => ({ ...prev, current: Math.min(prev.current + BATCH_SIZE, prev.total) }));
     }
 

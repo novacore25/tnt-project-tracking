@@ -416,3 +416,893 @@ export async function fetchListingPageDataAction(campaignId: number) {
     return { success: false, error: err.message };
   }
 }
+
+// ============================================================
+// REVISION NOTES (Campaign Creator Notes)
+// ============================================================
+export async function fetchRevisionNotesAction(ccIds: number[]) {
+  if (!ccIds || ccIds.length === 0) return { success: true, data: [] };
+  try {
+    const data = await db.execute(sql`
+      SELECT * FROM campaign_creator_notes
+      WHERE campaign_creator_id = ANY(${ccIds})
+        AND role ILIKE 'draft_revisi_%'
+    `) as any[];
+    return { success: true, data: data || [] };
+  } catch (err: any) {
+    return { success: false, data: [], error: err.message };
+  }
+}
+
+export async function upsertRevisionNoteAction(params: {
+  existingId?: number;
+  ccId: number;
+  urutan: number;
+  noteText: string;
+  authorId?: string;
+  authorName?: string;
+}) {
+  try {
+    if (params.existingId) {
+      const rows = await db.execute(sql`
+        UPDATE campaign_creator_notes
+        SET isi = ${params.noteText},
+            author_id = ${params.authorId || null},
+            author_name = ${params.authorName || 'Manager'},
+            updated_at = NOW()
+        WHERE id = ${params.existingId}
+        RETURNING *
+      `) as any[];
+      return { success: true, data: rows[0] };
+    } else {
+      const roleKey = `draft_revisi_${params.urutan}`;
+      const rows = await db.execute(sql`
+        INSERT INTO campaign_creator_notes (campaign_creator_id, role, isi, author_id, author_name, created_at, updated_at)
+        VALUES (${params.ccId}, ${roleKey}, ${params.noteText}, ${params.authorId || null}, ${params.authorName || 'Manager'}, NOW(), NOW())
+        RETURNING *
+      `) as any[];
+      return { success: true, data: rows[0] };
+    }
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
+// ============================================================
+// VIDEO OPERATIONS (Server Actions)
+// ============================================================
+export async function upsertVideoAction(params: {
+  id?: number;
+  campaign_creator_id: number;
+  urutan: number;
+  concept?: string;
+  concept_updated_at?: string;
+  concept_updated_by?: string;
+  link_draft?: string;
+  link_video?: string;
+  content_uid?: string;
+  sku_id?: number | null;
+  vt_approval?: string;
+  vt_approved_by?: string;
+  vt_approved_at?: string;
+}) {
+  try {
+    if (params.id) {
+      // Update
+      const sets: any[] = [];
+      if (params.concept !== undefined) sets.push(sql`concept = ${params.concept}`);
+      if (params.concept_updated_at !== undefined) sets.push(sql`concept_updated_at = ${params.concept_updated_at}`);
+      if (params.concept_updated_by !== undefined) sets.push(sql`concept_updated_by = ${params.concept_updated_by}`);
+      if (params.link_draft !== undefined) sets.push(sql`link_draft = ${params.link_draft}`);
+      if (params.link_video !== undefined) sets.push(sql`link_video = ${params.link_video}`);
+      if (params.content_uid !== undefined) sets.push(sql`content_uid = ${params.content_uid}`);
+      if (params.sku_id !== undefined) sets.push(sql`sku_id = ${params.sku_id}`);
+      if (params.vt_approval !== undefined) sets.push(sql`vt_approval = ${params.vt_approval}`);
+      if (params.vt_approved_by !== undefined) sets.push(sql`vt_approved_by = ${params.vt_approved_by}`);
+      if (params.vt_approved_at !== undefined) sets.push(sql`vt_approved_at = ${params.vt_approved_at}`);
+
+      if (sets.length === 0) return { success: true, data: null };
+      const rows = await db.execute(sql`
+        UPDATE videos SET ${sql.join(sets, sql`, `)} WHERE id = ${params.id} RETURNING *
+      `) as any[];
+      return { success: true, data: rows[0] || null };
+    } else {
+      // Check existing for same ccId + urutan
+      const existing = await db.execute(sql`
+        SELECT id FROM videos WHERE campaign_creator_id = ${params.campaign_creator_id} AND urutan = ${params.urutan} LIMIT 1
+      `) as any[];
+      if (existing.length > 0) {
+        // Update existing
+        return upsertVideoAction({ ...params, id: existing[0].id });
+      }
+      // Insert new
+      const rows = await db.execute(sql`
+        INSERT INTO videos (
+          campaign_creator_id, urutan, concept, concept_updated_at, concept_updated_by,
+          link_draft, link_video, content_uid, sku_id, vt_approval, vt_approved_by, vt_approved_at
+        ) VALUES (\
+          ${params.campaign_creator_id}, ${params.urutan}, ${params.concept || ''},
+          ${params.concept_updated_at || null}, ${params.concept_updated_by || null},
+          ${params.link_draft || null}, ${params.link_video || null}, ${params.content_uid || null},
+          ${params.sku_id || null}, ${params.vt_approval || 'pending'},
+          ${params.vt_approved_by || null}, ${params.vt_approved_at || null}
+        ) RETURNING *
+      `) as any[];
+      return { success: true, data: rows[0] || null };
+    }
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
+export async function insertVideoAction(params: {
+  campaign_creator_id: number;
+  urutan: number;
+  concept?: string;
+  link_video?: string;
+  content_uid?: string;
+  sku_id?: number | null;
+  vt_approval?: string;
+}) {
+  try {
+    const rows = await db.execute(sql`
+      INSERT INTO videos (campaign_creator_id, urutan, concept, link_video, content_uid, sku_id, vt_approval)
+      VALUES (${params.campaign_creator_id}, ${params.urutan}, ${params.concept || ''}, ${params.link_video || ''}, ${params.content_uid || null}, ${params.sku_id || null}, ${params.vt_approval || 'pending'})
+      RETURNING *
+    `) as any[];
+    return { success: true, data: rows[0] || null };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
+export async function deleteVideoAction(videoId: number) {
+  try {
+    await db.execute(sql`DELETE FROM videos WHERE id = ${videoId}`);
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
+export async function deleteVideosAction(videoIds: number[]) {
+  if (!videoIds || videoIds.length === 0) return { success: true };
+  try {
+    await db.execute(sql`DELETE FROM videos WHERE id = ANY(${videoIds})`);
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
+export async function bulkInsertVideosAction(videoList: Array<{
+  campaign_creator_id: number;
+  urutan: number;
+  concept?: string;
+  link_video?: string;
+  content_uid?: string;
+  vt_approval?: string;
+}>) {
+  if (!videoList || videoList.length === 0) return { success: true };
+  try {
+    for (const v of videoList) {
+      await db.execute(sql`
+        INSERT INTO videos (campaign_creator_id, urutan, concept, link_video, content_uid, vt_approval)
+        VALUES (${v.campaign_creator_id}, ${v.urutan}, ${v.concept || ''}, ${v.link_video || null}, ${v.content_uid || null}, ${v.vt_approval || 'pending'})
+      `);
+    }
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
+export async function fetchVideosByCcIdsAction(ccIds: number[]) {
+  if (!ccIds || ccIds.length === 0) return { success: true, data: [] };
+  try {
+    const data = await db.execute(sql`SELECT * FROM videos WHERE campaign_creator_id = ANY(${ccIds}) ORDER BY urutan ASC`) as any[];
+    return { success: true, data: data || [] };
+  } catch (err: any) {
+    return { success: false, data: [], error: err.message };
+  }
+}
+
+// ============================================================
+// LISTING PAGE - COUNTS & RECAP
+// ============================================================
+export async function fetchCampaignCreatorCountsAction(campaignId: number) {
+  try {
+    const rows = await db.execute(sql`
+      SELECT
+        COUNT(*) FILTER (WHERE approval = 'approved') as approved,
+        COUNT(*) FILTER (WHERE approval = 'pending') as pending,
+        COUNT(*) FILTER (WHERE approval = 'alternate') as alternate,
+        COUNT(*) FILTER (WHERE approval = 'not_approved') as not_approved,
+        COUNT(*) as total
+      FROM campaign_creators WHERE campaign_id = ${campaignId}
+    `) as any[];
+    const r = rows[0] || {};
+    return {
+      success: true,
+      approved: Number(r.approved || 0),
+      pending: Number(r.pending || 0),
+      alternate: Number(r.alternate || 0),
+      not_approved: Number(r.not_approved || 0),
+      total: Number(r.total || 0)
+    };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
+export async function fetchCampaignCreatorsRecapAction(campaignId: number) {
+  try {
+    const data = await db.execute(sql`
+      SELECT cc.id, cc.approval, cc.approved_at, cc.not_approved_at, cc.created_at, cc.added_by, cc.tier, cc.creator_id,
+             c.username
+      FROM campaign_creators cc
+      LEFT JOIN creators c ON cc.creator_id = c.id
+      WHERE cc.campaign_id = ${campaignId}
+      ORDER BY cc.id ASC
+    `) as any[];
+    return { success: true, data: data || [] };
+  } catch (err: any) {
+    return { success: false, data: [], error: err.message };
+  }
+}
+
+export async function fetchCampaignCreatorsDuplicateCheckAction(campaignId: number) {
+  try {
+    const data = await db.execute(sql`
+      SELECT cc.id, cc.campaign_id, cc.creator_id, c.username
+      FROM campaign_creators cc
+      LEFT JOIN creators c ON cc.creator_id = c.id
+      WHERE cc.campaign_id = ${campaignId}
+      ORDER BY cc.id ASC
+    `) as any[];
+    return { success: true, data: data || [] };
+  } catch (err: any) {
+    return { success: false, data: [], error: err.message };
+  }
+}
+
+export async function fetchDuplicateCcDetailsAction(ccIds: number[]) {
+  if (!ccIds || ccIds.length === 0) return { success: true, data: [] };
+  try {
+    const data = await db.execute(sql`
+      SELECT 
+        cc.id, cc.campaign_id, cc.creator_id, cc.price, cc.qty_vt, cc.approval, cc.sample_progress, cc.status_bayar, cc.notes_manager, cc.notes_pic,
+        c.username,
+        json_agg(json_build_object('id', v.id, 'urutan', v.urutan, 'concept', v.concept, 'link_video', v.link_video, 'vt_approval', v.vt_approval)) FILTER (WHERE v.id IS NOT NULL) as videos
+      FROM campaign_creators cc
+      LEFT JOIN creators c ON cc.creator_id = c.id
+      LEFT JOIN videos v ON v.campaign_creator_id = cc.id
+      WHERE cc.id = ANY(${ccIds})
+      GROUP BY cc.id, c.username
+    `) as any[];
+    return { success: true, data: data || [] };
+  } catch (err: any) {
+    return { success: false, data: [], error: err.message };
+  }
+}
+
+export async function mergeCampaignCreatorsAction(survivingId: number, otherIds: number[], updateData: any) {
+  try {
+    // Move all videos from otherIds to survivingId
+    if (otherIds.length > 0) {
+      await db.execute(sql`UPDATE videos SET campaign_creator_id = ${survivingId} WHERE campaign_creator_id = ANY(${otherIds})`);
+    }
+    // Update surviving row
+    const sets: any[] = [];
+    if (updateData.price !== undefined) sets.push(sql`price = ${updateData.price}`);
+    if (updateData.qty_vt !== undefined) sets.push(sql`qty_vt = ${updateData.qty_vt}`);
+    if (updateData.qty_live !== undefined) sets.push(sql`qty_live = ${updateData.qty_live}`);
+    if (updateData.approval !== undefined) sets.push(sql`approval = ${updateData.approval}`);
+    if (updateData.sample_progress !== undefined) sets.push(sql`sample_progress = ${updateData.sample_progress}`);
+    if (updateData.status_bayar !== undefined) sets.push(sql`status_bayar = ${updateData.status_bayar}`);
+    if (updateData.content_type !== undefined) sets.push(sql`content_type = ${updateData.content_type}`);
+    if (updateData.tier !== undefined) sets.push(sql`tier = ${updateData.tier}`);
+    if (updateData.notes_manager !== undefined) sets.push(sql`notes_manager = ${updateData.notes_manager}`);
+    if (updateData.notes_pic !== undefined) sets.push(sql`notes_pic = ${updateData.notes_pic}`);
+    if (updateData.approved_by !== undefined) sets.push(sql`approved_by = ${updateData.approved_by}`);
+    if (updateData.approved_at !== undefined) sets.push(sql`approved_at = ${updateData.approved_at}`);
+    if (updateData.not_approved_by !== undefined) sets.push(sql`not_approved_by = ${updateData.not_approved_by}`);
+    if (updateData.not_approved_at !== undefined) sets.push(sql`not_approved_at = ${updateData.not_approved_at}`);
+    if (updateData.assigned_sku_ids !== undefined) sets.push(sql`assigned_sku_ids = ${updateData.assigned_sku_ids}`);
+    
+    if (sets.length > 0) {
+      await db.execute(sql`UPDATE campaign_creators SET ${sql.join(sets, sql`, `)} WHERE id = ${survivingId}`);
+    }
+    // Delete other rows
+    if (otherIds.length > 0) {
+      await db.execute(sql`DELETE FROM campaign_creators WHERE id = ANY(${otherIds})`);
+    }
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
+export async function fetchOrgVideoUsernamesAction(campaignId: number) {
+  try {
+    const data = await db.execute(sql`SELECT DISTINCT creator_username FROM organic_videos WHERE campaign_id = ${campaignId} AND creator_username IS NOT NULL`) as any[];
+    return { success: true, data: (data || []).map((r: any) => r.creator_username?.toLowerCase()).filter(Boolean) };
+  } catch (err: any) {
+    return { success: false, data: [], error: err.message };
+  }
+}
+
+export async function fetchSalesVideoUsernamesAction(campaignId: number) {
+  try {
+    const data = await db.execute(sql`SELECT DISTINCT creator_username FROM sales WHERE campaign_id = ${campaignId} AND content_uid IS NOT NULL AND creator_username IS NOT NULL`) as any[];
+    return { success: true, data: (data || []).map((r: any) => r.creator_username?.toLowerCase()).filter(Boolean) };
+  } catch (err: any) {
+    return { success: false, data: [], error: err.message };
+  }
+}
+
+export async function fetchCreatorIdsByUsernamesAction(usernames: string[]) {
+  if (!usernames || usernames.length === 0) return { success: true, data: [] };
+  try {
+    const data = await db.execute(sql`SELECT id FROM creators WHERE LOWER(username) = ANY(${usernames.map(u => u.toLowerCase())})`) as any[];
+    return { success: true, data: (data || []).map((r: any) => r.id) };
+  } catch (err: any) {
+    return { success: false, data: [], error: err.message };
+  }
+}
+
+export async function fetchVideoCreatorIdsForCampaignAction(campaignId: number) {
+  try {
+    const data = await db.execute(sql`
+      SELECT DISTINCT cc.creator_id FROM videos v
+      JOIN campaign_creators cc ON v.campaign_creator_id = cc.id
+      WHERE cc.campaign_id = ${campaignId}
+    `) as any[];
+    return { success: true, data: (data || []).map((r: any) => r.creator_id) };
+  } catch (err: any) {
+    return { success: false, data: [], error: err.message };
+  }
+}
+
+export async function fetchSalesByCreatorUsernamesAction(campaignId: number, creatorUsernames: string[], skuProductIds: string[]) {
+  if (!creatorUsernames || creatorUsernames.length === 0 || !skuProductIds || skuProductIds.length === 0) return { success: true, data: [] };
+  try {
+    const data = await db.execute(sql`
+      SELECT content_uid, creator_username, product_id
+      FROM sales
+      WHERE campaign_id = ${campaignId}
+        AND creator_username = ANY(${creatorUsernames})
+        AND product_id = ANY(${skuProductIds})
+        AND content_uid IS NOT NULL
+        AND content_uid != ''
+    `) as any[];
+    return { success: true, data: data || [] };
+  } catch (err: any) {
+    return { success: false, data: [], error: err.message };
+  }
+}
+
+export async function fetchStaffProfilesAction() {
+  try {
+    const data = await db.execute(sql`SELECT id, nama FROM profiles ORDER BY nama ASC`) as any[];
+    return { success: true, data: data || [] };
+  } catch (err: any) {
+    return { success: false, data: [], error: err.message };
+  }
+}
+
+// ============================================================
+// LISTING FETCH (Paginated with filters via raw SQL)
+// ============================================================
+export async function fetchListingPagePaginatedAction(params: {
+  campaignId: number;
+  pageNum: number;
+  pageSize?: number;
+  statusFilter?: string;
+  tierFilter?: string;
+  levelFilter?: string;
+  nicheFilter?: string;
+  addedByFilter?: string;
+  actionByFilter?: string;
+  contentTypeFilter?: string;
+  conceptFilter?: string;
+  search?: string;
+  actionDateFilter?: string;
+}) {
+  const {
+    campaignId, pageNum, pageSize = 100,
+    statusFilter, tierFilter, levelFilter, nicheFilter, addedByFilter, actionByFilter,
+    contentTypeFilter, conceptFilter, search, actionDateFilter
+  } = params;
+  const offset = pageNum * pageSize;
+  const conditions: any[] = [sql`cc.campaign_id = ${campaignId}`];
+  
+  if (statusFilter && statusFilter !== 'all') conditions.push(sql`cc.approval = ${statusFilter}`);
+  if (tierFilter) conditions.push(sql`cc.tier ILIKE ${'%' + tierFilter + '%'}`);
+  if (levelFilter) conditions.push(sql`EXISTS (SELECT 1 FROM creator_snapshots cs WHERE cs.creator_id = cc.creator_id AND cs.level = ${Number(levelFilter)} LIMIT 1)`);
+  if (nicheFilter) conditions.push(sql`EXISTS (SELECT 1 FROM creator_niches cn WHERE cn.creator_id = cc.creator_id AND cn.niche_id = ${Number(nicheFilter)} LIMIT 1)`);
+  if (addedByFilter) conditions.push(sql`cc.added_by = ${addedByFilter}`);
+  if (actionByFilter) conditions.push(sql`(cc.approved_by = ${actionByFilter} OR cc.not_approved_by = ${actionByFilter})`);
+  if (contentTypeFilter) conditions.push(sql`cc.content_type = ${contentTypeFilter}`);
+  if (conceptFilter) conditions.push(sql`EXISTS (SELECT 1 FROM videos v WHERE v.campaign_creator_id = cc.id AND v.concept = ${conceptFilter} LIMIT 1)`);
+  if (search) {
+    const s = '%' + search + '%';
+    conditions.push(sql`(c.username ILIKE ${s} OR c.nama_asli ILIKE ${s})`);
+  }
+  if (actionDateFilter) {
+    const start = new Date(`${actionDateFilter}T00:00:00+07:00`).toISOString();
+    const end = new Date(`${actionDateFilter}T23:59:59+07:00`).toISOString();
+    conditions.push(sql`(\
+      (cc.approval = 'approved' AND (cc.approved_at >= ${start} AND cc.approved_at <= ${end})) OR\
+      (cc.approval IN ('not_approved','alternate') AND (cc.not_approved_at >= ${start} AND cc.not_approved_at <= ${end})) OR\
+      (cc.approval = 'pending' AND cc.created_at >= ${start} AND cc.created_at <= ${end})\
+    )`);
+  }
+
+  const whereClause = sql`WHERE ${sql.join(conditions, sql` AND `)}`;
+
+  try {
+    const data = await db.execute(sql`
+      SELECT 
+        cc.*,
+        c.id as creator_db_id, c.username, c.nama_asli, c.link_account,
+        p_add.nama as added_by_name, p_app.nama as approved_by_name, p_rej.nama as not_approved_by_name,
+        json_agg(DISTINCT jsonb_build_object('id', ct.id, 'nomor', ct.nomor, 'status', ct.status)) FILTER (WHERE ct.id IS NOT NULL) as creator_contacts,
+        json_agg(DISTINCT jsonb_build_object('id', cs.id, 'audience_age', cs.audience_age, 'level', cs.level, 'gmv_30d', cs.gmv_30d, 'gmv_30d_video', cs.gmv_30d_video, 'gmv_30d_live', cs.gmv_30d_live, 'tanggal_update', cs.tanggal_update, 'followers', cs.followers, 'tier', cs.tier, 'ratecard', cs.ratecard)) FILTER (WHERE cs.id IS NOT NULL) as creator_snapshots,
+        json_agg(DISTINCT jsonb_build_object('niche_id', cn.niche_id, 'nama', n.nama)) FILTER (WHERE cn.niche_id IS NOT NULL) as creator_niches,
+        json_agg(DISTINCT jsonb_build_object('id', v.id, 'urutan', v.urutan, 'concept', v.concept, 'concept_updated_at', v.concept_updated_at, 'concept_updated_by', v.concept_updated_by, 'link_video', v.link_video, 'vt_approval', v.vt_approval, 'content_uid', v.content_uid)) FILTER (WHERE v.id IS NOT NULL) as videos
+      FROM campaign_creators cc
+      LEFT JOIN creators c ON cc.creator_id = c.id
+      LEFT JOIN profiles p_add ON cc.added_by = p_add.id
+      LEFT JOIN profiles p_app ON cc.approved_by = p_app.id
+      LEFT JOIN profiles p_rej ON cc.not_approved_by = p_rej.id
+      LEFT JOIN creator_contacts ct ON ct.creator_id = cc.creator_id
+      LEFT JOIN creator_snapshots cs ON cs.creator_id = cc.creator_id
+      LEFT JOIN creator_niches cn ON cn.creator_id = cc.creator_id
+      LEFT JOIN niches n ON cn.niche_id = n.id
+      LEFT JOIN videos v ON v.campaign_creator_id = cc.id
+      ${whereClause}
+      GROUP BY cc.id, c.id, p_add.nama, p_app.nama, p_rej.nama
+      ORDER BY cc.id DESC
+      LIMIT ${pageSize} OFFSET ${offset}
+    `) as any[];
+
+    const mapped = (data || []).map((r: any) => ({
+      ...r,
+      creator_id: r.creator_id || r.creator_db_id,
+      creators: {
+        id: r.creator_db_id,
+        username: r.username,
+        nama_asli: r.nama_asli,
+        link_account: r.link_account,
+        creator_contacts: r.creator_contacts || [],
+        creator_snapshots: r.creator_snapshots || [],
+        creator_niches: r.creator_niches || [],
+      },
+      videos: r.videos || [],
+      added_by_profile: r.added_by_name ? { nama: r.added_by_name } : null,
+      approved_by_profile: r.approved_by_name ? { nama: r.approved_by_name } : null,
+      not_approved_by_profile: r.not_approved_by_name ? { nama: r.not_approved_by_name } : null,
+    }));
+
+    return { success: true, data: mapped, hasMore: mapped.length === pageSize };
+  } catch (err: any) {
+    console.error('fetchListingPagePaginatedAction error:', err);
+    return { success: false, data: [], hasMore: false, error: err.message };
+  }
+}
+
+// ============================================================
+// CREATOR SEARCH & SNAPSHOT for listing add-creator modal
+// ============================================================
+export async function searchCreatorsWithSnapshotsAction(usernames: string[]) {
+  if (!usernames || usernames.length === 0) return { success: true, data: [] };
+  try {
+    const data = await db.execute(sql`
+      SELECT 
+        c.id, c.username, c.added_by,
+        json_agg(DISTINCT jsonb_build_object('id', ct.id, 'nomor', ct.nomor, 'status', ct.status)) FILTER (WHERE ct.id IS NOT NULL) as creator_contacts,
+        json_agg(DISTINCT jsonb_build_object('id', cs.id, 'ratecard', cs.ratecard, 'followers', cs.followers, 'tanggal_update', cs.tanggal_update)) FILTER (WHERE cs.id IS NOT NULL) as creator_snapshots,
+        json_agg(DISTINCT jsonb_build_object('niche_id', cn.niche_id)) FILTER (WHERE cn.niche_id IS NOT NULL) as creator_niches,
+        json_agg(DISTINCT jsonb_build_object('campaign_id', cc2.campaign_id, 'nama', camp.nama)) FILTER (WHERE cc2.id IS NOT NULL) as campaign_creators
+      FROM creators c
+      LEFT JOIN creator_contacts ct ON ct.creator_id = c.id
+      LEFT JOIN creator_snapshots cs ON cs.creator_id = c.id
+      LEFT JOIN creator_niches cn ON cn.creator_id = c.id
+      LEFT JOIN campaign_creators cc2 ON cc2.creator_id = c.id
+      LEFT JOIN campaigns camp ON cc2.campaign_id = camp.id
+      WHERE LOWER(c.username) = ANY(${usernames.map(u => u.toLowerCase())})
+      GROUP BY c.id
+    `) as any[];
+    return { success: true, data: data || [] };
+  } catch (err: any) {
+    return { success: false, data: [], error: err.message };
+  }
+}
+
+export async function fetchCreatorSnapshotsBatchAction(creatorIds: number[]) {
+  if (!creatorIds || creatorIds.length === 0) return { success: true, data: [] };
+  try {
+    const data = await db.execute(sql`
+      SELECT DISTINCT ON (creator_id) id, creator_id, followers, gmv_30d, gmv_30d_video, gmv_30d_live, tier, ratecard, level, audience_age, tanggal_update
+      FROM creator_snapshots WHERE creator_id = ANY(${creatorIds})
+      ORDER BY creator_id, id DESC
+    `) as any[];
+    return { success: true, data: data || [] };
+  } catch (err: any) {
+    return { success: false, data: [], error: err.message };
+  }
+}
+
+export async function fetchExistingCcUsernamesAction(campaignId: number) {
+  try {
+    const data = await db.execute(sql`
+      SELECT LOWER(c.username) as username, cc.creator_id
+      FROM campaign_creators cc
+      JOIN creators c ON cc.creator_id = c.id
+      WHERE cc.campaign_id = ${campaignId}
+    `) as any[];
+    return { success: true, data: data || [] };
+  } catch (err: any) {
+    return { success: false, data: [], error: err.message };
+  }
+}
+
+export async function insertCreatorsAndCcAction(campaignId: number, creatorPayloads: any[], campaignCreatorPayloads: any[]) {
+  try {
+    // Upsert creators
+    for (const c of creatorPayloads) {
+      await db.execute(sql`
+        INSERT INTO creators (username, link_account, added_by, status)
+        VALUES (${c.username}, ${c.link_account}, ${c.added_by || null}, 'active')
+        ON CONFLICT (username) DO UPDATE SET link_account = EXCLUDED.link_account
+        RETURNING id
+      `);
+    }
+    // Get the IDs for each creator
+    const allUsernames = creatorPayloads.map(c => c.username.toLowerCase());
+    const crRows = await db.execute(sql`SELECT id, LOWER(username) as username FROM creators WHERE LOWER(username) = ANY(${allUsernames})`) as any[];
+    const crMap = new Map(crRows.map((r: any) => [r.username, r.id]));
+    
+    // Insert campaign creators
+    for (const cc of campaignCreatorPayloads) {
+      const cId = crMap.get(cc.username?.toLowerCase()) || cc.creator_id;
+      if (!cId) continue;
+      await db.execute(sql`
+        INSERT INTO campaign_creators (
+          campaign_id, creator_id, tier, price, qty_vt, qty_live, content_type,
+          approval, pic_assist, notes_manager, notes_pic, sample_progress,
+          gmv_organic_legacy, gmv_ads_legacy, status_bayar, nominal_pelunasan,
+          client_approval, added_by
+        ) VALUES (
+          ${campaignId}, ${cId}, ${cc.tier}, ${cc.price}, ${cc.qty_vt}, ${cc.qty_live || 0}, ${cc.content_type || 'Video'},
+          'pending', ${cc.pic_assist || '-'}, '', '', 'Belum',
+          0, 0, 'belum', 0,
+          ${cc.client_approval || 'not_required'}, ${cc.added_by || null}
+        )
+        ON CONFLICT DO NOTHING
+      `);
+    }
+    
+    // Insert initial snapshots for creators needing one
+    for (const cc of campaignCreatorPayloads) {
+      if (!cc.creator_id && !crMap.get(cc.username?.toLowerCase())) continue;
+      const cId = cc.creator_id || crMap.get(cc.username?.toLowerCase());
+      if (!cId || cc.hasSnapshot) continue;
+      await db.execute(sql`
+        INSERT INTO creator_snapshots (creator_id, followers, gmv_30d, gmv_30d_video, gmv_30d_live, ratecard, tier, tanggal_update, updated_by)
+        VALUES (${cId}, 0, 0, 0, 0, ${cc.price || 0}, 'Nano', CURRENT_DATE, ${cc.pic_assist || 'System'})
+        ON CONFLICT DO NOTHING
+      `);
+    }
+    
+    return { success: true };
+  } catch (err: any) {
+    console.error('insertCreatorsAndCcAction error:', err);
+    return { success: false, error: err.message };
+  }
+}
+
+// ============================================================
+// EXPORT (All creators data)
+// ============================================================
+export async function fetchExportCampaignCreatorsAction(campaignId: number, statuses: string[]) {
+  if (!statuses || statuses.length === 0) return { success: true, data: [] };
+  try {
+    const data = await db.execute(sql`
+      SELECT 
+        cc.*,
+        c.username, c.nama_asli, c.link_account,
+        json_agg(DISTINCT jsonb_build_object('nomor', ct.nomor, 'status', ct.status)) FILTER (WHERE ct.id IS NOT NULL) as creator_contacts,
+        json_agg(DISTINCT jsonb_build_object('id', cs.id, 'level', cs.level, 'followers', cs.followers, 'gmv_30d', cs.gmv_30d, 'gmv_30d_video', cs.gmv_30d_video, 'gmv_30d_live', cs.gmv_30d_live, 'tanggal_update', cs.tanggal_update)) FILTER (WHERE cs.id IS NOT NULL) as creator_snapshots
+      FROM campaign_creators cc
+      LEFT JOIN creators c ON cc.creator_id = c.id
+      LEFT JOIN creator_contacts ct ON ct.creator_id = cc.creator_id
+      LEFT JOIN creator_snapshots cs ON cs.creator_id = cc.creator_id
+      WHERE cc.campaign_id = ${campaignId}
+        AND cc.approval = ANY(${statuses})
+      GROUP BY cc.id, c.username, c.nama_asli, c.link_account
+      ORDER BY cc.id DESC
+    `) as any[];
+    const mapped = (data || []).map((r: any) => ({
+      ...r,
+      creators: {
+        username: r.username,
+        nama_asli: r.nama_asli,
+        link_account: r.link_account,
+        creator_contacts: r.creator_contacts || [],
+        creator_snapshots: r.creator_snapshots || [],
+      }
+    }));
+    return { success: true, data: mapped };
+  } catch (err: any) {
+    return { success: false, data: [], error: err.message };
+  }
+}
+
+// ============================================================
+// SPREADSHEET IMPORT CREATOR - Server Actions
+// ============================================================
+export async function fetchCreatorsWithSnapshotsForImportAction(usernames: string[]) {
+  if (!usernames || usernames.length === 0) return { success: true, data: [] };
+  const cleanUsernames = usernames.map(u => u.toLowerCase());
+  try {
+    const data = await db.execute(sql`
+      SELECT
+        c.id, c.username,
+        json_agg(DISTINCT jsonb_build_object('id', cs.id, 'ratecard', cs.ratecard, 'followers', cs.followers, 'gmv_30d', cs.gmv_30d, 'gmv_30d_video', cs.gmv_30d_video, 'gmv_30d_live', cs.gmv_30d_live, 'level', cs.level, 'tanggal_update', cs.tanggal_update)) FILTER (WHERE cs.id IS NOT NULL) as creator_snapshots,
+        json_agg(DISTINCT jsonb_build_object('nomor', ct.nomor, 'status', ct.status)) FILTER (WHERE ct.id IS NOT NULL) as creator_contacts
+      FROM creators c
+      LEFT JOIN creator_snapshots cs ON cs.creator_id = c.id
+      LEFT JOIN creator_contacts ct ON ct.creator_id = c.id
+      WHERE LOWER(c.username) = ANY(${cleanUsernames})
+      GROUP BY c.id
+    `) as any[];
+    return { success: true, data: data || [] };
+  } catch (err: any) {
+    return { success: false, data: [], error: err.message };
+  }
+}
+
+export async function fetchCampaignCreatorsForImportAction(campaignId: number, creatorIds: number[]) {
+  if (!creatorIds || creatorIds.length === 0) return { success: true, data: [] };
+  try {
+    const data = await db.execute(sql`
+      SELECT cc.creator_id, cc.price, cc.qty_vt, cc.qty_live,
+             c.username
+      FROM campaign_creators cc
+      JOIN creators c ON cc.creator_id = c.id
+      WHERE cc.campaign_id = ${campaignId}
+        AND cc.creator_id = ANY(${creatorIds})
+    `) as any[];
+    return { success: true, data: data || [] };
+  } catch (err: any) {
+    return { success: false, data: [], error: err.message };
+  }
+}
+
+export async function fetchCampaignCreatorsFullForImportAction(campaignId: number, approvalFilter?: string) {
+  try {
+    const conditions: any[] = [sql`cc.campaign_id = ${campaignId}`];
+    if (approvalFilter && approvalFilter !== 'all') {
+      if (approvalFilter === 'auto_detect') {
+        conditions.push(sql`cc.tier = 'Auto-Detect'`);
+      } else {
+        conditions.push(sql`cc.approval = ${approvalFilter}`);
+      }
+    }
+    const whereClause = sql`WHERE ${sql.join(conditions, sql` AND `)}`;
+    const data = await db.execute(sql`
+      SELECT
+        cc.id, cc.creator_id, cc.price, cc.qty_vt, cc.qty_live, cc.content_type, cc.tier, cc.approval,
+        c.id as c_id, c.username,
+        json_agg(DISTINCT jsonb_build_object('nomor', ct.nomor, 'status', ct.status)) FILTER (WHERE ct.id IS NOT NULL) as creator_contacts,
+        json_agg(DISTINCT jsonb_build_object('id', cs.id, 'followers', cs.followers, 'level', cs.level, 'gmv_30d', cs.gmv_30d, 'gmv_30d_video', cs.gmv_30d_video, 'gmv_30d_live', cs.gmv_30d_live, 'ratecard', cs.ratecard, 'tanggal_update', cs.tanggal_update)) FILTER (WHERE cs.id IS NOT NULL) as creator_snapshots
+      FROM campaign_creators cc
+      JOIN creators c ON cc.creator_id = c.id
+      LEFT JOIN creator_contacts ct ON ct.creator_id = cc.creator_id
+      LEFT JOIN creator_snapshots cs ON cs.creator_id = cc.creator_id
+      ${whereClause}
+      GROUP BY cc.id, c.id
+    `) as any[];
+    return { success: true, data: data || [] };
+  } catch (err: any) {
+    return { success: false, data: [], error: err.message };
+  }
+}
+
+export async function saveCreatorImportBatchAction(params: {
+  campaignId: number;
+  isClientApprovalRequired: boolean;
+  picName?: string;
+  picId?: string;
+  rows: Array<{
+    username: string;
+    creatorId?: number;
+    status: string;
+    action?: string;
+    followers: number;
+    gmv_30d: number;
+    gmv_30d_video: number;
+    gmv_30d_live: number;
+    ratecard: number;
+    tier: string;
+    level: number | null;
+    no_wa: string;
+    qty_vt: number;
+    qty_live: number;
+    content_type: string;
+    lastSnap?: any;
+  }>;
+}) {
+  const { campaignId, isClientApprovalRequired, picName, picId, rows } = params;
+  let successCount = 0;
+  const errors: any[] = [];
+
+  for (const row of rows) {
+    try {
+      let cid = row.creatorId;
+      
+      if (!cid) {
+        // Try to find by username (case-insensitive)
+        const existing = await db.execute(sql`SELECT id FROM creators WHERE LOWER(username) = ${row.username.toLowerCase().trim()} LIMIT 1`) as any[];
+        if (existing.length > 0) {
+          cid = existing[0].id;
+        } else {
+          // Insert new creator
+          const inserted = await db.execute(sql`
+            INSERT INTO creators (username, link_account, added_by, status)
+            VALUES (${row.username.trim()}, ${'https://www.tiktok.com/@' + row.username.trim()}, ${picId || null}, 'active')
+            ON CONFLICT (username) DO UPDATE SET link_account = EXCLUDED.link_account
+            RETURNING id
+          `) as any[];
+          cid = inserted[0]?.id;
+        }
+      }
+      
+      if (!cid) continue;
+      
+      if (row.status === 'duplicate_campaign' && row.action === 'skip') {
+        successCount++;
+        continue;
+      }
+      
+      // Check existing snapshot
+      const snapRows = await db.execute(sql`SELECT id, followers, gmv_30d, gmv_30d_video, gmv_30d_live, ratecard, level FROM creator_snapshots WHERE creator_id = ${cid} ORDER BY id DESC LIMIT 1`) as any[];
+      const lastSnap = snapRows[0];
+      const newFollowers = row.followers || (lastSnap?.followers || 0);
+      const newGmv = row.gmv_30d || (lastSnap?.gmv_30d || 0);
+      const newGmvVid = row.gmv_30d_video || (lastSnap?.gmv_30d_video || 0);
+      const newGmvLive = row.gmv_30d_live || (lastSnap?.gmv_30d_live || 0);
+      const newRateCard = row.ratecard || (lastSnap?.ratecard || 0);
+      const newLevel = row.level;
+      
+      // Insert snapshot if changed
+      if (!lastSnap || lastSnap.followers !== newFollowers || lastSnap.gmv_30d !== newGmv ||
+          lastSnap.ratecard !== newRateCard || lastSnap.level !== newLevel) {
+        await db.execute(sql`
+          INSERT INTO creator_snapshots (creator_id, followers, gmv_30d, gmv_30d_video, gmv_30d_live, ratecard, tier, level, tanggal_update, updated_by)
+          VALUES (${cid}, ${newFollowers}, ${newGmv}, ${newGmvVid}, ${newGmvLive}, ${newRateCard}, ${row.tier}, ${newLevel}, CURRENT_DATE, ${picName || 'System'})
+        `);
+      }
+      
+      // Update phone contact
+      if (row.no_wa && row.no_wa.trim()) {
+        const noWa = row.no_wa.trim();
+        const activeContacts = await db.execute(sql`SELECT id, nomor FROM creator_contacts WHERE creator_id = ${cid} AND status = 'aktif'`) as any[];
+        const activeContact = activeContacts[0];
+        if (!activeContact || activeContact.nomor !== noWa) {
+          const today = new Date().toISOString().split('T')[0];
+          if (activeContact) {
+            await db.execute(sql`UPDATE creator_contacts SET status = 'arsip', tanggal_diganti = ${today} WHERE id = ${activeContact.id}`);
+          }
+          const archived = await db.execute(sql`SELECT id FROM creator_contacts WHERE creator_id = ${cid} AND nomor = ${noWa} LIMIT 1`) as any[];
+          if (archived.length > 0) {
+            await db.execute(sql`UPDATE creator_contacts SET status = 'aktif', tanggal_mulai = ${today}, tanggal_diganti = NULL WHERE id = ${archived[0].id}`);
+          } else {
+            await db.execute(sql`INSERT INTO creator_contacts (creator_id, nomor, status, tanggal_mulai) VALUES (${cid}, ${noWa}, 'aktif', ${today})`);
+          }
+        }
+      }
+      
+      // Upsert campaign_creator
+      const updateData: any = {
+        tier: row.tier,
+        price: newRateCard,
+        qty_vt: row.qty_vt,
+        qty_live: row.qty_live,
+        content_type: row.content_type,
+        pic_assist: picName || '-'
+      };
+      
+      if (row.status === 'duplicate_campaign' && row.action === 'update') {
+        await db.execute(sql`
+          UPDATE campaign_creators SET
+            tier = ${updateData.tier}, price = ${updateData.price}, qty_vt = ${updateData.qty_vt},\
+            qty_live = ${updateData.qty_live}, content_type = ${updateData.content_type},\
+            pic_assist = ${updateData.pic_assist}
+          WHERE campaign_id = ${campaignId} AND creator_id = ${cid}
+        `);
+      } else {
+        // Check if exists
+        const existingCC = await db.execute(sql`SELECT id FROM campaign_creators WHERE campaign_id = ${campaignId} AND creator_id = ${cid} LIMIT 1`) as any[];
+        if (existingCC.length > 0) {
+          await db.execute(sql`
+            UPDATE campaign_creators SET
+              tier = ${updateData.tier}, price = ${updateData.price}, qty_vt = ${updateData.qty_vt},\
+              qty_live = ${updateData.qty_live}, content_type = ${updateData.content_type},\
+              pic_assist = ${updateData.pic_assist}
+            WHERE campaign_id = ${campaignId} AND creator_id = ${cid}
+          `);
+        } else {
+          await db.execute(sql`
+            INSERT INTO campaign_creators (
+              campaign_id, creator_id, tier, price, qty_vt, qty_live, content_type,
+              approval, pic_assist, status_bayar, client_approval, added_by
+            ) VALUES (
+              ${campaignId}, ${cid}, ${updateData.tier}, ${updateData.price}, ${updateData.qty_vt}, ${updateData.qty_live}, ${updateData.content_type},
+              'pending', ${updateData.pic_assist}, 'belum', ${isClientApprovalRequired ? 'pending' : 'not_required'}, ${picId || null}
+            )
+          `);
+        }
+      }
+      
+      successCount++;
+    } catch (err: any) {
+      errors.push({ username: row.username, error: err.message });
+    }
+  }
+  
+  return { success: true, successCount, errors };
+}
+
+export async function batchUpdateCampaignCreatorsApprovalAction(creatorIds: number[], status: string, profileId?: string) {
+  try {
+    if (!creatorIds || creatorIds.length === 0) return { success: true };
+    const now = new Date().toISOString();
+    if (status === 'approved') {
+      await db.execute(sql`
+        UPDATE campaign_creators 
+        SET approval = ${status}, approved_by = ${profileId || null}, approved_at = ${now}
+        WHERE id = ANY(${creatorIds})
+      `);
+    } else if (status === 'not_approved' || status === 'alternate') {
+      await db.execute(sql`
+        UPDATE campaign_creators 
+        SET approval = ${status}, not_approved_by = ${profileId || null}, not_approved_at = ${now}
+        WHERE id = ANY(${creatorIds})
+      `);
+    } else {
+      await db.execute(sql`
+        UPDATE campaign_creators 
+        SET approval = ${status}
+        WHERE id = ANY(${creatorIds})
+      `);
+    }
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
+export async function batchDeleteCampaignCreatorsAction(creatorIds: number[]) {
+  try {
+    if (!creatorIds || creatorIds.length === 0) return { success: true };
+    await db.execute(sql`DELETE FROM campaign_creators WHERE id = ANY(${creatorIds})`);
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
+export async function deleteSingleDuplicateCampaignCreatorAction(deleteId: number, keepId?: number) {
+  try {
+    if (keepId) {
+      await db.execute(sql`UPDATE videos SET campaign_creator_id = ${keepId} WHERE campaign_creator_id = ${deleteId}`);
+    }
+    await db.execute(sql`DELETE FROM campaign_creators WHERE id = ${deleteId}`);
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
