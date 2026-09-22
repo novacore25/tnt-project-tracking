@@ -882,6 +882,362 @@ export async function fetchVideosByCcIdsAction(ccIds: number[]) {
   }
 }
 
+export async function bulkVerifyVideoLinksAction(
+  campaignId: number,
+  items: Array<{
+    id: string;
+    originalUrl: string;
+    expandedUrl: string;
+    username?: string;
+    videoId?: string;
+  }>
+) {
+  try {
+    if (!items || items.length === 0) {
+      return { success: true, results: [] };
+    }
+
+    const videoIds = items.map(it => it.videoId).filter(Boolean) as string[];
+    const usernames = items.map(it => it.username?.toLowerCase().trim()).filter(Boolean) as string[];
+
+    // 1. Fetch existing videos by content_uid across database
+    let existingVideos: any[] = [];
+    if (videoIds.length > 0) {
+      existingVideos = (await db.execute(sql`
+        SELECT 
+          v.id as video_id,
+          v.content_uid,
+          v.campaign_creator_id,
+          cc.campaign_id,
+          c.username as creator_username
+        FROM videos v
+        LEFT JOIN campaign_creators cc ON v.campaign_creator_id = cc.id
+        LEFT JOIN creators c ON cc.creator_id = c.id
+        WHERE v.content_uid = ANY(${videoIds})
+      `)) as any[];
+    }
+
+    const existingVideoMap = new Map<string, any>();
+    existingVideos.forEach(v => {
+      if (v.content_uid) existingVideoMap.set(v.content_uid, v);
+    });
+
+    // 2. Fetch campaign creators for this campaign matching usernames
+    let campaignCreators: any[] = [];
+    if (usernames.length > 0) {
+      campaignCreators = (await db.execute(sql`
+        SELECT 
+          cc.id as cc_id,
+          cc.campaign_id,
+          c.id as creator_id,
+          LOWER(c.username) as username,
+          c.nama_asli
+        FROM campaign_creators cc
+        JOIN creators c ON cc.creator_id = c.id
+        WHERE cc.campaign_id = ${campaignId} AND LOWER(c.username) = ANY(${usernames})
+      `)) as any[];
+    }
+    const ccMap = new Map<string, any>();
+    campaignCreators.forEach(cc => {
+      if (cc.username) ccMap.set(cc.username, cc);
+    });
+
+    // 3. Fetch global creators matching usernames
+    let globalCreators: any[] = [];
+    if (usernames.length > 0) {
+      globalCreators = (await db.execute(sql`
+        SELECT id as creator_id, LOWER(username) as username, nama_asli
+        FROM creators
+        WHERE LOWER(username) = ANY(${usernames})
+      `)) as any[];
+    }
+    const globalCreatorMap = new Map<string, any>();
+    globalCreators.forEach(c => {
+      if (c.username) globalCreatorMap.set(c.username, c);
+    });
+
+    // Track duplicates within current batch
+    const seenBatchVideoIds = new Set<string>();
+
+    const results = items.map(item => {
+      const vId = item.videoId;
+      const uName = item.username?.toLowerCase().trim();
+
+      if (!vId || !uName) {
+        return {
+          id: item.id,
+          originalUrl: item.originalUrl,
+          expandedUrl: item.expandedUrl,
+          username: item.username || '',
+          videoId: item.videoId || '',
+          status: 'error',
+          statusText: 'Format URL TikTok tidak valid (username / Video ID tidak ditemukan)',
+          canImport: false,
+        };
+      }
+
+      if (seenBatchVideoIds.has(vId)) {
+        return {
+          id: item.id,
+          originalUrl: item.originalUrl,
+          expandedUrl: item.expandedUrl,
+          username: item.username,
+          videoId: item.videoId,
+          status: 'duplicate_batch',
+          statusText: 'Duplikat dalam antrean input',
+          canImport: false,
+        };
+      }
+      seenBatchVideoIds.add(vId);
+
+      const dbVideo = existingVideoMap.get(vId);
+      if (dbVideo) {
+        if (Number(dbVideo.campaign_id) === Number(campaignId)) {
+          return {
+            id: item.id,
+            originalUrl: item.originalUrl,
+            expandedUrl: item.expandedUrl,
+            username: item.username,
+            videoId: item.videoId,
+            status: 'duplicate_db',
+            statusText: 'Sudah ada di campaign ini',
+            canImport: false,
+          };
+        } else {
+          return {
+            id: item.id,
+            originalUrl: item.originalUrl,
+            expandedUrl: item.expandedUrl,
+            username: item.username,
+            videoId: item.videoId,
+            status: 'duplicate_db',
+            statusText: `Sudah terdaftar di campaign #${dbVideo.campaign_id || 'lain'}`,
+            canImport: false,
+          };
+        }
+      }
+
+      // Check if creator is already in this campaign
+      const ccMatch = ccMap.get(uName);
+      if (ccMatch) {
+        return {
+          id: item.id,
+          originalUrl: item.originalUrl,
+          expandedUrl: item.expandedUrl,
+          username: item.username,
+          videoId: item.videoId,
+          status: 'ready_existing',
+          statusText: 'Kreator Terdaftar (Campaign)',
+          creatorName: ccMatch.nama_asli,
+          ccId: ccMatch.cc_id,
+          creatorId: ccMatch.creator_id,
+          canImport: true,
+        };
+      }
+
+      // Check if creator exists in global master
+      const globalMatch = globalCreatorMap.get(uName);
+      if (globalMatch) {
+        return {
+          id: item.id,
+          originalUrl: item.originalUrl,
+          expandedUrl: item.expandedUrl,
+          username: item.username,
+          videoId: item.videoId,
+          status: 'ready_global',
+          statusText: 'Kreator Master (Akan Masuk Campaign)',
+          creatorName: globalMatch.nama_asli,
+          creatorId: globalMatch.creator_id,
+          canImport: true,
+        };
+      }
+
+      // Brand new creator
+      return {
+        id: item.id,
+        originalUrl: item.originalUrl,
+        expandedUrl: item.expandedUrl,
+        username: item.username,
+        videoId: item.videoId,
+        status: 'ready_new',
+        statusText: 'Kreator Baru (Auto-Detect)',
+        canImport: true,
+      };
+    });
+
+    return { success: true, results };
+  } catch (err: any) {
+    console.error('bulkVerifyVideoLinksAction error:', err);
+    return { success: false, error: err.message, results: [] };
+  }
+}
+
+export async function commitBulkImportVideosAction(
+  campaignId: number,
+  items: Array<{
+    originalUrl: string;
+    expandedUrl: string;
+    username: string;
+    videoId: string;
+    skuId?: number | null;
+  }>,
+  addedById?: string,
+  picName?: string
+) {
+  try {
+    await ensureVideoColumns();
+    await ensureNotesTable();
+
+    if (!items || items.length === 0) {
+      return { success: false, error: 'Tidak ada video yang valid untuk diimport.' };
+    }
+
+    // Deduplicate items in memory by videoId
+    const uniqueItemsMap = new Map<string, typeof items[0]>();
+    for (const item of items) {
+      if (item.videoId && !uniqueItemsMap.has(item.videoId)) {
+        uniqueItemsMap.set(item.videoId, item);
+      }
+    }
+    const cleanItems = Array.from(uniqueItemsMap.values());
+    const videoIds = cleanItems.map(it => it.videoId);
+
+    // Final safety check against DB duplicate videos
+    const existingVids = (await db.execute(sql`
+      SELECT content_uid FROM videos WHERE content_uid = ANY(${videoIds})
+    `)) as any[];
+    const existingVidSet = new Set(existingVids.map((r: any) => r.content_uid));
+
+    const validItems = cleanItems.filter(it => !existingVidSet.has(it.videoId));
+    if (validItems.length === 0) {
+      return {
+        success: true,
+        insertedCount: 0,
+        skippedCount: cleanItems.length,
+        message: 'Semua video sudah ada di database (Dilewati untuk mencegah duplikasi).'
+      };
+    }
+
+    // Group items by username (lowercase)
+    const creatorGroup = new Map<string, typeof validItems>();
+    validItems.forEach(item => {
+      const u = item.username.trim().toLowerCase();
+      if (!creatorGroup.has(u)) creatorGroup.set(u, []);
+      creatorGroup.get(u)!.push(item);
+    });
+
+    const usernames = Array.from(creatorGroup.keys());
+
+    // 1. Ensure all creators exist in `creators` table
+    for (const u of usernames) {
+      await db.execute(sql`
+        INSERT INTO creators (username, link_account, added_by, created_at, updated_at)
+        VALUES (${u}, ${'https://www.tiktok.com/@' + u}, ${addedById || null}, NOW(), NOW())
+        ON CONFLICT (username) DO UPDATE SET updated_at = NOW()
+      `);
+    }
+
+    const creatorRows = (await db.execute(sql`
+      SELECT id, LOWER(username) as username FROM creators WHERE LOWER(username) = ANY(${usernames})
+    `)) as any[];
+    const creatorMap = new Map<string, number>(creatorRows.map((r: any) => [r.username, r.id]));
+
+    // 2. Ensure `campaign_creators` exist for this campaign
+    for (const u of usernames) {
+      const creatorId = creatorMap.get(u);
+      if (!creatorId) continue;
+      const vidsCount = creatorGroup.get(u)!.length;
+
+      const existingCc = (await db.execute(sql`
+        SELECT id, qty_vt FROM campaign_creators WHERE campaign_id = ${campaignId} AND creator_id = ${creatorId} LIMIT 1
+      `)) as any[];
+
+      if (existingCc.length === 0) {
+        await db.execute(sql`
+          INSERT INTO campaign_creators (
+            campaign_id, creator_id, tier, price, qty_vt, qty_live, content_type,
+            approval, pic_assist, notes_manager, notes_pic, sample_progress,
+            gmv_organic_legacy, gmv_ads_legacy, status_bayar, nominal_pelunasan,
+            client_approval, added_by, created_at, updated_at
+          ) VALUES (
+            ${campaignId}, ${creatorId}, 'Nano', 0, ${vidsCount}, 0, 'Video',
+            'approved', ${picName || '-'}, '', '', 'Belum',
+            0, 0, 'belum', 0,
+            'not_required', ${addedById || null}, NOW(), NOW()
+          )
+        `);
+
+        // Insert initial snapshot
+        await db.execute(sql`
+          INSERT INTO creator_snapshots (creator_id, followers, gmv_30d, gmv_30d_video, gmv_30d_live, ratecard, tier, tanggal_update, updated_by)
+          VALUES (${creatorId}, 0, 0, 0, 0, 0, 'Nano', CURRENT_DATE, ${picName || 'Bulk Import'})
+          ON CONFLICT DO NOTHING
+        `);
+      }
+    }
+
+    // 3. Fetch final `campaign_creators` IDs for this campaign
+    const ccRows = (await db.execute(sql`
+      SELECT cc.id as cc_id, LOWER(c.username) as username
+      FROM campaign_creators cc
+      JOIN creators c ON cc.creator_id = c.id
+      WHERE cc.campaign_id = ${campaignId} AND LOWER(c.username) = ANY(${usernames})
+    `)) as any[];
+    const ccIdMap = new Map<string, number>(ccRows.map((r: any) => [r.username, r.cc_id]));
+
+    // 4. For each creator, get current MAX(urutan) and insert new video entries
+    let insertedTotal = 0;
+    const nowIso = new Date().toISOString();
+
+    for (const [u, creatorItems] of creatorGroup.entries()) {
+      const ccId = ccIdMap.get(u);
+      if (!ccId) continue;
+
+      const maxUrutanRes = (await db.execute(sql`
+        SELECT COALESCE(MAX(urutan), 0) as max_urutan FROM videos WHERE campaign_creator_id = ${ccId}
+      `)) as any[];
+      let currentUrutan = Number(maxUrutanRes[0]?.max_urutan || 0);
+
+      for (const item of creatorItems) {
+        currentUrutan++;
+        const finalUrl = item.expandedUrl || item.originalUrl;
+        await db.execute(sql`
+          INSERT INTO videos (
+            campaign_creator_id, urutan, concept, link_video, content_uid, sku_id,
+            vt_approval, created_at, updated_at
+          ) VALUES (
+            ${ccId}, ${currentUrutan}, '', ${finalUrl}, ${item.videoId}, ${item.skuId || null},
+            'pending', ${nowIso}, ${nowIso}
+          )
+        `);
+        insertedTotal++;
+      }
+
+      // Update qty_vt on campaign_creators if current total videos exceeds qty_vt
+      await db.execute(sql`
+        UPDATE campaign_creators
+        SET qty_vt = GREATEST(qty_vt, ${currentUrutan}),
+            approval = 'approved',
+            updated_at = NOW()
+        WHERE id = ${ccId}
+      `);
+    }
+
+    revalidatePath(`/campaigns/${campaignId}/video`);
+    revalidatePath(`/campaigns/${campaignId}/listing`);
+
+    return {
+      success: true,
+      insertedCount: insertedTotal,
+      skippedCount: cleanItems.length - validItems.length,
+      message: `Berhasil mengimport ${insertedTotal} video ke database!`
+    };
+  } catch (err: any) {
+    console.error('commitBulkImportVideosAction error:', err);
+    return { success: false, error: err.message };
+  }
+}
+
 // ============================================================
 // LISTING PAGE - COUNTS & RECAP
 // ============================================================

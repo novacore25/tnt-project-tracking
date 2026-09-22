@@ -1756,9 +1756,9 @@ export default function CampaignVideoPage({
                       }} className="btn bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 flex items-center gap-2 whitespace-nowrap h-fit">
                          Aktivitas Import Terakhir
                       </button>
-                      <button onClick={() => setBulkImportOpen(true)} className="btn btn-primary flex items-center gap-2 whitespace-nowrap h-fit">
+                      <Link href={`/campaigns/${campaignId}/video/import`} className="btn btn-primary flex items-center gap-2 whitespace-nowrap h-fit">
                          <Plus className="w-4 h-4" /> Bulk Import Link
-                      </button>
+                      </Link>
                     </>
                   )}
                 </div>
