@@ -61,11 +61,11 @@ export async function addCreatorFullAction(
 ) {
   try {
     // Insert Creator
+    const namaAsli = creator.nama_asli || creator.nama_lengkap || null;
+    const linkAccount = creator.link_account || (creator.username ? `https://www.tiktok.com/@${creator.username.replace(/^@/, '')}` : null);
     const [cData] = await db.execute(sql`
-      INSERT INTO creators (username, nama_lengkap, platform, tipe_konten, status, catatan, referal, link_portofolio)
-      VALUES (${creator.username}, ${creator.nama_lengkap || null}, ${creator.platform || 'tiktok'},
-              ${creator.tipe_konten || null}, ${creator.status || 'aktif'}, ${creator.catatan || null},
-              ${creator.referal || null}, ${creator.link_portofolio || null})
+      INSERT INTO creators (username, nama_asli, link_account, added_by)
+      VALUES (${creator.username}, ${namaAsli}, ${linkAccount}, ${creator.added_by || null})
       RETURNING *
     `) as any[];
     if (!cData) throw new Error('Failed to insert creator');
@@ -120,16 +120,29 @@ export async function addCreatorFullAction(
 
 export async function updateCreatorAction(id: number, updates: any) {
   try {
+    const sets: any[] = [];
+    if (updates.username !== undefined) sets.push(sql`username = ${updates.username}`);
+    if (updates.nama_asli !== undefined || updates.nama_lengkap !== undefined) {
+      sets.push(sql`nama_asli = ${updates.nama_asli ?? updates.nama_lengkap}`);
+    }
+    if (updates.link_account !== undefined || updates.link_portofolio !== undefined) {
+      sets.push(sql`link_account = ${updates.link_account ?? updates.link_portofolio}`);
+    }
+    if (updates.rekening !== undefined) sets.push(sql`rekening = ${updates.rekening}`);
+    if (updates.mcn !== undefined) sets.push(sql`mcn = ${updates.mcn}`);
+    if (updates.avatar_url !== undefined) sets.push(sql`avatar_url = ${updates.avatar_url}`);
+    if (updates.nik !== undefined) sets.push(sql`nik = ${updates.nik}`);
+    if (updates.link_ktp !== undefined) sets.push(sql`link_ktp = ${updates.link_ktp}`);
+    if (updates.link_npwp !== undefined) sets.push(sql`link_npwp = ${updates.link_npwp}`);
+    if (updates.link_kontrak !== undefined) sets.push(sql`link_kontrak = ${updates.link_kontrak}`);
+    if (updates.last_updated_by !== undefined) sets.push(sql`last_updated_by = ${updates.last_updated_by}`);
+    sets.push(sql`last_updated_at = NOW()`);
+
+    if (sets.length === 0) return { success: true, data: null };
+
     const [result] = await db.execute(sql`
-      UPDATE creators SET
-        username = COALESCE(${updates.username !== undefined ? updates.username : null}, username),
-        nama_lengkap = COALESCE(${updates.nama_lengkap !== undefined ? updates.nama_lengkap : null}, nama_lengkap),
-        platform = COALESCE(${updates.platform !== undefined ? updates.platform : null}, platform),
-        tipe_konten = COALESCE(${updates.tipe_konten !== undefined ? updates.tipe_konten : null}, tipe_konten),
-        status = COALESCE(${updates.status !== undefined ? updates.status : null}, status),
-        catatan = CASE WHEN ${updates.catatan !== undefined} THEN ${updates.catatan ?? null} ELSE catatan END,
-        referal = CASE WHEN ${updates.referal !== undefined} THEN ${updates.referal ?? null} ELSE referal END,
-        link_portofolio = CASE WHEN ${updates.link_portofolio !== undefined} THEN ${updates.link_portofolio ?? null} ELSE link_portofolio END
+      UPDATE creators
+      SET ${sql.join(sets, sql`, `)}
       WHERE id = ${id}
       RETURNING *
     `) as any[];
@@ -336,11 +349,23 @@ export async function deleteCreatorAddressBookAction(id: number, creatorId: numb
 // ============================================================
 export async function addCampaignCreatorAction(cc: any) {
   try {
+    const contentType = cc.content_type || cc.tipe_konten || 'Video';
+    const price = Number(cc.price ?? cc.rate_card ?? 0);
+    const qtyVt = Number(cc.qty_vt ?? cc.slot ?? 1);
+    const qtyLive = Number(cc.qty_live ?? 0);
+    const tier = cc.tier || 'Nano';
+
     const [data] = await db.execute(sql`
-      INSERT INTO campaign_creators (campaign_id, creator_id, price, approval, tipe_konten, status_bayar, slot, kategori, sistem_bayar)
-      VALUES (${cc.campaign_id}, ${cc.creator_id}, ${cc.price || 0}, ${cc.approval || 'pending'},
-              ${cc.tipe_konten || null}, ${cc.status_bayar || 'belum'}, ${cc.slot || 1},
-              ${cc.kategori || null}, ${cc.sistem_bayar || null})
+      INSERT INTO campaign_creators (
+        campaign_id, creator_id, price, approval, content_type, status_bayar,
+        qty_vt, qty_live, tier, pic_assist, client_approval, added_by
+      )
+      VALUES (
+        ${cc.campaign_id}, ${cc.creator_id}, ${price}, ${cc.approval || 'pending'},
+        ${contentType}, ${cc.status_bayar || 'belum'}, ${qtyVt},
+        ${qtyLive}, ${tier}, ${cc.pic_assist || null},
+        ${cc.client_approval || 'not_required'}, ${cc.added_by || null}
+      )
       RETURNING *
     `) as any[];
     return { success: true, data };
@@ -352,15 +377,78 @@ export async function addCampaignCreatorAction(cc: any) {
 
 export async function updateCampaignCreatorAction(id: number, updates: any) {
   try {
+    const sets: any[] = [];
+    if (updates.price !== undefined || updates.rate_card !== undefined) {
+      sets.push(sql`price = ${updates.price ?? updates.rate_card}`);
+    }
+    if (updates.approval !== undefined) {
+      sets.push(sql`approval = ${updates.approval}`);
+    }
+    if (updates.content_type !== undefined || updates.tipe_konten !== undefined) {
+      sets.push(sql`content_type = ${updates.content_type ?? updates.tipe_konten}`);
+    }
+    if (updates.status_bayar !== undefined) {
+      sets.push(sql`status_bayar = ${updates.status_bayar}`);
+    }
+    if (updates.tier !== undefined) {
+      sets.push(sql`tier = ${updates.tier}`);
+    }
+    if (updates.qty_vt !== undefined) {
+      sets.push(sql`qty_vt = ${updates.qty_vt}`);
+    }
+    if (updates.qty_live !== undefined) {
+      sets.push(sql`qty_live = ${updates.qty_live}`);
+    }
+    if (updates.slot_allocated !== undefined || updates.slot !== undefined) {
+      sets.push(sql`slot_allocated = ${updates.slot_allocated ?? updates.slot}`);
+    }
+    if (updates.pic_assist !== undefined) {
+      sets.push(sql`pic_assist = ${updates.pic_assist}`);
+    }
+    if (updates.notes_manager !== undefined) {
+      sets.push(sql`notes_manager = ${updates.notes_manager}`);
+    }
+    if (updates.notes_pic !== undefined) {
+      sets.push(sql`notes_pic = ${updates.notes_pic}`);
+    }
+    if (updates.notes_client !== undefined) {
+      sets.push(sql`notes_client = ${updates.notes_client}`);
+    }
+    if (updates.sample_progress !== undefined) {
+      sets.push(sql`sample_progress = ${updates.sample_progress}`);
+    }
+    if (updates.client_approval !== undefined) {
+      sets.push(sql`client_approval = ${updates.client_approval}`);
+    }
+    if (updates.assigned_sku_ids !== undefined) {
+      sets.push(sql`assigned_sku_ids = ${JSON.stringify(updates.assigned_sku_ids)}::jsonb`);
+    }
+    if (updates.pelunasan !== undefined || updates.nominal_pelunasan !== undefined) {
+      sets.push(sql`pelunasan = ${updates.pelunasan ?? updates.nominal_pelunasan}`);
+    }
+    if (updates.tgl_bayar !== undefined || updates.tgl_pembayaran !== undefined) {
+      sets.push(sql`tgl_bayar = ${updates.tgl_bayar ?? updates.tgl_pembayaran}`);
+    }
+    if (updates.approved_by !== undefined) {
+      sets.push(sql`approved_by = ${updates.approved_by}`);
+    }
+    if (updates.approved_at !== undefined) {
+      sets.push(sql`approved_at = ${updates.approved_at}`);
+    }
+    if (updates.not_approved_by !== undefined) {
+      sets.push(sql`not_approved_by = ${updates.not_approved_by}`);
+    }
+    if (updates.not_approved_at !== undefined) {
+      sets.push(sql`not_approved_at = ${updates.not_approved_at}`);
+    }
+
+    if (sets.length === 0) {
+      return { success: true, data: null };
+    }
+
     const [data] = await db.execute(sql`
-      UPDATE campaign_creators SET
-        price = COALESCE(${updates.price !== undefined ? updates.price : null}, price),
-        approval = COALESCE(${updates.approval !== undefined ? updates.approval : null}, approval),
-        tipe_konten = COALESCE(${updates.tipe_konten !== undefined ? updates.tipe_konten : null}, tipe_konten),
-        status_bayar = COALESCE(${updates.status_bayar !== undefined ? updates.status_bayar : null}, status_bayar),
-        slot = COALESCE(${updates.slot !== undefined ? updates.slot : null}, slot),
-        kategori = COALESCE(${updates.kategori !== undefined ? updates.kategori : null}, kategori),
-        sistem_bayar = COALESCE(${updates.sistem_bayar !== undefined ? updates.sistem_bayar : null}, sistem_bayar)
+      UPDATE campaign_creators
+      SET ${sql.join(sets, sql`, `)}
       WHERE id = ${id}
       RETURNING *
     `) as any[];
