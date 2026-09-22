@@ -163,14 +163,24 @@ export async function getInternalVideoData(campaignId: number, searchKeyword: st
     const initialRevisionNotes: Record<string, any> = {};
     if (ccIds.length > 0) {
       const notesRows = (await db.execute(sql`
-        SELECT * FROM campaign_creator_notes
+        SELECT 
+          id, 
+          campaign_creator_id, 
+          COALESCE(role, field_name) as role, 
+          COALESCE(isi, notes) as isi, 
+          COALESCE(author_id, updated_by) as author_id, 
+          COALESCE(author_name, updated_by, 'Manager') as author_name, 
+          created_at, 
+          COALESCE(updated_at, created_at) as updated_at
+        FROM campaign_creator_notes
         WHERE campaign_creator_id = ANY(${ccIds})
-          AND role ILIKE 'draft_revisi_%'
-        ORDER BY updated_at ASC, id ASC
+          AND (role ILIKE 'draft_revisi_%' OR field_name ILIKE 'draft_revisi_%')
+        ORDER BY COALESCE(updated_at, created_at) ASC, id ASC
       `).catch(() => [])) as any[];
 
       (notesRows || []).forEach((n: any) => {
-        const match = n.role.match(/^draft_revisi_(\d+)$/);
+        const roleStr = n.role || '';
+        const match = roleStr.match(/^draft_revisi_(\d+)$/);
         if (match) {
           const urutan = parseInt(match[1]);
           initialRevisionNotes[`${n.campaign_creator_id}_${urutan}`] = n;

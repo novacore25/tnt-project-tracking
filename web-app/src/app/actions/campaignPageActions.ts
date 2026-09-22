@@ -508,22 +508,35 @@ export async function ensureNotesTable() {
       CREATE TABLE IF NOT EXISTS campaign_creator_notes (
         id SERIAL PRIMARY KEY,
         campaign_creator_id INTEGER REFERENCES campaign_creators(id) ON DELETE CASCADE,
-        role VARCHAR(50) NOT NULL,
-        isi TEXT NOT NULL,
+        role VARCHAR(50),
+        field_name TEXT,
+        isi TEXT,
+        notes TEXT,
         author_id TEXT,
         author_name VARCHAR(255),
+        updated_by TEXT,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
       );
-      ALTER TABLE campaign_creator_notes ADD COLUMN IF NOT EXISTS author_name VARCHAR(255);
-      ALTER TABLE campaign_creator_notes ADD COLUMN IF NOT EXISTS author_id TEXT;
-      ALTER TABLE campaign_creator_notes ADD COLUMN IF NOT EXISTS role VARCHAR(50);
-      ALTER TABLE campaign_creator_notes ADD COLUMN IF NOT EXISTS isi TEXT;
     `);
 
     await db.execute(sql`
       DO $$
       BEGIN
+        ALTER TABLE campaign_creator_notes ADD COLUMN IF NOT EXISTS role VARCHAR(50);
+        ALTER TABLE campaign_creator_notes ADD COLUMN IF NOT EXISTS field_name TEXT;
+        ALTER TABLE campaign_creator_notes ADD COLUMN IF NOT EXISTS isi TEXT;
+        ALTER TABLE campaign_creator_notes ADD COLUMN IF NOT EXISTS notes TEXT;
+        ALTER TABLE campaign_creator_notes ADD COLUMN IF NOT EXISTS author_id TEXT;
+        ALTER TABLE campaign_creator_notes ADD COLUMN IF NOT EXISTS author_name VARCHAR(255);
+        ALTER TABLE campaign_creator_notes ADD COLUMN IF NOT EXISTS updated_by TEXT;
+        ALTER TABLE campaign_creator_notes ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();
+        ALTER TABLE campaign_creator_notes ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();
+
+        ALTER TABLE campaign_creator_notes ALTER COLUMN field_name DROP NOT NULL;
+        ALTER TABLE campaign_creator_notes ALTER COLUMN notes DROP NOT NULL;
+        ALTER TABLE campaign_creator_notes ALTER COLUMN role DROP NOT NULL;
+        ALTER TABLE campaign_creator_notes ALTER COLUMN isi DROP NOT NULL;
         ALTER TABLE campaign_creator_notes DROP CONSTRAINT IF EXISTS campaign_creator_notes_author_id_fkey;
         ALTER TABLE campaign_creator_notes ALTER COLUMN author_id TYPE TEXT USING author_id::text;
       EXCEPTION
@@ -541,10 +554,19 @@ export async function fetchRevisionNotesAction(ccIds: number[]) {
   try {
     await ensureNotesTable();
     const data = await db.execute(sql`
-      SELECT * FROM campaign_creator_notes
+      SELECT 
+        id, 
+        campaign_creator_id, 
+        COALESCE(role, field_name) as role, 
+        COALESCE(isi, notes) as isi, 
+        COALESCE(author_id, updated_by) as author_id, 
+        COALESCE(author_name, updated_by, 'Manager') as author_name, 
+        created_at, 
+        COALESCE(updated_at, created_at) as updated_at
+      FROM campaign_creator_notes
       WHERE campaign_creator_id = ANY(${ccIds})
-        AND role ILIKE 'draft_revisi_%'
-      ORDER BY updated_at ASC, id ASC
+        AND (role ILIKE 'draft_revisi_%' OR field_name ILIKE 'draft_revisi_%')
+      ORDER BY COALESCE(updated_at, created_at) ASC, id ASC
     `) as any[];
     return { success: true, data: data || [] };
   } catch (err: any) {
@@ -571,7 +593,8 @@ export async function upsertRevisionNoteAction(params: {
     if (!noteId) {
       const existing = (await db.execute(sql`
         SELECT id FROM campaign_creator_notes
-        WHERE campaign_creator_id = ${params.ccId} AND role = ${roleKey}
+        WHERE campaign_creator_id = ${params.ccId} 
+          AND (role = ${roleKey} OR field_name = ${roleKey})
         ORDER BY id DESC LIMIT 1
       `)) as any[];
       if (existing && existing.length > 0) {
@@ -583,18 +606,25 @@ export async function upsertRevisionNoteAction(params: {
       const rows = (await db.execute(sql`
         UPDATE campaign_creator_notes
         SET isi = ${params.noteText},
+            notes = ${params.noteText},
+            role = ${roleKey},
+            field_name = ${roleKey},
             author_id = ${authorId},
             author_name = ${authorName},
+            updated_by = ${authorName},
             updated_at = NOW()
         WHERE id = ${noteId}
-        RETURNING *
+        RETURNING id, campaign_creator_id, COALESCE(role, field_name) as role, COALESCE(isi, notes) as isi, COALESCE(author_id, updated_by) as author_id, COALESCE(author_name, updated_by, 'Manager') as author_name, created_at, COALESCE(updated_at, created_at) as updated_at
       `)) as any[];
       return { success: true, data: rows[0] };
     } else {
       const rows = (await db.execute(sql`
-        INSERT INTO campaign_creator_notes (campaign_creator_id, role, isi, author_id, author_name, created_at, updated_at)
-        VALUES (${params.ccId}, ${roleKey}, ${params.noteText}, ${authorId}, ${authorName}, NOW(), NOW())
-        RETURNING *
+        INSERT INTO campaign_creator_notes (
+          campaign_creator_id, role, field_name, isi, notes, author_id, author_name, updated_by, created_at, updated_at
+        ) VALUES (
+          ${params.ccId}, ${roleKey}, ${roleKey}, ${params.noteText}, ${params.noteText}, ${authorId}, ${authorName}, ${authorName}, NOW(), NOW()
+        )
+        RETURNING id, campaign_creator_id, COALESCE(role, field_name) as role, COALESCE(isi, notes) as isi, COALESCE(author_id, updated_by) as author_id, COALESCE(author_name, updated_by, 'Manager') as author_name, created_at, COALESCE(updated_at, created_at) as updated_at
       `)) as any[];
       return { success: true, data: rows[0] };
     }
