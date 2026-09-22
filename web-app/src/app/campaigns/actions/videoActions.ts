@@ -157,12 +157,33 @@ export async function getInternalVideoData(campaignId: number, searchKeyword: st
       };
     });
 
+    // 8. Fetch revision notes server-side for initial hydration
+    const ccIds = (ccsRows || []).map((r: any) => r.id).filter(Boolean);
+    const initialRevisionNotes: Record<string, any> = {};
+    if (ccIds.length > 0) {
+      const notesRows = (await db.execute(sql`
+        SELECT * FROM campaign_creator_notes
+        WHERE campaign_creator_id = ANY(${ccIds})
+          AND role ILIKE 'draft_revisi_%'
+        ORDER BY updated_at ASC, id ASC
+      `).catch(() => [])) as any[];
+
+      (notesRows || []).forEach((n: any) => {
+        const match = n.role.match(/^draft_revisi_(\d+)$/);
+        if (match) {
+          const urutan = parseInt(match[1]);
+          initialRevisionNotes[`${n.campaign_creator_id}_${urutan}`] = n;
+        }
+      });
+    }
+
     return {
       campaign,
       skus: skusList,
       creators: mapped,
       listingData: mapped,
       allVideos: allVideosList,
+      initialRevisionNotes,
       stats: organicRows,
     };
   } catch (error: any) {

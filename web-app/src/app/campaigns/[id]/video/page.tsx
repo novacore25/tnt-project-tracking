@@ -28,6 +28,7 @@ export default async function CampaignVideoPage({
     <CampaignVideoClient 
       initialListingData={data.listingData}
       initialVideos={data.allVideos}
+      initialRevisionNotes={data.initialRevisionNotes}
     />
   );
 }

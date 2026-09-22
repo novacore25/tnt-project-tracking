@@ -501,7 +501,7 @@ export async function fetchListingPageDataAction(campaignId: number) {
 // REVISION NOTES (Campaign Creator Notes)
 // ============================================================
 let notesTableEnsured = false;
-async function ensureNotesTable() {
+export async function ensureNotesTable() {
   if (notesTableEnsured) return;
   try {
     await db.execute(sql`
@@ -510,14 +510,25 @@ async function ensureNotesTable() {
         campaign_creator_id INTEGER REFERENCES campaign_creators(id) ON DELETE CASCADE,
         role VARCHAR(50) NOT NULL,
         isi TEXT NOT NULL,
-        author_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
+        author_id TEXT,
         author_name VARCHAR(255),
         created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
       );
       ALTER TABLE campaign_creator_notes ADD COLUMN IF NOT EXISTS author_name VARCHAR(255);
+      ALTER TABLE campaign_creator_notes ADD COLUMN IF NOT EXISTS author_id TEXT;
       ALTER TABLE campaign_creator_notes ADD COLUMN IF NOT EXISTS role VARCHAR(50);
       ALTER TABLE campaign_creator_notes ADD COLUMN IF NOT EXISTS isi TEXT;
+    `);
+
+    await db.execute(sql`
+      DO $$
+      BEGIN
+        ALTER TABLE campaign_creator_notes DROP CONSTRAINT IF EXISTS campaign_creator_notes_author_id_fkey;
+        ALTER TABLE campaign_creator_notes ALTER COLUMN author_id TYPE TEXT USING author_id::text;
+      EXCEPTION
+        WHEN OTHERS THEN NULL;
+      END $$;
     `);
     notesTableEnsured = true;
   } catch (err) {
@@ -533,6 +544,7 @@ export async function fetchRevisionNotesAction(ccIds: number[]) {
       SELECT * FROM campaign_creator_notes
       WHERE campaign_creator_id = ANY(${ccIds})
         AND role ILIKE 'draft_revisi_%'
+      ORDER BY updated_at ASC, id ASC
     `) as any[];
     return { success: true, data: data || [] };
   } catch (err: any) {
@@ -550,38 +562,40 @@ export async function upsertRevisionNoteAction(params: {
 }) {
   try {
     await ensureNotesTable();
-    const isValidUuid = (val?: any): boolean => typeof val === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(val);
-    let authorIdVal = isValidUuid(params.authorId) ? params.authorId : null;
+    const roleKey = `draft_revisi_${params.urutan}`;
+    const authorName = params.authorName || 'Manager';
+    const authorId = params.authorId ? String(params.authorId) : null;
 
-    if (!authorIdVal && params.authorName) {
-      try {
-        const found = (await db.execute(sql`
-          SELECT id FROM profiles WHERE LOWER(nama) = ${params.authorName.toLowerCase()} LIMIT 1
-        `)) as any[];
-        if (found && found[0]?.id && isValidUuid(found[0].id)) {
-          authorIdVal = found[0].id;
-        }
-      } catch {}
+    // Check if a note already exists by existingId OR by (campaign_creator_id, role)
+    let noteId = params.existingId;
+    if (!noteId) {
+      const existing = (await db.execute(sql`
+        SELECT id FROM campaign_creator_notes
+        WHERE campaign_creator_id = ${params.ccId} AND role = ${roleKey}
+        ORDER BY id DESC LIMIT 1
+      `)) as any[];
+      if (existing && existing.length > 0) {
+        noteId = existing[0].id;
+      }
     }
 
-    if (params.existingId) {
-      const rows = await db.execute(sql`
+    if (noteId) {
+      const rows = (await db.execute(sql`
         UPDATE campaign_creator_notes
         SET isi = ${params.noteText},
-            author_id = ${authorIdVal},
-            author_name = ${params.authorName || 'Manager'},
+            author_id = ${authorId},
+            author_name = ${authorName},
             updated_at = NOW()
-        WHERE id = ${params.existingId}
+        WHERE id = ${noteId}
         RETURNING *
-      `) as any[];
+      `)) as any[];
       return { success: true, data: rows[0] };
     } else {
-      const roleKey = `draft_revisi_${params.urutan}`;
-      const rows = await db.execute(sql`
+      const rows = (await db.execute(sql`
         INSERT INTO campaign_creator_notes (campaign_creator_id, role, isi, author_id, author_name, created_at, updated_at)
-        VALUES (${params.ccId}, ${roleKey}, ${params.noteText}, ${authorIdVal}, ${params.authorName || 'Manager'}, NOW(), NOW())
+        VALUES (${params.ccId}, ${roleKey}, ${params.noteText}, ${authorId}, ${authorName}, NOW(), NOW())
         RETURNING *
-      `) as any[];
+      `)) as any[];
       return { success: true, data: rows[0] };
     }
   } catch (err: any) {

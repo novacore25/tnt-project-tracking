@@ -77,10 +77,12 @@ function extractTikTokUploadDate(videoId: string): string | null {
 
 export default function CampaignVideoPage({
   initialListingData,
-  initialVideos
+  initialVideos,
+  initialRevisionNotes
 }: {
   initialListingData: any[],
-  initialVideos: any[]
+  initialVideos: any[],
+  initialRevisionNotes?: Record<string, any>
 }) {
   const { id } = useParams();
   const campaignId = Number(id);
@@ -177,7 +179,7 @@ export default function CampaignVideoPage({
   const [selectedConcept, setSelectedConcept] = useState<any | null>(null);
 
   // Draft Video Revision Notes states
-  const [revisionNotes, setRevisionNotes] = useState<Record<string, any>>({});
+  const [revisionNotes, setRevisionNotes] = useState<Record<string, any>>(initialRevisionNotes || {});
   const [revisionModalState, setRevisionModalState] = useState<{
     open: boolean;
     video: any | null;
@@ -309,10 +311,10 @@ export default function CampaignVideoPage({
             map[`${n.campaign_creator_id}_${urutan}`] = n;
           }
         });
-        setRevisionNotes(map);
+        setRevisionNotes(prev => ({ ...prev, ...map }));
       }
     });
-  }, [campaignId, listingData]);
+  }, [campaignId, listingData.length]);
 
   // Reset clientPage when filters change
   useEffect(() => {
