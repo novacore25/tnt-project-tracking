@@ -667,26 +667,29 @@ export async function upsertRevisionNoteAction(params: {
 // ============================================================
 // VIDEO OPERATIONS (Server Actions)
 // ============================================================
-let videoColumnsEnsured = false;
 export async function ensureVideoColumns() {
-  if (videoColumnsEnsured) return;
   try {
     await db.execute(sql`
-      ALTER TABLE videos ADD COLUMN IF NOT EXISTS link_draft text;
-      ALTER TABLE videos ADD COLUMN IF NOT EXISTS link_draft_updated_by text;
-      ALTER TABLE videos ADD COLUMN IF NOT EXISTS link_draft_updated_at timestamptz;
-      ALTER TABLE videos ADD COLUMN IF NOT EXISTS vt_approved_by text;
-      ALTER TABLE videos ADD COLUMN IF NOT EXISTS vt_approved_at timestamptz;
-      ALTER TABLE videos ADD COLUMN IF NOT EXISTS vt_approval text DEFAULT 'pending';
-      ALTER TABLE videos ADD COLUMN IF NOT EXISTS revision_notes text;
-      ALTER TABLE videos ADD COLUMN IF NOT EXISTS revision_notes_updated_by text;
-      ALTER TABLE videos ADD COLUMN IF NOT EXISTS revision_notes_updated_at timestamptz;
-      ALTER TABLE videos ADD COLUMN IF NOT EXISTS concept text;
-      ALTER TABLE videos ADD COLUMN IF NOT EXISTS concept_updated_at timestamptz;
-      ALTER TABLE videos ADD COLUMN IF NOT EXISTS concept_updated_by text;
-      ALTER TABLE videos ADD COLUMN IF NOT EXISTS link_video text;
-      ALTER TABLE videos ADD COLUMN IF NOT EXISTS content_uid text;
-      ALTER TABLE videos ADD COLUMN IF NOT EXISTS sku_id integer;
+      DO $$
+      BEGIN
+        ALTER TABLE videos ADD COLUMN IF NOT EXISTS link_draft text;
+        ALTER TABLE videos ADD COLUMN IF NOT EXISTS link_draft_updated_by text;
+        ALTER TABLE videos ADD COLUMN IF NOT EXISTS link_draft_updated_at timestamptz;
+        ALTER TABLE videos ADD COLUMN IF NOT EXISTS vt_approved_by text;
+        ALTER TABLE videos ADD COLUMN IF NOT EXISTS vt_approved_at timestamptz;
+        ALTER TABLE videos ADD COLUMN IF NOT EXISTS vt_approval text DEFAULT 'pending';
+        ALTER TABLE videos ADD COLUMN IF NOT EXISTS revision_notes text;
+        ALTER TABLE videos ADD COLUMN IF NOT EXISTS revision_notes_updated_by text;
+        ALTER TABLE videos ADD COLUMN IF NOT EXISTS revision_notes_updated_at timestamptz;
+        ALTER TABLE videos ADD COLUMN IF NOT EXISTS concept text;
+        ALTER TABLE videos ADD COLUMN IF NOT EXISTS concept_updated_at timestamptz;
+        ALTER TABLE videos ADD COLUMN IF NOT EXISTS concept_updated_by text;
+        ALTER TABLE videos ADD COLUMN IF NOT EXISTS link_video text;
+        ALTER TABLE videos ADD COLUMN IF NOT EXISTS content_uid text;
+        ALTER TABLE videos ADD COLUMN IF NOT EXISTS sku_id integer;
+      EXCEPTION
+        WHEN OTHERS THEN NULL;
+      END $$;
     `);
 
     await db.execute(sql`
@@ -703,18 +706,19 @@ export async function ensureVideoColumns() {
         ) LOOP
           EXECUTE 'ALTER TABLE videos DROP CONSTRAINT IF EXISTS ' || quote_ident(r.conname);
         END LOOP;
+      EXCEPTION
+        WHEN OTHERS THEN NULL;
       END $$;
     `);
-    videoColumnsEnsured = true;
   } catch (err) {
     console.error('ensureVideoColumns error:', err);
   }
 }
 
-function safeDate(val: any): Date | null {
+function safeDate(val: any): string | null {
   if (!val) return null;
   const d = new Date(val);
-  return isNaN(d.getTime()) ? null : d;
+  return isNaN(d.getTime()) ? null : d.toISOString();
 }
 
 export async function upsertVideoAction(params: {
