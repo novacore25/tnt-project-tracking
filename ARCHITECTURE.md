@@ -216,7 +216,38 @@ flowchart TD
 
 ---
 
-### H. Modul Smart Import & Sales Attribution (`/import-data`, `/input-penjualan`)
+### H. Modul Spreadsheet Import Creator (`/campaigns/[id]/listing/import-creator`)
+- **Fungsi Utama**: Alat entri massal interaktif berbasis spreadsheet (mendukung copy-paste langsung dari Excel/Google Sheets, autofill ratecard otomatis, drag-to-fill, dan deteksi kreator belum lengkap).
+- **Alur Kerja & Relasi Database**:
+  ```mermaid
+  flowchart TD
+      Paste[Paste / Input Excel Rows] --> Verify[Verifikasi Data & Lookup DB]
+      Verify --> ExistsCheck{Kreator Sudah Ada di DB?}
+      ExistsCheck -- Ya --> FetchSnap[Tarik Snapshot & Kontak Terakhir]
+      ExistsCheck -- Tidak --> NewEntry[Tandai Kreator Baru]
+      FetchSnap --> CampCheck{Sudah di Campaign?}
+      CampCheck -- Ya --> DuplicatePrompt[Deteksi Duplikat: Update / Skip]
+      CampCheck -- Tidak --> Ready[Siap Disimpan]
+      NewEntry --> Ready
+      Ready --> BatchSave[saveCreatorImportBatchAction]
+      BatchSave --> TblCreators[(creators)]
+      BatchSave --> TblSnap[(creator_snapshots)]
+      BatchSave --> TblContacts[(creator_contacts)]
+      BatchSave --> TblCampCreators[(campaign_creators)]
+  ```
+- **Fitur-Fitur Kunci**:
+  1. **Smart Clipboard Parser**: Otomatis mendeteksi pemisah tab (`\t`) dan newline (`\n`), membersihkan prefix `@` pada username, serta mengonversi format ringkas seperti `1.5M`, `200K`, `3B` menjadi integer murni.
+  2. **Auto-Fill Snapshots on Paste/Blur**: Ketika username dimasukkan, sistem otomatis memuat kontak aktif terakhir (`creator_contacts`), level, followers, GMV 30 hari (`creator_snapshots`), serta kuota & harga dari campaign sebelumnya jika ada.
+  3. **Tampilkan Kreator Belum Lengkap (`handleLoadIncompleteAuto`)**: Menarik data kreator campaign yang sudah terdaftar (`fetchCampaignCreatorsFullForImportAction`), menganalisis kolom yang masih kosong/bernilai 0, dan mengurutkannya berdasarkan tingkat kekurangan data (*missing score*) untuk dilengkapi secara cepat.
+  4. **Batch Upsert Transactional Pipeline**:
+     - Memastikan `creators` dimasukkan/diperbarui tanpa error kolom yang tidak ada (`status`).
+     - Menyimpan snapshot metrik terbaru ke `creator_snapshots` bila ada perubahan followers/GMV/ratecard.
+     - Mengelola status aktif/arsip pada nomor WhatsApp di `creator_contacts`.
+     - Mengaitkan kreator ke campaign via `campaign_creators` dengan status approval (`pending`), approval klien (`pending` jika diwajibkan), dan penugasan PIC.
+
+---
+
+### I. Modul Smart Import & Sales Attribution (`/import-data`, `/input-penjualan`)
 - **Routing Hierarki Penjualan**:
   1. *Priority 1*: Berdasarkan `product_id` yang terdaftar pada tabel `skus` campaign.
   2. *Priority 2*: Berdasarkan `tiktok_campaign_id` campaign.

@@ -1136,18 +1136,35 @@ export async function fetchExportCampaignCreatorsAction(campaignId: number, stat
 // ============================================================
 export async function fetchCreatorsWithSnapshotsForImportAction(usernames: string[]) {
   if (!usernames || usernames.length === 0) return { success: true, data: [] };
-  const cleanUsernames = usernames.map(u => u.toLowerCase());
+  const cleanUsernames = usernames.map(u => (u || '').toLowerCase().trim()).filter(Boolean);
+  if (cleanUsernames.length === 0) return { success: true, data: [] };
   try {
     const data = await db.execute(sql`
       SELECT
         c.id, c.username,
-        json_agg(DISTINCT jsonb_build_object('id', cs.id, 'ratecard', cs.ratecard, 'followers', cs.followers, 'gmv_30d', cs.gmv_30d, 'gmv_30d_video', cs.gmv_30d_video, 'gmv_30d_live', cs.gmv_30d_live, 'level', cs.level, 'tanggal_update', cs.tanggal_update)) FILTER (WHERE cs.id IS NOT NULL) as creator_snapshots,
-        json_agg(DISTINCT jsonb_build_object('nomor', ct.nomor, 'status', ct.status)) FILTER (WHERE ct.id IS NOT NULL) as creator_contacts
+        COALESCE(
+          (SELECT json_agg(json_build_object(
+            'id', cs.id,
+            'ratecard', cs.ratecard,
+            'followers', cs.followers,
+            'gmv_30d', cs.gmv_30d,
+            'gmv_30d_video', cs.gmv_30d_video,
+            'gmv_30d_live', cs.gmv_30d_live,
+            'level', cs.level,
+            'tanggal_update', cs.tanggal_update
+          ) ORDER BY cs.id DESC)
+           FROM creator_snapshots cs WHERE cs.creator_id = c.id), '[]'::json
+        ) as creator_snapshots,
+        COALESCE(
+          (SELECT json_agg(json_build_object(
+            'id', ct.id,
+            'nomor', ct.nomor,
+            'status', ct.status
+          ) ORDER BY ct.id DESC)
+           FROM creator_contacts ct WHERE ct.creator_id = c.id), '[]'::json
+        ) as creator_contacts
       FROM creators c
-      LEFT JOIN creator_snapshots cs ON cs.creator_id = c.id
-      LEFT JOIN creator_contacts ct ON ct.creator_id = c.id
       WHERE LOWER(c.username) = ANY(${cleanUsernames})
-      GROUP BY c.id
     `) as any[];
     return { success: true, data: data || [] };
   } catch (err: any) {
@@ -1178,23 +1195,33 @@ export async function fetchCampaignCreatorsFullForImportAction(campaignId: numbe
     if (approvalFilter && approvalFilter !== 'all') {
       if (approvalFilter === 'auto_detect') {
         conditions.push(sql`cc.tier = 'Auto-Detect'`);
+      } else if (approvalFilter === 'approve' || approvalFilter === 'approved') {
+        conditions.push(sql`LOWER(cc.approval) IN ('approve', 'approved')`);
+      } else if (approvalFilter === 'not_approve' || approvalFilter === 'not_approved' || approvalFilter === 'rejected') {
+        conditions.push(sql`LOWER(cc.approval) IN ('not_approve', 'not_approved', 'rejected')`);
       } else {
-        conditions.push(sql`cc.approval = ${approvalFilter}`);
+        conditions.push(sql`LOWER(cc.approval) = ${approvalFilter.toLowerCase()}`);
       }
     }
     const whereClause = sql`WHERE ${sql.join(conditions, sql` AND `)}`;
     const data = await db.execute(sql`
       SELECT
         cc.id, cc.creator_id, cc.price, cc.qty_vt, cc.qty_live, cc.content_type, cc.tier, cc.approval,
-        c.id as c_id, c.username,
-        json_agg(DISTINCT jsonb_build_object('nomor', ct.nomor, 'status', ct.status)) FILTER (WHERE ct.id IS NOT NULL) as creator_contacts,
-        json_agg(DISTINCT jsonb_build_object('id', cs.id, 'followers', cs.followers, 'level', cs.level, 'gmv_30d', cs.gmv_30d, 'gmv_30d_video', cs.gmv_30d_video, 'gmv_30d_live', cs.gmv_30d_live, 'ratecard', cs.ratecard, 'tanggal_update', cs.tanggal_update)) FILTER (WHERE cs.id IS NOT NULL) as creator_snapshots
+        json_build_object(
+          'id', c.id,
+          'username', c.username,
+          'creator_contacts', COALESCE(
+            (SELECT json_agg(json_build_object('id', ct.id, 'nomor', ct.nomor, 'status', ct.status) ORDER BY ct.id DESC)
+             FROM creator_contacts ct WHERE ct.creator_id = c.id), '[]'::json
+          ),
+          'creator_snapshots', COALESCE(
+            (SELECT json_agg(json_build_object('id', cs.id, 'followers', cs.followers, 'level', cs.level, 'gmv_30d', cs.gmv_30d, 'gmv_30d_video', cs.gmv_30d_video, 'gmv_30d_live', cs.gmv_30d_live, 'ratecard', cs.ratecard, 'tanggal_update', cs.tanggal_update) ORDER BY cs.id DESC)
+             FROM creator_snapshots cs WHERE cs.creator_id = c.id), '[]'::json
+          )
+        ) as creators
       FROM campaign_creators cc
       JOIN creators c ON cc.creator_id = c.id
-      LEFT JOIN creator_contacts ct ON ct.creator_id = cc.creator_id
-      LEFT JOIN creator_snapshots cs ON cs.creator_id = cc.creator_id
       ${whereClause}
-      GROUP BY cc.id, c.id
     `) as any[];
     return { success: true, data: data || [] };
   } catch (err: any) {
@@ -1212,11 +1239,15 @@ export async function saveCreatorImportBatchAction(params: {
     creatorId?: number;
     status: string;
     action?: string;
-    followers: number;
-    gmv_30d: number;
-    gmv_30d_video: number;
-    gmv_30d_live: number;
-    ratecard: number;
+    followers?: number;
+    gmv_30d?: number;
+    gmv_30_days?: number;
+    gmv_30d_video?: number;
+    gmv_30_days_video?: number;
+    gmv_30d_live?: number;
+    gmv_30_days_live?: number;
+    ratecard?: number;
+    rate_card?: number;
     tier: string;
     level: number | null;
     no_wa: string;
@@ -1233,17 +1264,19 @@ export async function saveCreatorImportBatchAction(params: {
   for (const row of rows) {
     try {
       let cid = row.creatorId;
+      const cleanUsername = (row.username || '').toLowerCase().trim();
+      if (!cleanUsername) continue;
       
       if (!cid) {
         // Try to find by username (case-insensitive)
-        const existing = await db.execute(sql`SELECT id FROM creators WHERE LOWER(username) = ${row.username.toLowerCase().trim()} LIMIT 1`) as any[];
+        const existing = await db.execute(sql`SELECT id FROM creators WHERE LOWER(username) = ${cleanUsername} LIMIT 1`) as any[];
         if (existing.length > 0) {
           cid = existing[0].id;
         } else {
-          // Insert new creator
+          // Insert new creator (Note: creators table has no 'status' column)
           const inserted = await db.execute(sql`
-            INSERT INTO creators (username, link_account, added_by, status)
-            VALUES (${row.username.trim()}, ${'https://www.tiktok.com/@' + row.username.trim()}, ${picId || null}, 'active')
+            INSERT INTO creators (username, link_account, added_by)
+            VALUES (${row.username.trim()}, ${'https://www.tiktok.com/@' + row.username.trim()}, ${picId || null})
             ON CONFLICT (username) DO UPDATE SET link_account = EXCLUDED.link_account
             RETURNING id
           `) as any[];
@@ -1258,22 +1291,29 @@ export async function saveCreatorImportBatchAction(params: {
         continue;
       }
       
+      // Resolve values supporting multiple property conventions
+      const rowFollowers = Number(row.followers) || 0;
+      const rowGmv = Number(row.gmv_30_days ?? row.gmv_30d) || 0;
+      const rowGmvVid = Number(row.gmv_30_days_video ?? row.gmv_30d_video) || 0;
+      const rowGmvLive = Number(row.gmv_30_days_live ?? row.gmv_30d_live) || 0;
+      const rowRatecard = Number(row.rate_card ?? row.ratecard) || 0;
+
       // Check existing snapshot
       const snapRows = await db.execute(sql`SELECT id, followers, gmv_30d, gmv_30d_video, gmv_30d_live, ratecard, level FROM creator_snapshots WHERE creator_id = ${cid} ORDER BY id DESC LIMIT 1`) as any[];
       const lastSnap = snapRows[0];
-      const newFollowers = row.followers || (lastSnap?.followers || 0);
-      const newGmv = row.gmv_30d || (lastSnap?.gmv_30d || 0);
-      const newGmvVid = row.gmv_30d_video || (lastSnap?.gmv_30d_video || 0);
-      const newGmvLive = row.gmv_30d_live || (lastSnap?.gmv_30d_live || 0);
-      const newRateCard = row.ratecard || (lastSnap?.ratecard || 0);
-      const newLevel = row.level;
+      const newFollowers = rowFollowers || (lastSnap?.followers || 0);
+      const newGmv = rowGmv || (lastSnap?.gmv_30d || 0);
+      const newGmvVid = rowGmvVid || (lastSnap?.gmv_30d_video || 0);
+      const newGmvLive = rowGmvLive || (lastSnap?.gmv_30d_live || 0);
+      const newRateCard = rowRatecard || (lastSnap?.ratecard || 0);
+      const newLevel = row.level !== undefined && row.level !== null ? Number(row.level) : (lastSnap?.level ?? null);
       
-      // Insert snapshot if changed
+      // Insert snapshot if changed or no existing snapshot
       if (!lastSnap || lastSnap.followers !== newFollowers || lastSnap.gmv_30d !== newGmv ||
           lastSnap.ratecard !== newRateCard || lastSnap.level !== newLevel) {
         await db.execute(sql`
           INSERT INTO creator_snapshots (creator_id, followers, gmv_30d, gmv_30d_video, gmv_30d_live, ratecard, tier, level, tanggal_update, updated_by)
-          VALUES (${cid}, ${newFollowers}, ${newGmv}, ${newGmvVid}, ${newGmvLive}, ${newRateCard}, ${row.tier}, ${newLevel}, CURRENT_DATE, ${picName || 'System'})
+          VALUES (${cid}, ${newFollowers}, ${newGmv}, ${newGmvVid}, ${newGmvLive}, ${newRateCard}, ${row.tier || 'Nano'}, ${newLevel}, CURRENT_DATE, ${picName || 'System'})
         `);
       }
       
@@ -1297,12 +1337,12 @@ export async function saveCreatorImportBatchAction(params: {
       }
       
       // Upsert campaign_creator
-      const updateData: any = {
-        tier: row.tier,
+      const updateData = {
+        tier: row.tier || 'Nano',
         price: newRateCard,
-        qty_vt: row.qty_vt,
-        qty_live: row.qty_live,
-        content_type: row.content_type,
+        qty_vt: Number(row.qty_vt) || 0,
+        qty_live: Number(row.qty_live) || 0,
+        content_type: row.content_type || 'Video',
         pic_assist: picName || '-'
       };
       
