@@ -81,30 +81,30 @@ export async function deleteCampaignConceptAction(id: number) {
 // ============================================================
 export async function fetchLivePageDataAction(campaignId: number, requireClientApproval: boolean = false) {
   try {
-    const [ccList, liveStats] = await Promise.all([
+    const [ccList, liveSessionsRows, organicLiveRows, salesRows] = await Promise.all([
       db.execute(sql`
         SELECT 
           cc.*,
-          c.username, c.nama_lengkap as nama_asli, c.platform, c.status as creator_status
+          c.username, c.nama_asli, c.link_account
         FROM campaign_creators cc
         LEFT JOIN creators c ON cc.creator_id = c.id
         WHERE cc.campaign_id = ${campaignId}
-          AND cc.approval IN ('approved', 'alternate')
-          ${requireClientApproval ? sql`AND cc.client_approval IN ('approved', 'not_required')` : sql``}
+          AND LOWER(cc.approval) IN ('approved', 'alternate')
+          ${requireClientApproval ? sql`AND LOWER(cc.client_approval) IN ('approved', 'not_required')` : sql``}
         ORDER BY cc.id ASC
-      `) as Promise<any[]>,
+      `).catch(() => []) as Promise<any[]>,
       db.execute(sql`
         SELECT 
-          ls.id, ls.livestream_room_id as content_uid, ls.creator_username, ls.start_time, ls.duration_str,
-          ls.live_views as video_views, ls.live_likes as video_likes,
+          ls.id, ls.livestream_room_id as content_uid, ls.creator_username, ls.livestream_name, ls.start_time, ls.duration_str,
+          COALESCE(ls.live_views, 0) as video_views, COALESCE(ls.live_likes, 0) as video_likes,
           COALESCE(lsp_agg.gmv, 0) as gmv,
           COALESCE(lsp_agg.orders, 0) as orders
         FROM live_sessions ls
         LEFT JOIN (
           SELECT 
             livestream_room_id,
-            SUM(gmv) as gmv,
-            SUM(orders) as orders
+            SUM(COALESCE(gmv, 0)) as gmv,
+            SUM(COALESCE(orders, 0)) as orders
           FROM live_session_products
           GROUP BY livestream_room_id
         ) lsp_agg ON ls.livestream_room_id = lsp_agg.livestream_room_id
@@ -114,24 +114,104 @@ export async function fetchLivePageDataAction(campaignId: number, requireClientA
              JOIN creators c ON cc.creator_id = c.id
              WHERE cc.campaign_id = ${campaignId}
            )
+      `).catch(() => []) as Promise<any[]>,
+      db.execute(sql`
+        SELECT 
+          ov.id, ov.content_uid, ov.creator_username,
+          ov.raw_data->>'Livestream name' as livestream_name,
+          ov.post_time as start_time, ov.duration_str,
+          COALESCE(ov.video_views, 0) as video_views,
+          COALESCE(ov.video_likes, 0) as video_likes
+        FROM organic_videos ov
+        WHERE ov.campaign_id = ${campaignId}
+          AND (ov.content_type ILIKE '%live%' OR ov.content_type ILIKE '%livestream%')
+      `).catch(() => []) as Promise<any[]>,
+      db.execute(sql`
+        SELECT 
+          content_uid,
+          SUM(COALESCE(gmv, 0)) as gmv,
+          SUM(COALESCE(quantity, 1)) as orders
+        FROM sales
+        WHERE campaign_id = ${campaignId}
+          AND (content_type ILIKE '%live%' OR content_type ILIKE '%livestream%')
+        GROUP BY content_uid
       `).catch(() => []) as Promise<any[]>
     ]);
 
-    const formattedCCs = (ccList || []).map(r => ({
+    const salesByUid = new Map<string, { gmv: number; orders: number }>();
+    (salesRows || []).forEach((s: any) => {
+      if (!s.content_uid) return;
+      salesByUid.set(s.content_uid.toString(), {
+        gmv: Number(s.gmv) || 0,
+        orders: Number(s.orders) || 0,
+      });
+    });
+
+    const liveStatsMap = new Map<string, any>();
+
+    (organicLiveRows || []).forEach((row: any) => {
+      const uid = (row.content_uid || '').toString();
+      if (!uid) return;
+      const salesInfo = salesByUid.get(uid) || { gmv: 0, orders: 0 };
+      liveStatsMap.set(uid, {
+        id: row.id,
+        content_uid: uid,
+        creator_username: row.creator_username,
+        livestream_name: row.livestream_name || null,
+        start_time: row.start_time,
+        duration_str: row.duration_str || null,
+        video_views: Number(row.video_views) || 0,
+        video_likes: Number(row.video_likes) || 0,
+        gmv: salesInfo.gmv,
+        orders: salesInfo.orders,
+      });
+    });
+
+    (liveSessionsRows || []).forEach((row: any) => {
+      const uid = (row.content_uid || '').toString();
+      if (!uid) return;
+      const existing = liveStatsMap.get(uid);
+      const salesInfo = salesByUid.get(uid);
+      const calculatedGmv = Math.max(Number(row.gmv) || 0, salesInfo?.gmv || 0);
+      const calculatedOrders = Math.max(Number(row.orders) || 0, salesInfo?.orders || 0);
+
+      if (existing) {
+        existing.livestream_name = existing.livestream_name || row.livestream_name;
+        existing.video_views = Math.max(existing.video_views, Number(row.video_views) || 0);
+        existing.video_likes = Math.max(existing.video_likes, Number(row.video_likes) || 0);
+        existing.duration_str = existing.duration_str || row.duration_str;
+        existing.gmv = Math.max(existing.gmv, calculatedGmv);
+        existing.orders = Math.max(existing.orders, calculatedOrders);
+      } else {
+        liveStatsMap.set(uid, {
+          id: row.id,
+          content_uid: uid,
+          creator_username: row.creator_username,
+          livestream_name: row.livestream_name || null,
+          start_time: row.start_time,
+          duration_str: row.duration_str || null,
+          video_views: Number(row.video_views) || 0,
+          video_likes: Number(row.video_likes) || 0,
+          gmv: calculatedGmv,
+          orders: calculatedOrders,
+        });
+      }
+    });
+
+    const formattedCCs = (ccList || []).map((r: any) => ({
       ...r,
       creators: {
         id: r.creator_id,
         username: r.username,
         nama_asli: r.nama_asli,
-        platform: r.platform,
-        status: r.creator_status,
+        link_account: r.link_account,
       }
     }));
 
     return {
       success: true,
       creators: formattedCCs,
-      actualLives: liveStats || []
+      actualLives: Array.from(liveStatsMap.values())
     };
   } catch (err: any) {
     console.error('fetchLivePageDataAction error:', err);
