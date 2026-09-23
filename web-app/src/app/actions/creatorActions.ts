@@ -1,6 +1,6 @@
 'use server';
 
-import { db } from '@/db';
+import { db, sqlInList } from '@/db';
 import { sql } from 'drizzle-orm';
 import { auth } from '@/auth';
 import { revalidatePath } from 'next/cache';
@@ -179,7 +179,7 @@ export async function fetchCreatorProfile(creatorId: number) {
   let videos: any[] = [];
   if (ccList.length > 0) {
     const ccIds = ccList.map(c => c.id);
-    const vRows = await db.execute(sql`SELECT * FROM videos WHERE campaign_creator_id = ANY(${ccIds})`).catch(() => []);
+    const vRows = await db.execute(sql`SELECT * FROM videos WHERE campaign_creator_id IN ${sqlInList(ccIds)}`).catch(() => []);
     videos = (vRows as unknown as any[]) || [];
   }
 
@@ -188,7 +188,7 @@ export async function fetchCreatorProfile(creatorId: number) {
   if (liveList.length > 0) {
     const roomIds = liveList.map(l => l.livestream_room_id).filter(Boolean);
     if (roomIds.length > 0) {
-      const lpRows = await db.execute(sql`SELECT * FROM live_session_products WHERE livestream_room_id = ANY(${roomIds})`).catch(() => []);
+      const lpRows = await db.execute(sql`SELECT * FROM live_session_products WHERE livestream_room_id IN ${sqlInList(roomIds)}`).catch(() => []);
       liveProducts = (lpRows as unknown as any[]) || [];
     }
   }
@@ -409,7 +409,7 @@ export async function verifySpreadsheetCreatorsAction(usernames: string[]) {
     FROM creators cr
     LEFT JOIN profiles p_add ON cr.added_by = p_add.id
     LEFT JOIN profiles p_upd ON cr.last_updated_by = p_upd.id
-    WHERE LOWER(cr.username) = ANY(${cleanUsernames})
+    WHERE LOWER(cr.username) IN ${sqlInList(cleanUsernames)}
   `);
 
   return (rows as unknown as any[]) || [];
@@ -529,7 +529,7 @@ export async function bulkAutoDetectCreatorsAction(usernames: string[]) {
         WHERE cn.creator_id = cr.id
       ) as creator_niches
     FROM creators cr
-    WHERE LOWER(cr.username) = ANY(${cleanUsernames})
+    WHERE LOWER(cr.username) IN ${sqlInList(cleanUsernames)}
   `);
 
   return (rows as unknown as any[]) || [];

@@ -1,6 +1,6 @@
 'use server';
 
-import { db } from '@/db';
+import { db, sqlInList } from '@/db';
 import { sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 
@@ -311,7 +311,7 @@ export async function bulkAutoDetectAddressCreatorsAction(campaignId: number, us
     FROM campaign_creators cc
     JOIN creators cr ON cc.creator_id = cr.id
     WHERE cc.campaign_id = ${campaignId}
-      AND LOWER(cr.username) = ANY(${cleanUsernames}::text[])
+      AND LOWER(cr.username) IN ${sqlInList(cleanUsernames)}
   `);
 
   return (rows as unknown as any[]) || [];

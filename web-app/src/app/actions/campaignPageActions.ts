@@ -569,7 +569,7 @@ export async function fetchRevisionNotesAction(ccIds: number[]) {
         created_at, 
         COALESCE(updated_at, created_at) as updated_at
       FROM campaign_creator_notes
-      WHERE campaign_creator_id = ANY(${ccIds})
+      WHERE campaign_creator_id IN ${sqlInList(ccIds)}
         AND (role ILIKE 'draft_revisi_%' OR field_name ILIKE 'draft_revisi_%')
       ORDER BY COALESCE(updated_at, created_at) ASC, id ASC
     `) as any[];
@@ -847,7 +847,7 @@ export async function deleteVideoAction(videoId: number) {
 export async function deleteVideosAction(videoIds: number[]) {
   if (!videoIds || videoIds.length === 0) return { success: true };
   try {
-    await db.execute(sql`DELETE FROM videos WHERE id = ANY(${videoIds})`);
+    await db.execute(sql`DELETE FROM videos WHERE id IN ${sqlInList(videoIds)}`);
     return { success: true };
   } catch (err: any) {
     return { success: false, error: err.message };
@@ -880,7 +880,7 @@ export async function bulkInsertVideosAction(videoList: Array<{
 export async function fetchVideosByCcIdsAction(ccIds: number[]) {
   if (!ccIds || ccIds.length === 0) return { success: true, data: [] };
   try {
-    const data = await db.execute(sql`SELECT * FROM videos WHERE campaign_creator_id = ANY(${ccIds}) ORDER BY urutan ASC`) as any[];
+    const data = await db.execute(sql`SELECT * FROM videos WHERE campaign_creator_id IN ${sqlInList(ccIds)} ORDER BY urutan ASC`) as any[];
     return { success: true, data: data || [] };
   } catch (err: any) {
     return { success: false, data: [], error: err.message };
@@ -1322,7 +1322,7 @@ export async function fetchDuplicateCcDetailsAction(ccIds: number[]) {
       FROM campaign_creators cc
       LEFT JOIN creators c ON cc.creator_id = c.id
       LEFT JOIN videos v ON v.campaign_creator_id = cc.id
-      WHERE cc.id = ANY(${ccIds})
+      WHERE cc.id IN ${sqlInList(ccIds)}
       GROUP BY cc.id, c.username
     `) as any[];
     return { success: true, data: data || [] };
@@ -1335,7 +1335,7 @@ export async function mergeCampaignCreatorsAction(survivingId: number, otherIds:
   try {
     // Move all videos from otherIds to survivingId
     if (otherIds.length > 0) {
-      await db.execute(sql`UPDATE videos SET campaign_creator_id = ${survivingId} WHERE campaign_creator_id = ANY(${otherIds})`);
+      await db.execute(sql`UPDATE videos SET campaign_creator_id = ${survivingId} WHERE campaign_creator_id IN ${sqlInList(otherIds)}`);
     }
     // Update surviving row
     const sets: any[] = [];
@@ -1360,7 +1360,7 @@ export async function mergeCampaignCreatorsAction(survivingId: number, otherIds:
     }
     // Delete other rows
     if (otherIds.length > 0) {
-      await db.execute(sql`DELETE FROM campaign_creators WHERE id = ANY(${otherIds})`);
+      await db.execute(sql`DELETE FROM campaign_creators WHERE id IN ${sqlInList(otherIds)}`);
     }
     return { success: true };
   } catch (err: any) {
@@ -1389,7 +1389,7 @@ export async function fetchSalesVideoUsernamesAction(campaignId: number) {
 export async function fetchCreatorIdsByUsernamesAction(usernames: string[]) {
   if (!usernames || usernames.length === 0) return { success: true, data: [] };
   try {
-    const data = await db.execute(sql`SELECT id FROM creators WHERE LOWER(username) = ANY(${usernames.map(u => u.toLowerCase())})`) as any[];
+    const data = await db.execute(sql`SELECT id FROM creators WHERE LOWER(username) IN ${sqlInList(usernames.map(u => u.toLowerCase()))}`) as any[];
     return { success: true, data: (data || []).map((r: any) => r.id) };
   } catch (err: any) {
     return { success: false, data: [], error: err.message };
@@ -1416,8 +1416,8 @@ export async function fetchSalesByCreatorUsernamesAction(campaignId: number, cre
       SELECT content_uid, creator_username, product_id
       FROM sales
       WHERE campaign_id = ${campaignId}
-        AND creator_username = ANY(${creatorUsernames})
-        AND product_id = ANY(${skuProductIds})
+        AND creator_username IN ${sqlInList(creatorUsernames)}
+        AND product_id IN ${sqlInList(skuProductIds)}
         AND content_uid IS NOT NULL
         AND content_uid != ''
     `) as any[];
@@ -1587,7 +1587,7 @@ export async function searchCreatorsWithSnapshotsAction(usernames: string[]) {
       LEFT JOIN creator_niches cn ON cn.creator_id = c.id
       LEFT JOIN campaign_creators cc2 ON cc2.creator_id = c.id
       LEFT JOIN campaigns camp ON cc2.campaign_id = camp.id
-      WHERE LOWER(c.username) = ANY(${usernames.map(u => u.toLowerCase())})
+      WHERE LOWER(c.username) IN ${sqlInList(usernames.map(u => u.toLowerCase()))}
       GROUP BY c.id
     `) as any[];
     return { success: true, data: data || [] };
@@ -1601,7 +1601,7 @@ export async function fetchCreatorSnapshotsBatchAction(creatorIds: number[]) {
   try {
     const data = await db.execute(sql`
       SELECT DISTINCT ON (creator_id) id, creator_id, followers, gmv_30d, gmv_30d_video, gmv_30d_live, tier, ratecard, level, audience_age, tanggal_update
-      FROM creator_snapshots WHERE creator_id = ANY(${creatorIds})
+      FROM creator_snapshots WHERE creator_id IN ${sqlInList(creatorIds)}
       ORDER BY creator_id, id DESC
     `) as any[];
     return { success: true, data: data || [] };
@@ -1637,7 +1637,7 @@ export async function insertCreatorsAndCcAction(campaignId: number, creatorPaylo
     }
     // Get the IDs for each creator
     const allUsernames = creatorPayloads.map(c => c.username.toLowerCase());
-    const crRows = await db.execute(sql`SELECT id, LOWER(username) as username FROM creators WHERE LOWER(username) = ANY(${allUsernames})`) as any[];
+    const crRows = await db.execute(sql`SELECT id, LOWER(username) as username FROM creators WHERE LOWER(username) IN ${sqlInList(allUsernames)}`) as any[];
     const crMap = new Map(crRows.map((r: any) => [r.username, r.id]));
     
     // Insert campaign creators
@@ -1696,7 +1696,7 @@ export async function fetchExportCampaignCreatorsAction(campaignId: number, stat
       LEFT JOIN creator_contacts ct ON ct.creator_id = cc.creator_id
       LEFT JOIN creator_snapshots cs ON cs.creator_id = cc.creator_id
       WHERE cc.campaign_id = ${campaignId}
-        AND cc.approval = ANY(${statuses})
+        AND cc.approval IN ${sqlInList(statuses)}
       GROUP BY cc.id, c.username, c.nama_asli, c.link_account
       ORDER BY cc.id DESC
     `) as any[];
@@ -1749,7 +1749,7 @@ export async function fetchCreatorsWithSnapshotsForImportAction(usernames: strin
            FROM creator_contacts ct WHERE ct.creator_id = c.id), '[]'::json
         ) as creator_contacts
       FROM creators c
-      WHERE LOWER(c.username) = ANY(${cleanUsernames})
+      WHERE LOWER(c.username) IN ${sqlInList(cleanUsernames)}
     `) as any[];
     return { success: true, data: data || [] };
   } catch (err: any) {
@@ -1766,7 +1766,7 @@ export async function fetchCampaignCreatorsForImportAction(campaignId: number, c
       FROM campaign_creators cc
       JOIN creators c ON cc.creator_id = c.id
       WHERE cc.campaign_id = ${campaignId}
-        AND cc.creator_id = ANY(${creatorIds})
+        AND cc.creator_id IN ${sqlInList(creatorIds)}
     `) as any[];
     return { success: true, data: data || [] };
   } catch (err: any) {
@@ -1976,23 +1976,24 @@ export async function batchUpdateCampaignCreatorsApprovalAction(creatorIds: numb
   try {
     if (!creatorIds || creatorIds.length === 0) return { success: true };
     const now = new Date().toISOString();
+    const pid = profileId ? sql`${profileId}::uuid` : sql`NULL`;
     if (status === 'approved') {
       await db.execute(sql`
         UPDATE campaign_creators 
-        SET approval = ${status}, approved_by = ${profileId || null}, approved_at = ${now}
-        WHERE id = ANY(${creatorIds})
+        SET approval = ${status}, approved_by = ${pid}, approved_at = ${now}
+        WHERE id IN ${sqlInList(creatorIds)}
       `);
     } else if (status === 'not_approved' || status === 'alternate') {
       await db.execute(sql`
         UPDATE campaign_creators 
-        SET approval = ${status}, not_approved_by = ${profileId || null}, not_approved_at = ${now}
-        WHERE id = ANY(${creatorIds})
+        SET approval = ${status}, not_approved_by = ${pid}, not_approved_at = ${now}
+        WHERE id IN ${sqlInList(creatorIds)}
       `);
     } else {
       await db.execute(sql`
         UPDATE campaign_creators 
         SET approval = ${status}
-        WHERE id = ANY(${creatorIds})
+        WHERE id IN ${sqlInList(creatorIds)}
       `);
     }
     return { success: true };
@@ -2004,7 +2005,7 @@ export async function batchUpdateCampaignCreatorsApprovalAction(creatorIds: numb
 export async function batchDeleteCampaignCreatorsAction(creatorIds: number[]) {
   try {
     if (!creatorIds || creatorIds.length === 0) return { success: true };
-    await db.execute(sql`DELETE FROM campaign_creators WHERE id = ANY(${creatorIds})`);
+    await db.execute(sql`DELETE FROM campaign_creators WHERE id IN ${sqlInList(creatorIds)}`);
     return { success: true };
   } catch (err: any) {
     return { success: false, error: err.message };

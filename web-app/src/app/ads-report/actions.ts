@@ -1,6 +1,6 @@
 "use server";
 
-import { db } from '@/db';
+import { db, sqlInList } from '@/db';
 import { sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 
@@ -288,7 +288,7 @@ export async function updateAdPerformanceAction(params: {
 export async function deleteAdPerformanceAction(ids: number[]) {
   if (!ids || ids.length === 0) return { success: true };
   await db.execute(sql`
-    DELETE FROM ads_performance WHERE id = ANY(${ids}::int[])
+    DELETE FROM ads_performance WHERE id IN ${sqlInList(ids)}
   `);
   revalidatePath('/ads-report');
   return { success: true };

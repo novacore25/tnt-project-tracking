@@ -1,6 +1,6 @@
 'use server';
 
-import { db } from '@/db';
+import { db, sqlInList } from '@/db';
 import { sql } from 'drizzle-orm';
 import { ensureVideoColumns, ensureNotesTable } from '@/app/actions/campaignPageActions';
 
@@ -178,7 +178,7 @@ export async function getInternalVideoData(campaignId: number, searchKeyword: st
           created_at, 
           COALESCE(updated_at, created_at) as updated_at
         FROM campaign_creator_notes
-        WHERE campaign_creator_id = ANY(${ccIds})
+        WHERE campaign_creator_id IN ${sqlInList(ccIds)}
           AND (role ILIKE 'draft_revisi_%' OR field_name ILIKE 'draft_revisi_%')
         ORDER BY COALESCE(updated_at, created_at) ASC, id ASC
       `).catch(() => [])) as any[];

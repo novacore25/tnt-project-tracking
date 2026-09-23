@@ -23,3 +23,9 @@ if (process.env.NODE_ENV !== 'production') globalForDb.conn = client;
 export const db = drizzle(client, { schema });
 export type DB = typeof db;
 export { client as sqlClient };
+
+import { sql } from 'drizzle-orm';
+export function sqlInList(items: any[]) {
+  if (!items || items.length === 0) return sql`(NULL)`;
+  return sql`(${sql.join(items.map(it => sql`${it}`), sql`, `)})`;
+}

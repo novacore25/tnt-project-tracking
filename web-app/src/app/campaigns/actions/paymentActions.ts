@@ -1,6 +1,6 @@
 "use server";
 
-import { db } from '@/db';
+import { db, sqlInList } from '@/db';
 import { sql } from 'drizzle-orm';
 import { auth } from '@/auth';
 import { revalidatePath } from 'next/cache';
@@ -915,7 +915,7 @@ async function syncPaidItemsToCampaignCreators(paymentItemIds: number[], actualP
     const paidItemsRes = (await db.execute(sql`
       SELECT campaign_creator_id, payment_type, nominal, actual_transfer
       FROM payment_items
-      WHERE id = ANY(${paymentItemIds}) AND campaign_creator_id IS NOT NULL
+      WHERE id IN ${sqlInList(paymentItemIds)} AND campaign_creator_id IS NOT NULL
     `)) as any[];
 
     const dateStr = actualPaymentDate || new Date().toISOString();
@@ -1002,7 +1002,7 @@ export async function autoSplitUnpaidBatchItems(batchId: number) {
           WHEN final_status IN ('ready_to_pay', 'executive_approved', 'finance_selected', 'pending_finance_outstanding') THEN 'executive_1_approved'
           ELSE final_status 
         END
-    WHERE id = ANY(${unpaidItemIds})
+    WHERE id IN ${sqlInList(unpaidItemIds)}
   `);
 }
 
@@ -1021,7 +1021,7 @@ export async function financeMarkPaid(batchId: number, payload: { actualPaymentD
     await db.execute(sql`
       UPDATE payment_items
       SET final_status = 'paid'
-      WHERE id = ANY(${itemIdsToPay})
+      WHERE id IN ${sqlInList(itemIdsToPay)}
     `);
 
     // Auto-sync status_bayar to campaign_creators
@@ -1058,7 +1058,7 @@ export async function financeBulkMarkPaidItems(batchId: number, itemIds: number[
     await db.execute(sql`
       UPDATE payment_items
       SET final_status = 'paid'
-      WHERE id = ANY(${itemIds}) AND batch_id = ${batchId}
+      WHERE id IN ${sqlInList(itemIds)} AND batch_id = ${batchId}
     `);
 
     // Auto-sync status_bayar to campaign_creators
@@ -1198,13 +1198,13 @@ export async function bulkApproveManager(batchIds: number[]) {
   await db.execute(sql`
     UPDATE payment_items
     SET manager_status = 'approved', final_status = 'manager_approved', manager_acted_by = ${userId || null}, manager_acted_at = NOW()
-    WHERE batch_id = ANY(${batchIds}) AND final_status = 'pending'
+    WHERE batch_id IN ${sqlInList(batchIds)} AND final_status = 'pending'
   `);
 
   await db.execute(sql`
     UPDATE payment_batches
     SET status = 'pending_executive_1', manager_reviewed_by = ${userId || null}, manager_reviewed_at = NOW()
-    WHERE id = ANY(${batchIds}) AND status = 'pending_manager'
+    WHERE id IN ${sqlInList(batchIds)} AND status = 'pending_manager'
   `);
 
   revalidatePath('/budgeting');
@@ -1219,26 +1219,26 @@ export async function bulkApproveExecutive1(batchIds: number[]) {
     UPDATE payment_items
     SET manager_status = 'approved', manager_acted_by = ${userId || null}, manager_acted_at = NOW(),
         final_status = 'executive_1_approved', executive_1_status = 'approved', executive_1_acted_by = ${userId || null}, executive_1_acted_at = NOW()
-    WHERE batch_id = ANY(${batchIds}) AND final_status = 'pending'
+    WHERE batch_id IN ${sqlInList(batchIds)} AND final_status = 'pending'
   `);
 
   await db.execute(sql`
     UPDATE payment_items
     SET final_status = 'executive_1_approved', executive_1_status = 'approved', executive_1_acted_by = ${userId || null}, executive_1_acted_at = NOW()
-    WHERE batch_id = ANY(${batchIds}) AND final_status = 'manager_approved'
+    WHERE batch_id IN ${sqlInList(batchIds)} AND final_status = 'manager_approved'
   `);
 
   await db.execute(sql`
     UPDATE payment_batches
     SET status = 'pending_finance', manager_reviewed_by = ${userId || null}, manager_reviewed_at = NOW(),
         executive_reviewed_1_by = ${userId || null}, executive_reviewed_1_at = NOW()
-    WHERE id = ANY(${batchIds}) AND status = 'pending_manager'
+    WHERE id IN ${sqlInList(batchIds)} AND status = 'pending_manager'
   `);
 
   await db.execute(sql`
     UPDATE payment_batches
     SET status = 'pending_finance', executive_reviewed_1_by = ${userId || null}, executive_reviewed_1_at = NOW()
-    WHERE id = ANY(${batchIds}) AND status = 'pending_executive_1'
+    WHERE id IN ${sqlInList(batchIds)} AND status = 'pending_executive_1'
   `);
 
   revalidatePath('/budgeting');
@@ -1252,13 +1252,13 @@ export async function bulkApproveExecutiveFinal(batchIds: number[]) {
   await db.execute(sql`
     UPDATE payment_items
     SET executive_status = 'approved', final_status = 'ready_to_pay', executive_acted_by = ${userId || null}, executive_acted_at = NOW()
-    WHERE batch_id = ANY(${batchIds}) AND final_status = 'finance_selected'
+    WHERE batch_id IN ${sqlInList(batchIds)} AND final_status = 'finance_selected'
   `);
 
   await db.execute(sql`
     UPDATE payment_batches
     SET status = 'ready_to_pay', executive_reviewed_by = ${userId || null}, executive_reviewed_at = NOW()
-    WHERE id = ANY(${batchIds}) AND status = 'pending_executive'
+    WHERE id IN ${sqlInList(batchIds)} AND status = 'pending_executive'
   `);
 
   revalidatePath('/budgeting');
@@ -1287,10 +1287,10 @@ export async function bulkProcessFinanceReview(itemIds: number[], actionType: 'a
     await db.execute(sql`
       UPDATE payment_items
       SET finance_selected = ${financeSelected}, final_status = ${finalStatus}
-      WHERE id = ANY(${itemIds})
+      WHERE id IN ${sqlInList(itemIds)}
     `);
 
-    const itemsRes = await db.execute(sql`SELECT DISTINCT batch_id FROM payment_items WHERE id = ANY(${itemIds})`);
+    const itemsRes = await db.execute(sql`SELECT DISTINCT batch_id FROM payment_items WHERE id IN ${sqlInList(itemIds)}`);
     const batchIds = (itemsRes as any[]).map(i => i.batch_id);
 
     if (actionType === 'approve') {
@@ -1322,13 +1322,13 @@ export async function bulkMarkPaidFinance(itemIds: number[], payload: { actualPa
   await db.execute(sql`
     UPDATE payment_items
     SET final_status = 'paid'
-    WHERE id = ANY(${itemIds})
+    WHERE id IN ${sqlInList(itemIds)}
   `);
 
   // Auto-sync status_bayar to campaign_creators
   await syncPaidItemsToCampaignCreators(itemIds, payload.actualPaymentDate);
 
-  const itemsRes = await db.execute(sql`SELECT DISTINCT batch_id FROM payment_items WHERE id = ANY(${itemIds})`);
+  const itemsRes = await db.execute(sql`SELECT DISTINCT batch_id FROM payment_items WHERE id IN ${sqlInList(itemIds)}`);
   const batchIds = (itemsRes as any[]).map(i => i.batch_id);
 
   for (const bId of batchIds) {
@@ -1355,7 +1355,7 @@ export async function processBulkExecutive(itemIds: number[]) {
   const session = await auth();
   const userId = session?.user?.id;
 
-  const itemsRes = await db.execute(sql`SELECT id, final_status, batch_id FROM payment_items WHERE id = ANY(${itemIds})`);
+  const itemsRes = await db.execute(sql`SELECT id, final_status, batch_id FROM payment_items WHERE id IN ${sqlInList(itemIds)}`);
   const items = itemsRes as any[];
 
   const toExec1FromPending = items.filter(i => i.final_status === 'pending').map(i => i.id);
@@ -1367,7 +1367,7 @@ export async function processBulkExecutive(itemIds: number[]) {
       UPDATE payment_items
       SET manager_status = 'approved', manager_acted_by = ${userId || null}, manager_acted_at = NOW(),
           final_status = 'executive_1_approved', executive_1_status = 'approved', executive_1_acted_by = ${userId || null}, executive_1_acted_at = NOW()
-      WHERE id = ANY(${toExec1FromPending})
+      WHERE id IN ${sqlInList(toExec1FromPending)}
     `);
   }
 
@@ -1375,7 +1375,7 @@ export async function processBulkExecutive(itemIds: number[]) {
     await db.execute(sql`
       UPDATE payment_items
       SET final_status = 'executive_1_approved', executive_1_status = 'approved', executive_1_acted_by = ${userId || null}, executive_1_acted_at = NOW()
-      WHERE id = ANY(${toExec1FromMgr})
+      WHERE id IN ${sqlInList(toExec1FromMgr)}
     `);
   }
 
@@ -1383,7 +1383,7 @@ export async function processBulkExecutive(itemIds: number[]) {
     await db.execute(sql`
       UPDATE payment_items
       SET executive_status = 'approved', final_status = 'ready_to_pay', executive_acted_by = ${userId || null}, executive_acted_at = NOW()
-      WHERE id = ANY(${toReady})
+      WHERE id IN ${sqlInList(toReady)}
     `);
   }
 
@@ -1420,10 +1420,10 @@ export async function processBulkManagerItems(itemIds: number[]) {
   await db.execute(sql`
     UPDATE payment_items
     SET manager_status = 'approved', final_status = 'manager_approved', manager_acted_by = ${userId || null}, manager_acted_at = NOW()
-    WHERE id = ANY(${itemIds}) AND final_status = 'pending'
+    WHERE id IN ${sqlInList(itemIds)} AND final_status = 'pending'
   `);
 
-  const itemsRes = await db.execute(sql`SELECT DISTINCT batch_id FROM payment_items WHERE id = ANY(${itemIds})`);
+  const itemsRes = await db.execute(sql`SELECT DISTINCT batch_id FROM payment_items WHERE id IN ${sqlInList(itemIds)}`);
   const batchIds = (itemsRes as any[]).map(i => i.batch_id);
 
   for (const bId of batchIds) {
