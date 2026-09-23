@@ -153,13 +153,19 @@ export async function getAdsReportData(params: {
     if (!campaignBreakdown[cId]) {
       campaignBreakdown[cId] = { name: campaignNames[cId] || 'Unknown Campaign', spend: 0, gmv: 0, gmv_usd: 0, impressions: 0, clicks: 0, purchases: 0, unmapped: 0, spend_usd: 0 };
     }
-    campaignBreakdown[cId].spend += (ad.cost_usd || 0) * kurs;
-    campaignBreakdown[cId].spend_usd += (ad.cost_usd || 0);
-    campaignBreakdown[cId].gmv += (ad.gross_revenue_usd || 0) * kurs;
-    campaignBreakdown[cId].gmv_usd += (ad.gross_revenue_usd || 0);
-    campaignBreakdown[cId].impressions += (ad.impressions || 0);
-    campaignBreakdown[cId].clicks += (ad.clicks || 0);
-    campaignBreakdown[cId].purchases += (ad.purchases || 0);
+    const costUsd = Number(ad.cost_usd) || 0;
+    const grossRevenueUsd = Number(ad.gross_revenue_usd) || 0;
+    const impressions = Number(ad.impressions) || 0;
+    const clicks = Number(ad.clicks) || 0;
+    const purchases = Number(ad.purchases) || 0;
+
+    campaignBreakdown[cId].spend += costUsd * kurs;
+    campaignBreakdown[cId].spend_usd += costUsd;
+    campaignBreakdown[cId].gmv += grossRevenueUsd * kurs;
+    campaignBreakdown[cId].gmv_usd += grossRevenueUsd;
+    campaignBreakdown[cId].impressions += impressions;
+    campaignBreakdown[cId].clicks += clicks;
+    campaignBreakdown[cId].purchases += purchases;
     if (!ad.creator_id || !ad.campaign_ads_name) {
       campaignBreakdown[cId].unmapped++;
     }
@@ -179,17 +185,17 @@ export async function getAdsReportData(params: {
   const calcSummary = (dataArr: any[], useDelta = false) => {
     let sumSpend = 0; let sumGmv = 0; let sumImpr = 0; let sumSpendUsd = 0;
     for (const ad of dataArr) {
-      let kurs = ad.kurs || 16000;
+      let kurs = Number(ad.kurs) || 16000;
       if (kurs < 1000) kurs = kurs * 1000;
       
-      const cost = useDelta && ad.delta_cost_usd !== undefined ? ad.delta_cost_usd : ad.cost_usd;
-      const gmv = useDelta && ad.delta_gross_revenue_usd !== undefined ? ad.delta_gross_revenue_usd : ad.gross_revenue_usd;
-      const impr = useDelta && ad.delta_impressions !== undefined ? ad.delta_impressions : ad.impressions;
+      const cost = Number(useDelta && ad.delta_cost_usd !== undefined ? ad.delta_cost_usd : ad.cost_usd) || 0;
+      const gmv = Number(useDelta && ad.delta_gross_revenue_usd !== undefined ? ad.delta_gross_revenue_usd : ad.gross_revenue_usd) || 0;
+      const impr = Number(useDelta && ad.delta_impressions !== undefined ? ad.delta_impressions : ad.impressions) || 0;
 
-      sumSpend += (cost || 0) * kurs;
-      sumSpendUsd += (cost || 0);
-      sumGmv += (gmv || 0) * kurs;
-      sumImpr += (impr || 0);
+      sumSpend += cost * kurs;
+      sumSpendUsd += cost;
+      sumGmv += gmv * kurs;
+      sumImpr += impr;
     }
     return {
       totalSpend: sumSpend,

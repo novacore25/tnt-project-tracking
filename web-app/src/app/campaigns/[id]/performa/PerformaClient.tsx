@@ -234,25 +234,29 @@ export default function CampaignPerformaClient({ campaignId }: { campaignId: num
       let unmappedAdsItemsSoldVal = 0;
 
       for (const ad of latestAdsMap.values()) {
-        let kurs = ad.kurs || 16000;
+        let kurs = Number(ad.kurs) || 16000;
         if (kurs < 1000) kurs = kurs * 1000;
         
-        globalAdsGmv += (ad.gross_revenue_usd || 0) * kurs;
-        globalAdsGmvUsd += (ad.gross_revenue_usd || 0);
-        globalAdsSpend += (ad.cost_usd || 0);
+        const costUsd = Number(ad.cost_usd) || 0;
+        const grossRevenueUsd = Number(ad.gross_revenue_usd) || 0;
+        const purchases = Number(ad.purchases) || 0;
+
+        globalAdsGmv += grossRevenueUsd * kurs;
+        globalAdsGmvUsd += grossRevenueUsd;
+        globalAdsSpend += costUsd;
 
         if (ad.creator_id) {
-          mappedAdsGmv += (ad.gross_revenue_usd || 0) * kurs;
+          mappedAdsGmv += grossRevenueUsd * kurs;
           if (!adsStatsByCreator[ad.creator_id]) {
             adsStatsByCreator[ad.creator_id] = { gmvAds: 0, costAds: 0, itemsSoldAds: 0 };
           }
-          adsStatsByCreator[ad.creator_id].gmvAds += (ad.gross_revenue_usd || 0) * kurs;
-          adsStatsByCreator[ad.creator_id].costAds += (ad.cost_usd || 0) * kurs;
-          adsStatsByCreator[ad.creator_id].itemsSoldAds += (ad.purchases || 0);
+          adsStatsByCreator[ad.creator_id].gmvAds += grossRevenueUsd * kurs;
+          adsStatsByCreator[ad.creator_id].costAds += costUsd * kurs;
+          adsStatsByCreator[ad.creator_id].itemsSoldAds += purchases;
         } else {
-          unmappedAdsGmvVal += (ad.gross_revenue_usd || 0) * kurs;
-          unmappedAdsCostVal += (ad.cost_usd || 0) * kurs;
-          unmappedAdsItemsSoldVal += (ad.purchases || 0);
+          unmappedAdsGmvVal += grossRevenueUsd * kurs;
+          unmappedAdsCostVal += costUsd * kurs;
+          unmappedAdsItemsSoldVal += purchases;
         }
       }
 
@@ -836,10 +840,10 @@ export default function CampaignPerformaClient({ campaignId }: { campaignId: num
                 <tbody>
                   {adsPerf.map((ad, i) => {
                     const creatorUsername = ad.creators?.username;
-                    const kurs = ad.kurs || 16000;
-                    const adjustedKurs = kurs < 1000 ? kurs * 1000 : kurs;
-                    const costUsd = ad.cost_usd || 0;
-                    const revenueUsd = ad.gross_revenue_usd || 0;
+                    const rawKurs = Number(ad.kurs) || 16000;
+                    const adjustedKurs = rawKurs < 1000 ? rawKurs * 1000 : rawKurs;
+                    const costUsd = Number(ad.cost_usd) || 0;
+                    const revenueUsd = Number(ad.gross_revenue_usd) || 0;
                     
                     const costIdr = costUsd * adjustedKurs;
                     const revenueIdr = revenueUsd * adjustedKurs;
