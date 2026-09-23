@@ -53,21 +53,20 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
               nama = ${fullName},
               avatar_url = ${avatarUrl},
               role = ${role},
-              brand_id = ${brandId},
-              updated_at = NOW()
+              brand_id = ${brandId}
             WHERE LOWER(email) = ${email}
-          `).catch(() => {});
+          `).catch((err) => console.error('Error updating existing profile:', err));
+        } else {
           const isValidUuid = (val?: any): boolean => typeof val === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(val);
           const newId = isValidUuid(user.id) ? user.id : crypto.randomUUID();
           await db.execute(sql`
             INSERT INTO profiles (id, email, nama, avatar_url, role, brand_id, status)
-            VALUES (${newId}, ${email}, ${fullName}, ${avatarUrl}, ${role}, ${brandId}, 'active')
+            VALUES (${newId}::uuid, ${email}, ${fullName}, ${avatarUrl}, ${role}, ${brandId}, 'approved')
             ON CONFLICT (email) DO UPDATE SET
               nama = EXCLUDED.nama,
               avatar_url = EXCLUDED.avatar_url,
-              role = EXCLUDED.role,
-              updated_at = NOW()
-          `).catch(() => {});
+              role = EXCLUDED.role
+          `).catch((err) => console.error('Error inserting new profile:', err));
         }
 
         return true;

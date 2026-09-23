@@ -53,12 +53,12 @@ export async function getAuthProfileAction() {
 
       await db.execute(sql`
         INSERT INTO profiles (id, email, nama, avatar_url, role, brand_id, status)
-        VALUES (${newId}, ${email}, ${fullName}, ${avatarUrl}, ${role}, ${brandId}, 'active')
+        VALUES (${newId}::uuid, ${email}, ${fullName}, ${avatarUrl}, ${role}, ${brandId}, 'approved')
         ON CONFLICT (email) DO UPDATE SET
           nama = EXCLUDED.nama,
           avatar_url = EXCLUDED.avatar_url,
           role = EXCLUDED.role
-      `).catch(() => {});
+      `).catch((err) => console.error('Error auto-creating profile in storeActions:', err));
 
       const createdRows = (await db.execute(sql`
         SELECT id, nama, email, avatar_url, role, brand_id, status FROM profiles WHERE LOWER(email) = ${email} LIMIT 1
@@ -85,6 +85,8 @@ export async function getAuthProfileAction() {
       console.error('Error fetching user_campaigns in getAuthProfileAction:', err);
       return [];
     }) : [];
+
+    console.log(`[AUTH_PROFILE] email=${email}, role=${userProfile.role}, targetUserId=${targetUserId}, campaignsCount=${userCampaignsRes.length}`);
 
     return {
       profile: userProfile,
