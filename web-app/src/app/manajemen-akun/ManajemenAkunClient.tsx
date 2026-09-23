@@ -84,7 +84,7 @@ export default function ManajemenAkunClient({
       setWlNama('');
       setWlRole('anggota');
     } catch (err: any) {
-      alert("Error: " + e.message);
+      alert("Error: " + err.message);
     }
     setLoadingId(null);
   };
@@ -95,7 +95,7 @@ export default function ManajemenAkunClient({
     try {
       await removeWhitelistEmail(id);
     } catch (err: any) {
-      alert("Error: " + e.message);
+      alert("Error: " + err.message);
     }
     setLoadingId(null);
   };
@@ -422,7 +422,7 @@ function UserAssignmentCard({ user, campaigns, userCampaigns }: { user: any, cam
     try {
       await assignCampaignsToUser(user.id, localCampaignIds, localAllCampaigns);
     } catch (err: any) {
-      alert("Error saving: " + e.message);
+      alert("Error saving: " + err.message);
     }
     setIsSaving(false);
   };

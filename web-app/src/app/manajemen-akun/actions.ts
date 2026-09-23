@@ -27,8 +27,8 @@ export async function approveUser(userId: string) {
     UPDATE profiles SET
       status = 'approved',
       approved_at = NOW(),
-      approved_by = ${profileId}
-    WHERE id = ${userId}
+      approved_by = ${profileId}::uuid
+    WHERE id = ${userId}::uuid
   `);
 
   revalidatePath('/manajemen-akun');
@@ -39,7 +39,7 @@ export async function rejectUser(userId: string) {
   
   await db.execute(sql`
     DELETE FROM profiles
-    WHERE id = ${userId} AND status = 'pending'
+    WHERE id = ${userId}::uuid AND status = 'pending'
   `);
 
   revalidatePath('/manajemen-akun');
@@ -50,7 +50,7 @@ export async function deactivateUser(userId: string) {
   
   await db.execute(sql`
     UPDATE profiles SET status = 'inactive'
-    WHERE id = ${userId}
+    WHERE id = ${userId}::uuid
   `);
 
   revalidatePath('/manajemen-akun');
@@ -61,7 +61,7 @@ export async function changeUserRole(userId: string, newRole: string) {
 
   await db.execute(sql`
     UPDATE profiles SET role = ${newRole}
-    WHERE id = ${userId}
+    WHERE id = ${userId}::uuid
   `);
 
   revalidatePath('/manajemen-akun');
@@ -71,18 +71,18 @@ export async function assignCampaignsToUser(userId: string, campaignIds: number[
   const { profileId } = await getAdminUser();
 
   // Delete existing
-  await db.execute(sql`DELETE FROM user_campaigns WHERE user_id = ${userId}`);
+  await db.execute(sql`DELETE FROM user_campaigns WHERE user_id = ${userId}::uuid`);
 
   if (allCampaigns) {
     await db.execute(sql`
       INSERT INTO user_campaigns (user_id, all_campaigns, assigned_by)
-      VALUES (${userId}, true, ${profileId})
+      VALUES (${userId}::uuid, true, ${profileId}::uuid)
     `);
   } else if (campaignIds.length > 0) {
     for (const cid of campaignIds) {
       await db.execute(sql`
         INSERT INTO user_campaigns (user_id, campaign_id, all_campaigns, assigned_by)
-        VALUES (${userId}, ${cid}, false, ${profileId})
+        VALUES (${userId}::uuid, ${Number(cid)}, false, ${profileId}::uuid)
       `);
     }
   }
@@ -96,7 +96,7 @@ export async function addWhitelistEmail(email: string, nama: string, role: strin
   try {
     await db.execute(sql`
       INSERT INTO whitelisted_emails (email, nama, role, added_by)
-      VALUES (${email.trim().toLowerCase()}, ${nama.trim()}, ${role}, ${profileId})
+      VALUES (${email.trim().toLowerCase()}, ${nama.trim()}, ${role}, ${profileId}::uuid)
     `);
   } catch (error: any) {
     if (error.code === '23505' || String(error).includes('unique')) {

@@ -21,7 +21,7 @@ type AuthContextType = {
   profile: Profile | null;
   userCampaigns: UserCampaign[];
   isLoading: boolean;
-  canEditCampaign: (campaignId: number) => boolean;
+  canEditCampaign: (campaignId: number | string) => boolean;
   isManager: boolean;
   isFinance: boolean;
   isExecutive: boolean;
@@ -68,14 +68,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  const canEditCampaign = (campaignId: number) => {
+  const canEditCampaign = (campaignId: number | string) => {
     if (isLoading) return false;
     if (!profile) return false;
     if (['manager', 'finance', 'executive', 'admin'].includes(profile.role)) return true;
     
     // Anggota / staff checks
-    if (userCampaigns.some(uc => uc.all_campaigns)) return true;
-    return userCampaigns.some(uc => uc.campaign_id === campaignId);
+    if (userCampaigns.some(uc => Boolean(uc.all_campaigns))) return true;
+    const targetCid = Number(campaignId);
+    return userCampaigns.some(uc => Number(uc.campaign_id) === targetCid);
   };
 
   const isManager = profile?.role === 'manager' || profile?.role === 'admin';

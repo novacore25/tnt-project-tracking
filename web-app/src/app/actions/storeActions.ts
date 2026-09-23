@@ -79,9 +79,12 @@ export async function getAuthProfileAction() {
     };
 
     const targetUserId = validProfileId || (session.user as any).id;
-    const userCampaignsRes = targetUserId ? await db.execute(sql`
-      SELECT campaign_id, all_campaigns FROM user_campaigns WHERE user_id = ${String(targetUserId)}
-    `).catch(() => []) : [];
+    const userCampaignsRes = (targetUserId && isValidUuid(targetUserId)) ? await db.execute(sql`
+      SELECT campaign_id, all_campaigns FROM user_campaigns WHERE user_id = ${String(targetUserId)}::uuid
+    `).catch((err) => {
+      console.error('Error fetching user_campaigns in getAuthProfileAction:', err);
+      return [];
+    }) : [];
 
     return {
       profile: userProfile,

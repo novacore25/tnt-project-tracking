@@ -1262,7 +1262,7 @@ export async function updateProfileAction(id: string, updates: any) {
 
 export async function fetchUserCampaignsAction(userId: string) {
   try {
-    const data = await db.execute(sql`SELECT * FROM user_campaigns WHERE user_id = ${userId}`) as any[];
+    const data = await db.execute(sql`SELECT * FROM user_campaigns WHERE user_id = ${userId}::uuid`) as any[];
     return { success: true, data: data || [] };
   } catch (err: any) {
     return { success: false, data: [], error: err.message };
@@ -1272,16 +1272,16 @@ export async function fetchUserCampaignsAction(userId: string) {
 export async function updateUserCampaignsAction(userId: string, campaignIds: number[], allCampaigns: boolean) {
   try {
     // Delete existing
-    await db.execute(sql`DELETE FROM user_campaigns WHERE user_id = ${userId}`);
+    await db.execute(sql`DELETE FROM user_campaigns WHERE user_id = ${userId}::uuid`);
     // Insert new
     if (allCampaigns) {
       await db.execute(sql`
-        INSERT INTO user_campaigns (user_id, all_campaigns) VALUES (${userId}, true)
+        INSERT INTO user_campaigns (user_id, all_campaigns) VALUES (${userId}::uuid, true)
       `);
     } else if (campaignIds.length > 0) {
       for (const cid of campaignIds) {
         await db.execute(sql`
-          INSERT INTO user_campaigns (user_id, campaign_id, all_campaigns) VALUES (${userId}, ${cid}, false)
+          INSERT INTO user_campaigns (user_id, campaign_id, all_campaigns) VALUES (${userId}::uuid, ${Number(cid)}, false)
         `);
       }
     }
