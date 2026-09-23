@@ -667,7 +667,7 @@ export default function OrganicImport({ mode = 'sales' }: { mode?: 'sales' | 'vi
 
     let successCount = 0;
     const errors: string[] = [];
-    const CHUNK_SIZE = 250;
+    const CHUNK_SIZE = 150;
     let processed = 0;
 
     // 1. Process Sales Chunks

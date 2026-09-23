@@ -37,31 +37,53 @@ export async function executeSalesImportChunkAction(salesRows: any[], videoRows:
 
     // 1. High-Performance Bulk Multi-Row Upsert for Sales
     if (salesRows.length > 0) {
-      const validSales = salesRows.filter(r => r.order_id);
+      const dedupedSales = new Map<string, any>();
+      for (const r of salesRows) {
+        if (!r.order_id) continue;
+        const oId = String(r.order_id).trim();
+        const existing = dedupedSales.get(oId);
+        if (existing) {
+          existing.quantity = (existing.quantity || 0) + (r.quantity || 1);
+          existing.gmv = (Number(existing.gmv) || 0) + (Number(r.gmv) || 0);
+          if (r.sku_id && !existing.sku_id) existing.sku_id = r.sku_id;
+          if (r.campaign_id && !existing.campaign_id) existing.campaign_id = r.campaign_id;
+          if (r.creator_username && !existing.creator_username) existing.creator_username = r.creator_username;
+          if (r.content_uid && !existing.content_uid) existing.content_uid = r.content_uid;
+          if (r.product_id && !existing.product_id) existing.product_id = r.product_id;
+          existing.raw_data = { ...(existing.raw_data || {}), ...(r.raw_data || {}) };
+        } else {
+          dedupedSales.set(oId, { ...r });
+        }
+      }
+
+      const validSales = Array.from(dedupedSales.values());
       if (validSales.length > 0) {
         const salesTuples = validSales.map(row => {
           const rawClean = JSON.stringify(row.raw_data || {}).replace(/\\u0000/g, '');
           const rowDate = (row.tanggal && !isNaN(new Date(row.tanggal).getTime()))
-            ? new Date(row.tanggal)
-            : new Date();
+            ? new Date(row.tanggal).toISOString()
+            : new Date().toISOString();
+          const uname = (row.creator_username && String(row.creator_username).trim())
+            ? String(row.creator_username).trim().toLowerCase()
+            : null;
 
           return sql`(
-            ${row.order_id},
+            ${String(row.order_id).trim()},
             ${row.sku_id || null},
             ${row.campaign_id || null},
-            ${row.creator_username || null},
-            ${row.content_uid || null},
-            ${row.product_id || null},
-            ${rowDate},
-            ${row.price || 0},
-            ${row.quantity || 1},
-            ${row.gmv || 0},
+            ${uname},
+            ${row.content_uid ? String(row.content_uid).trim() : null},
+            ${row.product_id ? String(row.product_id).trim() : null},
+            ${rowDate}::timestamptz,
+            ${Number(row.price) || 0},
+            ${Number(row.quantity) || 1},
+            ${Number(row.gmv) || 0},
             ${row.is_refund ? true : false},
             ${row.content_type || 'video'},
             ${row.order_status || null},
             ${row.commission_rate || null},
             ${row.attribution_type || null},
-            ${row.tiktok_campaign_id || null},
+            ${row.tiktok_campaign_id ? String(row.tiktok_campaign_id).trim() : null},
             ${row.shop_code || null},
             ${rawClean}::jsonb
           )`;
@@ -98,26 +120,56 @@ export async function executeSalesImportChunkAction(salesRows: any[], videoRows:
 
     // 2. High-Performance Bulk Multi-Row Upsert for Organic Videos
     if (videoRows.length > 0) {
-      const validVideos = videoRows.filter(v => v.content_uid);
+      const dedupedVideos = new Map<string, any>();
+      for (const v of videoRows) {
+        if (!v.content_uid) continue;
+        const cUid = String(v.content_uid).trim();
+        const pId = v.product_id ? String(v.product_id).trim() : '';
+        const key = `${cUid}:::${pId}`;
+        const existing = dedupedVideos.get(key);
+        if (existing) {
+          existing.video_views = Math.max(Number(existing.video_views) || 0, Number(v.video_views) || 0);
+          existing.video_likes = Math.max(Number(existing.video_likes) || 0, Number(v.video_likes) || 0);
+          existing.video_product_rpm = Math.max(Number(existing.video_product_rpm) || 0, Number(v.video_product_rpm) || 0);
+          if (v.campaign_id && !existing.campaign_id) existing.campaign_id = v.campaign_id;
+          if (v.creator_username && (!existing.creator_username || existing.creator_username === 'unknown')) {
+            existing.creator_username = v.creator_username;
+          }
+          if (v.duration_str && !existing.duration_str) existing.duration_str = v.duration_str;
+          if (v.content_type && !existing.content_type) existing.content_type = v.content_type;
+          if (v.tiktok_campaign_id && !existing.tiktok_campaign_id) existing.tiktok_campaign_id = v.tiktok_campaign_id;
+          if (v.tanggal && (!existing.tanggal || new Date(v.tanggal) > new Date(existing.tanggal))) {
+            existing.tanggal = v.tanggal;
+          }
+          existing.raw_data = { ...(existing.raw_data || {}), ...(v.raw_data || {}) };
+        } else {
+          dedupedVideos.set(key, { ...v, content_uid: cUid, product_id: pId || null });
+        }
+      }
+
+      const validVideos = Array.from(dedupedVideos.values());
       if (validVideos.length > 0) {
         const videoTuples = validVideos.map(v => {
           const rawClean = JSON.stringify(v.raw_data || {}).replace(/\\u0000/g, '');
           const postTime = (v.tanggal && !isNaN(new Date(v.tanggal).getTime()))
-            ? new Date(v.tanggal)
-            : new Date();
+            ? new Date(v.tanggal).toISOString()
+            : new Date().toISOString();
+          const uname = (v.creator_username && String(v.creator_username).trim())
+            ? String(v.creator_username).trim().toLowerCase()
+            : 'unknown';
 
           return sql`(
             ${v.content_uid},
             ${v.product_id || null},
             ${v.campaign_id || null},
-            ${v.creator_username || null},
-            ${postTime},
-            ${v.video_views || 0},
-            ${v.video_likes || 0},
+            ${uname},
+            ${postTime}::timestamptz,
+            ${Number(v.video_views) || 0},
+            ${Number(v.video_likes) || 0},
             ${v.duration_str || null},
-            ${v.video_product_rpm || 0},
+            ${Number(v.video_product_rpm) || 0},
             ${v.content_type || 'Video'},
-            ${v.tiktok_campaign_id || null},
+            ${v.tiktok_campaign_id ? String(v.tiktok_campaign_id).trim() : null},
             ${rawClean}::jsonb
           )`;
         });
@@ -130,7 +182,7 @@ export async function executeSalesImportChunkAction(salesRows: any[], videoRows:
           ) VALUES ${sql.join(videoTuples, sql`, `)}
           ON CONFLICT (content_uid, product_id) DO UPDATE SET
             campaign_id = COALESCE(EXCLUDED.campaign_id, organic_videos.campaign_id),
-            creator_username = COALESCE(EXCLUDED.creator_username, organic_videos.creator_username),
+            creator_username = CASE WHEN EXCLUDED.creator_username <> 'unknown' THEN EXCLUDED.creator_username ELSE organic_videos.creator_username END,
             post_time = EXCLUDED.post_time,
             video_views = GREATEST(organic_videos.video_views, EXCLUDED.video_views),
             video_likes = GREATEST(organic_videos.video_likes, EXCLUDED.video_likes),
@@ -286,11 +338,15 @@ export async function executeSalesImportChunkAction(salesRows: any[], videoRows:
     return { success: true, salesInserted, videosInserted };
   } catch (err: any) {
     console.error("FATAL ERROR in executeSalesImportChunkAction:", err);
+    const detailMsg = err?.detail || err?.cause?.message || err?.message || String(err);
+    const cleanError = detailMsg.length > 500
+      ? (detailMsg.substring(0, 300) + '... [Code: ' + (err?.code || 'ERR') + ']')
+      : detailMsg;
     return {
       success: false,
       salesInserted: 0,
       videosInserted: 0,
-      error: err?.message || String(err)
+      error: cleanError
     };
   }
 }
