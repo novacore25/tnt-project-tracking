@@ -675,8 +675,10 @@ export default function OrganicImport({ mode = 'sales' }: { mode?: 'sales' | 'vi
       const chunk = uniqueSalesPayload.slice(i, i + CHUNK_SIZE);
       try {
         const res = await executeSalesImportChunkAction(chunk, [], mode === 'video');
-        if (res.success) {
+        if (res && res.success) {
           successCount += res.salesInserted;
+        } else {
+          errors.push(`Gagal import batch sales (${i + 1}-${i + chunk.length}): ${res?.error || 'Gagal menyimpan ke database'}`);
         }
       } catch (err: any) {
         errors.push(`Gagal import batch sales (${i + 1}-${i + chunk.length}): ${err.message || err}`);
@@ -690,8 +692,10 @@ export default function OrganicImport({ mode = 'sales' }: { mode?: 'sales' | 'vi
       const chunk = uniqueVideoPayload.slice(i, i + CHUNK_SIZE);
       try {
         const res = await executeSalesImportChunkAction([], chunk, mode === 'video');
-        if (res.success) {
+        if (res && res.success) {
           successCount += res.videosInserted;
+        } else {
+          errors.push(`Gagal import batch awareness (${i + 1}-${i + chunk.length}): ${res?.error || 'Gagal menyimpan ke database'}`);
         }
       } catch (err: any) {
         errors.push(`Gagal import batch awareness (${i + 1}-${i + chunk.length}): ${err.message || err}`);
