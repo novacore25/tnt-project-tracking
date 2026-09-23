@@ -598,8 +598,25 @@ export function BatchDetail({ batch, creatorHistory, onBack, onRefresh, onRefres
                         </div>
                       )}
                     </td>
-                    <td className="px-4 py-3 uppercase text-xs font-bold text-slate-500">
-                      {item.payment_type?.replace('_', ' ') || '-'}
+                    <td className="px-4 py-3 text-xs">
+                      <div className="uppercase font-bold text-slate-700">
+                        {item.payment_type?.replace('_', ' ') || '-'}
+                      </div>
+                      {item.payment_type === '50_awal' && (
+                        <div className="text-[10px] font-semibold text-indigo-700 bg-indigo-50 border border-indigo-100 px-1.5 py-0.5 rounded mt-1 inline-block">
+                          Termin 1 (DP 50%) • Kurang Rp {(Number(item.ratecard_awal || (baseNominal * 2)) - baseNominal).toLocaleString()} (Termin 2)
+                        </div>
+                      )}
+                      {item.payment_type === '50_akhir' && (
+                        <div className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded mt-1 inline-block">
+                          Termin 2 (Pelunasan 50%)
+                        </div>
+                      )}
+                      {item.payment_type === '100_akhir' && (
+                        <div className="text-[10px] text-slate-400 font-normal mt-0.5">
+                          Pelunasan Penuh 100%
+                        </div>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-right">
                       {item.ratecard_awal && <div className="text-xs text-slate-400 line-through">Rp {Number(item.ratecard_awal).toLocaleString()}</div>}

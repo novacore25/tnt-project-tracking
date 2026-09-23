@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { Loader2, ArrowRight, Wallet, CheckCircle2, Clock, AlertCircle, Pencil, Check, X } from "lucide-react";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { getPaymentBatches, getBudgetSummary, updateCampaignBudget } from "../campaigns/actions/paymentActions";
@@ -33,6 +33,31 @@ function GlobalBudgetingContent() {
   const [editingCell, setEditingCell] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
   const [savingCell, setSavingCell] = useState<string | null>(null);
+
+  const creatorHistory = useMemo(() => {
+    const history: Record<number, any[]> = {};
+    batches.forEach(b => {
+      b.payment_items?.forEach((item: any) => {
+        if (item.final_status !== 'rejected' && item.campaign_creator_id) {
+          if (!history[item.campaign_creator_id]) {
+            history[item.campaign_creator_id] = [];
+          }
+          const baseNominal = item.actual_transfer != null ? Number(item.actual_transfer) : Number(item.nominal || 0);
+          history[item.campaign_creator_id].push({
+            id: item.id,
+            batch_id: b.id,
+            batch_label: b.batch_label,
+            batch_status: b.status,
+            date: b.created_at,
+            nominal: baseNominal + Number(item.biaya_transfer || 0),
+            payment_type: item.payment_type,
+            status: item.final_status
+          });
+        }
+      });
+    });
+    return history;
+  }, [batches]);
 
   const fetchBatches = useCallback(async () => {
     setIsLoading(true);
@@ -183,8 +208,24 @@ function GlobalBudgetingContent() {
 
       <div className="grid grid-cols-1 gap-6">
         <div className="col-span-1">
-          {activeTab === 'tindakan' && profile?.role && ['manager', 'executive', 'finance'].includes(profile.role) ? (
-            <GlobalCommandCenter role={profile.role} />
+          {activeTab === 'tindakan' ? (
+            profile?.role && ['manager', 'executive', 'finance'].includes(profile.role) ? (
+              <GlobalCommandCenter role={profile.role} />
+            ) : (
+              <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-12 text-center">
+                <AlertCircle className="w-12 h-12 text-amber-500 mx-auto mb-4" />
+                <h3 className="text-lg font-bold text-slate-800">Khusus Persetujuan & Finance</h3>
+                <p className="text-slate-500 max-w-md mx-auto mt-1 mb-6 text-sm">
+                  Tab Perlu Tindakan dikhususkan bagi Manager, Executive, dan Finance untuk memproses verifikasi dan persetujuan pengajuan. Silakan pantau pengajuan melalui tab Semua Ajuan.
+                </p>
+                <button 
+                  onClick={() => setActiveTab('semua')} 
+                  className="btn btn-primary inline-flex items-center gap-2 text-sm"
+                >
+                  Buka Tab Semua Ajuan <ArrowRight className="w-4 h-4" />
+                </button>
+              </div>
+            )
           ) : activeTab === 'mutasi' ? (
             <MutationTable />
           ) : activeTab === 'ads' ? (
@@ -295,7 +336,7 @@ function GlobalBudgetingContent() {
               <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                 <BatchDetail 
                   batch={batches.find(b => b.id === selectedBatchId)} 
-                  creatorHistory={{}} 
+                  creatorHistory={creatorHistory} 
                   onBack={() => setSelectedBatchId(null)} 
                   onRefresh={fetchBatches} 
                 />

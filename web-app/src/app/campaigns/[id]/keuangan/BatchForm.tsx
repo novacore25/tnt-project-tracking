@@ -262,13 +262,34 @@ export function BatchForm({
   };
 
   const handleChange = (ccId: number, field: string, value: any) => {
-    setForms(prev => ({
-      ...prev,
-      [ccId]: {
-        ...prev[ccId],
-        [field]: value
+    setForms(prev => {
+      const current = prev[ccId] || {};
+      let updatedNominal = current.nominal;
+      if (field === 'payment_type') {
+        const ratecard = Number(current.ratecard_awal || 0);
+        if (value === '50_awal' || value === '50_akhir') {
+          updatedNominal = Math.round(ratecard / 2);
+        } else if (value === '100_akhir') {
+          updatedNominal = ratecard;
+        }
+      } else if (field === 'ratecard_awal') {
+        const ratecard = Number(value || 0);
+        if (current.payment_type === '50_awal' || current.payment_type === '50_akhir') {
+          updatedNominal = Math.round(ratecard / 2);
+        } else if (current.payment_type === '100_akhir') {
+          updatedNominal = ratecard;
+        }
       }
-    }));
+
+      return {
+        ...prev,
+        [ccId]: {
+          ...current,
+          [field]: value,
+          ...(updatedNominal !== current.nominal ? { nominal: updatedNominal } : {})
+        }
+      };
+    });
   };
 
   const validateForms = () => {
@@ -279,6 +300,16 @@ export function BatchForm({
       if (!f.payment_type) return `Pilih tipe pembayaran untuk @${cc.creators?.username}`;
       if (!f.nominal || Number(f.nominal) <= 0) return `Nominal harus lebih dari 0 untuk @${cc.creators?.username}`;
       
+      const history = creatorHistory[cc.id] || [];
+      const paidTypes = history.filter((h: any) => h.status === 'paid').map((h: any) => h.payment_type);
+
+      if (f.payment_type === '50_awal' && paidTypes.includes('50_awal')) {
+        return `Kreator @${cc.creators?.username} sudah dibayar DP 50% Awal. Harap pilih Pelunasan 50% Akhir!`;
+      }
+      if (f.payment_type === '100_akhir' && paidTypes.includes('50_awal')) {
+        return `Kreator @${cc.creators?.username} sudah menerima DP 50% Awal. Tidak dapat memilih 100% Akhir (pilih Pelunasan 50% Akhir)!`;
+      }
+
       if (!f.bank_account_id) {
         if (!f.metode_pembayaran || !f.nomor_rekening) {
           return `Pilih rekening tersimpan atau isi rekening manual untuk @${cc.creators?.username}`;
@@ -516,8 +547,28 @@ export function BatchForm({
                               Sedang Diproses ({c.pendingBatchLabel || 'Batch Lain'})
                             </span>
                           )}
-                          {c.isFullyPaid && <span className="text-xs font-semibold text-orange-700 bg-orange-100 px-2 py-0.5 rounded-full">Ratecard Lunas</span>}
-                          {Number(c.price || 0).toLocaleString()}
+                          {(() => {
+                            const history = creatorHistory[c.id] || [];
+                            const types = history.map((h: any) => h.payment_type);
+                            const has50Awal = types.includes('50_awal');
+                            const has50Akhir = types.includes('50_akhir');
+                            const has100 = types.includes('100_akhir');
+                            const totalPaid = history.filter((h: any) => h.status === 'paid').reduce((s: number, h: any) => s + Number(h.nominal || 0), 0);
+                            const remaining = Math.max(0, Number(c.price || 0) - totalPaid);
+
+                            if (c.isFullyPaid || has100 || (has50Awal && has50Akhir)) {
+                              return <span className="text-xs font-semibold text-orange-700 bg-orange-100 px-2 py-0.5 rounded-full">Ratecard Lunas</span>;
+                            }
+                            if (has50Awal && !has50Akhir) {
+                              return (
+                                <span className="text-[11px] font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-full">
+                                  Termin 1 Terbayar: Rp {totalPaid.toLocaleString()} • Kurang: Rp {remaining.toLocaleString()} (Termin 2)
+                                </span>
+                              );
+                            }
+                            return null;
+                          })()}
+                          <span>Rp {Number(c.price || 0).toLocaleString()}</span>
                         </td>
                       </tr>
                     );
@@ -553,16 +604,31 @@ export function BatchForm({
                       <div className="grid grid-cols-2 gap-4">
                         <div>
                           <label className="block text-xs font-medium text-slate-600 mb-1">Tipe Pembayaran</label>
-                          <select className="w-full p-2 border border-slate-300 rounded text-sm outline-none focus:border-blue-500" value={f.payment_type} onChange={e => handleChange(cc.id, 'payment_type', e.target.value)}>
-                            <option value="100_akhir">100% Akhir</option>
-                            <option value="50_awal">DP 50% Awal</option>
-                            <option value="50_akhir">Pelunasan 50% Akhir</option>
-                            <option value="ads">Top Up ADS</option>
-                            <option value="crm">Biaya CRM</option>
-                            <option value="lion">Ongkir Lion Parcel</option>
-                            <option value="reward_affiliate">Bonus Reward Affiliate</option>
-                            <option value="boost_awareness">Boost Awareness</option>
-                          </select>
+                          {(() => {
+                            const history = creatorHistory[cc.id] || [];
+                            const paidTypes = history.filter((h: any) => h.status === 'paid').map((h: any) => h.payment_type);
+                            const hasPaid50Awal = paidTypes.includes('50_awal');
+                            return (
+                              <select 
+                                className="w-full p-2 border border-slate-300 rounded text-sm outline-none focus:border-blue-500" 
+                                value={f.payment_type} 
+                                onChange={e => handleChange(cc.id, 'payment_type', e.target.value)}
+                              >
+                                <option value="100_akhir" disabled={hasPaid50Awal}>
+                                  {hasPaid50Awal ? "100% Akhir (Sudah ada DP 50%)" : "100% Akhir"}
+                                </option>
+                                <option value="50_awal" disabled={hasPaid50Awal}>
+                                  {hasPaid50Awal ? "DP 50% Awal (Sudah Dibayar)" : "DP 50% Awal"}
+                                </option>
+                                <option value="50_akhir">Pelunasan 50% Akhir</option>
+                                <option value="ads">Top Up ADS</option>
+                                <option value="crm">Biaya CRM</option>
+                                <option value="lion">Ongkir Lion Parcel</option>
+                                <option value="reward_affiliate">Bonus Reward Affiliate</option>
+                                <option value="boost_awareness">Boost Awareness</option>
+                              </select>
+                            );
+                          })()}
                           {creatorHistory[cc.id]?.some((h: any) => h.payment_type === f.payment_type) && (
                             <p className="text-[10px] text-orange-700 mt-1 font-medium bg-orange-50 p-1 rounded border border-orange-100">⚠️ Sudah pernah diajukan sebelumnya.</p>
                           )}
@@ -582,6 +648,22 @@ export function BatchForm({
                           <label className="block text-xs font-medium text-slate-600 mb-1">Biaya Transfer (Opsional)</label>
                           <input type="number" className="w-full p-2 border border-slate-300 rounded text-sm outline-none focus:border-blue-500" value={f.biaya_transfer} onChange={e => handleChange(cc.id, 'biaya_transfer', e.target.value)} />
                         </div>
+                        {f.payment_type === '50_awal' && (
+                          <div className="col-span-2 text-xs text-indigo-700 bg-indigo-50 border border-indigo-200 p-2.5 rounded-lg flex flex-col gap-0.5">
+                            <span className="font-bold">ℹ️ Skema Pembayaran Termin 1 (DP 50%)</span>
+                            <span>Nominal diajukan sekarang: <strong>Rp {Number(f.nominal || 0).toLocaleString()}</strong>.</span>
+                            <span>Kekurangan: <strong>Rp {Math.max(0, Number(f.ratecard_awal || cc.price || 0) - Number(f.nominal || 0)).toLocaleString()}</strong> (Termin 2 / Pelunasan 50% Akhir) dapat diajukan kembali nanti setelah video/live tayang.</span>
+                          </div>
+                        )}
+                        {f.payment_type === '50_akhir' && (
+                          <div className="col-span-2 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 p-2.5 rounded-lg flex flex-col gap-0.5">
+                            <span className="font-bold">ℹ️ Skema Pembayaran Pelunasan Termin 2 (50% Akhir)</span>
+                            <span>Nominal pelunasan: <strong>Rp {Number(f.nominal || 0).toLocaleString()}</strong>.</span>
+                            {creatorHistory[cc.id]?.length > 0 && (
+                              <span>Sebelumnya telah dibayar: <strong>Rp {creatorHistory[cc.id].filter((h: any) => h.status === 'paid').reduce((s: number, h: any) => s + Number(h.nominal || 0), 0).toLocaleString()}</strong> pada Termin 1.</span>
+                            )}
+                          </div>
+                        )}
                         <div className="col-span-2">
                           <label className="block text-xs font-medium text-slate-600 mb-1">Catatan / Notes untuk Finance (Opsional)</label>
                           <textarea 

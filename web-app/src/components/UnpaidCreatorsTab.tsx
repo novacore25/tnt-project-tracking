@@ -17,6 +17,7 @@ export function UnpaidCreatorsTab({ campaignId, onSuccess }: { campaignId: numbe
   // Form Mode
   const [showBatchForm, setShowBatchForm] = useState(false);
   const [prefilledCreators, setPrefilledCreators] = useState<any[]>([]);
+  const [creatorHistory, setCreatorHistory] = useState<Record<number, any[]>>({});
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
@@ -92,6 +93,19 @@ export function UnpaidCreatorsTab({ campaignId, onSuccess }: { campaignId: numbe
         };
       }).filter(cc => !cc.isFullyPaid && (cc.price || 0) > 0); // Only show those who are NOT fully paid AND have a ratecard > 0
 
+      const historyMap: Record<number, any[]> = {};
+      (data || []).forEach((cc: any) => {
+        if (cc.payment_items && cc.payment_items.length > 0) {
+          historyMap[cc.id] = cc.payment_items.map((pi: any) => ({
+            id: pi.id,
+            payment_type: pi.payment_type,
+            nominal: Number(pi.nominal || 0),
+            status: pi.final_status
+          }));
+        }
+      });
+      setCreatorHistory(historyMap);
+
       setCreators(processed);
     } catch (err) {
       console.error(err);
@@ -165,7 +179,7 @@ export function UnpaidCreatorsTab({ campaignId, onSuccess }: { campaignId: numbe
       <BatchForm 
         campaignId={campaignId} 
         creators={creators} // pass all creators so the dropdown still works if they want to add more
-        creatorHistory={{}} // empty history for now, can be passed if needed
+        creatorHistory={creatorHistory}
         initialItems={prefilledCreators}
         onCancel={() => setShowBatchForm(false)} 
         onSuccess={() => {

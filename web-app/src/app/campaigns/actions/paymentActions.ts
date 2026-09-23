@@ -485,6 +485,46 @@ export async function addPaymentItem(batchId: number, itemData: any) {
     }
   }
 
+  // Server-side double claim and termin validation
+  if (itemData.campaign_creator_id) {
+    const existingItemsRes = await db.execute(sql`
+      SELECT pi.id, pi.payment_type, pi.final_status, pb.batch_label, pb.status as batch_status
+      FROM payment_items pi
+      JOIN payment_batches pb ON pi.batch_id = pb.id
+      WHERE pi.campaign_creator_id = ${Number(itemData.campaign_creator_id)}
+        AND pi.final_status NOT IN ('rejected', 'cancelled')
+        AND pb.status NOT IN ('cancelled')
+    `);
+    const existing = existingItemsRes as any[];
+
+    const paidTypes = existing.filter(e => e.final_status === 'paid').map(e => e.payment_type);
+    const pendingItems = existing.filter(e => e.final_status !== 'paid');
+
+    const reqType = itemData.payment_type || '100_akhir';
+
+    // 1. Prevent if creator is already fully paid
+    const isFullyPaid = paidTypes.includes('100_akhir') || (paidTypes.includes('50_awal') && paidTypes.includes('50_akhir'));
+    if (isFullyPaid) {
+      throw new Error(`Kreator ini sudah lunas (Ratecard lunas), tidak dapat diajukan pembayaran lagi.`);
+    }
+
+    // 2. Prevent if creator has an active pending payment in another batch
+    if (pendingItems.length > 0) {
+      const activeBatch = pendingItems[0].batch_label;
+      throw new Error(`Kreator ini masih memiliki pengajuan aktif di batch "${activeBatch}". Tunggu hingga selesai dibayar sebelum mengajukan termin berikutnya.`);
+    }
+
+    // 3. Double claim prevention for termin 1
+    if (reqType === '50_awal' && paidTypes.includes('50_awal')) {
+      throw new Error(`DP 50% Awal sudah pernah dibayar untuk kreator ini. Silakan ajukan Pelunasan 50% Akhir.`);
+    }
+
+    // 4. If DP 50% already paid, don't allow 100% Akhir (must be 50% Akhir)
+    if (reqType === '100_akhir' && paidTypes.includes('50_awal')) {
+      throw new Error(`Kreator ini sudah menerima DP 50% Awal. Pengajuan berikutnya harus berupa Pelunasan 50% Akhir.`);
+    }
+  }
+
   const transactionId = `${itemData.payment_type === 'ads' ? 'ADS' : (itemData.payment_type === 'ops' ? 'OPS' : 'RC')}-${new Date().toISOString().slice(2,7).replace('-','')}-${Math.floor(1000 + Math.random() * 9000)}`;
 
   await db.execute(sql`
@@ -896,6 +936,7 @@ async function syncPaidItemsToCampaignCreators(paymentItemIds: number[], actualP
         await db.execute(sql`
           UPDATE campaign_creators
           SET status_bayar = 'sebagian',
+              nominal_pelunasan = COALESCE(nominal_pelunasan, 0) + ${finalNominal},
               tgl_pembayaran = ${dateStr}
           WHERE id = ${item.campaign_creator_id}
         `);
