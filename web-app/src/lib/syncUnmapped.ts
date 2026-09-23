@@ -2,6 +2,7 @@
 
 import { db } from '@/db';
 import { sql } from 'drizzle-orm';
+import { revalidatePath } from 'next/cache';
 
 /**
  * Synchronize unmapped sales and organic videos for a specific product ID into a campaign.
@@ -90,21 +91,23 @@ export async function syncUnmappedForProduct(productId: string, campaignId: numb
           if (resolvedSkuId) {
             const currentSkus: number[] = existingCc.assigned_sku_ids || [];
             if (!currentSkus.includes(resolvedSkuId)) {
-              const updatedSkus = [...currentSkus, resolvedSkuId];
+              const updatedSkus = [...currentSkus, resolvedSkuId].filter(n => typeof n === 'number' && !isNaN(n));
+              const updatedSkusLiteral = updatedSkus.length > 0 ? `{${updatedSkus.join(',')}}` : '{}';
               await db.execute(sql`
                 UPDATE campaign_creators
-                SET assigned_sku_ids = ${JSON.stringify(updatedSkus)}::jsonb
+                SET assigned_sku_ids = ${updatedSkusLiteral}::int[]
                 WHERE id = ${existingCc.id}
               `);
             }
           }
         } else {
           const skuPayload = resolvedSkuId ? [resolvedSkuId] : [];
+          const skuPayloadLiteral = skuPayload.length > 0 ? `{${skuPayload.join(',')}}` : '{}';
           await db.execute(sql`
             INSERT INTO campaign_creators (
               campaign_id, creator_id, tier, assigned_sku_ids, approval, client_approval, status_bayar, qty_vt, price
             ) VALUES (
-              ${campaignId}, ${creatorId}, 'Nano', ${JSON.stringify(skuPayload)}::jsonb, 'pending', 'not_required', 'belum', 1, 0
+              ${campaignId}, ${creatorId}, 'Nano', ${skuPayloadLiteral}::int[], 'pending', 'not_required', 'belum', 1, 0
             )
           `);
           newCcCount++;
@@ -163,6 +166,19 @@ export async function syncUnmappedForProduct(productId: string, campaignId: numb
         }
       }
     }
+  }
+
+  try {
+    revalidatePath('/campaigns');
+    revalidatePath(`/campaigns/${campaignId}`);
+    revalidatePath(`/campaigns/${campaignId}/listing`);
+    revalidatePath(`/campaigns/${campaignId}/performa`);
+    revalidatePath(`/campaigns/${campaignId}/video`);
+    revalidatePath('/performa');
+    revalidatePath('/input-penjualan');
+    revalidatePath('/skus');
+  } catch (e) {
+    // Ignore in non-request contexts
   }
 
   return {
