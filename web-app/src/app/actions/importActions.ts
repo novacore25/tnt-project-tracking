@@ -406,44 +406,79 @@ export async function saveAdNameMappingAction(mapping: {
 
 export async function executeAdsImportAction(
   rawInserts: any[],
-  dateRange: { minDate: string; maxDate: string }
+  dateRange: { minDate: string; maxDate: string },
+  campaignId?: number | null
 ) {
-  // Delete existing records in date range
-  if (dateRange.minDate && dateRange.maxDate) {
-    await db.execute(sql`
-      DELETE FROM ads_performance
-      WHERE tanggal >= ${dateRange.minDate} AND tanggal <= ${dateRange.maxDate}
-    `);
-  }
+  try {
+    if (rawInserts.length === 0) return { success: true, count: 0 };
 
-  let inserted = 0;
-  for (const item of rawInserts) {
-    await db.execute(sql`
-      INSERT INTO ads_performance (
-        ad_id, ad_name, campaign_ads_name, campaign_id, creator_id, product_id,
-        tanggal, cost_usd, gross_revenue_usd, impressions, clicks, purchases, kurs, raw_data
-      ) VALUES (
-        ${item.ad_id},
-        ${item.ad_name || null},
-        ${item.campaign_ads_name || null},
-        ${item.campaign_id || null},
-        ${item.creator_id || null},
-        ${item.product_id || null},
-        ${item.tanggal},
-        ${item.cost_usd || 0},
-        ${item.gross_revenue_usd || 0},
-        ${item.impressions || 0},
-        ${item.clicks || 0},
-        ${item.purchases || 0},
-        ${item.kurs || 16000},
-        ${JSON.stringify(item.raw_data || {})}::jsonb
-      )
-    `);
-    inserted++;
-  }
+    // 1. Delete existing records in date range scoped to campaign (prevents deleting other campaigns)
+    if (dateRange.minDate && dateRange.maxDate) {
+      if (campaignId) {
+        await db.execute(sql`
+          DELETE FROM ads_performance
+          WHERE campaign_id = ${campaignId}
+            AND tanggal >= ${dateRange.minDate}
+            AND tanggal <= ${dateRange.maxDate}
+        `);
+      } else {
+        await db.execute(sql`
+          DELETE FROM ads_performance
+          WHERE tanggal >= ${dateRange.minDate}
+            AND tanggal <= ${dateRange.maxDate}
+        `);
+      }
+    }
 
-  revalidatePath('/ads-report');
-  return { success: true, count: inserted };
+    // 2. High-Performance Bulk Multi-Row Insert in Chunks (100 rows each)
+    const CHUNK_SIZE = 100;
+    let inserted = 0;
+
+    for (let i = 0; i < rawInserts.length; i += CHUNK_SIZE) {
+      const chunk = rawInserts.slice(i, i + CHUNK_SIZE);
+      const tuples = chunk.map(item => {
+        const rawClean = JSON.stringify(item.raw_data || {}).replace(/\\u0000/g, '');
+        let kursVal = Number(item.kurs) || 16000;
+        if (kursVal < 1000) kursVal = kursVal * 1000;
+
+        return sql`(
+          ${item.ad_id},
+          ${item.ad_name || null},
+          ${item.campaign_ads_name || null},
+          ${item.campaign_id || null},
+          ${item.creator_id || null},
+          ${item.product_id || null},
+          ${item.tanggal},
+          ${Number(item.cost_usd) || 0},
+          ${Number(item.gross_revenue_usd) || 0},
+          ${Number(item.impressions) || 0},
+          ${Number(item.clicks) || 0},
+          ${Number(item.purchases) || 0},
+          ${kursVal},
+          ${Number(item.product_page_views) || 0},
+          ${Number(item.checkouts_initiated) || 0},
+          ${Number(item.items_purchased) || 0},
+          ${rawClean}::jsonb
+        )`;
+      });
+
+      await db.execute(sql`
+        INSERT INTO ads_performance (
+          ad_id, ad_name, campaign_ads_name, campaign_id, creator_id, product_id,
+          tanggal, cost_usd, gross_revenue_usd, impressions, clicks, purchases, kurs,
+          product_page_views, checkouts_initiated, items_purchased, raw_data
+        ) VALUES ${sql.join(tuples, sql`, `)}
+      `);
+      inserted += chunk.length;
+    }
+
+    revalidatePath('/ads-report');
+    revalidatePath('/ads-report/budgeting-ads');
+    return { success: true, count: inserted };
+  } catch (err: any) {
+    console.error("FATAL ERROR in executeAdsImportAction:", err);
+    return { success: false, count: 0, error: err?.message || String(err) };
+  }
 }
 
 export async function syncOrphanedSalesAction() {

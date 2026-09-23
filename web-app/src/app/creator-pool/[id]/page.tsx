@@ -1181,8 +1181,10 @@ export default function CreatorProfilePage() {
                                     </thead>
                                     <tbody>
                                       {localData?.ads?.filter((a: any) => a.campaign_id === tr.campaign_id).map((ad: any) => {
-                                        const costIdr = ad.cost_usd * ad.kurs;
-                                        const revenueIdr = ad.gross_revenue_usd * ad.kurs;
+                                        let kurs = Number(ad.kurs) || 16000;
+                                        if (kurs < 1000) kurs = kurs * 1000;
+                                        const costIdr = (Number(ad.cost_usd) || 0) * kurs;
+                                        const revenueIdr = (Number(ad.gross_revenue_usd) || 0) * kurs;
                                         const roas = costIdr > 0 ? (revenueIdr / costIdr).toFixed(2) : '-';
                                         return (
                                           <tr className="border-b border-line hover:bg-indigo-50" key={ad.id}>

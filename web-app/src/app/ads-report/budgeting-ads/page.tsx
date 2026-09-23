@@ -179,7 +179,9 @@ export default function BudgetingAdsPage() {
         tanggal: allocDate,
         campaign_id: Number(allocCampaignId),
         alokasi_usd: usd,
-        keterangan: allocNote
+        keterangan: allocNote,
+        topup_id: Number(allocTopupId),
+        alokasi_idr: idr
       });
       setShowAllocForm(false);
       setAllocDate(""); setAllocTopupId(""); setAllocCampaignId(""); setAllocIdr(""); setAllocNote("");

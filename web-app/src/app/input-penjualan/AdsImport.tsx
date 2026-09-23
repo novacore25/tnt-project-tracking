@@ -276,10 +276,14 @@ export default function AdsImport() {
           };
         });
 
-        const res = await executeAdsImportAction(rawInserts, {
-          minDate: fConfig.tanggal,
-          maxDate: fConfig.tanggal
-        });
+        const res = await executeAdsImportAction(
+          rawInserts,
+          {
+            minDate: fConfig.tanggal,
+            maxDate: fConfig.tanggal
+          },
+          globalCampaignId ? Number(globalCampaignId) : undefined
+        );
 
         if (res.success) {
           successCount += res.count;

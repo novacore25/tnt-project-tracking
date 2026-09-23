@@ -316,7 +316,7 @@ export async function addAdsTopupAction(data: {
   keterangan?: string;
 }) {
   await db.execute(sql`
-    INSERT INTO ads_topups (tanggal, nominal_topup_idr, kurs, nominal_topup_usd, keterangan)
+    INSERT INTO ads_topups (tanggal, nominal_idr, kurs_topup, nominal_usd, catatan)
     VALUES (${data.tanggal}, ${data.nominal_topup_idr}, ${data.kurs}, ${data.nominal_topup_usd}, ${data.keterangan || null})
   `);
   revalidatePath('/ads-report/budgeting-ads');
@@ -324,6 +324,7 @@ export async function addAdsTopupAction(data: {
 }
 
 export async function deleteAdsTopupAction(id: number) {
+  await db.execute(sql`DELETE FROM ads_allocations WHERE topup_id = ${id}`);
   await db.execute(sql`DELETE FROM ads_topups WHERE id = ${id}`);
   revalidatePath('/ads-report/budgeting-ads');
   return { success: true };
@@ -334,10 +335,12 @@ export async function addAdsAllocationAction(data: {
   campaign_id: number;
   alokasi_usd: number;
   keterangan?: string;
+  topup_id?: number | null;
+  alokasi_idr?: number | null;
 }) {
   await db.execute(sql`
-    INSERT INTO ads_allocations (tanggal, campaign_id, alokasi_usd, keterangan)
-    VALUES (${data.tanggal}, ${data.campaign_id}, ${data.alokasi_usd}, ${data.keterangan || null})
+    INSERT INTO ads_allocations (tanggal, campaign_id, alokasi_usd, catatan, topup_id, alokasi_idr)
+    VALUES (${data.tanggal}, ${data.campaign_id}, ${data.alokasi_usd}, ${data.keterangan || null}, ${data.topup_id || null}, ${data.alokasi_idr || null})
   `);
   revalidatePath('/ads-report/budgeting-ads');
   return { success: true };
