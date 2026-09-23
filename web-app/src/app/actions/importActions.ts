@@ -93,7 +93,7 @@ export async function executeSalesImportAction(salesRows: any[], videoRows: any[
       await db.execute(sql`
         INSERT INTO organic_videos (
           content_uid, product_id, campaign_id, creator_username, post_time,
-          video_views, video_likes, duration_str, video_product_rpm, raw_data
+          video_views, video_likes, duration_str, video_product_rpm, content_type, raw_data
         ) VALUES (
           ${v.content_uid},
           ${v.product_id || null},
@@ -104,6 +104,7 @@ export async function executeSalesImportAction(salesRows: any[], videoRows: any[
           ${v.video_likes || 0},
           ${v.duration_str || null},
           ${v.video_product_rpm || 0},
+          ${v.content_type || 'Video'},
           ${JSON.stringify(v.raw_data || {})}::jsonb
         )
         ON CONFLICT (content_uid, product_id) DO UPDATE SET
@@ -114,6 +115,7 @@ export async function executeSalesImportAction(salesRows: any[], videoRows: any[
           video_likes = GREATEST(organic_videos.video_likes, EXCLUDED.video_likes),
           duration_str = COALESCE(EXCLUDED.duration_str, organic_videos.duration_str),
           video_product_rpm = EXCLUDED.video_product_rpm,
+          content_type = EXCLUDED.content_type,
           raw_data = EXCLUDED.raw_data
       `);
       videosInserted++;

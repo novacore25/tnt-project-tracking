@@ -15,6 +15,7 @@ type PreviewRow = {
   creator_username: string;
   content_uid: string | null;
   product_id: string | null;
+  product_name?: string;
   sku_id?: number;
   tanggal: string;
   price: number;
@@ -37,6 +38,7 @@ type PreviewRow = {
 
 type SkuInfo = { id: string; name: string };
 type CreatorGMV = { username: string; gmv: number };
+type CreatorAwareness = { username: string; views: number; likes: number; count: number };
 
 type PreviewStats = {
   totalRows: number;
@@ -44,10 +46,13 @@ type PreviewStats = {
   refunds: number;
   unmappedRows: number;
   totalGmv: number;
+  totalViews?: number;
+  totalLikes?: number;
   uniqueCreators: number;
   mappedSkus: SkuInfo[];
   unmappedSkus: SkuInfo[];
   topCreators: CreatorGMV[];
+  topCreatorsAwareness?: CreatorAwareness[];
   dateRange: string;
   missingCampaignRows: number;
   missingCreatorRows: number;
@@ -75,7 +80,7 @@ export default function OrganicImport({ mode = 'sales' }: { mode?: 'sales' | 'vi
     { key: 'time_created', label: 'Time Created', autoMatch: ['time created', 'created time', 'waktu pesanan', 'waktu dibuat', 'order creation time', 'waktu pembuatan pesanan', 'paid time', 'waktu dibayar'] },
     { key: 'price', label: 'Price', autoMatch: ['price', 'harga'] },
     { key: 'quantity', label: 'Quantity', autoMatch: ['quantity', 'jumlah'] },
-    { key: 'commission_gmv', label: 'Base Commission (GMV)', autoMatch: ['est. base commission', 'commission base', 'base commission'] },
+    { key: 'commission_gmv', label: 'Base Commission (GMV)', autoMatch: ['commission gmv', 'est. base commission', 'commission base', 'base commission'] },
     { key: 'refund_status', label: 'Refund Status', autoMatch: ['fully returned or refunded', 'refund', 'pengembalian'] },
     { key: 'tiktok_campaign_id', label: 'Campaign ID', autoMatch: ['partner campaign id', 'campaign id'] },
     { key: 'shop_code', label: 'Shop Code', autoMatch: ['shop code', 'shop id'] },
@@ -156,8 +161,9 @@ export default function OrganicImport({ mode = 'sales' }: { mode?: 'sales' | 'vi
                 try {
                   const dataArr = new Uint8Array(e.target?.result as ArrayBuffer);
                   const workbook = XLSX.read(dataArr, { type: 'array' });
-                  const firstSheetName = workbook.SheetNames[0];
-                  const worksheet = workbook.Sheets[firstSheetName];
+                  const customReportSheet = workbook.SheetNames.find(s => s.toLowerCase().trim() === 'custom report');
+                  const sheetToUse = customReportSheet || workbook.SheetNames[0];
+                  const worksheet = workbook.Sheets[sheetToUse];
                   const jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: '', raw: false });
                   resolve(jsonData as any[]);
                 } catch (error) {
@@ -282,11 +288,14 @@ export default function OrganicImport({ mode = 'sales' }: { mode?: 'sales' | 'vi
     let refundCount = 0;
     let unmappedRowsCount = 0;
     let totalGmv = 0;
+    let totalAwarenessViews = 0;
+    let totalAwarenessLikes = 0;
     let missingCampaignRows = 0;
     let missingCreatorRows = 0;
     
     const uniqueCreators = new Set<string>();
     const creatorGmvMap = new Map<string, number>();
+    const creatorAwarenessMap = new Map<string, { views: number; likes: number; count: number }>();
     const campaignBreakdownMap = new Map<string, { gmv: number; videos: number; live: number }>();
     
     const mappedSkusMap = new Map<string, string>(); // id -> name
@@ -386,9 +395,14 @@ export default function OrganicImport({ mode = 'sales' }: { mode?: 'sales' | 'vi
         price = Math.round(parseFloat(row[columnMapping['price']]?.toString().replace(/[^0-9.-]+/g,"") || '0'));
         quantity = parseInt(row[columnMapping['quantity']]?.toString().replace(/[^0-9.-]+/g,"") || '0');
         
-        const rawGmvStr = row[columnMapping['commission_gmv']]?.toString();
-        if (rawGmvStr !== undefined && rawGmvStr !== '') {
-          gmv = Math.round(parseFloat(rawGmvStr.replace(/[^0-9.-]+/g,"")));
+        // GMV: Hitung dari Qty * Est. Base Commission (atau jika Est. Base Commission sudah merupakan total pesanan)
+        const rawEstBase = parseFloat(row[columnMapping['commission_gmv']]?.toString().replace(/[^0-9.-]+/g,"") || '0');
+        if (rawEstBase > 0) {
+          if (quantity > 1 && rawEstBase < (price * quantity * 0.7)) {
+            gmv = Math.round(rawEstBase * quantity);
+          } else {
+            gmv = Math.round(rawEstBase);
+          }
         } else {
           gmv = Math.round(price * quantity);
         }
@@ -511,6 +525,16 @@ export default function OrganicImport({ mode = 'sales' }: { mode?: 'sales' | 'vi
       if (creatorUsername) {
         uniqueCreators.add(creatorUsername);
         creatorGmvMap.set(creatorUsername, (creatorGmvMap.get(creatorUsername) || 0) + gmv);
+
+        if (isAwarenessFormat || isLiveFormat) {
+          totalAwarenessViews += videoViews;
+          totalAwarenessLikes += videoLikes;
+          const cur = creatorAwarenessMap.get(creatorUsername) || { views: 0, likes: 0, count: 0 };
+          cur.views += videoViews;
+          cur.likes += videoLikes;
+          cur.count += 1;
+          creatorAwarenessMap.set(creatorUsername, cur);
+        }
       }
 
       payload.push({
@@ -518,6 +542,7 @@ export default function OrganicImport({ mode = 'sales' }: { mode?: 'sales' | 'vi
         creator_username: creatorUsername,
         content_uid: contentUid || null,
         product_id: rawProductId || null,
+        product_name: productName,
         sku_id: rawProductId ? skuIdMapping[rawProductId] : undefined,
         tanggal: tanggal,
         price: price,
@@ -556,6 +581,12 @@ export default function OrganicImport({ mode = 'sales' }: { mode?: 'sales' | 'vi
       .sort((a, b) => b.gmv - a.gmv)
       .slice(0, 3);
 
+    // Top 3 Creators by Views (Awareness)
+    const topCreatorsAwareness = Array.from(creatorAwarenessMap.entries())
+      .map(([username, d]) => ({ username, ...d }))
+      .sort((a, b) => b.views - a.views)
+      .slice(0, 3);
+
     // Array SKU
     const mappedSkusArray = Array.from(mappedSkusMap.entries()).map(([id, name]) => ({ id, name }));
     const unmappedSkusArray = Array.from(unmappedSkusMap.entries()).map(([id, name]) => ({ id, name }));
@@ -573,10 +604,13 @@ export default function OrganicImport({ mode = 'sales' }: { mode?: 'sales' | 'vi
       refunds: refundCount,
       unmappedRows: unmappedRowsCount + dupCount,
       totalGmv,
+      totalViews: totalAwarenessViews,
+      totalLikes: totalAwarenessLikes,
       uniqueCreators: uniqueCreators.size,
       mappedSkus: mappedSkusArray,
       unmappedSkus: unmappedSkusArray,
       topCreators,
+      topCreatorsAwareness,
       dateRange: dateRangeStr,
       missingCampaignRows,
       missingCreatorRows,
@@ -811,27 +845,60 @@ export default function OrganicImport({ mode = 'sales' }: { mode?: 'sales' | 'vi
             <div className="bg-slate-900 rounded-xl p-5 text-white shadow-lg relative overflow-hidden">
               <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/20 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none"></div>
               <h3 className="font-bold text-lg mb-4 relative z-10 flex items-center gap-2">
-                <BarChart3 className="w-5 h-5 text-indigo-400" /> Ringkasan Penambahan Data
+                <BarChart3 className="w-5 h-5 text-indigo-400" /> Ringkasan Penambahan Data ({mode === 'sales' ? 'Organik Sales' : mode === 'video' ? 'Awareness Video' : 'Awareness Livestream'})
               </h3>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 relative z-10">
-                <div className="bg-slate-800/50 border border-slate-700/50 p-4 rounded-xl">
-                  <p className="text-xs text-slate-400 font-medium mb-1">Total GMV (Masuk)</p>
-                  <p className="text-xl font-bold text-emerald-400">Rp {(stats.totalGmv / 1000000).toFixed(1)}M</p>
-                  <p className="text-[10px] text-slate-500 mt-1">Rp {stats.totalGmv.toLocaleString()}</p>
-                </div>
-                <div className="bg-slate-800/50 border border-slate-700/50 p-4 rounded-xl">
-                  <p className="text-xs text-slate-400 font-medium mb-1">Baris Data Valid</p>
-                  <p className="text-xl font-bold text-white">{stats.validRows.toLocaleString()}</p>
-                  <p className="text-[10px] text-slate-500 mt-1">{stats.refunds} baris refund (GMV tetap masuk)</p>
-                </div>
-                <div className="bg-slate-800/50 border border-slate-700/50 p-4 rounded-xl">
-                  <p className="text-xs text-slate-400 font-medium mb-1">Total Video Baru</p>
-                  <p className="text-xl font-bold text-blue-400">{stats.campaignBreakdown.reduce((sum, b) => sum + b.videos, 0).toLocaleString()}</p>
-                </div>
-                <div className="bg-slate-800/50 border border-slate-700/50 p-4 rounded-xl">
-                  <p className="text-xs text-slate-400 font-medium mb-1">Total Livestream</p>
-                  <p className="text-xl font-bold text-amber-400">{stats.campaignBreakdown.reduce((sum, b) => sum + b.live, 0).toLocaleString()}</p>
-                </div>
+                {mode === 'sales' ? (
+                  <>
+                    <div className="bg-slate-800/50 border border-slate-700/50 p-4 rounded-xl">
+                      <p className="text-xs text-slate-400 font-medium mb-1">Total GMV (Semua Status)</p>
+                      <p className="text-xl font-bold text-emerald-400">Rp {(stats.totalGmv / 1000000).toFixed(1)}M</p>
+                      <p className="text-[10px] text-slate-500 mt-1">Rp {stats.totalGmv.toLocaleString('id-ID')}</p>
+                    </div>
+                    <div className="bg-slate-800/50 border border-slate-700/50 p-4 rounded-xl">
+                      <p className="text-xs text-slate-400 font-medium mb-1">Total Pesanan (Orders)</p>
+                      <p className="text-xl font-bold text-white">{stats.validRows.toLocaleString()}</p>
+                      <p className="text-[10px] text-slate-500 mt-1">{stats.refunds} refund tercatat (GMV tetap masuk)</p>
+                    </div>
+                    <div className="bg-slate-800/50 border border-slate-700/50 p-4 rounded-xl">
+                      <p className="text-xs text-slate-400 font-medium mb-1">Total Kreator Aktif</p>
+                      <p className="text-xl font-bold text-blue-400">{stats.uniqueCreators.toLocaleString()}</p>
+                      <p className="text-[10px] text-slate-500 mt-1">Kreator penyumbang order</p>
+                    </div>
+                    <div className="bg-slate-800/50 border border-slate-700/50 p-4 rounded-xl">
+                      <p className="text-xs text-slate-400 font-medium mb-1">Campaign Terpetakan</p>
+                      <p className="text-xl font-bold text-indigo-400">{stats.campaignBreakdown.filter(b => b.name !== 'Belum Terpetakan').length} Campaign</p>
+                      <p className="text-[10px] text-slate-500 mt-1">{stats.missingCampaignRows} baris perlu mapping</p>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="bg-slate-800/50 border border-slate-700/50 p-4 rounded-xl">
+                      <p className="text-xs text-slate-400 font-medium mb-1">Total Views (Tayangan)</p>
+                      <p className="text-xl font-bold text-blue-400">{(stats.totalViews || 0).toLocaleString()}</p>
+                      <p className="text-[10px] text-slate-500 mt-1">Akumulasi views konten</p>
+                    </div>
+                    <div className="bg-slate-800/50 border border-slate-700/50 p-4 rounded-xl">
+                      <p className="text-xs text-slate-400 font-medium mb-1">Total Likes (Suka)</p>
+                      <p className="text-xl font-bold text-rose-400">{(stats.totalLikes || 0).toLocaleString()}</p>
+                      <p className="text-[10px] text-slate-500 mt-1">Interaksi likes dari audiens</p>
+                    </div>
+                    <div className="bg-slate-800/50 border border-slate-700/50 p-4 rounded-xl">
+                      <p className="text-xs text-slate-400 font-medium mb-1">{mode === 'video' ? 'Total Video Terdeteksi' : 'Total Livestream Terdeteksi'}</p>
+                      <p className="text-xl font-bold text-white">
+                        {mode === 'video' 
+                          ? stats.campaignBreakdown.reduce((sum, b) => sum + b.videos, 0).toLocaleString()
+                          : stats.campaignBreakdown.reduce((sum, b) => sum + b.live, 0).toLocaleString()}
+                      </p>
+                      <p className="text-[10px] text-slate-500 mt-1">{stats.validRows.toLocaleString()} baris data valid</p>
+                    </div>
+                    <div className="bg-slate-800/50 border border-slate-700/50 p-4 rounded-xl">
+                      <p className="text-xs text-slate-400 font-medium mb-1">Total Kreator Terdeteksi</p>
+                      <p className="text-xl font-bold text-emerald-400">{stats.uniqueCreators.toLocaleString()}</p>
+                      <p className="text-[10px] text-slate-500 mt-1">Kreator yang terhubung</p>
+                    </div>
+                  </>
+                )}
               </div>
               
               <div className="mt-4 pt-4 border-t border-slate-700/50 relative z-10">
@@ -863,26 +930,51 @@ export default function OrganicImport({ mode = 'sales' }: { mode?: 'sales' | 'vi
               {/* Leaderboard Manual Verification */}
               <div className="border border-slate-200 rounded-xl overflow-hidden">
                 <div className="bg-slate-50 p-3 border-b border-slate-200">
-                  <p className="font-bold text-sm text-slate-800">Top 3 Kreator (Verifikasi Manual)</p>
+                  <p className="font-bold text-sm text-slate-800">
+                    {mode === 'sales' ? 'Top 3 Kreator (Berdasarkan GMV)' : 'Top 3 Kreator (Berdasarkan Views)'}
+                  </p>
                 </div>
                 <div className="p-0">
                   <table className="w-full text-sm">
                     <thead className="bg-slate-50/50 text-slate-500 text-xs">
                       <tr>
                         <th className="px-4 py-2 text-left font-medium">Username</th>
-                        <th className="px-4 py-2 text-right font-medium">Total GMV</th>
+                        {mode === 'sales' ? (
+                          <th className="px-4 py-2 text-right font-medium">Total GMV</th>
+                        ) : (
+                          <>
+                            <th className="px-4 py-2 text-right font-medium">Views</th>
+                            <th className="px-4 py-2 text-right font-medium">Likes</th>
+                          </>
+                        )}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {stats.topCreators.length > 0 ? stats.topCreators.map((c, i) => (
-                        <tr key={i} className="hover:bg-slate-50">
-                          <td className="px-4 py-3 font-medium text-slate-700">@{c.username}</td>
-                          <td className="px-4 py-3 text-right font-bold text-emerald-600">
-                            Rp {c.gmv.toLocaleString('id-ID')}
-                          </td>
-                        </tr>
-                      )) : (
-                        <tr><td colSpan={2} className="px-4 py-3 text-center text-slate-500">Tidak ada data</td></tr>
+                      {mode === 'sales' ? (
+                        stats.topCreators.length > 0 ? stats.topCreators.map((c, i) => (
+                          <tr key={i} className="hover:bg-slate-50">
+                            <td className="px-4 py-3 font-medium text-slate-700">@{c.username}</td>
+                            <td className="px-4 py-3 text-right font-bold text-emerald-600">
+                              Rp {c.gmv.toLocaleString('id-ID')}
+                            </td>
+                          </tr>
+                        )) : (
+                          <tr><td colSpan={2} className="px-4 py-3 text-center text-slate-500">Tidak ada data</td></tr>
+                        )
+                      ) : (
+                        (stats.topCreatorsAwareness || []).length > 0 ? (stats.topCreatorsAwareness || []).map((c, i) => (
+                          <tr key={i} className="hover:bg-slate-50">
+                            <td className="px-4 py-3 font-medium text-slate-700">@{c.username}</td>
+                            <td className="px-4 py-3 text-right font-bold text-blue-600">
+                              {c.views.toLocaleString('id-ID')}
+                            </td>
+                            <td className="px-4 py-3 text-right font-semibold text-rose-500">
+                              {c.likes.toLocaleString('id-ID')}
+                            </td>
+                          </tr>
+                        )) : (
+                          <tr><td colSpan={3} className="px-4 py-3 text-center text-slate-500">Tidak ada data</td></tr>
+                        )
                       )}
                     </tbody>
                   </table>
@@ -970,29 +1062,71 @@ export default function OrganicImport({ mode = 'sales' }: { mode?: 'sales' | 'vi
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm text-left">
-                  <thead className="bg-slate-50 border-b border-slate-200 text-slate-600">
-                    <tr>
-                      <th className="p-3 font-semibold">No</th>
-                      <th className="p-3 font-semibold">Tanggal</th>
-                      <th className="p-3 font-semibold">Kreator</th>
-                      <th className="p-3 font-semibold">ID Konten/Order</th>
-                      <th className="p-3 font-semibold">GMV (Rp)</th>
-                    </tr>
+                  <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 text-xs">
+                    {mode === 'sales' ? (
+                      <tr>
+                        <th className="p-3 font-semibold w-12">No</th>
+                        <th className="p-3 font-semibold">Tanggal</th>
+                        <th className="p-3 font-semibold">Kreator</th>
+                        <th className="p-3 font-semibold">Order ID</th>
+                        <th className="p-3 font-semibold">Produk</th>
+                        <th className="p-3 font-semibold text-center">Qty</th>
+                        <th className="p-3 font-semibold text-right">GMV (Rp)</th>
+                        <th className="p-3 font-semibold">Status</th>
+                      </tr>
+                    ) : (
+                      <tr>
+                        <th className="p-3 font-semibold w-12">No</th>
+                        <th className="p-3 font-semibold">{mode === 'video' ? 'Post Time' : 'LIVE Time'}</th>
+                        <th className="p-3 font-semibold">Kreator</th>
+                        <th className="p-3 font-semibold">{mode === 'video' ? 'Video ID' : 'Livestream Room ID'}</th>
+                        <th className="p-3 font-semibold">Produk</th>
+                        <th className="p-3 font-semibold text-right">Views</th>
+                        <th className="p-3 font-semibold text-right">Likes</th>
+                        <th className="p-3 font-semibold text-center">Durasi</th>
+                        <th className="p-3 font-semibold text-right">RPM</th>
+                        <th className="p-3 font-semibold">Status</th>
+                      </tr>
+                    )}
                   </thead>
-                  <tbody>
+                  <tbody className="divide-y divide-slate-100">
                     {previewPayload.slice((previewPage - 1) * 50, previewPage * 50).map((row, idx) => {
                       const isError = !row.campaign_id || !row.creator_username;
+                      const prodName = row.product_name || row.raw_data?.['Product name'] || row.raw_data?.['Product Name'] || row.product_id || '-';
                       return (
                       <tr key={idx} className={`border-b border-slate-100 hover:bg-slate-50 ${isError ? 'bg-red-50/50' : ''}`}>
                         <td className="p-3 text-slate-400">{(previewPage - 1) * 50 + idx + 1}</td>
-                        <td className="p-3">{new Date(row.tanggal).toLocaleDateString('id-ID')}</td>
+                        <td className="p-3 whitespace-nowrap text-xs text-slate-600">{new Date(row.tanggal).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}</td>
                         <td className="p-3 font-medium text-slate-700">
-                          {row.creator_username ? `@${row.creator_username}` : <span className="text-red-500 text-xs font-bold bg-red-100 px-2 py-1 rounded">KOSONG</span>}
+                          {row.creator_username ? `@${row.creator_username}` : <span className="text-red-500 text-xs font-bold bg-red-100 px-2 py-0.5 rounded">KOSONG</span>}
                         </td>
-                        <td className="p-3 font-mono text-xs text-slate-500">{row.order_id || row.content_uid}</td>
-                        <td className="p-3 text-emerald-600 font-semibold">{row.gmv.toLocaleString()}</td>
-                        <td className="p-3">
-                          {!row.campaign_id && <span className="text-red-500 text-xs font-bold bg-red-100 px-2 py-1 rounded">Campaign/SKU Belum Terdaftar</span>}
+                        <td className="p-3 font-mono text-xs text-slate-500 max-w-[130px] truncate" title={row.order_id || row.content_uid || ''}>
+                          {mode === 'sales' ? (row.order_id?.split('_')[0] || row.order_id) : row.content_uid}
+                        </td>
+                        <td className="p-3 text-xs text-slate-700 max-w-[200px] truncate" title={prodName}>
+                          {prodName}
+                        </td>
+                        
+                        {mode === 'sales' ? (
+                          <>
+                            <td className="p-3 text-center font-semibold text-slate-700">{row.quantity}</td>
+                            <td className="p-3 text-right text-emerald-600 font-bold whitespace-nowrap">Rp {row.gmv.toLocaleString('id-ID')}</td>
+                          </>
+                        ) : (
+                          <>
+                            <td className="p-3 text-right font-bold text-blue-600">{Number(row.video_views || 0).toLocaleString('id-ID')}</td>
+                            <td className="p-3 text-right font-medium text-rose-500">{Number(row.video_likes || 0).toLocaleString('id-ID')}</td>
+                            <td className="p-3 text-center text-xs text-slate-500 font-mono">{row.duration_str || '-'}</td>
+                            <td className="p-3 text-right text-xs text-slate-600 font-semibold">{row.video_product_rpm ? `Rp ${row.video_product_rpm.toLocaleString('id-ID')}` : '-'}</td>
+                          </>
+                        )}
+                        
+                        <td className="p-3 whitespace-nowrap">
+                          {!row.campaign_id ? (
+                            <span className="text-red-600 text-xs font-bold bg-red-100 px-2 py-0.5 rounded">Belum Terdaftar</span>
+                          ) : (
+                            <span className="text-emerald-700 text-xs font-semibold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">Terpetakan</span>
+                          )}
                         </td>
                       </tr>
                     )})}
