@@ -4,6 +4,11 @@ import { db } from '@/db';
 import { sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 
+function sqlInList(items: any[]) {
+  if (!items || items.length === 0) return sql`(NULL)`;
+  return sql`(${sql.join(items.map(it => sql`${it}`), sql`, `)})`;
+}
+
 // ============================================================
 // CONCEPTS (Master Konsep)
 // ============================================================
@@ -913,7 +918,7 @@ export async function bulkVerifyVideoLinksAction(
         FROM videos v
         LEFT JOIN campaign_creators cc ON v.campaign_creator_id = cc.id
         LEFT JOIN creators c ON cc.creator_id = c.id
-        WHERE v.content_uid = ANY(${videoIds})
+        WHERE v.content_uid IN ${sqlInList(videoIds)}
       `)) as any[];
     }
 
@@ -934,7 +939,7 @@ export async function bulkVerifyVideoLinksAction(
           c.nama_asli
         FROM campaign_creators cc
         JOIN creators c ON cc.creator_id = c.id
-        WHERE cc.campaign_id = ${campaignId} AND LOWER(c.username) = ANY(${usernames})
+        WHERE cc.campaign_id = ${campaignId} AND LOWER(c.username) IN ${sqlInList(usernames)}
       `)) as any[];
     }
     const ccMap = new Map<string, any>();
@@ -948,7 +953,7 @@ export async function bulkVerifyVideoLinksAction(
       globalCreators = (await db.execute(sql`
         SELECT id as creator_id, LOWER(username) as username, nama_asli
         FROM creators
-        WHERE LOWER(username) = ANY(${usernames})
+        WHERE LOWER(username) IN ${sqlInList(usernames)}
       `)) as any[];
     }
     const globalCreatorMap = new Map<string, any>();
@@ -1103,9 +1108,12 @@ export async function commitBulkImportVideosAction(
     const videoIds = cleanItems.map(it => it.videoId);
 
     // Final safety check against DB duplicate videos
-    const existingVids = (await db.execute(sql`
-      SELECT content_uid FROM videos WHERE content_uid = ANY(${videoIds})
-    `)) as any[];
+    let existingVids: any[] = [];
+    if (videoIds.length > 0) {
+      existingVids = (await db.execute(sql`
+        SELECT content_uid FROM videos WHERE content_uid IN ${sqlInList(videoIds)}
+      `)) as any[];
+    }
     const existingVidSet = new Set(existingVids.map((r: any) => r.content_uid));
 
     const validItems = cleanItems.filter(it => !existingVidSet.has(it.videoId));
@@ -1137,9 +1145,12 @@ export async function commitBulkImportVideosAction(
       `);
     }
 
-    const creatorRows = (await db.execute(sql`
-      SELECT id, LOWER(username) as username FROM creators WHERE LOWER(username) = ANY(${usernames})
-    `)) as any[];
+    let creatorRows: any[] = [];
+    if (usernames.length > 0) {
+      creatorRows = (await db.execute(sql`
+        SELECT id, LOWER(username) as username FROM creators WHERE LOWER(username) IN ${sqlInList(usernames)}
+      `)) as any[];
+    }
     const creatorMap = new Map<string, number>(creatorRows.map((r: any) => [r.username, r.id]));
 
     // 2. Ensure `campaign_creators` exist for this campaign
@@ -1177,12 +1188,15 @@ export async function commitBulkImportVideosAction(
     }
 
     // 3. Fetch final `campaign_creators` IDs for this campaign
-    const ccRows = (await db.execute(sql`
-      SELECT cc.id as cc_id, LOWER(c.username) as username
-      FROM campaign_creators cc
-      JOIN creators c ON cc.creator_id = c.id
-      WHERE cc.campaign_id = ${campaignId} AND LOWER(c.username) = ANY(${usernames})
-    `)) as any[];
+    let ccRows: any[] = [];
+    if (usernames.length > 0) {
+      ccRows = (await db.execute(sql`
+        SELECT cc.id as cc_id, LOWER(c.username) as username
+        FROM campaign_creators cc
+        JOIN creators c ON cc.creator_id = c.id
+        WHERE cc.campaign_id = ${campaignId} AND LOWER(c.username) IN ${sqlInList(usernames)}
+      `)) as any[];
+    }
     const ccIdMap = new Map<string, number>(ccRows.map((r: any) => [r.username, r.cc_id]));
 
     // 4. For each creator, get current MAX(urutan) and insert new video entries

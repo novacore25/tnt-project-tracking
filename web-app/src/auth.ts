@@ -3,6 +3,14 @@ import Google from 'next-auth/providers/google';
 import { db } from '@/db';
 import { sql } from 'drizzle-orm';
 
+// Ensure hardcoded sslip.io does not force cross-domain redirects on custom domain
+if (process.env.NEXTAUTH_URL && process.env.NEXTAUTH_URL.includes('sslip.io')) {
+  delete process.env.NEXTAUTH_URL;
+}
+if (process.env.AUTH_URL && process.env.AUTH_URL.includes('sslip.io')) {
+  delete process.env.AUTH_URL;
+}
+
 export const { handlers, signIn, signOut, auth } = NextAuth({
   secret:
     process.env.AUTH_SECRET ||
