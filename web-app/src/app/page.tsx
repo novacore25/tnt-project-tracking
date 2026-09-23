@@ -76,10 +76,10 @@ export default function Dashboard() {
                 <div className="micon bg-g50 text-g300"><TrendingUp className="ico" /></div>
               </div>
               <div className="mval text-g300">
-                Rp {(vw_campaign_summary.reduce((a, b) => a + (b.total_gmv_achievement || 0), 0) / 1000000).toFixed(1)}M
+                Rp {(vw_campaign_summary.reduce((a, b) => a + (Number(b.total_gmv_achievement) || 0), 0) / 1000000).toFixed(1)}M
               </div>
               <div className="msub font-bold text-g400">
-                Rp {vw_campaign_summary.reduce((a, b) => a + (b.total_gmv_achievement || 0), 0).toLocaleString()}
+                Rp {Math.round(vw_campaign_summary.reduce((a, b) => a + (Number(b.total_gmv_achievement) || 0), 0)).toLocaleString('id-ID')}
               </div>
             </div>
             
@@ -88,7 +88,7 @@ export default function Dashboard() {
                 Total Video Tayang
                 <div className="micon bg-[#f3eaf7] text-pu300"><Video className="ico" /></div>
               </div>
-              <div className="mval">{vw_campaign_summary.reduce((a, b) => a + (b.achievement_video || 0), 0)}</div>
+              <div className="mval">{vw_campaign_summary.reduce((a, b) => a + (Number(b.achievement_video) || 0), 0).toLocaleString('id-ID')}</div>
             </div>
             
             <div className="metric">
@@ -97,10 +97,10 @@ export default function Dashboard() {
                 <div className="micon bg-o50 text-o300"><DollarSign className="ico" /></div>
               </div>
               <div className="mval text-o300">
-                Rp {(vw_campaign_summary.reduce((a, b) => a + (b.sisa_budget_ads || 0), 0) / 1000000).toFixed(1)}M
+                Rp {(vw_campaign_summary.reduce((a, b) => a + (Number(b.sisa_budget_ads) || 0), 0) / 1000000).toFixed(1)}M
               </div>
               <div className="msub font-bold text-o400">
-                Rp {vw_campaign_summary.reduce((a, b) => a + (b.sisa_budget_ads || 0), 0).toLocaleString()}
+                Rp {Math.round(vw_campaign_summary.reduce((a, b) => a + (Number(b.sisa_budget_ads) || 0), 0)).toLocaleString('id-ID')}
               </div>
             </div>
           </div>

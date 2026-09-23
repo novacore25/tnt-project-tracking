@@ -67,7 +67,7 @@ export async function getAuthProfileAction() {
     }
 
     const isValidUuid = (val?: any): boolean => typeof val === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(val);
-    const validProfileId = isValidUuid(profile?.id) ? profile.id : (isValidUuid((session.user as any).id) ? (session.user as any).id : null);
+    const validProfileId = profile?.id ? String(profile.id) : (isValidUuid((session.user as any).id) ? (session.user as any).id : null);
 
     const userProfile = {
       id: validProfileId,
@@ -78,8 +78,9 @@ export async function getAuthProfileAction() {
       status: profile?.status || 'active'
     };
 
-    const userCampaignsRes = profile?.id ? await db.execute(sql`
-      SELECT campaign_id, all_campaigns FROM user_campaigns WHERE user_id = ${profile.id}
+    const targetUserId = validProfileId || (session.user as any).id;
+    const userCampaignsRes = targetUserId ? await db.execute(sql`
+      SELECT campaign_id, all_campaigns FROM user_campaigns WHERE user_id = ${String(targetUserId)}
     `).catch(() => []) : [];
 
     return {
