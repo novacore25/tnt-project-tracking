@@ -8,7 +8,13 @@ import Papa from "papaparse";
 import * as XLSX from "xlsx";
 import { useDatabaseStore } from "@/store/useDatabaseStore";
 import { syncUnmappedForProduct } from "@/lib/syncUnmapped";
-import { fetchImportMetadataAction, insertCustomSkuAction, executeSalesImportAction } from "@/app/actions/importActions";
+import { 
+  fetchImportMetadataAction, 
+  insertCustomSkuAction, 
+  executeSalesImportAction, 
+  executeSalesImportChunkAction, 
+  finishSalesImportAction 
+} from "@/app/actions/importActions";
 
 type PreviewRow = {
   campaign_id: number | null;
@@ -624,10 +630,6 @@ export default function OrganicImport({ mode = 'sales' }: { mode?: 'sales' | 'vi
     setStep(3);
     setLoading(true);
     setResult(null);
-    setProgress({ current: 0, total: previewPayload.length });
-    
-    let successCount = 0;
-    const errors: string[] = [];
     
     // Deduplicate payload correctly based on type
     const salesMap = new Map<string, any>();
@@ -661,14 +663,48 @@ export default function OrganicImport({ mode = 'sales' }: { mode?: 'sales' | 'vi
     const uniqueSalesPayload = Array.from(salesMap.values());
     const uniqueVideoPayload = Array.from(videoMap.values());
     const total = uniqueSalesPayload.length + uniqueVideoPayload.length;
-    
-    try {
-      const res = await executeSalesImportAction(uniqueSalesPayload, uniqueVideoPayload, mode === 'video');
-      if (res.success) {
-        successCount = res.salesInserted + res.videosInserted;
+    setProgress({ current: 0, total: Math.max(total, 1) });
+
+    let successCount = 0;
+    const errors: string[] = [];
+    const CHUNK_SIZE = 250;
+    let processed = 0;
+
+    // 1. Process Sales Chunks
+    for (let i = 0; i < uniqueSalesPayload.length; i += CHUNK_SIZE) {
+      const chunk = uniqueSalesPayload.slice(i, i + CHUNK_SIZE);
+      try {
+        const res = await executeSalesImportChunkAction(chunk, [], mode === 'video');
+        if (res.success) {
+          successCount += res.salesInserted;
+        }
+      } catch (err: any) {
+        errors.push(`Gagal import batch sales (${i + 1}-${i + chunk.length}): ${err.message || err}`);
       }
+      processed += chunk.length;
+      setProgress({ current: processed, total });
+    }
+
+    // 2. Process Videos / Awareness Chunks
+    for (let i = 0; i < uniqueVideoPayload.length; i += CHUNK_SIZE) {
+      const chunk = uniqueVideoPayload.slice(i, i + CHUNK_SIZE);
+      try {
+        const res = await executeSalesImportChunkAction([], chunk, mode === 'video');
+        if (res.success) {
+          successCount += res.videosInserted;
+        }
+      } catch (err: any) {
+        errors.push(`Gagal import batch awareness (${i + 1}-${i + chunk.length}): ${err.message || err}`);
+      }
+      processed += chunk.length;
+      setProgress({ current: processed, total });
+    }
+
+    // 3. Revalidate path cache once after all chunks complete
+    try {
+      await finishSalesImportAction();
     } catch (err: any) {
-      errors.push(`Gagal import data: ${err.message || err}`);
+      console.warn("Revalidation warning:", err);
     }
     
     setResult({ success: successCount, skipped: total - successCount, errors });

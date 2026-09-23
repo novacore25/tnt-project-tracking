@@ -7,6 +7,9 @@ const nextConfig: NextConfig = {
       dynamic: 300, // 5 menit cache untuk Server Components dinamis
       static: 1800,
     },
+    serverActions: {
+      bodySizeLimit: '10mb',
+    },
   },
   typescript: {
     ignoreBuildErrors: true,

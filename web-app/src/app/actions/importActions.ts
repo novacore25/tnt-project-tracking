@@ -30,39 +30,41 @@ export async function insertCustomSkuAction(payload: {
   return (res as unknown as any[])[0];
 }
 
-export async function executeSalesImportAction(salesRows: any[], videoRows: any[], isVideoMode = false) {
+export async function executeSalesImportChunkAction(salesRows: any[], videoRows: any[], isVideoMode = false) {
   let salesInserted = 0;
   let videosInserted = 0;
 
-  // 1. Batch upsert sales
+  // 1. High-Performance Bulk Multi-Row Upsert for Sales
   if (salesRows.length > 0) {
-    for (const row of salesRows) {
-      if (!row.order_id) continue;
+    const validSales = salesRows.filter(r => r.order_id);
+    if (validSales.length > 0) {
+      const salesTuples = validSales.map(row => sql`(
+        ${row.order_id},
+        ${row.sku_id || null},
+        ${row.campaign_id || null},
+        ${row.creator_username || null},
+        ${row.content_uid || null},
+        ${row.product_id || null},
+        ${row.tanggal},
+        ${row.price || 0},
+        ${row.quantity || 1},
+        ${row.gmv || 0},
+        ${row.is_refund ? true : false},
+        ${row.content_type || 'video'},
+        ${row.order_status || null},
+        ${row.commission_rate || null},
+        ${row.attribution_type || null},
+        ${row.tiktok_campaign_id || null},
+        ${row.shop_code || null},
+        ${JSON.stringify(row.raw_data || {})}::jsonb
+      )`);
+
       await db.execute(sql`
         INSERT INTO sales (
           order_id, sku_id, campaign_id, creator_username, content_uid, product_id,
           tanggal, price, quantity, gmv, is_refund, content_type, order_status,
           commission_rate, attribution_type, tiktok_campaign_id, shop_code, raw_data
-        ) VALUES (
-          ${row.order_id},
-          ${row.sku_id || null},
-          ${row.campaign_id || null},
-          ${row.creator_username || null},
-          ${row.content_uid || null},
-          ${row.product_id || null},
-          ${row.tanggal},
-          ${row.price || 0},
-          ${row.quantity || 1},
-          ${row.gmv || 0},
-          ${row.is_refund ? true : false},
-          ${row.content_type || 'video'},
-          ${row.order_status || null},
-          ${row.commission_rate || null},
-          ${row.attribution_type || null},
-          ${row.tiktok_campaign_id || null},
-          ${row.shop_code || null},
-          ${JSON.stringify(row.raw_data || {})}::jsonb
-        )
+        ) VALUES ${sql.join(salesTuples, sql`, `)}
         ON CONFLICT (order_id) DO UPDATE SET
           sku_id = COALESCE(EXCLUDED.sku_id, sales.sku_id),
           campaign_id = COALESCE(EXCLUDED.campaign_id, sales.campaign_id),
@@ -82,31 +84,33 @@ export async function executeSalesImportAction(salesRows: any[], videoRows: any[
           shop_code = EXCLUDED.shop_code,
           raw_data = EXCLUDED.raw_data
       `);
-      salesInserted++;
+      salesInserted = validSales.length;
     }
   }
 
-  // 2. Batch upsert organic_videos
+  // 2. High-Performance Bulk Multi-Row Upsert for Organic Videos
   if (videoRows.length > 0) {
-    for (const v of videoRows) {
-      if (!v.content_uid) continue;
+    const validVideos = videoRows.filter(v => v.content_uid);
+    if (validVideos.length > 0) {
+      const videoTuples = validVideos.map(v => sql`(
+        ${v.content_uid},
+        ${v.product_id || null},
+        ${v.campaign_id || null},
+        ${v.creator_username || null},
+        ${v.tanggal ? new Date(v.tanggal) : new Date()},
+        ${v.video_views || 0},
+        ${v.video_likes || 0},
+        ${v.duration_str || null},
+        ${v.video_product_rpm || 0},
+        ${v.content_type || 'Video'},
+        ${JSON.stringify(v.raw_data || {})}::jsonb
+      )`);
+
       await db.execute(sql`
         INSERT INTO organic_videos (
           content_uid, product_id, campaign_id, creator_username, post_time,
           video_views, video_likes, duration_str, video_product_rpm, content_type, raw_data
-        ) VALUES (
-          ${v.content_uid},
-          ${v.product_id || null},
-          ${v.campaign_id || null},
-          ${v.creator_username || null},
-          ${v.tanggal ? new Date(v.tanggal) : new Date()},
-          ${v.video_views || 0},
-          ${v.video_likes || 0},
-          ${v.duration_str || null},
-          ${v.video_product_rpm || 0},
-          ${v.content_type || 'Video'},
-          ${JSON.stringify(v.raw_data || {})}::jsonb
-        )
+        ) VALUES ${sql.join(videoTuples, sql`, `)}
         ON CONFLICT (content_uid, product_id) DO UPDATE SET
           campaign_id = COALESCE(EXCLUDED.campaign_id, organic_videos.campaign_id),
           creator_username = COALESCE(EXCLUDED.creator_username, organic_videos.creator_username),
@@ -118,20 +122,23 @@ export async function executeSalesImportAction(salesRows: any[], videoRows: any[
           content_type = EXCLUDED.content_type,
           raw_data = EXCLUDED.raw_data
       `);
-      videosInserted++;
+      videosInserted = validVideos.length;
     }
   }
 
-  // 3. Auto-link creators
+  // 3. Batch Auto-link creators (Set-based)
   const allUsernames = Array.from(new Set([
     ...salesRows.map(r => r.creator_username?.toLowerCase().trim()),
     ...videoRows.map(r => r.creator_username?.toLowerCase().trim())
   ])).filter(Boolean) as string[];
 
-  for (const uname of allUsernames) {
+  if (allUsernames.length > 0) {
+    const creatorTuples = allUsernames.map(uname => sql`(
+      ${uname}, ${uname}, ${'https://tiktok.com/@' + uname}, 'system'
+    )`);
     await db.execute(sql`
       INSERT INTO creators (username, nama_asli, link_account, added_by)
-      VALUES (${uname}, ${uname}, ${'https://tiktok.com/@' + uname}, 'system')
+      VALUES ${sql.join(creatorTuples, sql`, `)}
       ON CONFLICT (username) DO NOTHING
     `);
   }
@@ -149,67 +156,81 @@ export async function executeSalesImportAction(salesRows: any[], videoRows: any[
     }
   }
 
-  for (const campIdStr of Object.keys(assignments)) {
-    const campId = parseInt(campIdStr);
-    const unames = Object.keys(assignments[campId]);
+  if (allUsernames.length > 0 && Object.keys(assignments).length > 0) {
+    const creatorsRes = await db.execute(sql`
+      SELECT id, LOWER(username) as username FROM creators WHERE LOWER(username) IN (${sql.join(allUsernames.map(u => sql`${u}`), sql`, `)})
+    `);
+    const creatorMap = new Map<string, number>();
+    for (const c of (creatorsRes as any[])) {
+      creatorMap.set(c.username, c.id);
+    }
 
-    for (const uname of unames) {
-      const creatorRes = await db.execute(sql`SELECT id FROM creators WHERE LOWER(username) = ${uname} LIMIT 1`);
-      const creatorId = (creatorRes as unknown as any[])[0]?.id;
-      if (!creatorId) continue;
+    for (const campIdStr of Object.keys(assignments)) {
+      const campId = parseInt(campIdStr);
+      const unames = Object.keys(assignments[campId]);
 
-      const newSkus = Array.from(assignments[campId][uname]);
-      const ccRes = await db.execute(sql`
-        SELECT id, assigned_sku_ids FROM campaign_creators
-        WHERE campaign_id = ${campId} AND creator_id = ${creatorId}
-        LIMIT 1
-      `);
-      const existingCc = (ccRes as unknown as any[])[0];
+      for (const uname of unames) {
+        const creatorId = creatorMap.get(uname);
+        if (!creatorId) continue;
 
-      if (existingCc) {
-        const currentSkus = (existingCc.assigned_sku_ids as number[]) || [];
-        const merged = Array.from(new Set([...currentSkus, ...newSkus]));
-        if (merged.length !== currentSkus.length) {
+        const newSkus = Array.from(assignments[campId][uname]);
+        const ccRes = await db.execute(sql`
+          SELECT id, assigned_sku_ids FROM campaign_creators
+          WHERE campaign_id = ${campId} AND creator_id = ${creatorId}
+          LIMIT 1
+        `);
+        const existingCc = (ccRes as unknown as any[])[0];
+
+        if (existingCc) {
+          const currentSkus = (existingCc.assigned_sku_ids as number[]) || [];
+          const merged = Array.from(new Set([...currentSkus, ...newSkus]));
+          if (merged.length !== currentSkus.length) {
+            await db.execute(sql`
+              UPDATE campaign_creators
+              SET assigned_sku_ids = ${merged}
+              WHERE id = ${existingCc.id}
+            `);
+          }
+        } else {
           await db.execute(sql`
-            UPDATE campaign_creators
-            SET assigned_sku_ids = ${merged}
-            WHERE id = ${existingCc.id}
+            INSERT INTO campaign_creators (
+              campaign_id, creator_id, tier, assigned_sku_ids, approval,
+              client_approval, status_bayar, qty_vt, price
+            ) VALUES (
+              ${campId}, ${creatorId}, 'Nano', ${newSkus}, 'pending',
+              'not_required', 'belum', 1, 0
+            )
           `);
         }
-      } else {
-        await db.execute(sql`
-          INSERT INTO campaign_creators (
-            campaign_id, creator_id, tier, assigned_sku_ids, approval,
-            client_approval, status_bayar, qty_vt, price
-          ) VALUES (
-            ${campId}, ${creatorId}, 'Nano', ${newSkus}, 'pending',
-            'not_required', 'belum', 1, 0
-          )
-        `);
       }
     }
   }
 
   // 5. Auto Populate Videos table if isVideoMode
-  if (isVideoMode) {
+  if (isVideoMode && videoRows.length > 0) {
     const uniqueVideos = Array.from(new Set(videoRows.map(p => p.content_uid).filter(Boolean)));
-    for (const vUid of uniqueVideos) {
-      const matchingRows = videoRows.filter(p => p.content_uid === vUid && p.campaign_id && p.creator_username);
-      if (matchingRows.length === 0) continue;
-      const firstRow = matchingRows[0];
-      const uname = firstRow.creator_username.toLowerCase().trim();
-
-      const ccRes = await db.execute(sql`
-        SELECT cc.id FROM campaign_creators cc
-        JOIN creators c ON cc.creator_id = c.id
-        WHERE cc.campaign_id = ${firstRow.campaign_id} AND LOWER(c.username) = ${uname}
-        LIMIT 1
+    if (uniqueVideos.length > 0) {
+      const existingVidsRes = await db.execute(sql`
+        SELECT content_uid FROM videos WHERE content_uid IN (${sql.join(uniqueVideos.map(u => sql`${u}`), sql`, `)})
       `);
-      const ccId = (ccRes as unknown as any[])[0]?.id;
-      if (!ccId) continue;
+      const existingSet = new Set((existingVidsRes as any[]).map(v => v.content_uid));
+      const toInsertUids = uniqueVideos.filter(uid => !existingSet.has(uid));
 
-      const vidExist = await db.execute(sql`SELECT id FROM videos WHERE content_uid = ${vUid} LIMIT 1`);
-      if ((vidExist as unknown as any[]).length === 0) {
+      for (const vUid of toInsertUids) {
+        const matchingRows = videoRows.filter(p => p.content_uid === vUid && p.campaign_id && p.creator_username);
+        if (matchingRows.length === 0) continue;
+        const firstRow = matchingRows[0];
+        const uname = firstRow.creator_username.toLowerCase().trim();
+
+        const ccRes = await db.execute(sql`
+          SELECT cc.id FROM campaign_creators cc
+          JOIN creators c ON cc.creator_id = c.id
+          WHERE cc.campaign_id = ${firstRow.campaign_id} AND LOWER(c.username) = ${uname}
+          LIMIT 1
+        `);
+        const ccId = (ccRes as unknown as any[])[0]?.id;
+        if (!ccId) continue;
+
         const maxUrutanRes = await db.execute(sql`
           SELECT COALESCE(MAX(urutan), 0) as max_u FROM videos WHERE campaign_creator_id = ${ccId}
         `);
@@ -232,9 +253,36 @@ export async function executeSalesImportAction(salesRows: any[], videoRows: any[
     }
   }
 
+  return { success: true, salesInserted, videosInserted };
+}
+
+export async function finishSalesImportAction() {
   revalidatePath('/input-penjualan');
   revalidatePath('/campaigns');
-  return { success: true, salesInserted, videosInserted };
+  revalidatePath('/performa');
+  return { success: true };
+}
+
+export async function executeSalesImportAction(salesRows: any[], videoRows: any[], isVideoMode = false) {
+  // Fallback wrapper that chunks if someone calls this directly with huge data
+  const CHUNK_SIZE = 250;
+  let totalSales = 0;
+  let totalVideos = 0;
+
+  for (let i = 0; i < salesRows.length; i += CHUNK_SIZE) {
+    const chunk = salesRows.slice(i, i + CHUNK_SIZE);
+    const res = await executeSalesImportChunkAction(chunk, [], isVideoMode);
+    totalSales += res.salesInserted;
+  }
+
+  for (let i = 0; i < videoRows.length; i += CHUNK_SIZE) {
+    const chunk = videoRows.slice(i, i + CHUNK_SIZE);
+    const res = await executeSalesImportChunkAction([], chunk, isVideoMode);
+    totalVideos += res.videosInserted;
+  }
+
+  await finishSalesImportAction();
+  return { success: true, salesInserted: totalSales, videosInserted: totalVideos };
 }
 
 export async function fetchAdNameMappingsAction() {
