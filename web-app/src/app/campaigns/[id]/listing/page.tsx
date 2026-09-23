@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useDatabaseStore } from "@/store/useDatabaseStore";
 import { getCreatorType, getJenisKerjasama } from "@/utils/computed";
-import { formatAbbreviated } from "@/utils/formatters";
+import { formatAbbreviated, formatRupiah } from "@/utils/formatters";
 import { ChevronDown, ChevronRight, ChevronLeft, Edit2, Check, X, Loader2, Trash2, Download, ArrowUp, ArrowDown, ArrowUpDown, Plus, AlertCircle, CheckCircle2, Save, Filter, GitMerge } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -2816,7 +2816,7 @@ function CampaignListingContent() {
                                     {row.approval}
                                   </span>
                                 </td>
-                                <td className="px-4 py-3 font-medium">Rp {row.price?.toLocaleString('id-ID') || 0}</td>
+                                <td className="px-4 py-3 font-medium">{formatRupiah(row.price)}</td>
                                 <td className="px-4 py-3 text-slate-600">{row.sample_progress || '-'}</td>
                                 <td className="px-4 py-3 text-slate-600">{row.status_bayar || 'belum'}</td>
                                 <td className="px-4 py-3">

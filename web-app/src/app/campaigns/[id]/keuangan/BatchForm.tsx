@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { createPaymentBatch, addPaymentItem, submitBatchToManager, getCreatorBankAccounts } from "../../actions/paymentActions";
 import { Loader2, Plus, Trash2, Save, Send, ArrowLeft, CheckCircle2, AlertCircle } from "lucide-react";
+import { formatRupiah } from "@/utils/formatters";
 
 export interface OperationalItem {
   id: string;
@@ -562,13 +563,13 @@ export function BatchForm({
                             if (has50Awal && !has50Akhir) {
                               return (
                                 <span className="text-[11px] font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-full">
-                                  Termin 1 Terbayar: Rp {totalPaid.toLocaleString()} • Kurang: Rp {remaining.toLocaleString()} (Termin 2)
+                                  Termin 1 Terbayar: {formatRupiah(totalPaid)} • Kurang: {formatRupiah(remaining)} (Termin 2)
                                 </span>
                               );
                             }
                             return null;
                           })()}
-                          <span>Rp {Number(c.price || 0).toLocaleString()}</span>
+                          <span>{formatRupiah(c.price)}</span>
                         </td>
                       </tr>
                     );
@@ -651,16 +652,16 @@ export function BatchForm({
                         {f.payment_type === '50_awal' && (
                           <div className="col-span-2 text-xs text-indigo-700 bg-indigo-50 border border-indigo-200 p-2.5 rounded-lg flex flex-col gap-0.5">
                             <span className="font-bold">ℹ️ Skema Pembayaran Termin 1 (DP 50%)</span>
-                            <span>Nominal diajukan sekarang: <strong>Rp {Number(f.nominal || 0).toLocaleString()}</strong>.</span>
-                            <span>Kekurangan: <strong>Rp {Math.max(0, Number(f.ratecard_awal || cc.price || 0) - Number(f.nominal || 0)).toLocaleString()}</strong> (Termin 2 / Pelunasan 50% Akhir) dapat diajukan kembali nanti setelah video/live tayang.</span>
+                            <span>Nominal diajukan sekarang: <strong>{formatRupiah(f.nominal)}</strong>.</span>
+                            <span>Kekurangan: <strong>{formatRupiah(Math.max(0, Number(f.ratecard_awal || cc.price || 0) - Number(f.nominal || 0)))}</strong> (Termin 2 / Pelunasan 50% Akhir) dapat diajukan kembali nanti setelah video/live tayang.</span>
                           </div>
                         )}
                         {f.payment_type === '50_akhir' && (
                           <div className="col-span-2 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 p-2.5 rounded-lg flex flex-col gap-0.5">
                             <span className="font-bold">ℹ️ Skema Pembayaran Pelunasan Termin 2 (50% Akhir)</span>
-                            <span>Nominal pelunasan: <strong>Rp {Number(f.nominal || 0).toLocaleString()}</strong>.</span>
+                            <span>Nominal pelunasan: <strong>{formatRupiah(f.nominal)}</strong>.</span>
                             {creatorHistory[cc.id]?.length > 0 && (
-                              <span>Sebelumnya telah dibayar: <strong>Rp {creatorHistory[cc.id].filter((h: any) => h.status === 'paid').reduce((s: number, h: any) => s + Number(h.nominal || 0), 0).toLocaleString()}</strong> pada Termin 1.</span>
+                              <span>Sebelumnya telah dibayar: <strong>{formatRupiah(creatorHistory[cc.id].filter((h: any) => h.status === 'paid').reduce((s: number, h: any) => s + Number(h.nominal || 0), 0))}</strong> pada Termin 1.</span>
                             )}
                           </div>
                         )}

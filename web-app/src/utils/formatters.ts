@@ -91,3 +91,13 @@ export function formatDateTimeShort(value: string | Date | null | undefined): st
     minute: '2-digit',
   });
 }
+
+/**
+ * Format angka ke format Rupiah dengan pemisah ribuan titik (Indonesian locale): "Rp 250.000.000"
+ */
+export function formatRupiah(value: number | string | null | undefined): string {
+  if (value === null || value === undefined || value === '') return 'Rp 0';
+  const num = Number(value);
+  if (isNaN(num)) return 'Rp 0';
+  return `Rp ${num.toLocaleString('id-ID')}`;
+}

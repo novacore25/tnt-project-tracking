@@ -31,8 +31,8 @@ export const computeCampaignGMV = (cc: CampaignCreator, videos?: Video[], sales?
   return dynamicGMV;
 };
 
-export const getJenisKerjasama = (price: number): 'barter' | 'ratecard' => {
-  return price === 0 ? 'barter' : 'ratecard';
+export const getJenisKerjasama = (price: number | string | null | undefined): 'barter' | 'ratecard' => {
+  return Number(price || 0) === 0 ? 'barter' : 'ratecard';
 };
 
 export const computeHighestVideoGMV = (cc: CampaignCreator, videos?: Video[], sales?: any[]): number => {

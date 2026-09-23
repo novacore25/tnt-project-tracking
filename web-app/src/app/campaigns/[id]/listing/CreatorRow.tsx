@@ -1,7 +1,7 @@
 import React from "react";
 import Link from "next/link";
 import { ChevronDown, ChevronRight, Trash2, Edit2, Loader2, PlayCircle, Info, AlertCircle, Plus, RotateCw, Save, X } from "lucide-react";
-import { formatAbbreviated, formatDateTime, formatDateTimeShort } from "@/utils/formatters";
+import { formatAbbreviated, formatDateTime, formatDateTimeShort, formatRupiah } from "@/utils/formatters";
 import { getCreatorType, getJenisKerjasama, getConceptColor } from "@/utils/computed";
 import { MultiSelect } from "@/components/MultiSelect";
 import { NotesTimeline } from "@/components/NotesTimeline";
@@ -352,7 +352,7 @@ export const CreatorRow = React.memo(({
           </div>
         </td>
         <td className="capitalize text-[13px] font-medium">
-          {getJenisKerjasama(getPendingValue(cc.id, 'price', cc.price) as number)}
+          {getJenisKerjasama(getPendingValue(cc.id, 'price', cc.price))}
         </td>
         <td>
           {activeEditingField === `price` ? (
@@ -368,7 +368,7 @@ export const CreatorRow = React.memo(({
             <span 
               className={`text-[13px] font-semibold cursor-pointer hover:bg-blue-50 px-1 py-0.5 rounded ${hasPending && pendingChange?.price !== undefined ? 'text-amber-700' : 'text-text'}`}
               onClick={() => hasAccess && setEditingCellId(`${cc.id}-price`)}
-            >Rp {(getPendingValue(cc.id, 'price', cc.price) as number).toLocaleString()}</span>
+            >{formatRupiah(getPendingValue(cc.id, 'price', cc.price))}</span>
           )}
         </td>
         <td>
