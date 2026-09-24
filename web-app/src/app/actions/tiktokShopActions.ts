@@ -24,6 +24,23 @@ export async function testFetchCategoryAssetsAction(accessToken: string) {
   }
 }
 
+export async function testFetchTapCampaignsAction(accessToken: string, categoryAssetCipher: string) {
+  try {
+    const res = await callTikTokShopApi(
+      '/affiliate_partner/202405/campaigns',
+      'GET',
+      accessToken,
+      {
+        category_asset_cipher: categoryAssetCipher,
+        page_size: 20
+      }
+    );
+    return res;
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+}
+
 export async function testFetchShopsAction(accessToken: string) {
   try {
     const res = await callTikTokShopApi(

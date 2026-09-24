@@ -10,6 +10,7 @@ import {
 import { 
   exchangeAuthCodeAction, 
   testFetchCategoryAssetsAction,
+  testFetchTapCampaignsAction,
   testFetchShopsAction, 
   testFetchAffiliateOrdersAction,
   testFetchSellerOrdersAction 
@@ -29,7 +30,13 @@ export default function TikTokCallbackClient({
   const [accessToken, setAccessToken] = useState('');
   const [refreshToken, setRefreshToken] = useState('');
   const [serviceId, setServiceId] = useState('7688709827098347271');
-  const [partnerCipher, setPartnerCipher] = useState('');
+  const [categoryAssets, setCategoryAssets] = useState<any[]>([
+    { name: 'Seller and Scalable Creator Match-Up (TAP)', cipher: 'ROW_fyGlKwAAAAB6jCmj_Z8Zc6uknZJUdZAi' },
+    { name: 'Creator collaborations', cipher: 'ROW__PB2UQAAAAC2BA1X7FYpYtw9sR5Ersu8' },
+    { name: 'Creator Management', cipher: 'ROW_L2lQaAAAAAAzXkQWIHTHFI_usF_y_j4j' },
+    { name: 'Analytics & Reporting', cipher: 'ROW_4oi6EQAAAAAHt3hjoNk6xj4i0L5du0R5' }
+  ]);
+  const [partnerCipher, setPartnerCipher] = useState('ROW_fyGlKwAAAAB6jCmj_Z8Zc6uknZJUdZAi');
   const [shopCipher, setShopCipher] = useState('');
   const [sellerName, setSellerName] = useState('');
   const [tokenError, setTokenError] = useState(urlError || '');
@@ -82,9 +89,14 @@ export default function TikTokCallbackClient({
       const res = await testFetchCategoryAssetsAction(accessToken);
       setTestResult(res);
       if (res.success && res.data?.data?.category_assets && res.data.data.category_assets.length > 0) {
-        const firstAsset = res.data.data.category_assets[0];
-        if (firstAsset.cipher) {
-          setPartnerCipher(firstAsset.cipher);
+        const assets = res.data.data.category_assets.map((a: any) => ({
+          name: a.category?.name || 'Category',
+          cipher: a.cipher
+        }));
+        setCategoryAssets(assets);
+        const tapAsset = assets.find((a: any) => a.name.includes('Match-Up') || a.name.includes('collaborations')) || assets[0];
+        if (tapAsset) {
+          setPartnerCipher(tapAsset.cipher);
         }
       }
     } catch (err: any) {
@@ -94,19 +106,13 @@ export default function TikTokCallbackClient({
     }
   };
 
-  const handleTestShops = async () => {
-    if (!accessToken) return;
-    setActiveTest('shops');
+  const handleTestTapCampaigns = async () => {
+    if (!accessToken || !partnerCipher) return;
+    setActiveTest('campaigns');
     setTestResult(null);
     try {
-      const res = await testFetchShopsAction(accessToken);
+      const res = await testFetchTapCampaignsAction(accessToken, partnerCipher);
       setTestResult(res);
-      if (res.success && res.data?.data?.shops && res.data.data.shops.length > 0) {
-        const firstShop = res.data.data.shops[0];
-        if (firstShop.cipher) {
-          setShopCipher(firstShop.cipher);
-        }
-      }
     } catch (err: any) {
       setTestResult({ success: false, error: err.message });
     } finally {
@@ -247,14 +253,18 @@ export default function TikTokCallbackClient({
                 </div>
 
                 <div>
-                  <label className="text-xs font-semibold text-slate-500 uppercase">Category Asset / Partner Cipher</label>
-                  <input
-                    type="text"
+                  <label className="text-xs font-semibold text-slate-500 uppercase">Pilih Category Asset / Partner Cipher</label>
+                  <select
                     value={partnerCipher}
                     onChange={(e) => setPartnerCipher(e.target.value)}
-                    placeholder="Auto terisi dari tombol Cek Category Assets..."
-                    className="w-full text-xs font-mono p-2 border rounded-md bg-white text-slate-700 mt-1"
-                  />
+                    className="w-full text-xs font-medium p-2 border rounded-md bg-white text-slate-800 mt-1"
+                  >
+                    {categoryAssets.map((asset, idx) => (
+                      <option key={idx} value={asset.cipher}>
+                        {asset.name} ({asset.cipher.substring(0, 16)}...)
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
             </div>
@@ -280,32 +290,41 @@ export default function TikTokCallbackClient({
           </CardTitle>
         </CardHeader>
         <CardContent className="p-6 space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
             <button
               onClick={handleTestCategoryAssets}
               disabled={!accessToken || activeTest !== null}
-              className="flex items-center justify-center gap-2 p-3 rounded-lg border border-slate-300 hover:border-indigo-500 hover:bg-indigo-50/50 text-sm font-semibold text-slate-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex items-center justify-center gap-2 p-3 rounded-lg border border-slate-300 hover:border-indigo-500 hover:bg-indigo-50/50 text-xs font-semibold text-slate-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {activeTest === 'category_assets' ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4 text-indigo-600" />}
-              1. Cek Category Assets (TAP)
+              1. Cek Category Assets
+            </button>
+
+            <button
+              onClick={handleTestTapCampaigns}
+              disabled={!accessToken || !partnerCipher || activeTest !== null}
+              className="flex items-center justify-center gap-2 p-3 rounded-lg border border-indigo-300 bg-indigo-50/40 hover:bg-indigo-100/60 text-xs font-bold text-indigo-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+            >
+              {activeTest === 'campaigns' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Database className="w-4 h-4 text-indigo-600" />}
+              2. Tarik Campaign (TAP)
             </button>
 
             <button
               onClick={handleTestAffiliateOrders}
-              disabled={!accessToken || activeTest !== null}
-              className="flex items-center justify-center gap-2 p-3 rounded-lg border border-emerald-300 bg-emerald-50/40 hover:bg-emerald-100/60 text-sm font-bold text-emerald-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+              disabled={!accessToken || !partnerCipher || activeTest !== null}
+              className="flex items-center justify-center gap-2 p-3 rounded-lg border border-emerald-300 bg-emerald-50/40 hover:bg-emerald-100/60 text-xs font-bold text-emerald-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
             >
               {activeTest === 'affiliate_orders' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Database className="w-4 h-4 text-emerald-600" />}
-              2. Tarik Pesanan Affiliate (TAP)
+              3. Tarik Orders (TAP)
             </button>
 
             <button
               onClick={handleTestShops}
               disabled={!accessToken || activeTest !== null}
-              className="flex items-center justify-center gap-2 p-3 rounded-lg border border-slate-300 hover:border-blue-500 hover:bg-blue-50/50 text-sm font-semibold text-slate-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex items-center justify-center gap-2 p-3 rounded-lg border border-slate-300 hover:border-blue-500 hover:bg-blue-50/50 text-xs font-semibold text-slate-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {activeTest === 'shops' ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShoppingBag className="w-4 h-4 text-blue-600" />}
-              3. Cek Info Toko / Authorized
+              4. Cek Info Toko
             </button>
           </div>
 
