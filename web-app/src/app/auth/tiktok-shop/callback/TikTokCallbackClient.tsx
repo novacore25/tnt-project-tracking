@@ -35,7 +35,7 @@ export default function TikTokCallbackClient({
   const [testResult, setTestResult] = useState<any>(null);
   const [copied, setCopied] = useState(false);
 
-  const authUrl = `https://services.tiktokshop.com/open/authorize?service_id=6lahgd8e9i686`;
+  const authUrl = `https://auth.tiktok-shops.com/oauth/authorize?app_key=6lahgd8e9i686&state=tnt_auth_test&redirect_uri=${encodeURIComponent('https://campaign.tntkreatif.com/auth/tiktok-shop/callback')}`;
 
   useEffect(() => {
     if (code && !accessToken) {
