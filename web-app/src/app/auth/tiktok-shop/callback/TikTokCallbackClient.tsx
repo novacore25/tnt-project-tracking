@@ -111,6 +111,22 @@ export default function TikTokCallbackClient() {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const handleClearTokens = () => {
+    try {
+      localStorage.removeItem('tts_access_token');
+      localStorage.removeItem('tts_refresh_token');
+      localStorage.removeItem('tts_partner_cipher');
+    } catch (e) {
+      console.warn('Failed clearing storage:', e);
+    }
+    setAccessToken('');
+    setRefreshToken('');
+    setCode('');
+    setSellerName('');
+    setTokenResult(null);
+    setTestResult(null);
+  };
+
   const handleTestCategoryAssets = async () => {
     if (!accessToken) return;
     setActiveTest('category_assets');
@@ -277,9 +293,18 @@ export default function TikTokCallbackClient() {
 
           {accessToken ? (
             <div className="space-y-3">
-              <div className="flex items-center gap-2 p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-800 text-sm font-medium">
-                <CheckCircle2 className="w-5 h-5 text-emerald-600" />
-                Access Token Berhasil Diperoleh & Aktif! {sellerName && `(Akun: ${sellerName})`}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-800 text-sm font-medium">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                  <span>Access Token Berhasil Diperoleh & Aktif! {sellerName && `(Akun: ${sellerName})`}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleClearTokens}
+                  className="self-start sm:self-auto px-2.5 py-1 text-xs text-rose-700 hover:text-rose-900 border border-rose-200 hover:border-rose-300 rounded bg-white hover:bg-rose-50 transition-colors"
+                >
+                  Reset Token
+                </button>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

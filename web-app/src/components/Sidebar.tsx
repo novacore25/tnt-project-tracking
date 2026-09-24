@@ -104,7 +104,7 @@ export function Sidebar() {
 
         <nav className="flex-1 flex flex-col overflow-y-auto mt-2">
           {navItems.map((item) => {
-            const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
+            const isActive = pathname ? (pathname === item.href || pathname.startsWith(item.href + '/')) : false;
             const Icon = item.icon;
             return (
               <Link
@@ -144,7 +144,7 @@ export function Sidebar() {
                   href="/manajemen-akun"
                   className={cn(
                     'navitem tool',
-                    pathname.startsWith('/manajemen-akun') && 'active'
+                    pathname?.startsWith('/manajemen-akun') && 'active'
                   )}
                   onMouseEnter={(e) => handleMouseEnter(e, 'Manajemen Akun', true)}
                   onMouseLeave={handleMouseLeave}
@@ -158,7 +158,7 @@ export function Sidebar() {
                 href="/activity-log"
                 className={cn(
                   'navitem tool',
-                  pathname.startsWith('/activity-log') && 'active'
+                  pathname?.startsWith('/activity-log') && 'active'
                 )}
                 onMouseEnter={(e) => handleMouseEnter(e, 'Activity Log', true)}
                 onMouseLeave={handleMouseLeave}
@@ -177,7 +177,7 @@ export function Sidebar() {
                 href="/budgeting"
                 className={cn(
                   'navitem tool text-emerald-400 hover:text-emerald-300',
-                  pathname.startsWith('/budgeting') && 'active bg-emerald-500/20 text-emerald-300'
+                  pathname?.startsWith('/budgeting') && 'active bg-emerald-500/20 text-emerald-300'
                 )}
                 onMouseEnter={(e) => handleMouseEnter(e, 'Dashboard Pembayaran', true)}
                 onMouseLeave={handleMouseLeave}

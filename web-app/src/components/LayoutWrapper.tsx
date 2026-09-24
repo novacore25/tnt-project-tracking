@@ -7,7 +7,7 @@ import { AuthProvider } from "@/providers/AuthProvider";
 export function LayoutWrapper({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   // Pages that should not display the sidebar and the margin
-  const isAuthPage = pathname === "/login" || pathname === "/pending" || pathname.startsWith("/auth") || pathname.startsWith("/portal");
+  const isAuthPage = !pathname || pathname === "/login" || pathname === "/pending" || pathname.startsWith("/auth") || pathname.startsWith("/portal");
 
   return (
     <AuthProvider>
