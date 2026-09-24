@@ -47,6 +47,18 @@ export default function TikTokCallbackClient() {
     : `https://partner.tiktokshop.com/open/authorize`;
 
   useEffect(() => {
+    // Load persisted tokens from localStorage
+    try {
+      const savedToken = localStorage.getItem('tts_access_token');
+      const savedRefresh = localStorage.getItem('tts_refresh_token');
+      const savedCipher = localStorage.getItem('tts_partner_cipher');
+      if (savedToken) setAccessToken(savedToken);
+      if (savedRefresh) setRefreshToken(savedRefresh);
+      if (savedCipher) setPartnerCipher(savedCipher);
+    } catch (e) {
+      console.warn('localStorage not available:', e);
+    }
+
     if (code && !accessToken) {
       handleExchangeCode(code);
     }
@@ -59,9 +71,21 @@ export default function TikTokCallbackClient() {
       const res = await exchangeAuthCodeAction(authCode);
       setTokenResult(res);
       if (res.code === 0 && res.data) {
-        setAccessToken(res.data.access_token || '');
-        setRefreshToken(res.data.refresh_token || '');
-        setSellerName(res.data.seller_name || res.data.name || '');
+        const token = res.data.access_token || '';
+        const refresh = res.data.refresh_token || '';
+        const name = res.data.seller_name || res.data.name || '';
+        setAccessToken(token);
+        setRefreshToken(refresh);
+        setSellerName(name);
+
+        try {
+          localStorage.setItem('tts_access_token', token);
+          localStorage.setItem('tts_refresh_token', refresh);
+          // Clean URL without reloading to avoid reusing expired code
+          window.history.replaceState({}, '', window.location.pathname);
+        } catch (e) {
+          console.warn('Failed saving to localStorage:', e);
+        }
       } else {
         setTokenError(res.message || 'Gagal menukar kode otorisasi.');
       }
