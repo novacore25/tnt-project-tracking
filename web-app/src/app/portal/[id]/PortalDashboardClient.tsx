@@ -106,7 +106,7 @@ export default function PortalDashboardClient({ data, campaignId }: { data: any,
   } = data;
   
   const isAwareness = campaign?.tipe_campaign === 'awareness' || campaign?.tipe_campaign === 'gmv_awareness';
-  const approvedOnlyList = approvalList?.filter((cc: any) => cc.approval === 'approved') || [];
+  const approvedOnlyList = approvalList?.filter((cc: any) => cc.approval === 'approved' || cc.client_approval === 'approved') || [];
 
   const totalApprovedCreators = fastCountsData ? fastCountsData.approved : (rpc?.total_approved_creators !== undefined ? Number(rpc.total_approved_creators) : 0);
   const totalPendingCreators = fastCountsData ? fastCountsData.pending : (rpc?.total_pending_creators !== undefined ? Number(rpc.total_pending_creators) : 0);
