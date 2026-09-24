@@ -28,7 +28,7 @@ export default function TikTokCallbackClient({
   const [tokenResult, setTokenResult] = useState<any>(null);
   const [accessToken, setAccessToken] = useState('');
   const [refreshToken, setRefreshToken] = useState('');
-  const [serviceId, setServiceId] = useState('');
+  const [serviceId, setServiceId] = useState('7688709827098347271');
   const [partnerCipher, setPartnerCipher] = useState('');
   const [shopCipher, setShopCipher] = useState('');
   const [sellerName, setSellerName] = useState('');

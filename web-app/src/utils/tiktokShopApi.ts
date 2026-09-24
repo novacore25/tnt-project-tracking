@@ -1,8 +1,9 @@
 import crypto from 'crypto';
 
 export const TIKTOK_CONFIG = {
-  appKey: process.env.TIKTOK_APP_KEY || '6lahgd8e9i686',
-  appSecret: process.env.TIKTOK_APP_SECRET || 'fc05bd7a4c4287992a9b69812f868dff77bbb646',
+  appKey: process.env.TIKTOK_APP_KEY || '6lcrat92ht0kd',
+  appSecret: process.env.TIKTOK_APP_SECRET || '4ca2f8f3508673ad241d3208a3a06cf303e219fb',
+  serviceId: '7688709827098347271',
   redirectUri: process.env.TIKTOK_REDIRECT_URI || 'https://campaign.tntkreatif.com/auth/tiktok-shop/callback',
   authBaseUrl: 'https://auth.tiktok-shops.com',
   partnerAuthBaseUrl: 'https://partner.tiktokshop.com/open/authorize',
