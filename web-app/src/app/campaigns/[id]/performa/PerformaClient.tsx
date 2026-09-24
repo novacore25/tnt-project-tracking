@@ -170,22 +170,23 @@ export default function CampaignPerformaClient({ campaignId }: { campaignId: num
         }
 
         for (const [uid, v] of orgUidMap.entries()) {
-          if (v.contentType !== 'livestream' && v.contentType !== 'live') {
+          const isLive = v.contentType === 'livestream' || v.contentType === 'live';
+          if (!isLive) {
             calcUniqueVideos++;
+            calcTotalViews += v.views;
+            calcTotalLikes += v.likes;
           } else {
             calcUniqueLivestreams++;
           }
-          calcTotalViews += v.views;
-          calcTotalLikes += v.likes;
 
           if (v.creator) {
             const perf = getOrCreatePerf(v.creator);
-            perf.video_views += v.views;
-            perf.video_likes += v.likes;
-            if (v.contentType === 'livestream' || v.contentType === 'live') {
-              perf.live_uids.add(uid);
-            } else {
+            if (!isLive) {
+              perf.video_views += v.views;
+              perf.video_likes += v.likes;
               perf.video_uids.add(uid);
+            } else {
+              perf.live_uids.add(uid);
             }
           }
         }
@@ -582,9 +583,17 @@ export default function CampaignPerformaClient({ campaignId }: { campaignId: num
 
   const formatCompactNumber = (num: number | undefined) => {
     if (num === undefined || isNaN(num)) return '0';
+    if (num >= 1000000000) return (num / 1000000000).toFixed(2) + 'B';
     if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
     if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
     return num.toLocaleString();
+  };
+
+  const formatCurrencyDisplay = (num: number | undefined) => {
+    if (num === undefined || isNaN(num) || num === 0) return 'Rp 0';
+    if (Math.abs(num) >= 1000000000) return `Rp ${(num / 1000000000).toFixed(2)}B`;
+    if (Math.abs(num) >= 1000000) return `Rp ${(num / 1000000).toFixed(1)}M`;
+    return `Rp ${num.toLocaleString('id-ID')}`;
   };
 
   return (
@@ -710,7 +719,7 @@ export default function CampaignPerformaClient({ campaignId }: { campaignId: num
               <div className="flex justify-between items-start">
                 <div>
                   <p className={`text-[13px] font-medium ${!isAwareness ? 'text-green-800' : 'text-text-soft'}`}>Total Achievement (All)</p>
-                  <h3 className={`text-[24px] font-bold mt-[8px] ${!isAwareness ? 'text-green-900' : 'text-text'}`}>Rp {(totalAllGmv / 1000000).toFixed(1)}M</h3>
+                  <h3 className={`text-[24px] font-bold mt-[8px] ${!isAwareness ? 'text-green-900' : 'text-text'}`}>{formatCurrencyDisplay(totalAllGmv)}</h3>
                   <p className={`text-[11px] font-semibold mt-[4px] ${!isAwareness ? 'text-green-700/80' : 'text-text-soft'}`}>Rp {totalAllGmv.toLocaleString()}</p>
                 </div>
                 <div className={`p-[12px] rounded-[12px] shadow-sm ${!isAwareness ? 'bg-white text-green-600' : 'bg-slate-50 text-slate-500'}`}><TrendingUp className="w-6 h-6" /></div>
@@ -718,7 +727,7 @@ export default function CampaignPerformaClient({ campaignId }: { campaignId: num
               {campaign.target_gmv && (
                 <div className={`mt-[16px] pt-[16px] border-t ${!isAwareness ? 'border-green-200/50' : 'border-line'}`}>
                   <div className={`flex justify-between text-[11px] mb-[4px] font-medium ${!isAwareness ? 'text-green-800' : 'text-text-soft'}`}>
-                    <span>Target: Rp {(campaign.target_gmv / 1000000).toFixed(1)}M</span>
+                    <span>Target: {formatCurrencyDisplay(campaign.target_gmv)}</span>
                     <span>{percentCapai}%</span>
                   </div>
                   <div className={`w-full rounded-full h-[6px] ${!isAwareness ? 'bg-green-200/50' : 'bg-slate-100'}`}>
@@ -734,7 +743,7 @@ export default function CampaignPerformaClient({ campaignId }: { campaignId: num
               <div className="flex justify-between items-start">
                 <div>
                   <p className="text-[13px] font-medium text-text-soft">GMV Organik</p>
-                  <h3 className="text-[24px] font-bold mt-[8px] text-text">Rp {(totalOrganic / 1000000).toFixed(1)}M</h3>
+                  <h3 className="text-[24px] font-bold mt-[8px] text-text">{formatCurrencyDisplay(totalOrganic)}</h3>
                   <p className="text-[11px] font-semibold text-text-soft mt-[4px]">Rp {totalOrganic.toLocaleString()}</p>
                   <p className="text-[11px] text-text-soft mt-[4px]">Total dari CSV Penjualan</p>
                 </div>
@@ -748,7 +757,7 @@ export default function CampaignPerformaClient({ campaignId }: { campaignId: num
               <div className="flex justify-between items-start">
                 <div>
                   <p className="text-[13px] font-medium text-text-soft">GMV Ads (Global Campaign)</p>
-                  <h3 className="text-[24px] font-bold mt-[8px] text-text">Rp {(totalAdsGmv / 1000000).toFixed(1)}M</h3>
+                  <h3 className="text-[24px] font-bold mt-[8px] text-text">{formatCurrencyDisplay(totalAdsGmv)}</h3>
                   <p className="text-[11px] font-semibold text-text-soft mt-[4px]">Rp {totalAdsGmv.toLocaleString()}</p>
                   <div className="flex gap-2 mt-[2px]">
                     <p className="text-[10px] font-semibold text-indigo-600 bg-indigo-50 inline-block px-1.5 py-0.5 rounded">Spend: ${initialTotalAdsSpend.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
@@ -779,7 +788,7 @@ export default function CampaignPerformaClient({ campaignId }: { campaignId: num
               <div className="flex justify-between items-start">
                 <div>
                   <p className="text-[13px] font-medium text-text-soft">Unattributed GMV (Gap)</p>
-                  <h3 className={`text-[24px] font-bold mt-[8px] ${attributionGap > 0 ? 'text-red-600' : 'text-green-600'}`}>Rp {(attributionGap / 1000000).toFixed(1)}M</h3>
+                  <h3 className={`text-[24px] font-bold mt-[8px] ${attributionGap > 0 ? 'text-red-600' : 'text-green-600'}`}>{formatCurrencyDisplay(attributionGap)}</h3>
                   <p className={`text-[11px] font-semibold mt-[4px] ${attributionGap > 0 ? 'text-red-500/80' : 'text-green-600/80'}`}>Rp {attributionGap.toLocaleString()}</p>
                   <p className="text-[11px] text-text-soft mt-[4px]">{gapPercentage}% nyangkut di kreator Pending</p>
                 </div>
@@ -790,7 +799,7 @@ export default function CampaignPerformaClient({ campaignId }: { campaignId: num
               {totalOrganic > 0 && (
                 <div className="mt-[16px] pt-[16px] border-t border-line">
                   <div className="flex justify-between text-[11px] text-text-soft mb-[4px]">
-                    <span>Tracked (Approved): Rp {(trackedOrganic / 1000000).toFixed(1)}M</span>
+                    <span>Tracked (Approved): {formatCurrencyDisplay(trackedOrganic)}</span>
                     <span>{100 - gapPercentage}%</span>
                   </div>
                   <div className="w-full bg-red-100 rounded-full h-[6px] flex overflow-hidden">
