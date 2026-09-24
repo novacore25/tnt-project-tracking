@@ -24,10 +24,79 @@ export async function testFetchCategoryAssetsAction(accessToken: string) {
   }
 }
 
-export async function testFetchTapCampaignsAction(accessToken: string, categoryAssetCipher: string) {
+export async function testFetchTapCampaignsAction(
+  accessToken: string, 
+  categoryAssetCipher: string,
+  status: string = 'ONGOING'
+) {
   try {
     const res = await callTikTokShopApi(
       '/affiliate_partner/202405/campaigns',
+      'GET',
+      accessToken,
+      {
+        category_asset_cipher: categoryAssetCipher,
+        page_size: 20,
+        status: status || 'ONGOING'
+      }
+    );
+    return res;
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+}
+
+export async function testFetchCampaignProductsAction(
+  accessToken: string,
+  categoryAssetCipher: string,
+  campaignId: string
+) {
+  try {
+    const res = await callTikTokShopApi(
+      `/affiliate_partner/202405/campaigns/${campaignId}/products`,
+      'GET',
+      accessToken,
+      {
+        category_asset_cipher: categoryAssetCipher,
+        page_size: 20
+      }
+    );
+    return res;
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+}
+
+export async function testFetchCampaignPerformanceAction(
+  accessToken: string,
+  categoryAssetCipher: string,
+  campaignId: string
+) {
+  try {
+    const res = await callTikTokShopApi(
+      `/affiliate_partner/202501/campaigns/${campaignId}/products/performance`,
+      'GET',
+      accessToken,
+      {
+        category_asset_cipher: categoryAssetCipher,
+        page_size: 20
+      }
+    );
+    return res;
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+}
+
+export async function testFetchCampaignCreatorsAction(
+  accessToken: string,
+  categoryAssetCipher: string,
+  campaignId: string,
+  productId: string
+) {
+  try {
+    const res = await callTikTokShopApi(
+      `/affiliate_partner/202501/campaigns/${campaignId}/products/${productId}/performance`,
       'GET',
       accessToken,
       {
