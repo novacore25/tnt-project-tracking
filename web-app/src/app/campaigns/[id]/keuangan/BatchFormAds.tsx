@@ -16,6 +16,49 @@ export function BatchFormAds({ campaignId, onCancel, onSuccess }: { campaignId: 
     notes: ''
   });
 
+  const [draftRestored, setDraftRestored] = useState(false);
+  const DRAFT_KEY = `tnt_batch_ads_draft_${campaignId}`;
+
+  React.useEffect(() => {
+    try {
+      const saved = localStorage.getItem(DRAFT_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.batchLabel) setBatchLabel(parsed.batchLabel);
+        if (parsed.formData) {
+          setFormData(parsed.formData);
+          if (parsed.formData.nominal || parsed.formData.metode_pembayaran) {
+            setDraftRestored(true);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Failed restoring ads draft:', e);
+    }
+  }, [campaignId]);
+
+  React.useEffect(() => {
+    try {
+      if (formData.nominal || formData.metode_pembayaran || formData.nomor_rekening || formData.nama_penerima || formData.notes) {
+        localStorage.setItem(DRAFT_KEY, JSON.stringify({ batchLabel, formData }));
+      }
+    } catch (e) {}
+  }, [batchLabel, formData, campaignId]);
+
+  const handleClearDraft = () => {
+    try {
+      localStorage.removeItem(DRAFT_KEY);
+      setDraftRestored(false);
+      setFormData({
+        nominal: '',
+        metode_pembayaran: '',
+        nomor_rekening: '',
+        nama_penerima: '',
+        notes: ''
+      });
+    } catch (e) {}
+  };
+
   const validateForm = () => {
     if (!formData.nominal || Number(formData.nominal) <= 0) return "Nominal Top Up harus diisi dan lebih dari 0";
     return null;
@@ -46,6 +89,10 @@ export function BatchFormAds({ campaignId, onCancel, onSuccess }: { campaignId: 
         await submitBatchToManager(batchId);
       }
       
+      try {
+        localStorage.removeItem(DRAFT_KEY);
+      } catch (e) {}
+
       alert(submitToManager ? "Top Up Ads berhasil disubmit ke Manager!" : "Draft Top Up Ads berhasil disimpan!");
       onSuccess();
     } catch (err: any) {
@@ -61,6 +108,21 @@ export function BatchFormAds({ campaignId, onCancel, onSuccess }: { campaignId: 
         <button onClick={onCancel} className="btn btn-outline p-2"><ArrowLeft className="w-5 h-5" /></button>
         <h2 className="text-xl font-bold text-slate-800">Ajukan Top Up Ads Baru</h2>
       </div>
+
+      {draftRestored && (
+        <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl flex items-center justify-between gap-3 text-amber-900 text-sm max-w-2xl">
+          <div className="flex items-center gap-2">
+            <span><strong>Draft Tersimpan Dipulihkan:</strong> Data pengisian Ads sebelumnya otomatis dipulihkan dari browser.</span>
+          </div>
+          <button 
+            type="button" 
+            onClick={handleClearDraft} 
+            className="text-xs bg-amber-200 hover:bg-amber-300 text-amber-900 px-3 py-1.5 rounded-lg font-semibold transition-colors shrink-0"
+          >
+            Hapus Draft
+          </button>
+        </div>
+      )}
 
       <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-6 max-w-2xl">
         <div>

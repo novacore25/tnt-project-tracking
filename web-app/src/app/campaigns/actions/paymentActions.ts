@@ -1185,9 +1185,14 @@ export async function bulkSyncBudgetRows(rows: Array<{ id: number, price?: numbe
 // ==========================================
 
 export async function fetchCommandCenterBatches() {
-  return await getPaymentBatchesRpc({
-    p_status_in: ['pending_manager', 'pending_executive_1', 'pending_finance', 'pending_executive', 'ready_to_pay']
-  });
+  const allBatches = await getPaymentBatches();
+  const actionStatuses = ['pending_manager', 'pending_executive_1', 'pending_finance', 'pending_executive', 'ready_to_pay'];
+  return (allBatches || []).filter((b: any) => 
+    actionStatuses.includes(b.status) || 
+    (b.payment_items || []).some((i: any) => 
+      ['pending', 'manager_approved', 'executive_1_approved', 'finance_selected', 'ready_to_pay', 'executive_approved'].includes(i.final_status)
+    )
+  );
 }
 
 export async function bulkApproveManager(batchIds: number[]) {
