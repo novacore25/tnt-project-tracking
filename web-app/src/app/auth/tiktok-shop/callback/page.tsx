@@ -1,19 +1,12 @@
-import React from 'react';
+import React, { Suspense } from 'react';
 import TikTokCallbackClient from './TikTokCallbackClient';
 
-export default async function TikTokCallbackPage({
-  searchParams
-}: {
-  searchParams: Promise<{ [key: string]: string | string[] | undefined }>
-}) {
-  const params = await searchParams;
-  const code = typeof params.code === 'string' ? params.code : '';
-  const state = typeof params.state === 'string' ? params.state : '';
-  const error = typeof params.error === 'string' ? params.error : '';
-
+export default function TikTokCallbackPage() {
   return (
     <div className="min-h-screen bg-slate-50 p-4 md:p-8">
-      <TikTokCallbackClient code={code} state={state} urlError={error} />
+      <Suspense fallback={<div className="p-8 text-center text-slate-500 font-medium">Memuat konsol integrasi TikTok Shop...</div>}>
+        <TikTokCallbackClient />
+      </Suspense>
     </div>
   );
 }

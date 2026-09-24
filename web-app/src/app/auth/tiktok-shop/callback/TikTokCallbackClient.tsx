@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { 
@@ -16,15 +17,11 @@ import {
   testFetchSellerOrdersAction 
 } from '@/app/actions/tiktokShopActions';
 
-export default function TikTokCallbackClient({
-  code,
-  state,
-  urlError
-}: {
-  code?: string;
-  state?: string;
-  urlError?: string;
-}) {
+export default function TikTokCallbackClient() {
+  const searchParams = useSearchParams();
+  const code = searchParams.get('code') || '';
+  const state = searchParams.get('state') || '';
+  const urlError = searchParams.get('error') || '';
   const [isExchanging, setIsExchanging] = useState(false);
   const [tokenResult, setTokenResult] = useState<any>(null);
   const [accessToken, setAccessToken] = useState('');
