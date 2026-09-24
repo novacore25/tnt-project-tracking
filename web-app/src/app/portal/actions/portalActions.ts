@@ -212,7 +212,7 @@ export async function getPortalData(campaignId: number) {
   const skuSet = new Set<string>(skuList);
   const hasSkus = skuList.length > 0;
 
-  // Set of approved creators
+  // 1. Approved Creators (matching internal logic: approved or alternate)
   const approvedUsernames = new Set<string>();
   const allUsernames = new Set<string>();
   
@@ -220,8 +220,7 @@ export async function getPortalData(campaignId: number) {
     const u = (cc.username || '').toLowerCase().trim();
     if (u) {
       allUsernames.add(u);
-      // For Brand Portal: consider approved if approved internally OR if client_approval is approved
-      if (cc.approval === 'approved' || cc.client_approval === 'approved') {
+      if (cc.approval === 'approved' || cc.approval === 'alternate') {
         approvedUsernames.add(u);
       }
     }
@@ -251,7 +250,7 @@ export async function getPortalData(campaignId: number) {
     return creatorPerfMap.get(usernameLower)!;
   };
 
-  // Map Sales Data
+  // 2. Sales Aggregation (matching internal PerformaClient logic)
   let calcOrganicGmv = 0;
   let calcUnattributedGmv = 0;
   let totalItemsSold = 0;
@@ -259,132 +258,176 @@ export async function getPortalData(campaignId: number) {
   const salesByUid = new Map<string, { gmv: number; quantity: number }>();
   const monthlyMap: Record<string, { gmvOrganic: number; gmvAds: number; videos: Set<string>; videoCreators: Set<string>; liveSessions: Set<string> }> = {};
 
-  salesData.forEach((s: any) => {
-    const pidStr = String(s.product_id || '').trim();
-    if (hasSkus && pidStr && !skuSet.has(pidStr)) return;
+  if (hasSkus) {
+    salesData.forEach((s: any) => {
+      const pidStr = String(s.product_id || '').trim();
+      if (!skuSet.has(pidStr)) return;
 
-    const u = (s.creator_username || '').toLowerCase().trim();
-    const gmv = Number(s.gmv || 0);
-    const qty = Number(s.quantity || 0);
-    const cType = (s.content_type || '').toLowerCase();
-    const uid = s.content_uid ? String(s.content_uid).trim() : '';
+      const u = (s.creator_username || '').toLowerCase().trim();
+      const gmv = Number(s.gmv || 0);
+      const qty = Number(s.quantity || 0);
+      const cType = (s.content_type || '').toLowerCase();
+      const uid = s.content_uid ? String(s.content_uid).trim() : '';
 
-    if (uid) {
-      const existingUid = salesByUid.get(uid) || { gmv: 0, quantity: 0 };
-      salesByUid.set(uid, {
-        gmv: existingUid.gmv + gmv,
-        quantity: existingUid.quantity + qty
-      });
-    }
-
-    // SKU aggregation
-    if (pidStr) {
-      const skuObj = skusData.find((sk: any) => String(sk.product_id || '').trim() === pidStr);
-      const skuName = skuObj ? skuObj.nama_produk : (s.nama_produk || pidStr);
-      const prevSku = skuSalesMap.get(pidStr) || { product_id: pidStr, nama_produk: skuName, gmv: 0, items_sold: 0 };
-      skuSalesMap.set(pidStr, {
-        ...prevSku,
-        gmv: prevSku.gmv + gmv,
-        items_sold: prevSku.items_sold + qty
-      });
-    }
-
-    if (approvedUsernames.has(u)) {
-      calcOrganicGmv += gmv;
-      totalItemsSold += qty;
-      const perf = getOrCreatePerf(u);
-      perf.gmv_organic += gmv;
-      perf.items_sold += qty;
       if (uid) {
-        if (cType === 'livestream' || cType === 'live') {
-          perf.live_uids.add(uid);
-        } else {
-          perf.video_uids.add(uid);
-        }
+        const existingUid = salesByUid.get(uid) || { gmv: 0, quantity: 0 };
+        salesByUid.set(uid, {
+          gmv: existingUid.gmv + gmv,
+          quantity: existingUid.quantity + qty
+        });
       }
-    } else {
-      calcUnattributedGmv += gmv;
-    }
 
-    // Monthly bucket
-    if (s.tanggal) {
-      const monthStr = String(s.tanggal).substring(0, 7);
-      if (!monthlyMap[monthStr]) monthlyMap[monthStr] = { gmvOrganic: 0, gmvAds: 0, videos: new Set(), videoCreators: new Set(), liveSessions: new Set() };
+      // SKU aggregation
+      if (pidStr) {
+        const skuObj = skusData.find((sk: any) => String(sk.product_id || '').trim() === pidStr);
+        const skuName = skuObj ? skuObj.nama_produk : (s.nama_produk || pidStr);
+        const prevSku = skuSalesMap.get(pidStr) || { product_id: pidStr, nama_produk: skuName, gmv: 0, items_sold: 0 };
+        skuSalesMap.set(pidStr, {
+          ...prevSku,
+          gmv: prevSku.gmv + gmv,
+          items_sold: prevSku.items_sold + qty
+        });
+      }
+
       if (approvedUsernames.has(u)) {
-        monthlyMap[monthStr].gmvOrganic += gmv;
-      }
-    }
-  });
-
-  // Map Organic Videos
-  let totalVideoViews = 0;
-  let totalVideoLikes = 0;
-  const allUniqueVideoUids = new Set<string>();
-  const orgUidMap = new Map<string, { views: number; likes: number; creator: string; contentType: string; postTime: string }>();
-
-  organicVideos.forEach((v: any) => {
-    const pidStr = String(v.product_id || '').trim();
-    if (hasSkus && pidStr && !skuSet.has(pidStr)) return;
-
-    const uid = v.content_uid ? String(v.content_uid).trim() : '';
-    if (!uid) return;
-
-    const u = (v.creator_username || '').toLowerCase().trim();
-    const views = Number(v.video_views || 0);
-    const likes = Number(v.video_likes || 0);
-    const cType = (v.content_type || '').toLowerCase();
-
-    if (!orgUidMap.has(uid)) {
-      orgUidMap.set(uid, {
-        creator: u,
-        views,
-        likes,
-        contentType: cType,
-        postTime: v.post_time
-      });
-
-      if (approvedUsernames.has(u) && cType !== 'livestream' && cType !== 'live') {
-        totalVideoViews += views;
-        totalVideoLikes += likes;
-        allUniqueVideoUids.add(uid);
-        
+        calcOrganicGmv += gmv;
+        totalItemsSold += qty;
         const perf = getOrCreatePerf(u);
-        perf.video_views += views;
-        perf.video_likes += likes;
-        perf.video_uids.add(uid);
-
-        if (v.post_time) {
-          const mStr = String(v.post_time).substring(0, 7);
-          if (monthlyMap[mStr]) {
-            monthlyMap[mStr].videos.add(uid);
-            monthlyMap[mStr].videoCreators.add(u);
+        perf.gmv_organic += gmv;
+        perf.items_sold += qty;
+        if (uid) {
+          if (cType === 'livestream' || cType === 'live') {
+            perf.live_uids.add(uid);
+          } else {
+            perf.video_uids.add(uid);
           }
         }
+      } else {
+        calcUnattributedGmv += gmv;
+      }
+
+      // Monthly bucket
+      if (s.tanggal) {
+        const monthStr = String(s.tanggal).substring(0, 7);
+        if (!monthlyMap[monthStr]) monthlyMap[monthStr] = { gmvOrganic: 0, gmvAds: 0, videos: new Set(), videoCreators: new Set(), liveSessions: new Set() };
+        if (approvedUsernames.has(u)) {
+          monthlyMap[monthStr].gmvOrganic += gmv;
+        }
+      }
+    });
+  }
+
+  // 3. Organic Videos Aggregation (matching internal PerformaClient orgUidMap logic)
+  const orgUidMap = new Map<string, { views: number; likes: number; creator: string; contentType: string; postTime: string }>();
+
+  if (hasSkus) {
+    organicVideos.forEach((v: any) => {
+      const pidStr = String(v.product_id || '').trim();
+      if (!skuSet.has(pidStr)) return;
+
+      const uid = v.content_uid ? String(v.content_uid).trim() : '';
+      if (!uid) return;
+
+      const views = Number(v.video_views || 0);
+      const likes = Number(v.video_likes || 0);
+      const cType = (v.content_type || 'video').toLowerCase();
+
+      if (!orgUidMap.has(uid)) {
+        orgUidMap.set(uid, {
+          creator: (v.creator_username || '').toLowerCase().trim(),
+          views,
+          likes,
+          contentType: cType,
+          postTime: v.post_time
+        });
+      } else {
+        const cur = orgUidMap.get(uid)!;
+        cur.views = Math.max(cur.views, views);
+        cur.likes = Math.max(cur.likes, likes);
+      }
+    });
+  }
+
+  let calcTotalViews = 0;
+  let calcTotalLikes = 0;
+  let calcUniqueVideos = 0;
+  let calcUniqueLivestreams = 0;
+
+  for (const [uid, v] of orgUidMap.entries()) {
+    if (v.contentType !== 'livestream' && v.contentType !== 'live') {
+      calcUniqueVideos++;
+    } else {
+      calcUniqueLivestreams++;
+    }
+    calcTotalViews += v.views;
+    calcTotalLikes += v.likes;
+
+    if (v.creator) {
+      const perf = getOrCreatePerf(v.creator);
+      perf.video_views += v.views;
+      perf.video_likes += v.likes;
+      if (v.contentType === 'livestream' || v.contentType === 'live') {
+        perf.live_uids.add(uid);
+      } else {
+        perf.video_uids.add(uid);
       }
     }
-  });
 
-  // Calculate Ads Performance
-  let totalAdsGmv = 0;
-  const creatorAdsMap = new Map<string, number>();
+    if (v.postTime) {
+      const mStr = String(v.postTime).substring(0, 7);
+      if (monthlyMap[mStr]) {
+        if (v.contentType !== 'livestream' && v.contentType !== 'live') {
+          monthlyMap[mStr].videos.add(uid);
+          if (v.creator) monthlyMap[mStr].videoCreators.add(v.creator);
+        } else {
+          monthlyMap[mStr].liveSessions.add(uid);
+        }
+      }
+    }
+  }
 
-  rawAdsData.forEach((ad: any) => {
-    const kurs = Number(ad.kurs) || 16000;
-    const gmvUsd = Number(ad.gross_revenue_usd || 0);
-    const gmvVal = gmvUsd > 0 ? gmvUsd * kurs : Number(ad.gmv || 0);
-    totalAdsGmv += gmvVal;
+  // 4. Ads Aggregation (deduplicated by latest ad_id, matching internal PerformaClient)
+  const latestAdsMap = new Map<string, any>();
+  if (rawAdsData) {
+    for (const row of rawAdsData) {
+      const existing = latestAdsMap.get(row.ad_id);
+      if (!existing || new Date(row.tanggal) > new Date(existing.tanggal)) {
+        latestAdsMap.set(row.ad_id, row);
+      }
+    }
+  }
 
-    const u = (ad.username || '').toLowerCase().trim();
-    if (u) {
-      creatorAdsMap.set(u, (creatorAdsMap.get(u) || 0) + gmvVal);
+  const adsStatsByCreator: Record<number, { gmvAds: number; costAds: number; itemsSoldAds: number }> = {};
+  let globalAdsGmv = 0;
+  let globalAdsSpend = 0;
+
+  for (const ad of latestAdsMap.values()) {
+    let kurs = Number(ad.kurs) || 16000;
+    if (kurs < 1000) kurs = kurs * 1000;
+
+    const grossRevenueUsd = Number(ad.gross_revenue_usd) || 0;
+    const costUsd = Number(ad.cost_usd) || 0;
+    const purchases = Number(ad.purchases) || 0;
+    const adGmvIdr = grossRevenueUsd * kurs;
+
+    globalAdsGmv += adGmvIdr;
+    globalAdsSpend += costUsd;
+
+    if (ad.creator_id) {
+      if (!adsStatsByCreator[ad.creator_id]) {
+        adsStatsByCreator[ad.creator_id] = { gmvAds: 0, costAds: 0, itemsSoldAds: 0 };
+      }
+      adsStatsByCreator[ad.creator_id].gmvAds += adGmvIdr;
+      adsStatsByCreator[ad.creator_id].costAds += costUsd * kurs;
+      adsStatsByCreator[ad.creator_id].itemsSoldAds += purchases;
     }
 
     if (ad.tanggal) {
       const monthStr = String(ad.tanggal).substring(0, 7);
       if (!monthlyMap[monthStr]) monthlyMap[monthStr] = { gmvOrganic: 0, gmvAds: 0, videos: new Set(), videoCreators: new Set(), liveSessions: new Set() };
-      monthlyMap[monthStr].gmvAds += gmvVal;
+      monthlyMap[monthStr].gmvAds += adGmvIdr;
     }
-  });
+  }
 
   // Group manual videos by campaign_creator_id
   const videoMapByCc = new Map<number, any[]>();
@@ -395,15 +438,15 @@ export async function getPortalData(campaignId: number) {
     videoMapByCc.get(v.campaign_creator_id)!.push(v);
   });
 
-  // Build Enriched CC Data
+  // 5. Build Enriched CC Data
   const enrichedCcData = rawCc.map((cc: any) => {
     const u = (cc.username || '').toLowerCase().trim();
     const perf = getOrCreatePerf(u);
     const vids = videoMapByCc.get(cc.id) || [];
-    const adsGmv = creatorAdsMap.get(u) || 0;
+    const adsInfo = adsStatsByCreator[cc.creator_id] || { gmvAds: 0, costAds: 0, itemsSoldAds: 0 };
 
-    // Total VT = manual approved videos + unique video uids
-    const totalVt = Math.max(vids.length, perf.video_uids.size);
+    const totalVt = perf.video_uids.size > 0 ? perf.video_uids.size : vids.length;
+    const totalLive = perf.live_uids.size;
 
     return {
       ...cc,
@@ -420,18 +463,17 @@ export async function getPortalData(campaignId: number) {
       no_whatsapp: cc.no_whatsapp || '',
       gmv_organic: perf.gmv_organic,
       items_sold: perf.items_sold,
-      gmv_ads: adsGmv,
+      gmv_ads: adsInfo.gmvAds,
       video_views: perf.video_views,
       video_likes: perf.video_likes,
       total_vt: totalVt,
-      total_livestreams: perf.live_uids.size
+      total_livestreams: totalLive
     };
   });
 
-  // Build Video Tab Dataset (Manual + Organic Videos with real views, likes, GMV)
+  // 6. Build Video Tab Dataset
   const creatorVideoGroupsMap = new Map<string, any>();
 
-  // 1. Process organic videos
   orgUidMap.forEach((meta, uid) => {
     if (meta.contentType === 'livestream' || meta.contentType === 'live') return;
     const u = meta.creator;
@@ -467,7 +509,6 @@ export async function getPortalData(campaignId: number) {
     group.total_gmv += salesInfo.gmv;
   });
 
-  // 2. Add manual videos
   manualVideos.forEach((v: any) => {
     const u = (v.creator_username || '').toLowerCase().trim();
     if (!u) return;
@@ -488,7 +529,6 @@ export async function getPortalData(campaignId: number) {
     const orgData = uid ? orgUidMap.get(uid) : null;
     const salesInfo = uid ? (salesByUid.get(uid) || { gmv: 0, quantity: 0 }) : { gmv: 0, quantity: 0 };
 
-    // Check if not already included from organic
     const alreadyExists = group.videos.some((ex: any) => ex.content_uid && ex.content_uid === uid);
     if (!alreadyExists) {
       const vObj = {
@@ -512,10 +552,9 @@ export async function getPortalData(campaignId: number) {
 
   const portalVideos = Array.from(creatorVideoGroupsMap.values());
 
-  // Actual Lives Aggregation
+  // 7. Actual Lives Aggregation
   const liveStatsMap = new Map<string, any>();
   
-  // From organic livestream
   organicVideos.forEach((ov: any) => {
     const cType = (ov.content_type || '').toLowerCase();
     if (cType === 'livestream' || cType === 'live') {
@@ -537,7 +576,6 @@ export async function getPortalData(campaignId: number) {
     }
   });
 
-  // From live sessions table
   liveSessions.forEach((ls: any) => {
     const uid = ls.content_uid ? String(ls.content_uid).trim() : '';
     if (!uid) return;
@@ -571,7 +609,7 @@ export async function getPortalData(campaignId: number) {
 
   const actualLives = Array.from(liveStatsMap.values());
 
-  // Monthly stats array
+  // 8. Monthly Stats
   const monthlyStats = Object.keys(monthlyMap)
     .sort((a, b) => b.localeCompare(a))
     .map(month => ({
@@ -586,27 +624,26 @@ export async function getPortalData(campaignId: number) {
 
   const salesPerProduct = Array.from(skuSalesMap.values()).sort((a, b) => b.gmv - a.gmv);
 
-  // Filter approved creators vs pending creators
-  const approvedCreatorsList = enrichedCcData.filter((cc: any) => cc.approval === 'approved' || cc.client_approval === 'approved');
-  const pendingCreatorsList = enrichedCcData.filter((cc: any) => cc.approval === 'pending' || cc.client_approval === 'pending');
-  const pendingWithVideos = pendingCreatorsList.filter((cc: any) => cc.total_vt > 0 || cc.videos.length > 0).length;
+  // Status counts (matching internal: approved = approved + alternate, pending = pending)
+  const approvedCreatorsCount = rawCc.filter((cc: any) => cc.approval === 'approved' || cc.approval === 'alternate').length;
+  const pendingCreatorsCount = rawCc.filter((cc: any) => cc.approval === 'pending').length;
 
   return {
     authenticated: true,
     campaign,
     summary: {
       organic_gmv: calcOrganicGmv,
-      total_views: totalVideoViews,
-      total_likes: totalVideoLikes,
-      total_videos: allUniqueVideoUids.size + manualVideos.length
+      total_views: calcTotalViews,
+      total_likes: calcTotalLikes,
+      total_videos: calcUniqueVideos
     },
     totalSales: {
-      creatorsWithVideo: approvedCreatorsList.filter((c: any) => c.total_vt > 0).length,
-      creatorsWithLive: approvedCreatorsList.filter((c: any) => c.total_livestreams > 0).length
+      creatorsWithVideo: enrichedCcData.filter((c: any) => (c.approval === 'approved' || c.approval === 'alternate') && c.total_vt > 0).length,
+      creatorsWithLive: enrichedCcData.filter((c: any) => (c.approval === 'approved' || c.approval === 'alternate') && c.total_livestreams > 0).length
     },
     totalAwareness: {
-      total_views: totalVideoViews,
-      total_likes: totalVideoLikes
+      total_views: calcTotalViews,
+      total_likes: calcTotalLikes
     },
     dailyPerf: [],
     ccData: enrichedCcData,
@@ -618,23 +655,23 @@ export async function getPortalData(campaignId: number) {
     rpc: {
       organic_gmv: calcOrganicGmv,
       unattributed_gmv: calcUnattributedGmv,
-      total_views: totalVideoViews,
-      total_likes: totalVideoLikes,
-      total_videos: allUniqueVideoUids.size + manualVideos.length,
-      total_approved_creators: approvedCreatorsList.length,
-      total_pending_creators: pendingCreatorsList.length
+      total_views: calcTotalViews,
+      total_likes: calcTotalLikes,
+      total_videos: calcUniqueVideos,
+      total_approved_creators: approvedCreatorsCount,
+      total_pending_creators: pendingCreatorsCount
     },
     fastCountsData: {
-      approved: approvedCreatorsList.length,
-      pending: pendingCreatorsList.length,
-      pending_with_videos: pendingWithVideos
+      approved: approvedCreatorsCount,
+      pending: pendingCreatorsCount,
+      pending_with_videos: 0
     },
     fastVideoCountsData: {
-      total_approved: manualVideos.length + allUniqueVideoUids.size,
+      total_approved: calcUniqueVideos,
       total_pending: 0,
-      total_livestream: actualLives.length
+      total_livestream: calcUniqueLivestreams
     },
-    initialTotalAdsGmv: totalAdsGmv,
+    initialTotalAdsGmv: globalAdsGmv,
     topSkus: salesPerProduct.slice(0, 5),
     actualLives,
     salesPerProduct,
