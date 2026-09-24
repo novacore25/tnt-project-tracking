@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { 
   exchangeAuthCodeAction, 
+  testFetchCategoryAssetsAction,
   testFetchShopsAction, 
   testFetchAffiliateOrdersAction,
   testFetchSellerOrdersAction 
@@ -27,6 +28,8 @@ export default function TikTokCallbackClient({
   const [tokenResult, setTokenResult] = useState<any>(null);
   const [accessToken, setAccessToken] = useState('');
   const [refreshToken, setRefreshToken] = useState('');
+  const [serviceId, setServiceId] = useState('');
+  const [partnerCipher, setPartnerCipher] = useState('');
   const [shopCipher, setShopCipher] = useState('');
   const [sellerName, setSellerName] = useState('');
   const [tokenError, setTokenError] = useState(urlError || '');
@@ -35,7 +38,9 @@ export default function TikTokCallbackClient({
   const [testResult, setTestResult] = useState<any>(null);
   const [copied, setCopied] = useState(false);
 
-  const authUrl = `https://auth.tiktok-shops.com/oauth/authorize?app_key=6lahgd8e9i686&state=tnt_auth_test&redirect_uri=${encodeURIComponent('https://campaign.tntkreatif.com/auth/tiktok-shop/callback')}`;
+  const partnerAuthUrl = serviceId 
+    ? `https://partner.tiktokshop.com/open/authorize?service_id=${encodeURIComponent(serviceId)}`
+    : `https://partner.tiktokshop.com/open/authorize`;
 
   useEffect(() => {
     if (code && !accessToken) {
@@ -69,6 +74,26 @@ export default function TikTokCallbackClient({
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const handleTestCategoryAssets = async () => {
+    if (!accessToken) return;
+    setActiveTest('category_assets');
+    setTestResult(null);
+    try {
+      const res = await testFetchCategoryAssetsAction(accessToken);
+      setTestResult(res);
+      if (res.success && res.data?.data?.category_assets && res.data.data.category_assets.length > 0) {
+        const firstAsset = res.data.data.category_assets[0];
+        if (firstAsset.cipher) {
+          setPartnerCipher(firstAsset.cipher);
+        }
+      }
+    } catch (err: any) {
+      setTestResult({ success: false, error: err.message });
+    } finally {
+      setActiveTest(null);
+    }
+  };
+
   const handleTestShops = async () => {
     if (!accessToken) return;
     setActiveTest('shops');
@@ -94,7 +119,7 @@ export default function TikTokCallbackClient({
     setActiveTest('affiliate_orders');
     setTestResult(null);
     try {
-      const res = await testFetchAffiliateOrdersAction(accessToken, shopCipher || undefined);
+      const res = await testFetchAffiliateOrdersAction(accessToken, partnerCipher || undefined);
       setTestResult(res);
     } catch (err: any) {
       setTestResult({ success: false, error: err.message });
@@ -123,22 +148,13 @@ export default function TikTokCallbackClient({
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 pb-4">
         <div>
           <Badge variant="outline" className="mb-2 border-indigo-200 bg-indigo-50 text-indigo-700">
-            TikTok Shop Open Platform Sandbox & Live Test
+            TikTok Shop Partner Center (TAP / Agency) OpenAPI Test
           </Badge>
-          <h1 className="text-2xl font-bold text-slate-900">Uji Coba Integrasi TikTok Shop OpenAPI</h1>
+          <h1 className="text-2xl font-bold text-slate-900">Integrasi API Partner Center (TNT Media)</h1>
           <p className="text-sm text-slate-500 mt-1">
-            Validasi penarikan otomatis data pesanan affiliate & toko langsung via API TikTok resmi.
+            Penarikan otomatis data pesanan affiliate & performa agency langsung via Akun TAP Partner Center.
           </p>
         </div>
-        <a
-          href={authUrl}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-pink-500 via-rose-500 to-indigo-600 text-white font-semibold text-sm rounded-xl hover:opacity-90 shadow-md transition-all"
-        >
-          <ExternalLink className="w-4 h-4" />
-          Hubungkan / Otorisasi Akun TikTok
-        </a>
       </div>
 
       {/* Step 1: Otorisasi & Token Status */}
@@ -146,10 +162,40 @@ export default function TikTokCallbackClient({
         <CardHeader className="bg-slate-50/50 border-b border-slate-100">
           <CardTitle className="text-base flex items-center gap-2">
             <Key className="w-5 h-5 text-indigo-600" />
-            Langkah 1: Status Kredensial & Access Token
+            Langkah 1: Otorisasi Akun Partner Agency (TNT Media)
           </CardTitle>
         </CardHeader>
         <CardContent className="p-6 space-y-4">
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-xs text-amber-900 space-y-2">
+            <p className="font-semibold text-sm text-amber-950 flex items-center gap-1.5">
+              📌 Penting untuk Akun Agency / TAP:
+            </p>
+            <p>
+              Otorisasi untuk akun Agency dilakukan melalui <b>Partner Center</b> (<code className="bg-amber-100 px-1 py-0.5 rounded">partner.tiktokshop.com/open/authorize?service_id=...</code>), bukan Seller Center.
+            </p>
+            <p>
+              Masukkan <b>Service ID</b> dari Partner Center Anda di bawah (atau klik langsung link otorisasi dari Partner Center):
+            </p>
+            <div className="flex flex-col sm:flex-row gap-2 pt-1">
+              <input
+                type="text"
+                value={serviceId}
+                onChange={(e) => setServiceId(e.target.value)}
+                placeholder="Masukkan Service ID (dari Partner Center > App & Service)"
+                className="flex-1 text-xs font-mono p-2 border border-amber-300 rounded-lg bg-white text-slate-800"
+              />
+              <a
+                href={partnerAuthUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-lg transition-colors shadow-sm"
+              >
+                <ExternalLink className="w-4 h-4" />
+                Buka Link Otorisasi Partner
+              </a>
+            </div>
+          </div>
+
           {code && (
             <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-xs font-mono text-blue-800 break-all">
               <span className="font-bold">Auth Code Diterima:</span> {code}
@@ -169,9 +215,6 @@ export default function TikTokCallbackClient({
               <div>
                 <p className="font-semibold">Otorisasi Belum Berhasil:</p>
                 <p className="text-xs mt-0.5">{tokenError}</p>
-                <p className="text-xs text-red-600 mt-2">
-                  Tips: Klik tombol <b>&quot;Hubungkan / Otorisasi Akun TikTok&quot;</b> di atas, lalu login ke akun TikTok Shop Anda untuk mendapatkan token baru.
-                </p>
               </div>
             </div>
           )}
@@ -204,12 +247,12 @@ export default function TikTokCallbackClient({
                 </div>
 
                 <div>
-                  <label className="text-xs font-semibold text-slate-500 uppercase">Shop Cipher (Opsional)</label>
+                  <label className="text-xs font-semibold text-slate-500 uppercase">Category Asset / Partner Cipher</label>
                   <input
                     type="text"
-                    value={shopCipher}
-                    onChange={(e) => setShopCipher(e.target.value)}
-                    placeholder="Auto terisi dari tombol cek toko..."
+                    value={partnerCipher}
+                    onChange={(e) => setPartnerCipher(e.target.value)}
+                    placeholder="Auto terisi dari tombol Cek Category Assets..."
                     className="w-full text-xs font-mono p-2 border rounded-md bg-white text-slate-700 mt-1"
                   />
                 </div>
@@ -217,20 +260,11 @@ export default function TikTokCallbackClient({
             </div>
           ) : (
             !isExchanging && !tokenError && (
-              <div className="text-center py-6 space-y-3">
-                <ShieldCheck className="w-12 h-12 text-slate-400 mx-auto" />
+              <div className="text-center py-4 space-y-2">
+                <ShieldCheck className="w-10 h-10 text-slate-400 mx-auto" />
                 <p className="text-sm text-slate-600 max-w-md mx-auto">
-                  Belum ada Access Token yang aktif. Silakan klik tombol di bawah untuk mengotorisasi akun TikTok Shop Anda.
+                  Silakan buka link otorisasi Partner di atas untuk menghubungkan akun agency TNT Media.
                 </p>
-                <a
-                  href={authUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-2 px-6 py-3 bg-slate-900 text-white font-medium text-sm rounded-xl hover:bg-slate-800 transition-colors shadow-sm"
-                >
-                  <ExternalLink className="w-4 h-4" />
-                  Mulai Otorisasi Akun TikTok
-                </a>
               </div>
             )
           )}
@@ -242,18 +276,18 @@ export default function TikTokCallbackClient({
         <CardHeader className="bg-slate-50/50 border-b border-slate-100">
           <CardTitle className="text-base flex items-center gap-2">
             <Play className="w-5 h-5 text-indigo-600" />
-            Langkah 2: Eksekusi Test Pemanggilan API
+            Langkah 2: Eksekusi Test Pemanggilan API Agency (TAP)
           </CardTitle>
         </CardHeader>
         <CardContent className="p-6 space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <button
-              onClick={handleTestShops}
+              onClick={handleTestCategoryAssets}
               disabled={!accessToken || activeTest !== null}
-              className="flex items-center justify-center gap-2 p-3 rounded-lg border border-slate-300 hover:border-blue-500 hover:bg-blue-50/50 text-sm font-semibold text-slate-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex items-center justify-center gap-2 p-3 rounded-lg border border-slate-300 hover:border-indigo-500 hover:bg-indigo-50/50 text-sm font-semibold text-slate-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {activeTest === 'shops' ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShoppingBag className="w-4 h-4 text-blue-600" />}
-              1. Cek Info Toko & Cipher
+              {activeTest === 'category_assets' ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4 text-indigo-600" />}
+              1. Cek Category Assets (TAP)
             </button>
 
             <button
@@ -266,12 +300,12 @@ export default function TikTokCallbackClient({
             </button>
 
             <button
-              onClick={handleTestSellerOrders}
-              disabled={!accessToken || !shopCipher || activeTest !== null}
-              className="flex items-center justify-center gap-2 p-3 rounded-lg border border-slate-300 hover:border-purple-500 hover:bg-purple-50/50 text-sm font-semibold text-slate-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={handleTestShops}
+              disabled={!accessToken || activeTest !== null}
+              className="flex items-center justify-center gap-2 p-3 rounded-lg border border-slate-300 hover:border-blue-500 hover:bg-blue-50/50 text-sm font-semibold text-slate-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {activeTest === 'seller_orders' ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4 text-purple-600" />}
-              3. Tarik Pesanan Seller (Direct)
+              {activeTest === 'shops' ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShoppingBag className="w-4 h-4 text-blue-600" />}
+              3. Cek Info Toko / Authorized
             </button>
           </div>
 

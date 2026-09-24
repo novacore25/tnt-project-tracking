@@ -11,6 +11,19 @@ export async function exchangeAuthCodeAction(authCode: string) {
   }
 }
 
+export async function testFetchCategoryAssetsAction(accessToken: string) {
+  try {
+    const res = await callTikTokShopApi(
+      '/authorization/202405/category_assets',
+      'GET',
+      accessToken
+    );
+    return res;
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+}
+
 export async function testFetchShopsAction(accessToken: string) {
   try {
     const res = await callTikTokShopApi(
@@ -24,25 +37,30 @@ export async function testFetchShopsAction(accessToken: string) {
   }
 }
 
-export async function testFetchAffiliateOrdersAction(accessToken: string, shopCipher?: string) {
+export async function testFetchAffiliateOrdersAction(
+  accessToken: string,
+  categoryAssetCipher?: string
+) {
   try {
     const now = Math.floor(Date.now() / 1000);
-    const sevenDaysAgo = now - 7 * 24 * 3600;
+    const thirtyDaysAgo = now - 30 * 24 * 3600;
 
-    const queryParams: Record<string, any> = {};
-    if (shopCipher) {
-      queryParams['shop_cipher'] = shopCipher;
+    const queryParams: Record<string, any> = {
+      page_size: 20
+    };
+    
+    if (categoryAssetCipher) {
+      queryParams['category_asset_cipher'] = categoryAssetCipher;
     }
 
-    // Try affiliate partner order endpoint first
+    // Official TAP OpenAPI v202411 for affiliate orders
     const res = await callTikTokShopApi(
-      '/affiliate_partner/202409/orders/search',
+      '/affiliate_partner/202411/orders/search',
       'POST',
       accessToken,
       queryParams,
       {
-        page_size: 20,
-        create_time_ge: sevenDaysAgo,
+        create_time_ge: thirtyDaysAgo,
         create_time_lt: now
       }
     );

@@ -5,7 +5,8 @@ export const TIKTOK_CONFIG = {
   appSecret: process.env.TIKTOK_APP_SECRET || 'fc05bd7a4c4287992a9b69812f868dff77bbb646',
   redirectUri: process.env.TIKTOK_REDIRECT_URI || 'https://campaign.tntkreatif.com/auth/tiktok-shop/callback',
   authBaseUrl: 'https://auth.tiktok-shops.com',
-  apiBaseUrl: 'https://open.tiktokapis.com'
+  partnerAuthBaseUrl: 'https://partner.tiktokshop.com/open/authorize',
+  apiBaseUrl: 'https://open-api.tiktokglobalshop.com'
 };
 
 /**
