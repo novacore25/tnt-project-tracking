@@ -28,7 +28,8 @@ export function generateTtsSignature(
     paramString += `${k}${params[k]}`;
   }
 
-  const signString = `${path}${paramString}${body}`;
+  // Official TikTok Shop OpenAPI signature: appSecret + path + paramString + body + appSecret
+  const signString = `${appSecret}${path}${paramString}${body}${appSecret}`;
   return crypto.createHmac('sha256', appSecret).update(signString).digest('hex');
 }
 
