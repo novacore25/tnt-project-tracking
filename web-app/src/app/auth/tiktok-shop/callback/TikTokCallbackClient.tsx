@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { 
@@ -18,10 +17,9 @@ import {
 } from '@/app/actions/tiktokShopActions';
 
 export default function TikTokCallbackClient() {
-  const searchParams = useSearchParams();
-  const code = searchParams.get('code') || '';
-  const state = searchParams.get('state') || '';
-  const urlError = searchParams.get('error') || '';
+  const [code, setCode] = useState('');
+  const [state, setState] = useState('');
+  const [urlError, setUrlError] = useState('');
   const [isExchanging, setIsExchanging] = useState(false);
   const [tokenResult, setTokenResult] = useState<any>(null);
   const [accessToken, setAccessToken] = useState('');
@@ -47,22 +45,33 @@ export default function TikTokCallbackClient() {
     : `https://partner.tiktokshop.com/open/authorize`;
 
   useEffect(() => {
-    // Load persisted tokens from localStorage
-    try {
-      const savedToken = localStorage.getItem('tts_access_token');
-      const savedRefresh = localStorage.getItem('tts_refresh_token');
-      const savedCipher = localStorage.getItem('tts_partner_cipher');
-      if (savedToken) setAccessToken(savedToken);
-      if (savedRefresh) setRefreshToken(savedRefresh);
-      if (savedCipher) setPartnerCipher(savedCipher);
-    } catch (e) {
-      console.warn('localStorage not available:', e);
-    }
+    // Read query params from window.location on mount without Next.js streaming
+    if (typeof window !== 'undefined') {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const urlCode = params.get('code') || '';
+        const urlState = params.get('state') || '';
+        const urlErr = params.get('error') || '';
+        if (urlCode) setCode(urlCode);
+        if (urlState) setState(urlState);
+        if (urlErr) setTokenError(urlErr);
 
-    if (code && !accessToken) {
-      handleExchangeCode(code);
+        // Load persisted tokens from localStorage
+        const savedToken = localStorage.getItem('tts_access_token');
+        const savedRefresh = localStorage.getItem('tts_refresh_token');
+        const savedCipher = localStorage.getItem('tts_partner_cipher');
+        if (savedToken) setAccessToken(savedToken);
+        if (savedRefresh) setRefreshToken(savedRefresh);
+        if (savedCipher) setPartnerCipher(savedCipher);
+
+        if (urlCode && !savedToken) {
+          handleExchangeCode(urlCode);
+        }
+      } catch (e) {
+        console.warn('Initialization error:', e);
+      }
     }
-  }, [code]);
+  }, []);
 
   const handleExchangeCode = async (authCode: string) => {
     setIsExchanging(true);
@@ -148,6 +157,26 @@ export default function TikTokCallbackClient() {
     try {
       const res = await testFetchAffiliateOrdersAction(accessToken, partnerCipher || undefined);
       setTestResult(res);
+    } catch (err: any) {
+      setTestResult({ success: false, error: err.message });
+    } finally {
+      setActiveTest(null);
+    }
+  };
+
+  const handleTestShops = async () => {
+    if (!accessToken) return;
+    setActiveTest('shops');
+    setTestResult(null);
+    try {
+      const res = await testFetchShopsAction(accessToken);
+      setTestResult(res);
+      if (res.success && res.data?.data?.shops && res.data.data.shops.length > 0) {
+        const firstShop = res.data.data.shops[0];
+        if (firstShop.cipher) {
+          setShopCipher(firstShop.cipher);
+        }
+      }
     } catch (err: any) {
       setTestResult({ success: false, error: err.message });
     } finally {
