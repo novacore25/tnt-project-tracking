@@ -1087,6 +1087,9 @@ function CampaignListingContent() {
         conceptFilter: filterConcept || undefined,
         search: debouncedSearch || undefined,
         actionDateFilter: filterActionDate || undefined,
+        notesFilter: filterNotes || undefined,
+        pendingWithVideoFilter: filterPendingWithVideo || undefined,
+        unattributedFilter: filterUnattributed || undefined,
       });
 
       if (currentFetchId !== fetchIdRef.current) return;

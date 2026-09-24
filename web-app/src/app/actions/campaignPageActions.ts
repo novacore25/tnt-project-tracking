@@ -1453,17 +1453,21 @@ export async function fetchListingPagePaginatedAction(params: {
   conceptFilter?: string;
   search?: string;
   actionDateFilter?: string;
+  notesFilter?: string;
+  pendingWithVideoFilter?: boolean;
+  unattributedFilter?: boolean;
 }) {
   const {
     campaignId, pageNum, pageSize = 100,
     statusFilter, tierFilter, levelFilter, nicheFilter, addedByFilter, actionByFilter,
-    contentTypeFilter, conceptFilter, search, actionDateFilter
+    contentTypeFilter, conceptFilter, search, actionDateFilter,
+    notesFilter, pendingWithVideoFilter, unattributedFilter
   } = params;
   const offset = pageNum * pageSize;
   const conditions: any[] = [sql`cc.campaign_id = ${campaignId}`];
   
   if (statusFilter && statusFilter !== 'all') conditions.push(sql`cc.approval = ${statusFilter}`);
-  if (tierFilter) conditions.push(sql`cc.tier ILIKE ${'%' + tierFilter + '%'}`);
+  if (tierFilter) conditions.push(sql`(cc.tier ILIKE ${'%' + tierFilter + '%'} OR EXISTS (SELECT 1 FROM creator_snapshots cs WHERE cs.creator_id = cc.creator_id AND cs.tier ILIKE ${'%' + tierFilter + '%'} LIMIT 1))`);
   if (levelFilter) conditions.push(sql`EXISTS (SELECT 1 FROM creator_snapshots cs WHERE cs.creator_id = cc.creator_id AND cs.level = ${Number(levelFilter)} LIMIT 1)`);
   if (nicheFilter) conditions.push(sql`EXISTS (SELECT 1 FROM creator_niches cn WHERE cn.creator_id = cc.creator_id AND cn.niche_id = ${Number(nicheFilter)} LIMIT 1)`);
   if (addedByFilter) conditions.push(sql`cc.added_by = ${addedByFilter}`);
@@ -1481,6 +1485,49 @@ export async function fetchListingPagePaginatedAction(params: {
       (cc.approval = 'approved' AND (cc.approved_at >= ${start} AND cc.approved_at <= ${end})) OR\
       (cc.approval IN ('not_approved','alternate') AND (cc.not_approved_at >= ${start} AND cc.not_approved_at <= ${end})) OR\
       (cc.approval = 'pending' AND cc.created_at >= ${start} AND cc.created_at <= ${end})\
+    )`);
+  }
+  if (notesFilter === 'Ada Notes') {
+    conditions.push(sql`(
+      (cc.notes_manager IS NOT NULL AND cc.notes_manager != '') OR
+      (cc.notes_pic IS NOT NULL AND cc.notes_pic != '') OR
+      (cc.notes_client IS NOT NULL AND cc.notes_client != '')
+    )`);
+  }
+  if (pendingWithVideoFilter) {
+    conditions.push(sql`(
+      cc.approval != 'approved' AND (
+        EXISTS (
+          SELECT 1 FROM videos v 
+          WHERE v.campaign_creator_id = cc.id 
+            AND v.link_video IS NOT NULL 
+            AND v.link_video != ''
+        )
+        OR EXISTS (
+          SELECT 1 FROM organic_videos ov 
+          WHERE ov.campaign_id = cc.campaign_id 
+            AND LOWER(ov.creator_username) = LOWER(c.username)
+        )
+        OR EXISTS (
+          SELECT 1 FROM sales s 
+          WHERE s.campaign_id = cc.campaign_id 
+            AND LOWER(s.creator_username) = LOWER(c.username) 
+            AND s.content_uid IS NOT NULL 
+            AND s.content_uid != ''
+        )
+      )
+    )`);
+  }
+  if (unattributedFilter) {
+    conditions.push(sql`(
+      cc.approval != 'approved' AND (
+        EXISTS (
+          SELECT 1 FROM sales s 
+          WHERE s.campaign_id = cc.campaign_id 
+            AND LOWER(s.creator_username) = LOWER(c.username) 
+            AND s.gmv > 0
+        )
+      )
     )`);
   }
 
