@@ -1,347 +1,350 @@
-# Graph Report - Project-Tracking-System-VPS  (2026-09-23)
+# Graph Report - Project-Tracking-System-VPS  (2026-09-24)
 
 ## Corpus Check
-- Large corpus: 522 files · ~576,292 words. Semantic extraction will be expensive (many Claude tokens). Consider running on a subfolder.
+- 55 files · ~581,687 words
+- Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 2131 nodes · 3496 edges · 350 communities (121 shown, 229 thin omitted)
+- 2159 nodes · 3599 edges · 352 communities (124 shown, 228 thin omitted)
 - Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS · INFERRED: 12 edges (avg confidence: 0.84)
 - Token cost: 0 input · 0 output
 
 ## Community Hubs (Navigation)
-- Finance & Payment Batches
-- Database & Creator Store Actions
-- Data Sync & Address Batch Processing
-- Sales & Ads Import Engine
-- Database Verification & Maintenance Scripts
-- Drizzle PostgreSQL Schema Definitions
-- UI Tables & Brand Portal Views
-- Campaign Creator Performance RPCs
-- Database Seed & Test Utilities
-- Campaign Performance & Concept Actions
-- Core Database TypeScript Interfaces
-- Live & Organic Video Views Metrics
-- Campaign Sales SQL Migrations
-- Frontend Dependencies & Configurations
-- Drizzle ORM Activity & Stream Actions
-- react Module
-- dependencies Module
-- Server Actions (creatorActions)
-- SQL Migration (update_views)
-- cheerio Module
-- manifest.json Module
-- Server Actions (creatorActions)
-- loading.tsx Module
-- tsconfig.json Module
-- Server Actions (listingActions)
-- Server Actions (portalActions)
-- popup.js Module
-- Server Actions (campaignPageActions)
-- SQL Migration (20260826084300_finance_overhaul)
-- Server Actions (storeActions)
-- route.ts Module
-- Server Actions (addressActions)
-- Server Actions (actions)
-- manifest.json Module
-- Server Actions (activityActions)
-- CreatorRow.tsx Module
-- SQL Migration (db_migration_phase2_sales_ads)
-- devDependencies Module
-- Maintenance Script (sync_data)
-- Server Actions (actions)
-- file-saver Module
-- Server Actions (paymentActions)
-- next-auth Module
-- Maintenance Script (compare_omg)
-- Maintenance Script (compare_wardah)
-- Server Actions (importActions)
-- SQL Migration (db_rpc_get_campaign_performance)
-- content.js Module
-- SQL Migration (db_migration_phase2_daily_view)
-- Maintenance Script (migrate_relations)
-- Maintenance Script (patch_creators_metrics)
-- Server Actions (addressActions)
-- Server Actions (campaignPageActions)
-- page.tsx Module
-- Maintenance Script (audit)
-- Maintenance Script (find_discrepancies)
-- Maintenance Script (fix_campaigns)
-- Maintenance Script (fix_iswhite)
-- Maintenance Script (migrate)
-- Maintenance Script (sync_sku)
-- Maintenance Script (validate_migration)
-- Maintenance Script (audit_omg)
-- Maintenance Script (check-approval)
-- Maintenance Script (fix_campaigns_fast)
-- Maintenance Script (parse-qahira)
-- Maintenance Script (patch_approval)
-- Maintenance Script (patch_ui)
-- importAdsSync.ts Module
-- scratch_parser.js Module
-- Maintenance Script (analyze)
-- Maintenance Script (find_iswhite_qahira)
-- Maintenance Script (migrate_finance)
-- Maintenance Script (parse-excel)
-- Maintenance Script (read_sku)
-- Server Actions (conceptActions)
-- Server Actions (invoiceActions)
-- next Module
-- scripts Module
-- fix_padding.js Module
-- Maintenance Script (analyze_d987)
-- Maintenance Script (backup_and_reset)
-- Maintenance Script (check_all_excel)
-- Maintenance Script (check_brands)
-- Maintenance Script (check-counts)
-- Maintenance Script (check_legacy)
-- Maintenance Script (check-schema)
-- Maintenance Script (check_top_products)
-- Maintenance Script (find_dupes)
-- Maintenance Script (fix_all_campaigns)
-- Maintenance Script (fix_campaign15)
-- Maintenance Script (fix_contacts_snapshots)
-- Maintenance Script (fix_organic_gmv)
-- Maintenance Script (fix_salsa)
-- Maintenance Script (fix_videos)
-- Maintenance Script (migrate_finance_fast)
-- Maintenance Script (patch_gmv)
-- Server Actions (patch_payment_actions)
-- Maintenance Script (patch-payouts)
-- Maintenance Script (reset_and_patch)
-- Maintenance Script (run-import)
-- Maintenance Script (run_sql)
-- Maintenance Script (test_address)
-- Maintenance Script (test_bang_fey)
-- Maintenance Script (test_contacts)
-- Maintenance Script (test_schema)
-- Maintenance Script (test_update)
-- Maintenance Script (test-view)
-- Maintenance Script (test-view2)
-- Maintenance Script (verify_all)
-- Maintenance Script (verify_omg)
-- Maintenance Script (verify_reconciliation)
-- SQL Migration (20260610000002_phase_3)
-- audit_omg.js Module
-- content.js Module
-- Database Layer (check_db)
-- check_kahf.js Module
-- check_kahf_rpc.js Module
-- check_schema.js Module
-- test_import.js Module
-- test_insert.js Module
-- test_nan.js Module
-- Maintenance Script (alter_db)
-- Maintenance Script (audit_omg_new)
-- Maintenance Script (audit_performa)
-- Maintenance Script (check)
-- Maintenance Script (check2)
-- Maintenance Script (check_ads)
-- Maintenance Script (check_all_constraints)
-- Maintenance Script (check_all_sales_types)
-- Maintenance Script (check-anon)
-- Maintenance Script (check_arnilawati)
-- Maintenance Script (check_arnilawati2)
-- Maintenance Script (check_budgets)
-- Maintenance Script (check-campaign17)
-- Maintenance Script (check_campaigns)
-- Maintenance Script (check_cols)
-- Maintenance Script (check_columns)
-- Maintenance Script (check_constraint)
-- Maintenance Script (check_constraint_def)
-- Maintenance Script (check_creator_pool)
-- Maintenance Script (check_creators)
-- Maintenance Script (check_db)
-- Maintenance Script (check_duplicates)
-- Maintenance Script (check_enum)
-- Maintenance Script (check_enum2)
-- Maintenance Script (check_excel)
-- Maintenance Script (check-excel)
-- Maintenance Script (check_fk)
-- Maintenance Script (check_fk_exact)
-- Maintenance Script (check_headers)
-- Maintenance Script (check_item)
-- Maintenance Script (check-matcha)
-- Maintenance Script (check-null-price)
-- Maintenance Script (check-null-users)
-- Maintenance Script (check_raw)
-- Maintenance Script (check-riska)
-- Maintenance Script (check_sales)
-- Maintenance Script (check_schema)
-- Maintenance Script (check_syntax)
-- Maintenance Script (check_table)
-- Maintenance Script (check-total)
-- Maintenance Script (check-total-creators)
-- Maintenance Script (check-total-videos)
-- Maintenance Script (check_trigger2)
-- Maintenance Script (check_trigger_pg)
-- Maintenance Script (check_triggers)
-- Maintenance Script (check_unmapped)
-- Maintenance Script (check_update)
-- Maintenance Script (check-videos)
-- Maintenance Script (check_view)
-- Maintenance Script (clean_all_dupes)
-- Maintenance Script (clean_db)
-- Maintenance Script (cleanup-duplicates)
-- Maintenance Script (cleanup-duplicates-v2)
-- Maintenance Script (cleanup_videos)
-- Maintenance Script (create_loadings)
-- Maintenance Script (debug_gap)
-- Maintenance Script (debug_videos)
-- Maintenance Script (del_dup)
-- Maintenance Script (find_campaign)
-- Maintenance Script (find-pass)
-- Maintenance Script (fix_sql)
-- Maintenance Script (fix_urutan)
-- Maintenance Script (fix_video_links)
-- Maintenance Script (inspect)
-- Maintenance Script (inspect2)
-- Maintenance Script (inspect_680)
-- Maintenance Script (merge_duplicate_creators)
-- Maintenance Script (migrate)
-- Maintenance Script (patch_videos)
-- Maintenance Script (query2)
-- Maintenance Script (query3)
-- Maintenance Script (query_supabase)
-- Maintenance Script (read_daily_performance)
-- Maintenance Script (read-excel)
-- Maintenance Script (read_excel)
-- Maintenance Script (read_excel_temp)
-- Maintenance Script (reconstruct_ads)
-- Maintenance Script (remap_sales)
-- Maintenance Script (remap_sales_rest)
-- Maintenance Script (resolve_duplicates)
-- Maintenance Script (roundIcon)
-- Maintenance Script (scratch_dupes)
-- Maintenance Script (seed-tiktok-niches)
-- Maintenance Script (test_55)
-- Maintenance Script (test_action)
-- Maintenance Script (test_action_batch)
-- Maintenance Script (test-ads-delta)
-- Maintenance Script (test_anon)
-- Maintenance Script (test_campaign_rls)
-- Maintenance Script (test_constraint)
-- Maintenance Script (test_detail)
-- Maintenance Script (test_executive)
-- Maintenance Script (test-fetch)
-- Maintenance Script (test_fetch)
-- Maintenance Script (test-filter)
-- Maintenance Script (test_nurulaini)
-- Maintenance Script (test-query2)
-- Maintenance Script (test-query)
-- Maintenance Script (test_query)
-- Maintenance Script (test_rls)
-- Maintenance Script (test_rls2)
-- Maintenance Script (test_rls3)
-- Maintenance Script (test_schema)
-- Maintenance Script (test_summary_anon)
-- Maintenance Script (test_summary_fix)
-- Maintenance Script (test-syntax)
-- Maintenance Script (test-update)
-- Maintenance Script (test_update)
-- Maintenance Script (test_videos)
-- Maintenance Script (test_videos2)
-- Maintenance Script (verify)
-- Maintenance Script (verify_5_brands)
-- Server Actions (databaseActions)
-- page.tsx Module
-- old_uploadOrganik.ts Module
-- @radix-ui/react-label Module
-- @radix-ui/react-switch Module
-- fix_button_sizes.js Module
-- fix_buttons.js Module
-- fix_classnames.js Module
-- fix_daily.js Module
-- fix_performa.js Module
-- fix_tables.js Module
-- fix_variant_attrs.js Module
-- migrate.js Module
-- Maintenance Script (analyze_excel)
-- Maintenance Script (audit_new_excel)
-- Maintenance Script (check_db2)
-- Maintenance Script (find_dates)
-- Maintenance Script (fix_brands)
-- Maintenance Script (get_rpc)
-- Maintenance Script (inspect-listing)
-- Maintenance Script (list-sheets)
-- Server Actions (patch_actions)
-- Maintenance Script (query)
-- Maintenance Script (run_migration)
-- Maintenance Script (temp)
-- Maintenance Script (test_awareness)
-- Maintenance Script (test-count)
-- Maintenance Script (test_count_creators)
-- Maintenance Script (test_query)
-- Maintenance Script (test_query)
-- Maintenance Script (test-query)
-- Maintenance Script (test_video)
-- proxy.ts Module
-- SQL Migration (20260716000000_brand_portal_rpcs)
-- SQL Migration (20260909_optimize_livestream_rpc)
-- popup.js Module
-- read_excel.py Module
-- eslint.config.mjs Module
-- postcss.config.mjs Module
-- SQL Migration (db_rpc_daily_stats)
-- Maintenance Script (test)
-- Maintenance Script (test-crash)
-- Maintenance Script (test-tiktok)
-- route.ts Module
-- layout.tsx Module
-- SQL Migration (20260731160400_revert_get_campaign_top_skus)
-- background.js Module
-- SQL Migration (db_update_audience)
-- SQL Migration (db_update_mcn)
-- SQL Migration (add_target_creator_tiers)
-- SQL Migration (fix_constraint)
-- SQL Migration (public_schema)
-- { GET, POST } Module
-- SQL Migration (20260610000003_phase_4)
-- SQL Migration (20260616000000_phase_9_followers)
-- SQL Migration (20260618000000_add_sku_to_videos)
-- public.videos Module
-- SQL Migration (20260618000003_add_budgeting_fields)
-- public.campaign_creators Module
-- SQL Migration (20260625000000_add_updated_by_to_snapshots)
-- SQL Migration (20260628000000_enable_rls)
-- SQL Migration (20260803150000_add_target_creator_tiers)
-- SQL Migration (20260806100200_add_target_creator_live)
-- SQL Migration (20260810140700_add_concept_metadata)
-- SQL Migration (20260818041121_add_notes_client)
-- SQL Migration (20260827000000_add_notes_to_payment_items)
-- SQL Migration (20260827000002_backfill_bank_data)
-- SQL Migration (20260828000001_unified_expense_types)
-- SQL Migration (20260903000000_add_split_gmv_30d)
-- SQL Migration (20260910_fix_sales_sku_fk_cascade)
-- SQL Migration (20260917150000_add_creator_admin_columns)
-- temp_original.tsx Module
-- organic_videos Cluster
-- { GET, POST } Cluster
-- public.videos Cluster
-- public.campaign_creators Cluster
+- Budgeting & Financial Payments
+- Database Actions & Audit Logging
+- Campaign Sync & Address Batching
+- Drizzle Schema & Master Tables
+- Activity Logs & Ads Reporting UI
+- PostgreSQL DB Integrity & Audit
+- Campaign Creator & Video Lifecycle
+- TikTok Shop Callback & Auth UI
+- SQL RPC & Creator Performance
+- Smart Import & Sales Attribution
+- Creator Pool & Profile Management
+- Database Types & Interfaces
+- Core Dependencies & Tooling
+- Views, Live Stats & Aggregation
+- Supabase Migrations & Sales Stats
+- Module Community 15
+- Module Community 16
+- Module Community 17
+- Module Community 18
+- Module Community 19
+- Module Community 20
+- Module Community 21
+- Module Community 22
+- Module Community 23
+- Module Community 24
+- Module Community 25
+- Module Community 26
+- Module Community 27
+- Module Community 28
+- Module Community 29
+- Module Community 30
+- Module Community 31
+- Module Community 32
+- Module Community 33
+- Module Community 34
+- Module Community 35
+- Module Community 36
+- Module Community 37
+- Module Community 38
+- Module Community 39
+- Module Community 40
+- Module Community 41
+- Module Community 42
+- Module Community 43
+- Module Community 44
+- Module Community 45
+- Module Community 46
+- Module Community 47
+- Module Community 48
+- Module Community 49
+- Module Community 50
+- Module Community 51
+- Module Community 52
+- Module Community 53
+- Module Community 54
+- Module Community 55
+- Module Community 56
+- Module Community 57
+- Module Community 58
+- Module Community 59
+- Module Community 60
+- Module Community 61
+- Module Community 62
+- Module Community 63
+- Module Community 64
+- Module Community 65
+- Module Community 66
+- Module Community 67
+- Module Community 68
+- Module Community 69
+- Module Community 70
+- Module Community 71
+- Module Community 72
+- Module Community 73
+- Module Community 74
+- Module Community 75
+- Module Community 76
+- Module Community 77
+- Module Community 78
+- Module Community 79
+- Module Community 80
+- Module Community 81
+- Module Community 82
+- Module Community 83
+- Module Community 84
+- Module Community 85
+- Module Community 86
+- Module Community 87
+- Module Community 88
+- Module Community 89
+- Module Community 90
+- Module Community 91
+- Module Community 92
+- Module Community 93
+- Module Community 94
+- Module Community 95
+- Module Community 96
+- Module Community 97
+- Module Community 98
+- Module Community 99
+- Module Community 100
+- Module Community 101
+- Module Community 102
+- Module Community 103
+- Module Community 104
+- Module Community 105
+- Module Community 106
+- Module Community 107
+- Module Community 108
+- Module Community 109
+- Module Community 110
+- Module Community 111
+- Module Community 112
+- Module Community 113
+- Module Community 114
+- Module Community 115
+- Module Community 116
+- Module Community 117
+- Module Community 118
+- Module Community 119
+- Module Community 120
+- Module Community 121
+- Module Community 122
+- Module Community 123
+- Module Community 124
+- Module Community 125
+- Module Community 126
+- Module Community 127
+- Module Community 128
+- Module Community 129
+- Module Community 130
+- Module Community 131
+- Module Community 132
+- Module Community 133
+- Module Community 134
+- Module Community 135
+- Module Community 136
+- Module Community 137
+- Module Community 138
+- Module Community 139
+- Module Community 140
+- Module Community 141
+- Module Community 142
+- Module Community 143
+- Module Community 144
+- Module Community 145
+- Module Community 146
+- Module Community 147
+- Module Community 148
+- Module Community 149
+- Module Community 150
+- Module Community 151
+- Module Community 152
+- Module Community 153
+- Module Community 154
+- Module Community 155
+- Module Community 156
+- Module Community 157
+- Module Community 158
+- Module Community 159
+- Module Community 160
+- Module Community 161
+- Module Community 162
+- Module Community 163
+- Module Community 164
+- Module Community 165
+- Module Community 166
+- Module Community 167
+- Module Community 168
+- Module Community 169
+- Module Community 170
+- Module Community 171
+- Module Community 172
+- Module Community 173
+- Module Community 174
+- Module Community 175
+- Module Community 176
+- Module Community 177
+- Module Community 178
+- Module Community 179
+- Module Community 180
+- Module Community 181
+- Module Community 182
+- Module Community 183
+- Module Community 184
+- Module Community 185
+- Module Community 186
+- Module Community 187
+- Module Community 188
+- Module Community 189
+- Module Community 190
+- Module Community 191
+- Module Community 192
+- Module Community 193
+- Module Community 194
+- Module Community 195
+- Module Community 196
+- Module Community 197
+- Module Community 198
+- Module Community 199
+- Module Community 200
+- Module Community 201
+- Module Community 202
+- Module Community 203
+- Module Community 204
+- Module Community 205
+- Module Community 206
+- Module Community 207
+- Module Community 208
+- Module Community 209
+- Module Community 210
+- Module Community 211
+- Module Community 212
+- Module Community 213
+- Module Community 214
+- Module Community 215
+- Module Community 216
+- Module Community 217
+- Module Community 218
+- Module Community 219
+- Module Community 220
+- Module Community 221
+- Module Community 222
+- Module Community 223
+- Module Community 224
+- Module Community 225
+- Module Community 226
+- Module Community 227
+- Module Community 228
+- Module Community 229
+- Module Community 230
+- Module Community 231
+- Module Community 232
+- Module Community 233
+- Module Community 234
+- Module Community 235
+- Module Community 236
+- Module Community 237
+- Module Community 238
+- Module Community 239
+- Module Community 240
+- Module Community 241
+- Module Community 242
+- Module Community 243
+- Module Community 244
+- Module Community 245
+- Module Community 246
+- Module Community 247
+- Module Community 248
+- Module Community 249
+- Module Community 250
+- Module Community 251
+- Module Community 252
+- Module Community 253
+- Module Community 254
+- Module Community 255
+- Module Community 256
+- Module Community 257
+- Module Community 258
+- Module Community 259
+- Module Community 260
+- Module Community 261
+- Module Community 262
+- Module Community 263
+- Module Community 264
+- Module Community 265
+- Module Community 266
+- Module Community 267
+- Module Community 268
+- Module Community 269
+- Module Community 270
+- Module Community 271
+- Module Community 273
+- Module Community 274
+- Module Community 276
+- Module Community 277
+- Module Community 278
+- Module Community 279
+- Module Community 280
+- Module Community 281
+- Module Community 284
+- Module Community 285
+- Module Community 289
+- Module Community 292
+- Module Community 293
+- Module Community 296
+- Module Community 301
+- Module Community 302
+- Module Community 303
+- Module Community 304
+- Module Community 305
+- Module Community 306
+- Module Community 307
+- Module Community 308
+- Module Community 309
+- Module Community 311
+- Module Community 312
+- Module Community 313
+- Module Community 314
+- Module Community 315
+- Module Community 316
+- Module Community 317
+- Module Community 318
+- Module Community 319
+- Module Community 320
+- Module Community 321
+- Module Community 323
+- Module Community 324
+- Module Community 327
+- Module Community 334
+- Module Community 336
 
 ## God Nodes (most connected - your core abstractions)
-1. `useDatabaseStore` - 97 edges
-2. `react` - 88 edges
-3. `lucide-react` - 63 edges
+1. `useDatabaseStore` - 95 edges
+2. `react` - 91 edges
+3. `lucide-react` - 65 edges
 4. `useAuth()` - 50 edges
 5. `auth` - 37 edges
 6. `dotenv` - 32 edges
-7. `drizzle-orm` - 28 edges
+7. `drizzle-orm` - 29 edges
 8. `campaigns` - 28 edges
 9. `campaign_creators` - 28 edges
-10. `CampaignListingContent()` - 27 edges
+10. `DB` - 27 edges
 
 ## Surprising Connections (you probably didn't know these)
-- `get_campaign_performance()` --reads_from--> `campaign_creators`  [EXTRACTED]
-  db_rpc_get_campaign_performance.sql → web-app/supabase/migrations/20260610000000_phase_1.sql
+- `campaign_sales_summary` --reads_from--> `sales`  [EXTRACTED]
+  update_views.sql → web-app/supabase/migrations/20260610000001_phase_2.sql
 - `get_campaign_performance()` --reads_from--> `campaigns`  [EXTRACTED]
   db_rpc_get_campaign_performance.sql → web-app/supabase/migrations/20260610000000_phase_1.sql
-- `get_campaign_performance()` --reads_from--> `creators`  [EXTRACTED]
-  db_rpc_get_campaign_performance.sql → web-app/supabase/migrations/20260610000000_phase_1.sql
-- `get_campaign_performance()` --reads_from--> `videos`  [EXTRACTED]
-  db_rpc_get_campaign_performance.sql → web-app/supabase/migrations/20260610000000_phase_1.sql
-- `get_campaign_performance()` --reads_from--> `sales`  [EXTRACTED]
-  db_rpc_get_campaign_performance.sql → web-app/supabase/migrations/20260610000001_phase_2.sql
+- `public.get_campaign_creator_performance()` --reads_from--> `campaigns`  [EXTRACTED]
+  fix_rpc_end_date.sql → web-app/supabase/migrations/20260610000000_phase_1.sql
+- `vw_campaign_summary` --reads_from--> `campaigns`  [EXTRACTED]
+  update_views.sql → web-app/supabase/migrations/20260610000000_phase_1.sql
+- `get_campaign_sales_stats()` --reads_from--> `campaign_creators`  [EXTRACTED]
+  db_rpc_get_campaign_sales_stats.sql → web-app/supabase/migrations/20260610000000_phase_1.sql
 
 ## Import Cycles
 - None detected.
@@ -349,511 +352,523 @@
 ## Hyperedges (group relationships)
 - **TNT Logo Composition** — web_app_public_icon_tnt_project_tracking1_logo, web_app_public_icon_tnt_project_tracking1_tnt_text, web_app_public_icon_tnt_project_tracking1_network_traces [EXTRACTED 1.00]
 
-## Communities (350 total, 229 thin omitted)
+## Communities (352 total, 228 thin omitted)
 
-### Community 0 - "Finance & Payment Batches"
-Cohesion: 0.05
-Nodes (83): GlobalBudgetingContent(), addPaymentItem(), autoSplitUnpaidBatchItems(), bulkApproveExecutive1(), bulkApproveExecutiveFinal(), bulkApproveManager(), bulkMarkPaidFinance(), bulkProcessFinanceReview() (+75 more)
+### Community 0 - "Budgeting & Financial Payments"
+Cohesion: 0.07
+Nodes (70): GlobalBudgetingContent(), addPaymentItem(), autoSplitUnpaidBatchItems(), bulkApproveExecutive1(), bulkApproveExecutiveFinal(), bulkApproveManager(), bulkMarkPaidFinance(), bulkProcessFinanceReview() (+62 more)
 
-### Community 1 - "Database & Creator Store Actions"
+### Community 1 - "Database Actions & Audit Logging"
 Cohesion: 0.08
-Nodes (37): addAdsSpendAction(), addAuditLogAction(), addCampaignCreatorAction(), addCreatorFullAction(), addCreatorNoteAction(), addCreatorSnapshotAction(), addDailyPerformanceAction(), addLiveScheduleAction() (+29 more)
+Nodes (38): addAdsSpendAction(), addAuditLogAction(), addCampaignCreatorAction(), addCreatorFullAction(), addCreatorNoteAction(), addCreatorSnapshotAction(), addDailyPerformanceAction(), addLiveScheduleAction() (+30 more)
 
-### Community 2 - "Data Sync & Address Batch Processing"
-Cohesion: 0.11
-Nodes (31): papaparse, syncAddressBatchAction(), searchCreatorUsernames(), executeFullCampaignSyncAction(), fetchCampaignSyncListingDbAction(), AddressSyncModal(), CampaignSyncModal(), CreatorSyncModal() (+23 more)
+### Community 2 - "Campaign Sync & Address Batching"
+Cohesion: 0.12
+Nodes (30): syncAddressBatchAction(), searchCreatorUsernames(), executeFullCampaignSyncAction(), fetchCampaignSyncListingDbAction(), bulkSyncBudgetRows(), AddressSyncModal(), BudgetSyncModal(), CampaignSyncModal() (+22 more)
 
-### Community 3 - "Sales & Ads Import Engine"
-Cohesion: 0.10
-Nodes (31): executeAdsImportAction(), executeSalesImportAction(), executeSalesImportChunkAction(), fetchAdNameMappingsAction(), fetchImportMetadataAction(), finishSalesImportAction(), insertCustomSkuAction(), saveAdNameMappingAction() (+23 more)
-
-### Community 4 - "Database Verification & Maintenance Scripts"
+### Community 3 - "Drizzle Schema & Master Tables"
 Cohesion: 0.06
 Nodes (36): campaign_creator_notes, accounts, adNameMapping, adsPerformance, adsSpends, adsTopups, auditLogs, brands (+28 more)
 
-### Community 5 - "Drizzle PostgreSQL Schema Definitions"
-Cohesion: 0.12
-Nodes (13): lucide-react, react, importLiveOrganicAction(), CampaignLayoutInner(), LiveSyncModal(), parseRp(), StringCombobox(), Button (+5 more)
+### Community 4 - "Activity Logs & Ads Reporting UI"
+Cohesion: 0.25
+Nodes (18): fetchActivityLogsAction(), ActivityLogPage(), MemoizedTableRow, navItems, Badge(), BadgeProps, Card, CardContent (+10 more)
 
-### Community 6 - "UI Tables & Brand Portal Views"
+### Community 5 - "PostgreSQL DB Integrity & Audit"
 Cohesion: 0.07
 Nodes (15): pg, { Pool }, { createClient }, { Pool }, { Client }, { Client }, { Client }, env (+7 more)
 
-### Community 7 - "Campaign Creator Performance RPCs"
+### Community 6 - "Campaign Creator & Video Lifecycle"
+Cohesion: 0.18
+Nodes (23): batchDeleteCampaignCreatorsAction(), batchUpdateCampaignCreatorsApprovalAction(), deleteSingleDuplicateCampaignCreatorAction(), deleteVideoAction(), fetchCampaignCreatorCountsAction(), fetchCampaignCreatorsDuplicateCheckAction(), fetchCampaignCreatorsRecapAction(), fetchCreatorIdsByUsernamesAction() (+15 more)
+
+### Community 7 - "TikTok Shop Callback & Auth UI"
+Cohesion: 0.12
+Nodes (6): lucide-react, react, addCreatorFull(), AddCreatorClient(), Button, ButtonProps
+
+### Community 8 - "SQL RPC & Creator Performance"
 Cohesion: 0.11
 Nodes (22): public.get_campaign_creator_performance(), organic_videos, manual_video_imports, public.get_campaign_creator_performance(), organic_videos, public.get_campaign_video_stats(), organic_videos, ads_name_mappings (+14 more)
 
-### Community 8 - "Database Seed & Test Utilities"
-Cohesion: 0.29
-Nodes (18): fetchActivityLogsAction(), ActivityLogPage(), MemoizedTableRow, SettingsPage(), Badge(), BadgeProps, Card, CardContent (+10 more)
+### Community 9 - "Smart Import & Sales Attribution"
+Cohesion: 0.14
+Nodes (18): papaparse, executeAdsImportAction(), executeSalesImportAction(), executeSalesImportChunkAction(), fetchAdNameMappingsAction(), fetchImportMetadataAction(), finishSalesImportAction(), insertCustomSkuAction() (+10 more)
 
-### Community 9 - "Campaign Performance & Concept Actions"
-Cohesion: 0.16
-Nodes (20): batchDeleteCampaignCreatorsAction(), batchUpdateCampaignCreatorsApprovalAction(), deleteSingleDuplicateCampaignCreatorAction(), deleteVideoAction(), fetchCampaignCreatorCountsAction(), fetchCampaignCreatorsDuplicateCheckAction(), fetchCampaignCreatorsRecapAction(), fetchCreatorSnapshotsBatchAction() (+12 more)
+### Community 10 - "Creator Pool & Profile Management"
+Cohesion: 0.14
+Nodes (21): addCreatorNote(), addCreatorSnapshot(), bulkImportCreatorsAction(), fetchCreatorProfile(), fetchCreatorsPaginated(), fetchStaffProfiles(), updateCreatorContact(), updateCreatorMaster() (+13 more)
 
-### Community 10 - "Core Database TypeScript Interfaces"
+### Community 11 - "Database Types & Interfaces"
 Cohesion: 0.08
 Nodes (25): AdNameMapping, AdsPerformance, AdsSpend, AuditLog, Brand, Campaign, CampaignSummary, Creator (+17 more)
 
-### Community 11 - "Live & Organic Video Views Metrics"
+### Community 12 - "Core Dependencies & Tooling"
 Cohesion: 0.08
-Nodes (23): clsx, drizzle-kit, eslint, eslint-config-next, postgres, @radix-ui/react-dialog, react-dom, swr (+15 more)
+Nodes (24): clsx, eslint, eslint-config-next, exceljs, next-auth, postgres, @radix-ui/react-dialog, react-dom (+16 more)
 
-### Community 12 - "Campaign Sales SQL Migrations"
-Cohesion: 0.12
-Nodes (17): addCreatorFull(), CampaignCardItem(), CampaignsPage(), AddCreatorClient(), InputPenjualanPage(), Dashboard(), NotesTimeline(), NotesTimelineProps (+9 more)
-
-### Community 13 - "Frontend Dependencies & Configurations"
+### Community 13 - "Views, Live Stats & Aggregation"
 Cohesion: 0.11
 Nodes (17): ads_import, campaign_sales_summary, public.get_campaign_live_stats(), organic_videos, brands, campaigns, public.vw_campaign_summary, public.vw_campaign_summary (+9 more)
 
-### Community 14 - "Drizzle ORM Activity & Stream Actions"
+### Community 14 - "Supabase Migrations & Sales Stats"
 Cohesion: 0.12
 Nodes (20): get_campaign_sales_stats(), audit_logs, creator_contacts, creator_niches, creator_notes, creator_snapshots, creators, extract_content_uid() (+12 more)
 
-### Community 15 - "react Module"
+### Community 15 - "Module Community 15"
 Cohesion: 0.09
 Nodes (9): dotenv, supabase, run(), supabase, supabase, supabase, supabase, supabase (+1 more)
 
-### Community 16 - "dependencies Module"
-Cohesion: 0.15
-Nodes (15): bulkAutoDetectAddressCreatorsAction(), fetchCampaignCreatorsForAddressAction(), fetchCreatorAddressBookAction(), importSpreadsheetAddressesAction(), saveAddressDetailsAction(), syncMissingCampaignAddressesAction(), DragFillState, getEmptyRow() (+7 more)
+### Community 16 - "Module Community 16"
+Cohesion: 0.13
+Nodes (17): fetchPerformaPageFullDataAction(), updateAdsPerformanceKursAction(), getAuthProfileAction(), CampaignPerformaClient(), InputPenjualanPage(), LayoutWrapper(), NotesTimeline(), NotesTimelineProps (+9 more)
 
-### Community 17 - "Server Actions (creatorActions)"
+### Community 17 - "Module Community 17"
 Cohesion: 0.09
 Nodes (22): dependencies, clsx, dotenv, drizzle-orm, exceljs, file-saver, lucide-react, next (+14 more)
 
-### Community 18 - "SQL Migration (update_views)"
+### Community 18 - "Module Community 18"
+Cohesion: 0.22
+Nodes (17): exchangeAuthCodeAction(), testFetchAffiliateOrdersAction(), testFetchCampaignCreatorsAction(), testFetchCampaignPerformanceAction(), testFetchCampaignProductsAction(), testFetchCapOrdersAction(), testFetchCategoryAssetsAction(), testFetchSellerOrdersAction() (+9 more)
+
+### Community 19 - "Module Community 19"
+Cohesion: 0.19
+Nodes (8): drizzle-orm, dynamic, revalidate, ManajemenAkunPage(), signIn, signOut, DB, globalForDb
+
+### Community 20 - "Module Community 20"
+Cohesion: 0.17
+Nodes (13): bulkAutoDetectAddressCreatorsAction(), fetchCampaignCreatorsForAddressAction(), fetchCreatorAddressBookAction(), importSpreadsheetAddressesAction(), saveAddressDetailsAction(), syncMissingCampaignAddressesAction(), DragFillState, getEmptyRow() (+5 more)
+
+### Community 21 - "Module Community 21"
+Cohesion: 0.18
+Nodes (16): bulkAutoDetectCreatorsAction(), executeSpreadsheetImportAction(), verifySpreadsheetCreatorsAction(), DragFillState, getEmptyRow(), SpreadsheetImportClient(), SpreadsheetRow, CreatorSyncModal() (+8 more)
+
+### Community 22 - "Module Community 22"
 Cohesion: 0.14
 Nodes (14): pembayaran, vw_campaign_summary, campaign_creators, idx_cc_campaign, idx_cc_creator, videos, daily_performance, vw_campaign_summary (+6 more)
 
-### Community 19 - "cheerio Module"
+### Community 23 - "Module Community 23"
 Cohesion: 0.10
 Nodes (19): cheerio, author, dependencies, cheerio, xlsx, description, xlsx, keywords (+11 more)
 
-### Community 20 - "manifest.json Module"
+### Community 24 - "Module Community 24"
 Cohesion: 0.10
 Nodes (19): action, default_icon, default_popup, background, service_worker, content_scripts, 128, 16 (+11 more)
 
-### Community 21 - "Server Actions (creatorActions)"
-Cohesion: 0.20
-Nodes (17): bulkInsertVideosAction(), deleteVideosAction(), ensureNotesTable(), ensureVideoColumns(), fetchRevisionNotesAction(), fetchVideosByCcIdsAction(), insertCreatorsAndCcAction(), upsertRevisionNoteAction() (+9 more)
+### Community 25 - "Module Community 25"
+Cohesion: 0.16
+Nodes (13): fetchLivePageDataAction(), getLivestreamData(), CampaignFilterContextWrapper(), CampaignLayoutInner(), LiveSchedulePage(), CampaignLiveStreamClient(), CampaignLiveStreamPage(), CampaignFilterContext (+5 more)
 
-### Community 23 - "tsconfig.json Module"
-Cohesion: 0.19
-Nodes (8): drizzle-orm, getLivestreamData(), CampaignLiveStreamPage(), dynamic, revalidate, ManajemenAkunPage(), DB, globalForDb
-
-### Community 24 - "Server Actions (listingActions)"
+### Community 27 - "Module Community 27"
 Cohesion: 0.11
 Nodes (18): compilerOptions, allowJs, esModuleInterop, incremental, isolatedModules, jsx, lib, module (+10 more)
 
-### Community 25 - "Server Actions (portalActions)"
+### Community 28 - "Module Community 28"
+Cohesion: 0.20
+Nodes (15): bulkInsertVideosAction(), deleteVideosAction(), ensureVideoColumns(), fetchVideosByCcIdsAction(), safeDate(), upsertRevisionNoteAction(), upsertVideoAction(), getInternalVideoData() (+7 more)
+
+### Community 29 - "Module Community 29"
 Cohesion: 0.28
 Nodes (16): addCurrentToQueue(), appDatabase, formatFollowers(), getTier(), init(), isInDatabase(), isInQueue(), loadAppDatabase() (+8 more)
 
-### Community 26 - "popup.js Module"
-Cohesion: 0.18
-Nodes (13): addCreatorNote(), addCreatorSnapshot(), bulkAutoDetectCreatorsAction(), bulkImportCreatorsAction(), executeSpreadsheetImportAction(), updateCreatorContact(), updateCreatorMaster(), verifySpreadsheetCreatorsAction() (+5 more)
-
-### Community 27 - "Server Actions (campaignPageActions)"
-Cohesion: 0.21
-Nodes (14): fetchCreatorProfile(), deleteCreatorAddressBookAction(), fetchCreatorNotesAction(), saveCreatorAddressBookAction(), CreatorProfilePage(), useDraftLocalStorage(), CampaignCreator, CreatorSnapshot (+6 more)
-
-### Community 28 - "SQL Migration (20260826084300_finance_overhaul)"
+### Community 30 - "Module Community 30"
 Cohesion: 0.25
 Nodes (12): public.profiles, creator_bank_accounts, payment_batches, payment_items, sender_accounts, idx_payment_batches_paid_at, idx_payment_items_final_status, vw_payment_mutations (+4 more)
 
-### Community 29 - "Server Actions (storeActions)"
-Cohesion: 0.17
-Nodes (8): getAuthProfileAction(), metadata, DataLoader(), GlobalLoadingOverlay(), LayoutWrapper(), useSmartRealtime(), AuthProvider(), loadAuth()
+### Community 31 - "Module Community 31"
+Cohesion: 0.12
+Nodes (6): campaignConcepts, campaignCreators, creatorContacts, creators, creatorSnapshots, videos
 
-### Community 30 - "route.ts Module"
+### Community 32 - "Module Community 32"
+Cohesion: 0.30
+Nodes (12): POST(), deleteBatchSkusAction(), deleteSkuAction(), getCampaignSkus(), saveBatchSkusAction(), SkuInput, syncCampaignUnmappedAction(), updateSkuAction() (+4 more)
+
+### Community 33 - "Module Community 33"
+Cohesion: 0.22
+Nodes (12): BatchUpdateData, batchUpdateResiByClient(), getPortalData(), loginPortal(), logoutPortal(), submitClientApproval(), updateClientNotes(), updateResiByClient() (+4 more)
+
+### Community 34 - "Module Community 34"
+Cohesion: 0.25
+Nodes (11): importLiveOrganicAction(), syncOrphanedSalesAction(), CampaignCardItem(), CampaignsPage(), SkuPage(), LiveSyncModal(), parseRp(), DialogContent (+3 more)
+
+### Community 35 - "Module Community 35"
+Cohesion: 0.23
+Nodes (10): CreatorRow, CreatorRowProps, MultiSelect(), MultiSelectProps, Option, getCreatorType(), getJenisKerjasama(), formatAbbreviated() (+2 more)
+
+### Community 36 - "Module Community 36"
 Cohesion: 0.15
 Nodes (12): action, default_popup, default_title, background, service_worker, content_scripts, description, host_permissions (+4 more)
 
-### Community 31 - "Server Actions (addressActions)"
+### Community 37 - "Module Community 37"
 Cohesion: 0.26
 Nodes (10): fetchCampaignCreatorsForImportAction(), fetchCampaignCreatorsFullForImportAction(), fetchCreatorsWithSnapshotsForImportAction(), saveCreatorImportBatchAction(), determineContentType(), DragFillState, getEmptyRow(), parseSmartNumber() (+2 more)
 
-### Community 32 - "Server Actions (actions)"
-Cohesion: 0.24
-Nodes (9): fetchLivePageDataAction(), LiveSchedulePage(), CampaignLiveStreamClient(), CampaignFilterContext, CampaignFilterContextType, CampaignFilterProvider(), CampaignFilterProviderProps, FilterType (+1 more)
-
-### Community 33 - "manifest.json Module"
-Cohesion: 0.28
-Nodes (8): fetchPerformaPageFullDataAction(), updateAdsPerformanceKursAction(), fetchCreatorsPaginated(), fetchStaffProfiles(), CampaignPerformaClient(), CreatorPoolPage(), getCreatorType(), exportToCSV()
-
-### Community 34 - "Server Actions (activityActions)"
+### Community 38 - "Module Community 38"
 Cohesion: 0.27
 Nodes (11): idx_ads_campaign, idx_ads_creator, idx_sales_campaign, idx_sales_content_uid, idx_sales_creator, public.ad_name_mapping, public.ads_performance, public.sales (+3 more)
 
-### Community 35 - "CreatorRow.tsx Module"
-Cohesion: 0.27
-Nodes (8): exceljs, file-saver, dynamic, SummaryPage(), ExcelExportButton(), Props, fetchReportData(), generateExcelBuffer()
-
-### Community 36 - "SQL Migration (db_migration_phase2_sales_ads)"
+### Community 39 - "Module Community 39"
 Cohesion: 0.17
 Nodes (12): devDependencies, drizzle-kit, eslint, eslint-config-next, tailwindcss, @tailwindcss/postcss, @types/file-saver, @types/node (+4 more)
 
-### Community 37 - "devDependencies Module"
+### Community 40 - "Module Community 40"
 Cohesion: 0.26
 Nodes (11): { createClient }, getOrCreateBrand(), getOrCreateCampaign(), parseApproval(), parseGMV(), parsePrice(), processAll(), processSheet() (+3 more)
 
-### Community 38 - "Maintenance Script (sync_data)"
+### Community 41 - "Module Community 41"
+Cohesion: 0.35
+Nodes (10): addAdsAllocationAction(), addAdsTopupAction(), deleteAdPerformanceAction(), deleteAdsAllocationAction(), deleteAdsTopupAction(), fetchAdsBudgetingDataAction(), getAdsReportData(), updateAdPerformanceAction() (+2 more)
+
+### Community 42 - "Module Community 42"
 Cohesion: 0.48
 Nodes (10): addWhitelistEmail(), approveUser(), assignCampaignsToUser(), changeUserRole(), deactivateUser(), getAdminUser(), rejectUser(), removeWhitelistEmail() (+2 more)
 
-### Community 39 - "Server Actions (actions)"
-Cohesion: 0.29
-Nodes (10): addAdsAllocationAction(), addAdsTopupAction(), deleteAdPerformanceAction(), deleteAdsAllocationAction(), deleteAdsTopupAction(), fetchAdsBudgetingDataAction(), getAdsReportData(), updateAdPerformanceAction() (+2 more)
+### Community 43 - "Module Community 43"
+Cohesion: 0.31
+Nodes (7): file-saver, dynamic, SummaryPage(), ExcelExportButton(), Props, fetchReportData(), generateExcelBuffer()
 
-### Community 40 - "file-saver Module"
+### Community 44 - "Module Community 44"
 Cohesion: 0.20
 Nodes (7): allCreators, diffs, legacy, raw1, raw2, rawCreators, xlsx
 
-### Community 41 - "Server Actions (paymentActions)"
+### Community 45 - "Module Community 45"
 Cohesion: 0.20
 Nodes (7): allCreators, diffs, legacy, raw1, raw2, rawCreators, xlsx
 
-### Community 42 - "next-auth Module"
+### Community 46 - "Module Community 46"
 Cohesion: 0.29
 Nodes (6): fetchDailyPerformancePageDataAction(), getDailyData(), CampaignDailyPerformanceClient(), toWIBDateStr(), TimelineTarget(), TimelineTargetProps
 
-### Community 43 - "Maintenance Script (compare_omg)"
-Cohesion: 0.20
-Nodes (5): campaignCreators, creatorContacts, creators, creatorSnapshots, videos
-
-### Community 44 - "Maintenance Script (compare_wardah)"
-Cohesion: 0.36
-Nodes (8): bulkSyncBudgetRows(), BudgetSyncModal(), BudgetColumnMapping, BudgetParseResult, downloadBudgetSyncTemplate(), parseBudgetFileHeaders(), parseBudgetSyncFile(), ParsedBudgetRow
-
-### Community 45 - "Server Actions (importActions)"
+### Community 47 - "Module Community 47"
 Cohesion: 0.22
 Nodes (7): campaign_awareness_summary, campaign_total_awareness, get_campaign_performance(), ads_performance_delta, ads_performance, idx_ads_campaign, idx_ads_creator
 
-### Community 46 - "SQL Migration (db_rpc_get_campaign_performance)"
+### Community 48 - "Module Community 48"
 Cohesion: 0.39
 Nodes (7): getStatValue(), injectButton(), updatePreview(), isKalodata, observer, scrapeData(), scrapeKalodata()
 
-### Community 47 - "content.js Module"
+### Community 49 - "Module Community 49"
 Cohesion: 0.25
 Nodes (8): public.daily_performance, public.vw_campaign_summary, public.campaign_creators, public.campaigns, public.sales, public.videos, public.ads_performance, public.creator_payments
 
-### Community 48 - "SQL Migration (db_migration_phase2_daily_view)"
+### Community 50 - "Module Community 50"
 Cohesion: 0.28
 Nodes (8): dataPath, fileBudgeting, fileListing, fileTracking, findHeaderRow(), normalizeStr(), runRelationsMigration(), supabase
 
-### Community 49 - "Maintenance Script (migrate_relations)"
+### Community 51 - "Module Community 51"
 Cohesion: 0.31
 Nodes (8): { createClient }, parseAudienceAge(), parseGMV(), parsePrice(), run(), sheetMapping, supabase, XLSX
 
-### Community 51 - "Server Actions (addressActions)"
+### Community 52 - "Module Community 52"
+Cohesion: 0.33
+Nodes (8): bulkVerifyVideoLinksAction(), commitBulkImportVideosAction(), ensureNotesTable(), delay(), ImportVideoClient(), ImportVideoClientProps, isShortLink(), StagingVideoItem
+
+### Community 53 - "Module Community 53"
+Cohesion: 0.28
+Nodes (3): metadata, DataLoader(), GlobalLoadingOverlay()
+
+### Community 55 - "Module Community 55"
 Cohesion: 0.39
 Nodes (7): dataPath, fileListing, findHeaderRow(), normalizeLink(), normalizePhone(), normalizeUsername(), runAudit()
 
-### Community 52 - "Server Actions (campaignPageActions)"
+### Community 56 - "Module Community 56"
 Cohesion: 0.29
 Nodes (7): dataPath, fileBudgeting, fileListing, fileTracking, findDifferences(), normalizeStr(), supabase
 
-### Community 53 - "page.tsx Module"
+### Community 57 - "Module Community 57"
 Cohesion: 0.32
 Nodes (7): dataPath, fileListing, fileTracking, findHeaderRow(), fixCampaigns(), normalizeStr(), supabase
 
-### Community 54 - "Maintenance Script (audit)"
+### Community 58 - "Module Community 58"
 Cohesion: 0.29
 Nodes (7): dataPath, fileListing, fixIswhite(), normalizeStr(), require, supabase, XLSX
 
-### Community 55 - "Maintenance Script (find_discrepancies)"
+### Community 59 - "Module Community 59"
 Cohesion: 0.32
 Nodes (7): dataPath, fileListing, fileTracking, findHeaderRow(), normalizeStr(), runMigration(), supabase
 
-### Community 56 - "Maintenance Script (fix_campaigns)"
+### Community 60 - "Module Community 60"
 Cohesion: 0.29
 Nodes (7): { createClient }, dotenv, fs, mapCampaign(), run(), supabase, XLSX
 
-### Community 57 - "Maintenance Script (fix_iswhite)"
+### Community 61 - "Module Community 61"
 Cohesion: 0.29
 Nodes (7): dataPath, fileBudgeting, fileListing, fileTracking, normalizeStr(), supabase, validate()
 
-### Community 58 - "Maintenance Script (migrate)"
-Cohesion: 0.39
-Nodes (7): bulkVerifyVideoLinksAction(), commitBulkImportVideosAction(), delay(), ImportVideoClient(), ImportVideoClientProps, isShortLink(), StagingVideoItem
-
-### Community 59 - "Maintenance Script (sync_sku)"
+### Community 62 - "Module Community 62"
 Cohesion: 0.29
 Nodes (6): data, newKeySet, oldKeySet, OMG_MAKEUP_SKUS, workbook, XLSX
 
-### Community 60 - "Maintenance Script (validate_migration)"
+### Community 63 - "Module Community 63"
 Cohesion: 0.29
 Nodes (6): approvals, data, parsedData, rows, workbook, xlsx
 
-### Community 61 - "Maintenance Script (audit_omg)"
+### Community 64 - "Module Community 64"
 Cohesion: 0.38
 Nodes (6): dataPath, fileListing, findHeaderRow(), fixCampaignsFast(), normalizeStr(), supabase
 
-### Community 62 - "Maintenance Script (check-approval)"
+### Community 65 - "Module Community 65"
 Cohesion: 0.29
 Nodes (6): approved, data, parsedData, rows, workbook, xlsx
 
-### Community 63 - "Maintenance Script (fix_campaigns_fast)"
+### Community 66 - "Module Community 66"
 Cohesion: 0.33
 Nodes (6): { createClient }, parseApproval(), run(), sheetMapping, supabase, XLSX
 
-### Community 64 - "Maintenance Script (parse-qahira)"
+### Community 67 - "Module Community 67"
 Cohesion: 0.29
 Nodes (6): bdContent, bdFile, ccContent, ccFile, fs, path
 
-### Community 65 - "Maintenance Script (patch_approval)"
+### Community 68 - "Module Community 68"
 Cohesion: 0.33
 Nodes (3): ColumnMapping, EnrichedAdsRow, ParsedAdsRow
 
-### Community 66 - "Maintenance Script (patch_ui)"
-Cohesion: 0.40
-Nodes (4): next-auth, handlers, signIn, signOut
-
-### Community 67 - "importAdsSync.ts Module"
+### Community 69 - "Module Community 69"
 Cohesion: 0.33
 Nodes (4): dom, fs, html, { JSDOM }
 
-### Community 68 - "scratch_parser.js Module"
+### Community 70 - "Module Community 70"
 Cohesion: 0.33
 Nodes (5): basePath, files, fs, path, XLSX
 
-### Community 69 - "Maintenance Script (analyze)"
+### Community 71 - "Module Community 71"
 Cohesion: 0.40
 Nodes (5): dataPath, fileListing, findSpecificDiffs(), normalizeStr(), supabase
 
-### Community 70 - "Maintenance Script (find_iswhite_qahira)"
+### Community 72 - "Module Community 72"
 Cohesion: 0.40
 Nodes (5): dataPath, fileBudgeting, normalizeStr(), runFinanceMigration(), supabase
 
-### Community 71 - "Maintenance Script (migrate_finance)"
+### Community 73 - "Module Community 73"
 Cohesion: 0.33
 Nodes (5): data, parsedData, rows, workbook, xlsx
 
-### Community 72 - "Maintenance Script (parse-excel)"
+### Community 74 - "Module Community 74"
 Cohesion: 0.33
 Nodes (5): fs, grouped, rows, workbook, XLSX
 
-### Community 73 - "Maintenance Script (read_sku)"
+### Community 75 - "Module Community 75"
 Cohesion: 0.60
 Nodes (5): addCampaignConceptAction(), deleteCampaignConceptAction(), fetchCampaignConceptsAction(), updateCampaignConceptAction(), CampaignConceptsPage()
 
-### Community 75 - "Server Actions (invoiceActions)"
+### Community 76 - "Module Community 76"
 Cohesion: 0.53
 Nodes (5): approveInvoiceAction(), fetchInvoiceDataAction(), fetchInvoiceRincianAction(), rejectInvoiceAction(), InvoicePage()
 
-### Community 77 - "scripts Module"
+### Community 78 - "Module Community 78"
 Cohesion: 0.40
 Nodes (5): scripts, build, dev, lint, start
 
-### Community 78 - "fix_padding.js Module"
+### Community 79 - "Module Community 79"
 Cohesion: 0.40
 Nodes (4): content1, file1, fs, path
 
-### Community 79 - "Maintenance Script (analyze_d987)"
+### Community 80 - "Module Community 80"
 Cohesion: 0.40
 Nodes (4): data, uniqueVideos, workbook, xlsx
 
-### Community 80 - "Maintenance Script (backup_and_reset)"
+### Community 81 - "Module Community 81"
 Cohesion: 0.40
 Nodes (3): { createClient }, fs, supabase
 
-### Community 81 - "Maintenance Script (check_all_excel)"
+### Community 82 - "Module Community 82"
 Cohesion: 0.40
 Nodes (3): fs, path, XLSX
 
-### Community 82 - "Maintenance Script (check_brands)"
+### Community 83 - "Module Community 83"
 Cohesion: 0.40
 Nodes (4): brands, data, workbook, xlsx
 
-### Community 83 - "Maintenance Script (check-counts)"
+### Community 84 - "Module Community 84"
 Cohesion: 0.50
 Nodes (4): checkCount(), { createClient }, run(), supabase
 
-### Community 84 - "Maintenance Script (check_legacy)"
+### Community 85 - "Module Community 85"
 Cohesion: 0.40
 Nodes (4): data, wardahRows, workbook, xlsx
 
-### Community 85 - "Maintenance Script (check-schema)"
+### Community 86 - "Module Community 86"
 Cohesion: 0.50
 Nodes (4): checkColumns(), { createClient }, run(), supabase
 
-### Community 86 - "Maintenance Script (check_top_products)"
+### Community 87 - "Module Community 87"
 Cohesion: 0.40
 Nodes (3): fs, path, XLSX
 
-### Community 87 - "Maintenance Script (find_dupes)"
+### Community 88 - "Module Community 88"
 Cohesion: 0.50
 Nodes (4): dataPath, fileListing, findDupesInSheet(), normalizeStr()
 
-### Community 88 - "Maintenance Script (fix_all_campaigns)"
+### Community 89 - "Module Community 89"
 Cohesion: 0.40
 Nodes (3): { createClient }, supabase, xlsx
 
-### Community 89 - "Maintenance Script (fix_campaign15)"
+### Community 90 - "Module Community 90"
 Cohesion: 0.40
 Nodes (3): { createClient }, supabase, xlsx
 
-### Community 90 - "Maintenance Script (fix_contacts_snapshots)"
+### Community 91 - "Module Community 91"
 Cohesion: 0.50
 Nodes (4): fileListing, fixContactsAndSnapshots(), normalizeStr(), supabase
 
-### Community 91 - "Maintenance Script (fix_organic_gmv)"
+### Community 92 - "Module Community 92"
 Cohesion: 0.50
 Nodes (4): { createClient }, parseTikTokDate(), run(), supabase
 
-### Community 92 - "Maintenance Script (fix_salsa)"
+### Community 93 - "Module Community 93"
 Cohesion: 0.40
 Nodes (3): { createClient }, supabase, xlsx
 
-### Community 93 - "Maintenance Script (fix_videos)"
+### Community 94 - "Module Community 94"
 Cohesion: 0.50
 Nodes (4): fileListing, fixVideos(), normalizeStr(), supabase
 
-### Community 94 - "Maintenance Script (migrate_finance_fast)"
+### Community 95 - "Module Community 95"
 Cohesion: 0.50
 Nodes (4): fileBudgeting, normalizeStr(), runFinanceMigrationFast(), supabase
 
-### Community 95 - "Maintenance Script (patch_gmv)"
+### Community 96 - "Module Community 96"
 Cohesion: 0.40
 Nodes (3): { createClient }, supabase, xlsx
 
-### Community 96 - "Server Actions (patch_payment_actions)"
+### Community 97 - "Module Community 97"
 Cohesion: 0.40
 Nodes (4): content, file, fs, path
 
-### Community 97 - "Maintenance Script (patch-payouts)"
+### Community 98 - "Module Community 98"
 Cohesion: 0.50
 Nodes (4): { createClient }, levenshteinDistance(), run(), supabase
 
-### Community 98 - "Maintenance Script (reset_and_patch)"
+### Community 99 - "Module Community 99"
 Cohesion: 0.40
 Nodes (3): { createClient }, supabase, xlsx
 
-### Community 99 - "Maintenance Script (run-import)"
+### Community 100 - "Module Community 100"
 Cohesion: 0.40
 Nodes (3): { createClient }, supabase, xlsx
 
-### Community 100 - "Maintenance Script (run_sql)"
+### Community 101 - "Module Community 101"
 Cohesion: 0.40
 Nodes (3): { createClient }, fs, path
 
-### Community 101 - "Maintenance Script (test_address)"
+### Community 102 - "Module Community 102"
 Cohesion: 0.40
 Nodes (3): anonKey, envFile, supabase
 
-### Community 102 - "Maintenance Script (test_bang_fey)"
+### Community 103 - "Module Community 103"
 Cohesion: 0.40
 Nodes (3): anonKey, envFile, supabase
 
-### Community 103 - "Maintenance Script (test_contacts)"
+### Community 104 - "Module Community 104"
 Cohesion: 0.40
 Nodes (3): anonKey, envFile, supabase
 
-### Community 104 - "Maintenance Script (test_schema)"
+### Community 105 - "Module Community 105"
 Cohesion: 0.40
 Nodes (3): anonKey, envFile, supabase
 
-### Community 105 - "Maintenance Script (test_update)"
+### Community 106 - "Module Community 106"
 Cohesion: 0.40
 Nodes (3): anonKey, envFile, supabase
 
-### Community 106 - "Maintenance Script (test-view)"
+### Community 107 - "Module Community 107"
 Cohesion: 0.40
 Nodes (3): { createClient }, dotenv, supabase
 
-### Community 107 - "Maintenance Script (test-view2)"
+### Community 108 - "Module Community 108"
 Cohesion: 0.40
 Nodes (3): { createClient }, dotenv, supabase
 
-### Community 108 - "Maintenance Script (verify_all)"
+### Community 109 - "Module Community 109"
 Cohesion: 0.40
 Nodes (3): anonKey, envFile, supabase
 
-### Community 109 - "Maintenance Script (verify_omg)"
+### Community 110 - "Module Community 110"
 Cohesion: 0.40
 Nodes (3): anonKey, envFile, supabase
 
-### Community 110 - "Maintenance Script (verify_reconciliation)"
+### Community 111 - "Module Community 111"
 Cohesion: 0.60
 Nodes (4): findHeaderRow(), normalizeStr(), run(), xlsx
 
-### Community 112 - "audit_omg.js Module"
+### Community 112 - "Module Community 112"
 Cohesion: 0.60
 Nodes (4): log_cc_status_bayar_changes(), payout_creator, payout_requests, trg_cc_status_bayar
 
-### Community 114 - "Database Layer (check_db)"
+### Community 114 - "Module Community 114"
 Cohesion: 0.83
 Nodes (3): extractPartnerCenter(), parseCount(), saveData()
 
-### Community 147 - "Maintenance Script (check_fk)"
+### Community 147 - "Module Community 147"
 Cohesion: 0.50
 Nodes (3): data, xlsx, workbook
 
-### Community 150 - "Maintenance Script (check_item)"
+### Community 150 - "Module Community 150"
 Cohesion: 0.50
 Nodes (3): sheets, workbook, XLSX
 
-### Community 176 - "Maintenance Script (debug_gap)"
+### Community 176 - "Module Community 176"
 Cohesion: 0.50
 Nodes (3): fs, path, tabs
 
-### Community 185 - "Maintenance Script (inspect2)"
+### Community 185 - "Module Community 185"
 Cohesion: 0.50
 Nodes (3): data, workbook, xlsx
 
-### Community 186 - "Maintenance Script (inspect_680)"
+### Community 186 - "Module Community 186"
 Cohesion: 0.50
 Nodes (3): data, workbook, xlsx
 
-### Community 194 - "Maintenance Script (read-excel)"
+### Community 194 - "Module Community 194"
 Cohesion: 0.50
 Nodes (3): data, workbook, xlsx
 
-### Community 195 - "Maintenance Script (read_excel)"
+### Community 195 - "Module Community 195"
 Cohesion: 0.50
 Nodes (3): data, workbook, xlsx
 
-### Community 196 - "Maintenance Script (read_excel_temp)"
+### Community 196 - "Module Community 196"
 Cohesion: 0.50
 Nodes (3): fs, workbook, XLSX
 
-### Community 197 - "Maintenance Script (reconstruct_ads)"
+### Community 197 - "Module Community 197"
 Cohesion: 0.50
 Nodes (3): data, workbook, XLSX
 
-### Community 202 - "Maintenance Script (scratch_dupes)"
+### Community 202 - "Module Community 202"
 Cohesion: 0.67
 Nodes (3): fs, roundImage(), sharp
 
-### Community 238 - "fix_button_sizes.js Module"
+### Community 235 - "Module Community 235"
+Cohesion: 0.50
+Nodes (3): GET(), POST(), handlers
+
+### Community 240 - "Module Community 240"
 Cohesion: 0.67
 Nodes (3): Git Commit Hook, Query, Graphify Workflow
 
-### Community 239 - "fix_buttons.js Module"
+### Community 241 - "Module Community 241"
 Cohesion: 0.67
 Nodes (3): TNT Project Tracking Logo, Network Nodes and Traces, TNT Text
 
 ## Knowledge Gaps
-- **774 isolated node(s):** `isKalodata`, `manifest_version`, `name`, `version`, `description` (+769 more)
-  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 1134 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
-- **229 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **775 isolated node(s):** `ViewState`, `Props`, `State`, `PaymentBatchStatus`, `StepperProps` (+770 more)
+  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 1137 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
+- **228 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `dotenv` connect `react Module` to `Maintenance Script (run_migration)`, `Maintenance Script (test_query)`, `proxy.ts Module`, `Live & Organic Video Views Metrics`, `SQL Migration (db_migration_phase2_daily_view)`, `Server Actions (campaignPageActions)`, `page.tsx Module`, `Maintenance Script (audit)`, `Maintenance Script (find_discrepancies)`, `Maintenance Script (fix_campaigns)`, `Maintenance Script (fix_iswhite)`, `Maintenance Script (audit_omg)`, `Maintenance Script (analyze)`, `Maintenance Script (find_iswhite_qahira)`, `Maintenance Script (test_55)`, `Maintenance Script (fix_contacts_snapshots)`, `Maintenance Script (fix_videos)`, `Maintenance Script (migrate_finance_fast)`, `Maintenance Script (test-view)`, `Maintenance Script (test-view2)`, `Maintenance Script (fix_brands)`, `Maintenance Script (get_rpc)`, `Maintenance Script (inspect-listing)`, `Maintenance Script (list-sheets)`, `Server Actions (patch_actions)`?**
-  _High betweenness centrality (0.063) - this node is a cross-community bridge._
-- **Why does `react` connect `Drizzle PostgreSQL Schema Definitions` to `Finance & Payment Batches`, `Data Sync & Address Batch Processing`, `Sales & Ads Import Engine`, `Database Seed & Test Utilities`, `Campaign Performance & Concept Actions`, `Live & Organic Video Views Metrics`, `Campaign Sales SQL Migrations`, `dependencies Module`, `Server Actions (creatorActions)`, `tsconfig.json Module`, `popup.js Module`, `Server Actions (campaignPageActions)`, `Server Actions (storeActions)`, `Server Actions (addressActions)`, `Server Actions (actions)`, `manifest.json Module`, `CreatorRow.tsx Module`, `Maintenance Script (sync_data)`, `next-auth Module`, `Maintenance Script (compare_wardah)`, `Maintenance Script (migrate)`, `Maintenance Script (read_sku)`, `page.tsx Module`, `@radix-ui/react-label Module`, `@radix-ui/react-switch Module`, `SQL Migration (20260610000002_phase_3)`?**
-  _High betweenness centrality (0.055) - this node is a cross-community bridge._
-- **Why does `profiles` connect `Database Verification & Maintenance Scripts` to `SQL Migration (20260826084300_finance_overhaul)`?**
-  _High betweenness centrality (0.043) - this node is a cross-community bridge._
-- **What connects `isKalodata`, `manifest_version`, `name` to the rest of the system?**
-  _774 weakly-connected nodes found - possible documentation gaps or missing edges._
-- **Should `Finance & Payment Batches` be split into smaller, more focused modules?**
-  _Cohesion score 0.050353925353925355 - nodes in this community are weakly interconnected._
-- **Should `Database & Creator Store Actions` be split into smaller, more focused modules?**
-  _Cohesion score 0.08446455505279035 - nodes in this community are weakly interconnected._
-- **Should `Data Sync & Address Batch Processing` be split into smaller, more focused modules?**
-  _Cohesion score 0.1109936575052854 - nodes in this community are weakly interconnected._
+- **Why does `dotenv` connect `Module Community 15` to `Module Community 256`, `Module Community 258`, `Module Community 264`, `Module Community 267`, `Core Dependencies & Tooling`, `Module Community 50`, `Module Community 56`, `Module Community 57`, `Module Community 58`, `Module Community 59`, `Module Community 60`, `Module Community 61`, `Module Community 64`, `Module Community 71`, `Module Community 72`, `Module Community 204`, `Module Community 91`, `Module Community 94`, `Module Community 95`, `Module Community 107`, `Module Community 108`, `Module Community 252`, `Module Community 253`, `Module Community 254`, `Module Community 255`?**
+  _High betweenness centrality (0.077) - this node is a cross-community bridge._
+- **Why does `react` connect `TikTok Shop Callback & Auth UI` to `Budgeting & Financial Payments`, `Campaign Sync & Address Batching`, `Activity Logs & Ads Reporting UI`, `Campaign Creator & Video Lifecycle`, `Smart Import & Sales Attribution`, `Creator Pool & Profile Management`, `Core Dependencies & Tooling`, `Module Community 16`, `Module Community 18`, `Module Community 19`, `Module Community 20`, `Module Community 21`, `Module Community 25`, `Module Community 28`, `Module Community 32`, `Module Community 33`, `Module Community 34`, `Module Community 35`, `Module Community 37`, `Module Community 41`, `Module Community 42`, `Module Community 43`, `Module Community 46`, `Module Community 52`, `Module Community 53`, `Module Community 75`, `Module Community 234`, `Module Community 238`, `Module Community 239`?**
+  _High betweenness centrality (0.059) - this node is a cross-community bridge._
+- **Why does `drizzle-orm` connect `Module Community 19` to `Budgeting & Financial Payments`, `Database Actions & Audit Logging`, `Module Community 32`, `Drizzle Schema & Master Tables`, `Module Community 33`, `Campaign Creator & Video Lifecycle`, `Smart Import & Sales Attribution`, `Creator Pool & Profile Management`, `Module Community 41`, `Core Dependencies & Tooling`, `Module Community 76`, `Module Community 42`, `Module Community 43`, `Module Community 20`, `Module Community 54`, `Module Community 31`?**
+  _High betweenness centrality (0.036) - this node is a cross-community bridge._
+- **What connects `ViewState`, `Props`, `State` to the rest of the system?**
+  _775 weakly-connected nodes found - possible documentation gaps or missing edges._
+- **Should `Budgeting & Financial Payments` be split into smaller, more focused modules?**
+  _Cohesion score 0.066167290886392 - nodes in this community are weakly interconnected._
+- **Should `Database Actions & Audit Logging` be split into smaller, more focused modules?**
+  _Cohesion score 0.07966457023060797 - nodes in this community are weakly interconnected._
+- **Should `Campaign Sync & Address Batching` be split into smaller, more focused modules?**
+  _Cohesion score 0.11585365853658537 - nodes in this community are weakly interconnected._

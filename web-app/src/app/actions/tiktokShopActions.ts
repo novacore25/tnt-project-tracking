@@ -125,6 +125,47 @@ export async function testFetchShopsAction(accessToken: string) {
 
 export async function testFetchAffiliateOrdersAction(
   accessToken: string,
+  categoryAssetCipher?: string,
+  campaignId?: string
+) {
+  try {
+    const now = Math.floor(Date.now() / 1000);
+    const thirtyDaysAgo = now - 30 * 24 * 3600;
+
+    const queryParams: Record<string, any> = {
+      page_size: 20
+    };
+    
+    if (categoryAssetCipher) {
+      queryParams['category_asset_cipher'] = categoryAssetCipher;
+    }
+
+    const bodyData: Record<string, any> = {
+      create_time_ge: thirtyDaysAgo,
+      create_time_lt: now
+    };
+
+    if (campaignId) {
+      bodyData['campaign_id'] = campaignId;
+    }
+
+    // Official TAP OpenAPI v202411 for affiliate orders
+    const res = await callTikTokShopApi(
+      '/affiliate_partner/202411/orders/search',
+      'POST',
+      accessToken,
+      queryParams,
+      bodyData
+    );
+
+    return res;
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+}
+
+export async function testFetchCapOrdersAction(
+  accessToken: string,
   categoryAssetCipher?: string
 ) {
   try {
@@ -139,9 +180,9 @@ export async function testFetchAffiliateOrdersAction(
       queryParams['category_asset_cipher'] = categoryAssetCipher;
     }
 
-    // Official TAP OpenAPI v202411 for affiliate orders
+    // Official CAP OpenAPI v202504 for CAP orders (matching partner.cap_orders.read)
     const res = await callTikTokShopApi(
-      '/affiliate_partner/202411/orders/search',
+      '/affiliate_partner/202504/cap_order/search',
       'POST',
       accessToken,
       queryParams,

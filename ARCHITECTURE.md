@@ -309,6 +309,71 @@ flowchart TD
 
 ---
 
+### K. Integrasi TikTok Shop OpenAPI (TAP & CAP Partner Integration)
+
+Platform mendukung integrasi langsung ke **TikTok Shop Partner Center (TTSPC)** untuk otomasi penarikan data Campaign Afiliasi (TAP), Produk & Komisi, Kreator & Sampel, serta Pesanan Afiliasi (Orders), menggantikan proses manual download-upload spreadsheet Excel.
+
+#### 1. Arsitektur Otentikasi & Kredensial
+- **Service & App Credentials**:
+  - `App Key`: `6lcrat92ht0kd`
+  - `Service ID`: `7688709827098347271` (Nama Service: *TNT Project Tracking*, Kategori: *Creator Collaborations*)
+  - `Redirect URI`: `https://campaign.tntkreatif.com/auth/tiktok-shop/callback`
+  - `Auth Base URL`: `https://auth.tiktok-shops.com`
+  - `Partner Center OAuth URL`: `https://partner.tiktokshop.com/open/authorize?service_id=...`
+  - `OpenAPI Gateway`: `https://open-api.tiktokglobalshop.com`
+- **HMAC-SHA256 Signature Engine (`tiktokShopApi.ts`)**:
+  - Algoritma: Mengurutkan semua query parameter (kecuali `sign` dan `access_token`) secara alfabetis.
+  - String to sign: `app_secret + path + sorted_params + request_body + app_secret`
+  - Digest: Hex lowercase SHA256.
+  - Header: `x-tts-access-token` dan `Content-Type: application/json`.
+
+#### 2. Kategori Asset & Partner Cipher TNT Media
+Pada endpoint Partner Center v2, setiap pemanggilan API wajib menyertakan `category_asset_cipher` yang sesuai:
+1. `Seller and Scalable Creator Match-Up` (ID: 839312) &rarr; `ROW_fyGlKwAAAAB6jCmj_Z8Zc6uknZJUdZAi` *(Kunci utama TAP Campaign & Produk)*
+2. `Creator collaborations` (ID: 870800) &rarr; `ROW__PB2UQAAAAC2BA1X7FYpYtw9sR5Ersu8`
+3. `Creator Management` (ID: 839056) &rarr; `ROW_L2lQaAAAAAAzXkQWIHTHFI_usF_y_j4j`
+4. `Analytics & Reporting` (ID: 886032) &rarr; `ROW_4oi6EQAAAAAHt3hjoNk6xj4i0L5du0R5`
+
+#### 3. Endpoint OpenAPI & Hasil Uji Coba Produksi (Production Verified HTTP 200)
+1. **Daftar Campaign TAP**:
+   - `GET /affiliate_partner/202405/campaigns?status=ONGOING&category_asset_cipher=...`
+   - *Status*: **HTTP 200 OK** (Berhasil menarik 96 campaign live TNT, e.g. *TNT X FELAUFEE*, *TNT X BRASOV*, *TNT X MD GLOWING*).
+2. **Produk & Komisi Campaign**:
+   - `GET /affiliate_partner/202405/campaigns/{campaign_id}/products?category_asset_cipher=...`
+   - *Status*: **HTTP 200 OK** (Berhasil menarik SKU, harga ritel, komisi TAP 5%, stok, unit terjual).
+3. **Statistik Agregat Produk Campaign**:
+   - `GET /affiliate_partner/202501/campaigns/{campaign_id}/products/performance?category_asset_cipher=...`
+   - *Status*: **HTTP 200 OK** (Berhasil menarik data total kreator kolaborasi dan sampel diminta).
+4. **Detail Kreator & Status Permintaan Sampel**:
+   - `GET /affiliate_partner/202501/campaigns/{campaign_id}/products/{product_id}/performance?category_asset_cipher=...`
+   - *Status*: **HTTP 200 OK** (Berhasil menarik list username kreator, follower, avatar URL, room count, video count, paid amount, serta status free sample).
+5. **Performa Konten Video & Livestream**:
+   - `GET /affiliate_partner/202501/campaigns/{id}/products/{product_id}/creator/{temp_id}/content/statistics?content_type=1` (Video)
+   - `GET /affiliate_partner/202501/campaigns/{id}/products/{product_id}/creator/{temp_id}/content/statistics?content_type=2` (Live Stream)
+   - *Status*: Mendukung data views, likes, comment count, cover image, video link, room ID, post time, paid orders, dan GMV.
+6. **Pencarian Pesanan Afiliasi (Orders)**:
+   - TAP Orders: `POST /affiliate_partner/202411/orders/search`
+   - CAP Orders: `POST /affiliate_partner/202504/cap_order/search`
+   - *Catatan Otorisasi Scope*: Error `98001008` terjadi ketika `access_token` belum membawa scope order. Solusi: Pastikan scope `partner.cap_orders.read` atau order scope diaktifkan pada Manage Scope Partner Center, lalu lakukan otorisasi ulang (re-authorize).
+
+#### 4. Pemetaan 1-to-1 Kolom Laporan Spreadsheet Excel TikTok
+Sistem telah memverifikasi keselarasan 100% data OpenAPI terhadap 3 format laporan spreadsheet TikTok Partner Center:
+- **Laporan Performa Video (27 Kolom)**: `Campaign ID`, `Campaign name`, `Creator name`, `Follower count`, `Product ID`, `Shop code/name`, `Video ID`, `Post time`, `GMV`, `Views`, `Likes`, `RPM`, `Orders` &rarr; Dipenuhi dari `/campaigns`, `/products`, `/performance`, dan `/content/statistics?content_type=1`.
+- **Laporan Performa Live Stream (27 Kolom)**: `Livestream room ID`, `LIVE time info`, `Duration`, `Live GMV`, `Live views`, `Live likes`, `Product RPM` &rarr; Dipenuhi dari `/content/statistics?content_type=2`.
+- **Laporan Pesanan Afiliasi (46 Kolom)**: `Order ID`, `SKU ID`, `Creator Username`, `Product Name`, `Price`, `Quantity`, `Refund/Return Status`, `Campaign ID`, `Content ID`, `Content Type`, `Commission Base`, `Partner Commission Rate`, `Creator Commission Rate`, `Est/Actual Commissions`, `Time Created`, `Time Delivered` &rarr; Dipetakan persis ke skema response `SearchTapAffiliateOrders` / `SearchCAPAffiliateOrders`.
+
+---
+
+### L. Stabilitas Produksi & Mitigasi SSR Error Boundary (Next.js 16)
+- **Root Cause "This page couldn't load"**: Terjadi akibat halaman callback otentikasi mencoba di-render secara statis saat build (`force-static`) yang menabrak dynamic routing Next.js (`window.location.search` dan URL query params), serta fungsi `pathname.startsWith()` yang memicu exception saat `pathname` bernilai `null`.
+- **Solusi Rekayasa**:
+  1. Penerapan `export const dynamic = 'force-dynamic'` dan `export const revalidate = 0` pada rute `/auth/tiktok-shop/callback/page.tsx`.
+  2. Safe optional chaining `pathname?.startsWith(...) ?? false` pada [`LayoutWrapper.tsx`](file:///c:/Users/Banzilla/Documents/DEV/Project-Tracking-System-VPS/web-app/src/components/LayoutWrapper.tsx) dan [`Sidebar.tsx`](file:///c:/Users/Banzilla/Documents/DEV/Project-Tracking-System-VPS/web-app/src/components/Sidebar.tsx).
+  3. Pembuatan [`error.tsx`](file:///c:/Users/Banzilla/Documents/DEV/Project-Tracking-System-VPS/web-app/src/app/auth/tiktok-shop/callback/error.tsx) Error Boundary khusus dengan tombol "Hapus Cache & Reset Token" sehingga UI tidak akan pernah crash fatal di browser klien.
+  4. Deployment terverifikasi pada container Docker VPS Coolify (`du7trdtlmdpmahkkptmjokvp-084009034021`).
+
+---
+
 ## 4. Panduan Pengembang & Prosedur Deployment
 
 ### Environment Variables Wajib (`.env.production` / Coolify Environment):

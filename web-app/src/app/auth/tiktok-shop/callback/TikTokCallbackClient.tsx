@@ -14,7 +14,8 @@ import {
   testFetchCampaignProductsAction,
   testFetchCampaignPerformanceAction,
   testFetchCampaignCreatorsAction,
-  testFetchAffiliateOrdersAction 
+  testFetchAffiliateOrdersAction,
+  testFetchCapOrdersAction 
 } from '@/app/actions/tiktokShopActions';
 
 export default function TikTokCallbackClient() {
@@ -217,7 +218,25 @@ export default function TikTokCallbackClient() {
     setActiveTest('affiliate_orders');
     setTestResult(null);
     try {
-      const res = await testFetchAffiliateOrdersAction(accessToken, partnerCipher || undefined);
+      const res = await testFetchAffiliateOrdersAction(
+        accessToken, 
+        partnerCipher || undefined, 
+        selectedCampaignId || undefined
+      );
+      setTestResult(res);
+    } catch (err: any) {
+      setTestResult({ success: false, error: err.message });
+    } finally {
+      setActiveTest(null);
+    }
+  };
+
+  const handleTestCapOrders = async () => {
+    if (!accessToken) return;
+    setActiveTest('cap_orders');
+    setTestResult(null);
+    try {
+      const res = await testFetchCapOrdersAction(accessToken, partnerCipher || undefined);
       setTestResult(res);
     } catch (err: any) {
       setTestResult({ success: false, error: err.message });
@@ -415,14 +434,14 @@ export default function TikTokCallbackClient() {
           </div>
 
           {/* Test Action Buttons */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-6 gap-3">
             <button
               onClick={handleTestCategoryAssets}
               disabled={!accessToken || activeTest !== null}
               className="flex flex-col items-center justify-center p-3 rounded-lg border border-slate-300 hover:border-indigo-500 hover:bg-indigo-50/50 text-xs font-semibold text-slate-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {activeTest === 'category_assets' ? <Loader2 className="w-5 h-5 animate-spin mb-1 text-indigo-600" /> : <ShieldCheck className="w-5 h-5 text-indigo-600 mb-1" />}
-              <span>1. Cek Category Assets</span>
+              <span>1. Category Assets</span>
               <span className="text-[10px] text-slate-500 font-normal">Verifikasi Cipher TAP</span>
             </button>
 
@@ -432,7 +451,7 @@ export default function TikTokCallbackClient() {
               className="flex flex-col items-center justify-center p-3 rounded-lg border border-indigo-300 bg-indigo-50/50 hover:bg-indigo-100 text-xs font-bold text-indigo-900 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
             >
               {activeTest === 'campaigns' ? <Loader2 className="w-5 h-5 animate-spin mb-1 text-indigo-600" /> : <Database className="w-5 h-5 text-indigo-600 mb-1" />}
-              <span>2. Tarik Campaign TAP</span>
+              <span>2. Tarik Campaign</span>
               <span className="text-[10px] text-indigo-600 font-normal">Daftar 96 Campaign TNT</span>
             </button>
 
@@ -442,7 +461,7 @@ export default function TikTokCallbackClient() {
               className="flex flex-col items-center justify-center p-3 rounded-lg border border-emerald-300 bg-emerald-50/50 hover:bg-emerald-100 text-xs font-bold text-emerald-900 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
             >
               {activeTest === 'products' ? <Loader2 className="w-5 h-5 animate-spin mb-1 text-emerald-600" /> : <Package className="w-5 h-5 text-emerald-600 mb-1" />}
-              <span>3. Tarik Produk Campaign</span>
+              <span>3. Produk Campaign</span>
               <span className="text-[10px] text-emerald-600 font-normal">Produk, SKU & Komisi</span>
             </button>
 
@@ -452,7 +471,7 @@ export default function TikTokCallbackClient() {
               className="flex flex-col items-center justify-center p-3 rounded-lg border border-purple-300 bg-purple-50/50 hover:bg-purple-100 text-xs font-bold text-purple-900 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
             >
               {activeTest === 'creators' ? <Loader2 className="w-5 h-5 animate-spin mb-1 text-purple-600" /> : <Users className="w-5 h-5 text-purple-600 mb-1" />}
-              <span>4. Tarik Creator & Sample</span>
+              <span>4. Creator & Sample</span>
               <span className="text-[10px] text-purple-600 font-normal">Kreator & Status Sample</span>
             </button>
 
@@ -462,8 +481,18 @@ export default function TikTokCallbackClient() {
               className="flex flex-col items-center justify-center p-3 rounded-lg border border-amber-300 bg-amber-50/50 hover:bg-amber-100 text-xs font-bold text-amber-900 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
             >
               {activeTest === 'affiliate_orders' ? <Loader2 className="w-5 h-5 animate-spin mb-1 text-amber-600" /> : <ShoppingBag className="w-5 h-5 text-amber-600 mb-1" />}
-              <span>5. Cek Pesanan TAP</span>
-              <span className="text-[10px] text-amber-600 font-normal">Search TAP Orders API</span>
+              <span>5. Pesanan TAP</span>
+              <span className="text-[10px] text-amber-600 font-normal">TAP Orders v202411</span>
+            </button>
+
+            <button
+              onClick={handleTestCapOrders}
+              disabled={!accessToken || !partnerCipher || activeTest !== null}
+              className="flex flex-col items-center justify-center p-3 rounded-lg border border-teal-300 bg-teal-50/50 hover:bg-teal-100 text-xs font-bold text-teal-900 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+            >
+              {activeTest === 'cap_orders' ? <Loader2 className="w-5 h-5 animate-spin mb-1 text-teal-600" /> : <ShoppingBag className="w-5 h-5 text-teal-600 mb-1" />}
+              <span>6. Pesanan CAP</span>
+              <span className="text-[10px] text-teal-600 font-normal">CAP Orders v202504</span>
             </button>
           </div>
 
