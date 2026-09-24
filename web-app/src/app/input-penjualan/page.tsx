@@ -9,6 +9,7 @@ import * as xlsx from 'xlsx';
 import OrganicImport from './OrganicImport';
 import { useAuth } from '@/providers/AuthProvider';
 import { LiveSyncModal } from '@/components/LiveSyncModal';
+import { TikTokSyncControlCard } from '@/components/TikTokSyncControlCard';
 
 export default function InputPenjualanPage() {
   const [activeTab, setActiveTab] = useState<'organik_sales' | 'awareness_video' | 'awareness_live' | 'live'>('organik_sales');
@@ -20,8 +21,11 @@ export default function InputPenjualanPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Input Penjualan & Performa</h1>
-        <p className="text-slate-500 mt-1">Upload file export dari TikTok Partner Center & Toko</p>
+        <p className="text-slate-500 mt-1">Sinkronisasi otomatis OpenAPI TikTok Shop atau upload file Excel</p>
       </div>
+
+      {/* Auto-Sync TikTok Shop OpenAPI Card */}
+      <TikTokSyncControlCard />
 
       <div className="flex border-b border-slate-200 overflow-x-auto whitespace-nowrap">
         <button

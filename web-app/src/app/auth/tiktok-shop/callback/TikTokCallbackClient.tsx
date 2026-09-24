@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { 
   exchangeAuthCodeAction, 
+  saveTikTokAuthTokensAction,
   testFetchCategoryAssetsAction,
   testFetchTapCampaignsAction,
   testFetchCampaignProductsAction,
@@ -93,6 +94,17 @@ export default function TikTokCallbackClient() {
         setAccessToken(token);
         setRefreshToken(refresh);
         setSellerName(name);
+
+        // Auto-persist tokens to database for background cron auto-sync
+        await saveTikTokAuthTokensAction({
+          access_token: token,
+          refresh_token: refresh,
+          seller_name: name,
+          access_token_expire_in: res.data.access_token_expire_in,
+          refresh_token_expire_in: res.data.refresh_token_expire_in,
+          open_id: res.data.open_id,
+          seller_base_region: res.data.seller_base_region || 'ID'
+        });
 
         try {
           localStorage.setItem('tts_access_token', token);

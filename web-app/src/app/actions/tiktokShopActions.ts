@@ -220,3 +220,137 @@ export async function testFetchSellerOrdersAction(accessToken: string, shopCiphe
     return { success: false, error: error.message };
   }
 }
+
+/**
+ * Persist TikTok OAuth Token directly to database
+ */
+export async function saveTikTokAuthTokensAction(payload: {
+  access_token: string;
+  refresh_token: string;
+  access_token_expire_in?: number;
+  refresh_token_expire_in?: number;
+  seller_name?: string;
+  open_id?: string;
+  category_asset_cipher?: string;
+  seller_base_region?: string;
+}) {
+  try {
+    const { saveTikTokAuthTokens } = await import('@/utils/tiktokShopApi');
+    const res = await saveTikTokAuthTokens(payload);
+    return res;
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Get active TikTok OAuth connection status and last sync time
+ */
+export async function getTikTokAuthStatusAction() {
+  try {
+    const { db } = await import('@/db');
+    const { sql } = await import('drizzle-orm');
+
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS tiktok_authorizations (
+        id SERIAL PRIMARY KEY,
+        seller_name TEXT,
+        open_id TEXT,
+        access_token TEXT NOT NULL,
+        refresh_token TEXT NOT NULL,
+        access_token_expire_in BIGINT,
+        refresh_token_expire_in BIGINT,
+        category_asset_cipher TEXT,
+        seller_base_region TEXT,
+        status TEXT DEFAULT 'active',
+        last_synced_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+
+    const rows = await db.execute(sql`
+      SELECT id, seller_name, open_id, category_asset_cipher, seller_base_region, 
+             status, last_synced_at, access_token_expire_in, created_at, updated_at
+      FROM tiktok_authorizations
+      WHERE status = 'active'
+      ORDER BY id DESC
+      LIMIT 1
+    `);
+
+    const record = (rows as any[])[0];
+    if (!record) {
+      return { isConnected: false, data: null };
+    }
+
+    const nowSec = Math.floor(Date.now() / 1000);
+    const expireSec = Number(record.access_token_expire_in) || 0;
+    const isTokenExpiringSoon = expireSec > 0 && (expireSec - nowSec < 24 * 3600);
+
+    return {
+      isConnected: true,
+      data: {
+        sellerName: record.seller_name || 'TNT Agency',
+        categoryAssetCipher: record.category_asset_cipher,
+        lastSyncedAt: record.last_synced_at,
+        isExpiringSoon: isTokenExpiringSoon,
+        expiresAt: expireSec ? new Date(expireSec * 1000).toISOString() : null
+      }
+    };
+  } catch (error: any) {
+    return { isConnected: false, error: error.message };
+  }
+}
+
+/**
+ * Trigger manual auto-sync pipeline from UI
+ */
+export async function triggerManualTikTokSyncAction(campaignId?: number) {
+  try {
+    const { runTikTokAutoSync } = await import('@/lib/tiktokAutoSync');
+    const res = await runTikTokAutoSync({
+      campaignId,
+      triggerType: 'manual'
+    });
+    return res;
+  } catch (error: any) {
+    return { success: false, message: error.message, error: error.message };
+  }
+}
+
+/**
+ * Get recent sync logs history
+ */
+export async function getTikTokSyncHistoryAction(limit: number = 5) {
+  try {
+    const { db } = await import('@/db');
+    const { sql } = await import('drizzle-orm');
+
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS tiktok_sync_logs (
+        id SERIAL PRIMARY KEY,
+        trigger_type TEXT NOT NULL,
+        status TEXT NOT NULL,
+        sales_count INT DEFAULT 0,
+        videos_count INT DEFAULT 0,
+        campaigns_count INT DEFAULT 0,
+        message TEXT,
+        details JSONB,
+        duration_ms INT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+
+    const rows = await db.execute(sql`
+      SELECT id, trigger_type, status, sales_count, videos_count, 
+             campaigns_count, message, duration_ms, created_at
+      FROM tiktok_sync_logs
+      ORDER BY id DESC
+      LIMIT ${limit}
+    `);
+
+    return (rows as any[]) || [];
+  } catch (error: any) {
+    return [];
+  }
+}

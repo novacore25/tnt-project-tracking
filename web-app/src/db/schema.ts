@@ -529,6 +529,37 @@ export const userCampaigns = pgTable('user_campaigns', {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 });
 
+// TikTok Shop OpenAPI Authorizations
+export const tiktokAuthorizations = pgTable('tiktok_authorizations', {
+  id: serial('id').primaryKey(),
+  sellerName: text('seller_name'),
+  openId: text('open_id'),
+  accessToken: text('access_token').notNull(),
+  refreshToken: text('refresh_token').notNull(),
+  accessTokenExpireIn: bigint('access_token_expire_in', { mode: 'number' }),
+  refreshTokenExpireIn: bigint('refresh_token_expire_in', { mode: 'number' }),
+  categoryAssetCipher: text('category_asset_cipher'),
+  sellerBaseRegion: text('seller_base_region'),
+  status: text('status').default('active'),
+  lastSyncedAt: timestamp('last_synced_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+// TikTok Shop Auto-Sync Execution Logs
+export const tiktokSyncLogs = pgTable('tiktok_sync_logs', {
+  id: serial('id').primaryKey(),
+  triggerType: text('trigger_type').notNull(), // 'cron' | 'manual'
+  status: text('status').notNull(), // 'success' | 'failed' | 'partial'
+  salesCount: integer('sales_count').default(0),
+  videosCount: integer('videos_count').default(0),
+  campaignsCount: integer('campaigns_count').default(0),
+  message: text('message'),
+  details: jsonb('details'),
+  durationMs: integer('duration_ms'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
 // ==========================================
 // RELATIONS
 // ==========================================
