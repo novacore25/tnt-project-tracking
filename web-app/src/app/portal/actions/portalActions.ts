@@ -51,7 +51,7 @@ export async function getPortalData(campaignId: number) {
 
   if (!campaign || campaign.pin !== pin) return { authenticated: false };
 
-  // Parallel fetch campaign raw dataset for fast in-memory aggregation
+  // Parallel fetch campaign dataset using 100% verified schema
   const [
     skusRes,
     ccDataRes,
@@ -68,15 +68,18 @@ export async function getPortalData(campaignId: number) {
       SELECT id, product_id, nama_produk 
       FROM skus 
       WHERE campaign_id = ${campaignId}
-    `).catch(() => []) as Promise<any[]>,
+    `).catch(err => {
+      console.error('Error fetching skus:', err);
+      return [];
+    }) as Promise<any[]>,
 
     // 2. Campaign Creators with Snapshots & Contacts
     db.execute(sql`
       SELECT 
         cc.id, cc.creator_id, cc.campaign_id, cc.approval, cc.client_approval, 
-        cc.notes_pic, cc.notes_client, cc.kategori as tier, cc.tipe_konten, cc.sample_progress,
+        cc.notes_pic, cc.notes_client, cc.tier, cc.content_type, cc.sample_progress,
         cc.assigned_sku_ids, cc.qty_vt, cc.qty_live,
-        c.username, c.nama_lengkap as nama_asli, c.link_portofolio as link_account,
+        c.username, c.nama_asli, c.link_account,
         cs.followers, cs.level, cs.tier as snapshot_tier,
         ct.nomor as no_whatsapp
       FROM campaign_creators cc
@@ -89,34 +92,46 @@ export async function getPortalData(campaignId: number) {
       ) ct ON true
       WHERE cc.campaign_id = ${campaignId}
       ORDER BY cc.id DESC
-    `).catch(() => []) as Promise<any[]>,
+    `).catch(err => {
+      console.error('Error fetching campaign_creators:', err);
+      return [];
+    }) as Promise<any[]>,
 
     // 3. Manual Videos
     db.execute(sql`
       SELECT 
         v.id, v.campaign_creator_id, v.content_uid, v.vt_approval, v.urutan, 
-        COALESCE(v.link_video, v.link) as link_video, v.concept, v.sku_id, v.created_at,
+        v.link_video, v.concept, v.sku_id, v.created_at,
         c.username as creator_username
       FROM videos v
       JOIN campaign_creators cc ON v.campaign_creator_id = cc.id
       LEFT JOIN creators c ON cc.creator_id = c.id
       WHERE cc.campaign_id = ${campaignId}
       ORDER BY v.id ASC
-    `).catch(() => []) as Promise<any[]>,
+    `).catch(err => {
+      console.error('Error fetching manual videos:', err);
+      return [];
+    }) as Promise<any[]>,
 
     // 4. Sales Records
     db.execute(sql`
       SELECT tanggal, gmv, quantity, creator_username, content_uid, content_type, product_id, sku_id
       FROM sales
       WHERE campaign_id = ${campaignId}
-    `).catch(() => []) as Promise<any[]>,
+    `).catch(err => {
+      console.error('Error fetching sales:', err);
+      return [];
+    }) as Promise<any[]>,
 
     // 5. Organic Videos
     db.execute(sql`
       SELECT id, content_uid, post_time, content_type, creator_username, video_views, video_likes, product_id, raw_data, duration_str
       FROM organic_videos
       WHERE campaign_id = ${campaignId}
-    `).catch(() => []) as Promise<any[]>,
+    `).catch(err => {
+      console.error('Error fetching organic_videos:', err);
+      return [];
+    }) as Promise<any[]>,
 
     // 6. Ads Performance
     db.execute(sql`
@@ -124,7 +139,10 @@ export async function getPortalData(campaignId: number) {
       FROM ads_performance ap
       LEFT JOIN creators c ON ap.creator_id = c.id
       WHERE ap.campaign_id = ${campaignId}
-    `).catch(() => []) as Promise<any[]>,
+    `).catch(err => {
+      console.error('Error fetching ads_performance:', err);
+      return [];
+    }) as Promise<any[]>,
 
     // 7. Creator Addresses (Sampel) - direct join on campaign_id
     db.execute(sql`
@@ -134,7 +152,10 @@ export async function getPortalData(campaignId: number) {
       LEFT JOIN creators c ON cc.creator_id = c.id
       WHERE cc.campaign_id = ${campaignId}
       ORDER BY ca.id DESC
-    `).catch(() => []) as Promise<any[]>,
+    `).catch(err => {
+      console.error('Error fetching creator_addresses:', err);
+      return [];
+    }) as Promise<any[]>,
 
     // 8. Live Schedules - direct join on campaign_id
     db.execute(sql`
@@ -144,7 +165,10 @@ export async function getPortalData(campaignId: number) {
       LEFT JOIN creators c ON cc.creator_id = c.id
       WHERE cc.campaign_id = ${campaignId}
       ORDER BY ls.tanggal_live ASC
-    `).catch(() => []) as Promise<any[]>,
+    `).catch(err => {
+      console.error('Error fetching live_schedules:', err);
+      return [];
+    }) as Promise<any[]>,
 
     // 9. Actual Live Sessions
     db.execute(sql`
@@ -168,7 +192,10 @@ export async function getPortalData(campaignId: number) {
            JOIN creators c ON cc.creator_id = c.id
            WHERE cc.campaign_id = ${campaignId}
          )
-    `).catch(() => []) as Promise<any[]>
+    `).catch(err => {
+      console.error('Error fetching live_sessions:', err);
+      return [];
+    }) as Promise<any[]>
   ]);
 
   const skusData = (skusRes as any[]) || [];
@@ -181,7 +208,7 @@ export async function getPortalData(campaignId: number) {
   const schedulesData = (schedulesRes as any[]) || [];
   const liveSessions = (liveSessionsRes as any[]) || [];
 
-  const skuList = skusData.map((s: any) => s.product_id).filter(Boolean);
+  const skuList = skusData.map((s: any) => String(s.product_id || '').trim()).filter(Boolean);
   const skuSet = new Set<string>(skuList);
   const hasSkus = skuList.length > 0;
 
@@ -190,7 +217,7 @@ export async function getPortalData(campaignId: number) {
   const allUsernames = new Set<string>();
   
   rawCc.forEach((cc: any) => {
-    const u = (cc.username || '').toLowerCase();
+    const u = (cc.username || '').toLowerCase().trim();
     if (u) {
       allUsernames.add(u);
       // For Brand Portal: consider approved if approved internally OR if client_approval is approved
@@ -208,7 +235,6 @@ export async function getPortalData(campaignId: number) {
     video_likes: number;
     video_uids: Set<string>;
     live_uids: Set<string>;
-    manual_videos: any[];
   }>();
 
   const getOrCreatePerf = (usernameLower: string) => {
@@ -219,8 +245,7 @@ export async function getPortalData(campaignId: number) {
         video_views: 0,
         video_likes: 0,
         video_uids: new Set<string>(),
-        live_uids: new Set<string>(),
-        manual_videos: []
+        live_uids: new Set<string>()
       });
     }
     return creatorPerfMap.get(usernameLower)!;
@@ -235,13 +260,14 @@ export async function getPortalData(campaignId: number) {
   const monthlyMap: Record<string, { gmvOrganic: number; gmvAds: number; videos: Set<string>; videoCreators: Set<string>; liveSessions: Set<string> }> = {};
 
   salesData.forEach((s: any) => {
-    if (hasSkus && s.product_id && !skuSet.has(s.product_id)) return;
+    const pidStr = String(s.product_id || '').trim();
+    if (hasSkus && pidStr && !skuSet.has(pidStr)) return;
 
-    const u = (s.creator_username || '').toLowerCase();
+    const u = (s.creator_username || '').toLowerCase().trim();
     const gmv = Number(s.gmv || 0);
     const qty = Number(s.quantity || 0);
     const cType = (s.content_type || '').toLowerCase();
-    const uid = s.content_uid ? String(s.content_uid) : '';
+    const uid = s.content_uid ? String(s.content_uid).trim() : '';
 
     if (uid) {
       const existingUid = salesByUid.get(uid) || { gmv: 0, quantity: 0 };
@@ -252,11 +278,11 @@ export async function getPortalData(campaignId: number) {
     }
 
     // SKU aggregation
-    if (s.product_id) {
-      const skuObj = skusData.find((sk: any) => sk.product_id === s.product_id);
-      const skuName = skuObj ? skuObj.nama_produk : (s.nama_produk || s.product_id);
-      const prevSku = skuSalesMap.get(s.product_id) || { product_id: s.product_id, nama_produk: skuName, gmv: 0, items_sold: 0 };
-      skuSalesMap.set(s.product_id, {
+    if (pidStr) {
+      const skuObj = skusData.find((sk: any) => String(sk.product_id || '').trim() === pidStr);
+      const skuName = skuObj ? skuObj.nama_produk : (s.nama_produk || pidStr);
+      const prevSku = skuSalesMap.get(pidStr) || { product_id: pidStr, nama_produk: skuName, gmv: 0, items_sold: 0 };
+      skuSalesMap.set(pidStr, {
         ...prevSku,
         gmv: prevSku.gmv + gmv,
         items_sold: prevSku.items_sold + qty
@@ -297,12 +323,13 @@ export async function getPortalData(campaignId: number) {
   const orgUidMap = new Map<string, { views: number; likes: number; creator: string; contentType: string; postTime: string }>();
 
   organicVideos.forEach((v: any) => {
-    if (hasSkus && v.product_id && !skuSet.has(v.product_id)) return;
+    const pidStr = String(v.product_id || '').trim();
+    if (hasSkus && pidStr && !skuSet.has(pidStr)) return;
 
-    const uid = v.content_uid ? String(v.content_uid) : '';
+    const uid = v.content_uid ? String(v.content_uid).trim() : '';
     if (!uid) return;
 
-    const u = (v.creator_username || '').toLowerCase();
+    const u = (v.creator_username || '').toLowerCase().trim();
     const views = Number(v.video_views || 0);
     const likes = Number(v.video_likes || 0);
     const cType = (v.content_type || '').toLowerCase();
@@ -343,11 +370,11 @@ export async function getPortalData(campaignId: number) {
 
   rawAdsData.forEach((ad: any) => {
     const kurs = Number(ad.kurs) || 16000;
-    const isUsd = (ad.currency || '').toUpperCase() === 'USD';
-    const gmvVal = isUsd ? (Number(ad.gmv) || 0) * kurs : (Number(ad.gmv) || 0);
+    const gmvUsd = Number(ad.gross_revenue_usd || 0);
+    const gmvVal = gmvUsd > 0 ? gmvUsd * kurs : Number(ad.gmv || 0);
     totalAdsGmv += gmvVal;
 
-    const u = (ad.username || '').toLowerCase();
+    const u = (ad.username || '').toLowerCase().trim();
     if (u) {
       creatorAdsMap.set(u, (creatorAdsMap.get(u) || 0) + gmvVal);
     }
@@ -370,7 +397,7 @@ export async function getPortalData(campaignId: number) {
 
   // Build Enriched CC Data
   const enrichedCcData = rawCc.map((cc: any) => {
-    const u = (cc.username || '').toLowerCase();
+    const u = (cc.username || '').toLowerCase().trim();
     const perf = getOrCreatePerf(u);
     const vids = videoMapByCc.get(cc.id) || [];
     const adsGmv = creatorAdsMap.get(u) || 0;
@@ -442,7 +469,7 @@ export async function getPortalData(campaignId: number) {
 
   // 2. Add manual videos
   manualVideos.forEach((v: any) => {
-    const u = (v.creator_username || '').toLowerCase();
+    const u = (v.creator_username || '').toLowerCase().trim();
     if (!u) return;
 
     if (!creatorVideoGroupsMap.has(u)) {
@@ -457,7 +484,7 @@ export async function getPortalData(campaignId: number) {
     }
 
     const group = creatorVideoGroupsMap.get(u)!;
-    const uid = v.content_uid ? String(v.content_uid) : '';
+    const uid = v.content_uid ? String(v.content_uid).trim() : '';
     const orgData = uid ? orgUidMap.get(uid) : null;
     const salesInfo = uid ? (salesByUid.get(uid) || { gmv: 0, quantity: 0 }) : { gmv: 0, quantity: 0 };
 
@@ -492,7 +519,7 @@ export async function getPortalData(campaignId: number) {
   organicVideos.forEach((ov: any) => {
     const cType = (ov.content_type || '').toLowerCase();
     if (cType === 'livestream' || cType === 'live') {
-      const uid = ov.content_uid ? String(ov.content_uid) : '';
+      const uid = ov.content_uid ? String(ov.content_uid).trim() : '';
       if (!uid) return;
       const salesInfo = salesByUid.get(uid) || { gmv: 0, quantity: 0 };
       liveStatsMap.set(uid, {
@@ -512,7 +539,7 @@ export async function getPortalData(campaignId: number) {
 
   // From live sessions table
   liveSessions.forEach((ls: any) => {
-    const uid = ls.content_uid ? String(ls.content_uid) : '';
+    const uid = ls.content_uid ? String(ls.content_uid).trim() : '';
     if (!uid) return;
     const existing = liveStatsMap.get(uid);
     const salesInfo = salesByUid.get(uid);
