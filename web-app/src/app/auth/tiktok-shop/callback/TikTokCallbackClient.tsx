@@ -281,8 +281,8 @@ export default function TikTokCallbackClient() {
                     className="w-full text-xs font-medium p-2 border rounded-md bg-white text-slate-800 mt-1"
                   >
                     {categoryAssets.map((asset, idx) => (
-                      <option key={idx} value={asset.cipher}>
-                        {asset.name} ({asset.cipher.substring(0, 16)}...)
+                      <option key={idx} value={asset?.cipher || ''}>
+                        {asset?.name || 'Category'} {asset?.cipher ? `(${asset.cipher.substring(0, 16)}...)` : ''}
                       </option>
                     ))}
                   </select>
