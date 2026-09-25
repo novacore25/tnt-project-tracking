@@ -359,9 +359,10 @@ export async function fetchPerformaPageFullDataAction(campaignId: number) {
         ORDER BY v.id ASC
       `).catch(() => []) as Promise<any[]>,
       db.execute(sql`
-        SELECT tanggal, gmv, quantity, creator_username, content_uid, content_type, product_id
+        SELECT tanggal, gmv, quantity, creator_username, content_uid, content_type, product_id, campaign_id
         FROM sales
         WHERE campaign_id = ${campaignId}
+           OR (product_id IS NOT NULL AND product_id IN (SELECT product_id FROM skus WHERE campaign_id = ${campaignId} AND product_id IS NOT NULL))
       `).catch(() => []) as Promise<any[]>,
       db.execute(sql`
         SELECT ap.*, c.username
@@ -370,9 +371,10 @@ export async function fetchPerformaPageFullDataAction(campaignId: number) {
         WHERE ap.campaign_id = ${campaignId}
       `).catch(() => []) as Promise<any[]>,
       db.execute(sql`
-        SELECT content_uid, post_time, content_type, creator_username, video_views, video_likes, product_id
+        SELECT content_uid, post_time, content_type, creator_username, video_views, video_likes, product_id, campaign_id
         FROM organic_videos
         WHERE campaign_id = ${campaignId}
+           OR (product_id IS NOT NULL AND product_id IN (SELECT product_id FROM skus WHERE campaign_id = ${campaignId} AND product_id IS NOT NULL))
       `).catch(() => []) as Promise<any[]>
     ]);
 

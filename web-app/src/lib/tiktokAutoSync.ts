@@ -257,12 +257,23 @@ export async function runTikTokAutoSync(options?: TikTokAutoSyncOptions): Promis
 
     const orderEndpoint = '/affiliate_partner/202603/orders/search';
 
-    for (const tw of timeWindows) {
+    const totalWindows = timeWindows.length;
+    for (let wIdx = 0; wIdx < totalWindows; wIdx++) {
+      const tw = timeWindows[wIdx];
       try {
         let nextPageToken = '';
         let page = 0;
         do {
           page++;
+          const progressPercent = 30 + Math.min(25, Math.round(((wIdx + (page / (page + 2))) / totalWindows) * 25));
+          emitProgress({
+            stage: 'orders',
+            percent: progressPercent,
+            message: `Menarik transaksi pesanan TAP (${tw.label}, hal. ${page}) [${salesRowsToInsert.length} order, ${videoRowsToInsert.length} konten]...`,
+            salesCount: salesRowsToInsert.length,
+            videosCount: videoRowsToInsert.length
+          });
+
           const queryParams: Record<string, any> = {
             category_asset_cipher: tapCipher,
             page_size: 100
@@ -470,6 +481,26 @@ export async function runTikTokAutoSync(options?: TikTokAutoSyncOptions): Promis
 
       const campaignDbId = matchedCampaign ? matchedCampaign.id : null;
 
+      // Auto-register discovered TAP campaign SKUs into internal campaign skus table if missing
+      if (campaignDbId && products.length > 0) {
+        for (const prod of products) {
+          const pId = String(prod.id || prod.product_id || '').trim();
+          const pTitle = prod.title || prod.name || prod.product_name || `Produk ${pId}`;
+          if (pId && !skuToCampaignMap.has(pId)) {
+            try {
+              await db.execute(sql`
+                INSERT INTO skus (campaign_id, product_id, nama_produk)
+                VALUES (${campaignDbId}, ${pId}, ${pTitle})
+              `);
+              skuToCampaignMap.set(pId, campaignDbId);
+              console.log(`[TikTok AutoSync] Auto-registered SKU ${pId} (${pTitle}) for campaign ${campaignDbId}`);
+            } catch (skuErr: any) {
+              // Ignore duplicate or constraint error
+            }
+          }
+        }
+      }
+
       // 5b. Fetch performance per product with creator pagination
       for (const prod of products) {
         const pId = String(prod.id || prod.product_id);
@@ -660,7 +691,10 @@ export async function runTikTokAutoSync(options?: TikTokAutoSyncOptions): Promis
       campaignsProcessed
     };
 
-    const summaryMsg = `Sukses sinkronisasi ${campaignsProcessed} kampanye (${totalSalesCount} order sales, ${totalVideosCount} video/live konten, ${unmappedRes.totalSalesUpdated || 0} mapping updated).`;
+    const mappingText = (unmappedRes.totalSalesUpdated || 0) > 0
+      ? `${unmappedRes.totalSalesUpdated} order re-mapped`
+      : 'semua order langsung terpetakan';
+    const summaryMsg = `Sukses sinkronisasi ${campaignsProcessed} kampanye (${totalSalesCount} order sales, ${totalVideosCount} video/live konten, ${mappingText}).`;
     await logSyncExecution(triggerType, 'success', totalSalesCount, totalVideosCount, campaignsProcessed, summaryMsg, fullDiagnostics, durationMs);
 
     emitProgress({
