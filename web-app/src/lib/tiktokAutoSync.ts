@@ -254,7 +254,7 @@ export async function runTikTokAutoSync(options?: {
                 }
               );
 
-              const tapOrders = tapOrdersRes.data?.data?.orders || [];
+              const tapOrders = tapOrdersRes.data?.data?.sku_orders || tapOrdersRes.data?.data?.orders || [];
               nextPageToken = tapOrdersRes.data?.data?.next_page_token || '';
 
               diagnosticData.orderApiLogs.push({
@@ -281,18 +281,21 @@ export async function runTikTokAutoSync(options?: {
 
             for (const ord of tapOrders) {
               const orderId = String(ord.id || ord.order_id || '').trim();
-              if (!orderId || salesRowsToInsert.some(s => s.order_id === orderId)) continue;
+              if (!orderId) continue;
 
-              const orderDate = ord.create_time 
-                ? new Date(Number(ord.create_time) * 1000).toISOString()
+              const orderDate = (ord.create_time || ord.delivery_time)
+                ? new Date(Number(ord.create_time || ord.delivery_time) * 1000).toISOString()
                 : new Date().toISOString();
 
-              // Unpack SKUs from order (can be object or array)
+              // Unpack SKUs from order (can be nested sku array or flat sku_orders item)
               const rawSkus = ord.skus;
-              const skuList = Array.isArray(rawSkus) ? rawSkus : (rawSkus ? [rawSkus] : [{}]);
+              const skuList = Array.isArray(rawSkus) && rawSkus.length > 0
+                ? rawSkus
+                : (rawSkus && typeof rawSkus === 'object' && Object.keys(rawSkus).length > 0 ? [rawSkus] : [ord]);
 
               for (const sku of skuList) {
-                const pId = sku.product_id ? String(sku.product_id).trim() : null;
+                const pId = sku.product_id ? String(sku.product_id).trim() : (ord.product_id ? String(ord.product_id).trim() : null);
+                const skuId = sku.sku_id ? String(sku.sku_id).trim() : (ord.sku_id ? String(ord.sku_id).trim() : null);
                 const uname = (sku.creator_username || ord.creator_username || ord.creator_name || '').toLowerCase().trim();
                 const cUid = sku.content_id ? String(sku.content_id).trim() : (ord.content_id ? String(ord.content_id).trim() : null);
                 const rawCType = (sku.content_type || ord.content_type || '').toUpperCase();
@@ -300,18 +303,31 @@ export async function runTikTokAutoSync(options?: {
                 
                 // GMV derivation
                 const gmv = Number(
+                  sku.actual_commission_base?.amount ||
                   sku.estimated_commission_base?.amount || 
-                  sku.actual_commission_base?.amount || 
+                  ord.actual_commission_base?.amount ||
+                  ord.estimated_commission_base?.amount ||
                   sku.price?.amount || 
+                  ord.price?.amount || 
                   ord.order_amount || 
                   ord.gmv || 0
                 );
                 const qty = Number(sku.quantity || ord.quantity || 1);
-                const price = Number(sku.price?.amount || (qty > 0 ? (gmv / qty) : gmv));
-                const status = sku.status || ord.status || 'COMPLETED';
-                const isRefund = status === 'CANCELLED' || status === 'REFUND' || Number(sku.refunded_quantity || 0) > 0;
-                const commRate = sku.tap_commission_rate || sku.creator_commission_rate || null;
+                const price = Number(sku.price?.amount || ord.price?.amount || (qty > 0 ? (gmv / qty) : gmv));
+                const status = sku.settle_status || ord.settle_status || sku.status || ord.status || 'COMPLETED';
+                const isRefund = sku.fully_return || ord.fully_return || status === 'CANCELLED' || status === 'REFUND' || Number(sku.refunded_quantity || 0) > 0;
+                const commRate = sku.partner_standard_commission_rate || 
+                                 sku.partner_tap_bonus_commission_rate || 
+                                 sku.tap_commission_rate || 
+                                 sku.creator_standard_commission_rate || 
+                                 ord.partner_standard_commission_rate || 
+                                 ord.partner_tap_bonus_commission_rate || null;
                 const tapCampaignId = sku.campaign_id || ord.campaign_id || null;
+
+                // Deduplication check
+                if (salesRowsToInsert.some(s => s.order_id === orderId && (!skuId || s.raw_data?.sku?.sku_id === skuId))) {
+                  continue;
+                }
 
                 // Link campaign
                 let matchedCampId: number | null = null;
@@ -554,10 +570,10 @@ export async function runTikTokAutoSync(options?: {
                 }
               );
 
-            const campOrders = campOrderRes.data?.data?.orders || [];
+            const campOrders = campOrderRes.data?.data?.sku_orders || campOrderRes.data?.data?.orders || [];
             if (i < 5 || campOrders.length > 0) {
               diagnosticData.orderApiLogs.push({
-                endpoint: '/affiliate_partner/202411/orders/search',
+                endpoint: ep,
                 campaign: tapName,
                 campaignId: tapId,
                 label: tw.label,
@@ -572,33 +588,49 @@ export async function runTikTokAutoSync(options?: {
 
             for (const ord of campOrders) {
               const orderId = String(ord.id || ord.order_id || '').trim();
-              if (!orderId || salesRowsToInsert.some(s => s.order_id === orderId)) continue;
+              if (!orderId) continue;
 
-              const orderDate = ord.create_time 
-                ? new Date(Number(ord.create_time) * 1000).toISOString()
+              const orderDate = (ord.create_time || ord.delivery_time)
+                ? new Date(Number(ord.create_time || ord.delivery_time) * 1000).toISOString()
                 : new Date().toISOString();
 
               const rawSkus = ord.skus;
-              const skuList = Array.isArray(rawSkus) ? rawSkus : (rawSkus ? [rawSkus] : [{}]);
+              const skuList = Array.isArray(rawSkus) && rawSkus.length > 0
+                ? rawSkus
+                : (rawSkus && typeof rawSkus === 'object' && Object.keys(rawSkus).length > 0 ? [rawSkus] : [ord]);
 
               for (const sku of skuList) {
-                const pId = sku.product_id ? String(sku.product_id).trim() : null;
+                const pId = sku.product_id ? String(sku.product_id).trim() : (ord.product_id ? String(ord.product_id).trim() : null);
+                const skuId = sku.sku_id ? String(sku.sku_id).trim() : (ord.sku_id ? String(ord.sku_id).trim() : null);
                 const uname = (sku.creator_username || ord.creator_username || ord.creator_name || '').toLowerCase().trim();
                 const cUid = sku.content_id ? String(sku.content_id).trim() : (ord.content_id ? String(ord.content_id).trim() : null);
                 const rawCType = (sku.content_type || ord.content_type || '').toUpperCase();
                 const cType = (rawCType === 'LIVE' || rawCType === 'LIVESTREAM') ? 'livestream' : 'video';
+                
                 const gmv = Number(
+                  sku.actual_commission_base?.amount ||
                   sku.estimated_commission_base?.amount || 
-                  sku.actual_commission_base?.amount || 
+                  ord.actual_commission_base?.amount ||
+                  ord.estimated_commission_base?.amount ||
                   sku.price?.amount || 
+                  ord.price?.amount || 
                   ord.order_amount || 
                   ord.gmv || 0
                 );
                 const qty = Number(sku.quantity || ord.quantity || 1);
-                const price = Number(sku.price?.amount || (qty > 0 ? (gmv / qty) : gmv));
-                const status = sku.status || ord.status || 'COMPLETED';
-                const isRefund = status === 'CANCELLED' || status === 'REFUND' || Number(sku.refunded_quantity || 0) > 0;
-                const commRate = sku.tap_commission_rate || sku.creator_commission_rate || null;
+                const price = Number(sku.price?.amount || ord.price?.amount || (qty > 0 ? (gmv / qty) : gmv));
+                const status = sku.settle_status || ord.settle_status || sku.status || ord.status || 'COMPLETED';
+                const isRefund = sku.fully_return || ord.fully_return || status === 'CANCELLED' || status === 'REFUND' || Number(sku.refunded_quantity || 0) > 0;
+                const commRate = sku.partner_standard_commission_rate || 
+                                 sku.partner_tap_bonus_commission_rate || 
+                                 sku.tap_commission_rate || 
+                                 sku.creator_standard_commission_rate || 
+                                 ord.partner_standard_commission_rate || 
+                                 ord.partner_tap_bonus_commission_rate || null;
+
+                if (salesRowsToInsert.some(s => s.order_id === orderId && (!skuId || s.raw_data?.sku?.sku_id === skuId))) {
+                  continue;
+                }
 
                 salesRowsToInsert.push({
                   order_id: orderId,
