@@ -243,7 +243,7 @@ export async function updateAdsPerformanceKursAction(id: number, kurs: number) {
 // ============================================================
 export async function fetchDailyPerformancePageDataAction(campaignId: number) {
   try {
-    const [campaignRes, skusRes, ccRes, vidRes, adsRes, salesRes, orgRes] = await Promise.all([
+    const [campaignRes, skusRes, ccRes, vidRes, adsRes, salesRes, orgRes, liveRes] = await Promise.all([
       db.execute(sql`SELECT * FROM campaigns WHERE id = ${campaignId} LIMIT 1`).catch(() => []) as Promise<any[]>,
       db.execute(sql`SELECT product_id FROM skus WHERE campaign_id = ${campaignId}`).catch(() => []) as Promise<any[]>,
       db.execute(sql`
@@ -275,6 +275,13 @@ export async function fetchDailyPerformancePageDataAction(campaignId: number) {
         SELECT content_uid, post_time, content_type, creator_username, product_id
         FROM organic_videos
         WHERE campaign_id = ${campaignId}
+      `).catch(() => []) as Promise<any[]>,
+      db.execute(sql`
+        SELECT ls.id, ls.content_uid, ls.start_time, c.username
+        FROM live_sessions ls
+        JOIN campaign_creators cc ON ls.campaign_creator_id = cc.id
+        LEFT JOIN creators c ON cc.creator_id = c.id
+        WHERE cc.campaign_id = ${campaignId}
       `).catch(() => []) as Promise<any[]>
     ]);
 
@@ -288,6 +295,7 @@ export async function fetchDailyPerformancePageDataAction(campaignId: number) {
     const ads = adsRes || [];
     const sales = salesRes || [];
     const organicVideos = orgRes || [];
+    const liveSessions = liveRes || [];
 
     // Map videos to creators
     const videosByCcId = new Map<number, any[]>();
@@ -309,7 +317,8 @@ export async function fetchDailyPerformancePageDataAction(campaignId: number) {
       videos,
       ads,
       sales,
-      organicVideos
+      organicVideos,
+      liveSessions
     };
   } catch (err: any) {
     console.error('fetchDailyPerformancePageDataAction error:', err);

@@ -1,0 +1,3256 @@
+{
+  "communities": {
+    "0": [
+      "web_app_src_app_budgeting_page",
+      "web_app_src_app_budgeting_page_globalbudgetingcontent",
+      "web_app_src_app_budgeting_page_globalbudgetingpage",
+      "web_app_src_app_campaigns_actions_paymentactions",
+      "web_app_src_app_campaigns_actions_paymentactions_addpaymentitem",
+      "web_app_src_app_campaigns_actions_paymentactions_autosplitunpaidbatchitems",
+      "web_app_src_app_campaigns_actions_paymentactions_bulkapproveexecutive1",
+      "web_app_src_app_campaigns_actions_paymentactions_bulkapproveexecutivefinal",
+      "web_app_src_app_campaigns_actions_paymentactions_bulkapprovemanager",
+      "web_app_src_app_campaigns_actions_paymentactions_bulkmarkpaidfinance",
+      "web_app_src_app_campaigns_actions_paymentactions_bulkprocessfinancereview",
+      "web_app_src_app_campaigns_actions_paymentactions_createpaymentbatch",
+      "web_app_src_app_campaigns_actions_paymentactions_deletepaymentbatch",
+      "web_app_src_app_campaigns_actions_paymentactions_deletepaymentitem",
+      "web_app_src_app_campaigns_actions_paymentactions_executiveapproveitem",
+      "web_app_src_app_campaigns_actions_paymentactions_executiveapproveitem1",
+      "web_app_src_app_campaigns_actions_paymentactions_executivefinalizereview",
+      "web_app_src_app_campaigns_actions_paymentactions_executivefinalizereview1",
+      "web_app_src_app_campaigns_actions_paymentactions_executiverejectitem",
+      "web_app_src_app_campaigns_actions_paymentactions_executiverejectitem1",
+      "web_app_src_app_campaigns_actions_paymentactions_fetchapprovedcreatorsforbatch",
+      "web_app_src_app_campaigns_actions_paymentactions_fetchcampaigncreatormutations",
+      "web_app_src_app_campaigns_actions_paymentactions_fetchcommandcenterbatches",
+      "web_app_src_app_campaigns_actions_paymentactions_fetchmutationsexport",
+      "web_app_src_app_campaigns_actions_paymentactions_fetchmutationspaginated",
+      "web_app_src_app_campaigns_actions_paymentactions_fetchpendingadstopup",
+      "web_app_src_app_campaigns_actions_paymentactions_fetchunpaidcreators",
+      "web_app_src_app_campaigns_actions_paymentactions_financebulkmarkpaiditems",
+      "web_app_src_app_campaigns_actions_paymentactions_financemarkpaid",
+      "web_app_src_app_campaigns_actions_paymentactions_financesubmittoexecutive",
+      "web_app_src_app_campaigns_actions_paymentactions_financetoggleitem",
+      "web_app_src_app_campaigns_actions_paymentactions_financeupdateamounts",
+      "web_app_src_app_campaigns_actions_paymentactions_getbudgetsummary",
+      "web_app_src_app_campaigns_actions_paymentactions_getcreatorbankaccounts",
+      "web_app_src_app_campaigns_actions_paymentactions_getpaymentbatchdetail",
+      "web_app_src_app_campaigns_actions_paymentactions_getpaymentbatches",
+      "web_app_src_app_campaigns_actions_paymentactions_getsenderaccounts",
+      "web_app_src_app_campaigns_actions_paymentactions_importhistoricalbatch",
+      "web_app_src_app_campaigns_actions_paymentactions_managerapproveitem",
+      "web_app_src_app_campaigns_actions_paymentactions_managerfinalizereview",
+      "web_app_src_app_campaigns_actions_paymentactions_managerrejectitem",
+      "web_app_src_app_campaigns_actions_paymentactions_processbulkexecutive",
+      "web_app_src_app_campaigns_actions_paymentactions_processbulkmanageritems",
+      "web_app_src_app_campaigns_actions_paymentactions_resolvecreatorformigration",
+      "web_app_src_app_campaigns_actions_paymentactions_revertbatchstatus",
+      "web_app_src_app_campaigns_actions_paymentactions_submitbatchtomanager",
+      "web_app_src_app_campaigns_actions_paymentactions_syncpaiditemstocampaigncreators",
+      "web_app_src_app_campaigns_actions_paymentactions_updatecampaignbudget",
+      "web_app_src_app_campaigns_actions_paymentactions_updateitembuktitransfer",
+      "web_app_src_app_campaigns_actions_paymentactions_updatepaymentitem",
+      "web_app_src_app_campaigns_id_keuangan_batchdetail",
+      "web_app_src_app_campaigns_id_keuangan_batchdetail_batchdetail",
+      "web_app_src_app_campaigns_id_keuangan_batchform",
+      "web_app_src_app_campaigns_id_keuangan_batchform_batchform",
+      "web_app_src_app_campaigns_id_keuangan_batchform_operationalitem",
+      "web_app_src_app_campaigns_id_keuangan_batchformads",
+      "web_app_src_app_campaigns_id_keuangan_batchformads_batchformads",
+      "web_app_src_app_campaigns_id_keuangan_import_page",
+      "web_app_src_app_campaigns_id_keuangan_import_page_importhistoricalbatchpage",
+      "web_app_src_app_campaigns_id_keuangan_page",
+      "web_app_src_app_campaigns_id_keuangan_page_campaignkeuangancontent",
+      "web_app_src_app_campaigns_id_keuangan_page_campaignkeuanganpage",
+      "web_app_src_app_campaigns_id_keuangan_page_viewstate",
+      "web_app_src_auth_auth",
+      "web_app_src_components_campaigncreatormutationtab",
+      "web_app_src_components_campaigncreatormutationtab_campaigncreatormutationtab",
+      "web_app_src_components_errorboundary",
+      "web_app_src_components_errorboundary_errorboundary",
+      "web_app_src_components_errorboundary_errorboundary_componentdidcatch",
+      "web_app_src_components_errorboundary_errorboundary_getderivedstatefromerror",
+      "web_app_src_components_errorboundary_errorboundary_render",
+      "web_app_src_components_errorboundary_props",
+      "web_app_src_components_errorboundary_state",
+      "web_app_src_components_globalcommandcenter",
+      "web_app_src_components_globalcommandcenter_globalcommandcenter",
+      "web_app_src_components_mutationtable",
+      "web_app_src_components_mutationtable_mutationtable",
+      "web_app_src_components_paymentstepper",
+      "web_app_src_components_paymentstepper_paymentbatchstatus",
+      "web_app_src_components_paymentstepper_paymentstepper",
+      "web_app_src_components_paymentstepper_stepperprops",
+      "web_app_src_components_rekapadstab",
+      "web_app_src_components_rekapadstab_rekapadstab",
+      "web_app_src_components_unpaidcreatorstab",
+      "web_app_src_components_unpaidcreatorstab_unpaidcreatorstab",
+      "web_app_src_db_index_sqlinlist",
+      "web_app_src_utils_formatters",
+      "web_app_src_utils_formatters_formatdatetime",
+      "web_app_src_utils_formatters_formatrupiah",
+      "web_app_src_utils_formatters_formatuserwithrole",
+      "web_app_src_utils_statushelper",
+      "web_app_src_utils_statushelper_getlogicalstatus"
+    ],
+    "1": [
+      "drizzle_orm",
+      "web_app_src_app_actions_importactions",
+      "web_app_src_app_actions_importactions_executeadsimportaction",
+      "web_app_src_app_actions_importactions_executesalesimportaction",
+      "web_app_src_app_actions_importactions_executesalesimportchunkaction",
+      "web_app_src_app_actions_importactions_fetchadnamemappingsaction",
+      "web_app_src_app_actions_importactions_fetchimportmetadataaction",
+      "web_app_src_app_actions_importactions_finishsalesimportaction",
+      "web_app_src_app_actions_importactions_insertcustomskuaction",
+      "web_app_src_app_actions_importactions_saveadnamemappingaction",
+      "web_app_src_app_actions_importactions_syncorphanedsalesaction",
+      "web_app_src_app_actions_tiktokshopactions",
+      "web_app_src_app_actions_tiktokshopactions_exchangeauthcodeaction",
+      "web_app_src_app_actions_tiktokshopactions_savetiktokauthtokensaction",
+      "web_app_src_app_actions_tiktokshopactions_testfetchaffiliateordersaction",
+      "web_app_src_app_actions_tiktokshopactions_testfetchcampaigncreatorsaction",
+      "web_app_src_app_actions_tiktokshopactions_testfetchcampaignperformanceaction",
+      "web_app_src_app_actions_tiktokshopactions_testfetchcampaignproductsaction",
+      "web_app_src_app_actions_tiktokshopactions_testfetchcapordersaction",
+      "web_app_src_app_actions_tiktokshopactions_testfetchcategoryassetsaction",
+      "web_app_src_app_actions_tiktokshopactions_testfetchsellerordersaction",
+      "web_app_src_app_actions_tiktokshopactions_testfetchshopsaction",
+      "web_app_src_app_actions_tiktokshopactions_testfetchtapcampaignsaction",
+      "web_app_src_app_actions_tiktokshopactions_triggermanualtiktoksyncaction",
+      "web_app_src_app_ads_report_import_ads_page",
+      "web_app_src_app_ads_report_import_ads_page_importadspage",
+      "web_app_src_app_api_cron_tiktok_sync_route",
+      "web_app_src_app_api_cron_tiktok_sync_route_dynamic",
+      "web_app_src_app_api_cron_tiktok_sync_route_get",
+      "web_app_src_app_api_cron_tiktok_sync_route_handlecron",
+      "web_app_src_app_api_cron_tiktok_sync_route_maxduration",
+      "web_app_src_app_api_cron_tiktok_sync_route_post",
+      "web_app_src_app_api_sync_tiktok_manual_route",
+      "web_app_src_app_api_sync_tiktok_manual_route_dynamic",
+      "web_app_src_app_api_sync_tiktok_manual_route_post",
+      "web_app_src_app_api_sync_unmapped_route",
+      "web_app_src_app_api_sync_unmapped_route_post",
+      "web_app_src_app_auth_tiktok_shop_callback_page",
+      "web_app_src_app_auth_tiktok_shop_callback_page_dynamic",
+      "web_app_src_app_auth_tiktok_shop_callback_page_revalidate",
+      "web_app_src_app_auth_tiktok_shop_callback_page_tiktokcallbackpage",
+      "web_app_src_app_auth_tiktok_shop_callback_tiktokcallbackclient",
+      "web_app_src_app_auth_tiktok_shop_callback_tiktokcallbackclient_tiktokcallbackclient",
+      "web_app_src_app_campaigns_actions_skuactions",
+      "web_app_src_app_campaigns_actions_skuactions_deletebatchskusaction",
+      "web_app_src_app_campaigns_actions_skuactions_deleteskuaction",
+      "web_app_src_app_campaigns_actions_skuactions_getcampaignskus",
+      "web_app_src_app_campaigns_actions_skuactions_savebatchskusaction",
+      "web_app_src_app_campaigns_actions_skuactions_skuinput",
+      "web_app_src_app_campaigns_actions_skuactions_synccampaignunmappedaction",
+      "web_app_src_app_campaigns_actions_skuactions_updateskuaction",
+      "web_app_src_app_campaigns_id_sku_page",
+      "web_app_src_app_campaigns_id_sku_page_skupage",
+      "web_app_src_app_campaigns_id_sku_page_skurow",
+      "web_app_src_app_input_penjualan_adsimport",
+      "web_app_src_app_input_penjualan_adsimport_adsimport",
+      "web_app_src_app_input_penjualan_adsimport_fileconfig",
+      "web_app_src_app_input_penjualan_adsimport_searchableselect",
+      "web_app_src_app_input_penjualan_adsimport_searchableselect_handleclickoutside",
+      "web_app_src_app_input_penjualan_organicimport",
+      "web_app_src_app_input_penjualan_organicimport_creatorawareness",
+      "web_app_src_app_input_penjualan_organicimport_creatorgmv",
+      "web_app_src_app_input_penjualan_organicimport_organicimport",
+      "web_app_src_app_input_penjualan_organicimport_previewrow",
+      "web_app_src_app_input_penjualan_organicimport_previewstats",
+      "web_app_src_app_input_penjualan_organicimport_skuinfo",
+      "web_app_src_app_skus_page_skupage",
+      "web_app_src_lib_syncunmapped",
+      "web_app_src_lib_syncunmapped_syncallunmappedglobal",
+      "web_app_src_lib_syncunmapped_syncunmappedforproduct",
+      "web_app_src_lib_tiktokautosync",
+      "web_app_src_lib_tiktokautosync_logsyncexecution",
+      "web_app_src_lib_tiktokautosync_runtiktokautosync",
+      "web_app_src_lib_tiktokautosync_tiktoksyncresult",
+      "web_app_src_utils_tiktokshopapi",
+      "web_app_src_utils_tiktokshopapi_calltiktokshopapi",
+      "web_app_src_utils_tiktokshopapi_exchangetiktokauthcode",
+      "web_app_src_utils_tiktokshopapi_generatettssignature",
+      "web_app_src_utils_tiktokshopapi_getvalidtiktoktoken",
+      "web_app_src_utils_tiktokshopapi_refreshtiktokaccesstoken",
+      "web_app_src_utils_tiktokshopapi_savetiktokauthtokens",
+      "web_app_src_utils_tiktokshopapi_tiktok_config"
+    ],
+    "2": [
+      "web_app_src_app_actions_campaignpageactions",
+      "web_app_src_app_actions_campaignpageactions_addcampaignconceptaction",
+      "web_app_src_app_actions_campaignpageactions_batchdeletecampaigncreatorsaction",
+      "web_app_src_app_actions_campaignpageactions_batchupdatecampaigncreatorsapprovalaction",
+      "web_app_src_app_actions_campaignpageactions_bulkinsertvideosaction",
+      "web_app_src_app_actions_campaignpageactions_bulkverifyvideolinksaction",
+      "web_app_src_app_actions_campaignpageactions_commitbulkimportvideosaction",
+      "web_app_src_app_actions_campaignpageactions_deletecampaignconceptaction",
+      "web_app_src_app_actions_campaignpageactions_deletesingleduplicatecampaigncreatoraction",
+      "web_app_src_app_actions_campaignpageactions_deletevideoaction",
+      "web_app_src_app_actions_campaignpageactions_deletevideosaction",
+      "web_app_src_app_actions_campaignpageactions_ensurenotestable",
+      "web_app_src_app_actions_campaignpageactions_ensurevideocolumns",
+      "web_app_src_app_actions_campaignpageactions_fetchcampaignconceptsaction",
+      "web_app_src_app_actions_campaignpageactions_fetchcampaigncreatorcountsaction",
+      "web_app_src_app_actions_campaignpageactions_fetchcampaigncreatorsduplicatecheckaction",
+      "web_app_src_app_actions_campaignpageactions_fetchcampaigncreatorsforimportaction",
+      "web_app_src_app_actions_campaignpageactions_fetchcampaigncreatorsfullforimportaction",
+      "web_app_src_app_actions_campaignpageactions_fetchcampaigncreatorsrecapaction",
+      "web_app_src_app_actions_campaignpageactions_fetchcreatoridsbyusernamesaction",
+      "web_app_src_app_actions_campaignpageactions_fetchcreatorsnapshotsbatchaction",
+      "web_app_src_app_actions_campaignpageactions_fetchcreatorswithsnapshotsforimportaction",
+      "web_app_src_app_actions_campaignpageactions_fetchduplicateccdetailsaction",
+      "web_app_src_app_actions_campaignpageactions_fetchexistingccusernamesaction",
+      "web_app_src_app_actions_campaignpageactions_fetchexportcampaigncreatorsaction",
+      "web_app_src_app_actions_campaignpageactions_fetchlistingpagedataaction",
+      "web_app_src_app_actions_campaignpageactions_fetchlistingpagepaginatedaction",
+      "web_app_src_app_actions_campaignpageactions_fetchorgvideousernamesaction",
+      "web_app_src_app_actions_campaignpageactions_fetchrevisionnotesaction",
+      "web_app_src_app_actions_campaignpageactions_fetchsalesbycreatorusernamesaction",
+      "web_app_src_app_actions_campaignpageactions_fetchsalesvideousernamesaction",
+      "web_app_src_app_actions_campaignpageactions_fetchstaffprofilesaction",
+      "web_app_src_app_actions_campaignpageactions_fetchvideocreatoridsforcampaignaction",
+      "web_app_src_app_actions_campaignpageactions_fetchvideosbyccidsaction",
+      "web_app_src_app_actions_campaignpageactions_insertcreatorsandccaction",
+      "web_app_src_app_actions_campaignpageactions_insertvideoaction",
+      "web_app_src_app_actions_campaignpageactions_mergecampaigncreatorsaction",
+      "web_app_src_app_actions_campaignpageactions_safedate",
+      "web_app_src_app_actions_campaignpageactions_savecreatorimportbatchaction",
+      "web_app_src_app_actions_campaignpageactions_searchcreatorswithsnapshotsaction",
+      "web_app_src_app_actions_campaignpageactions_sqlinlist",
+      "web_app_src_app_actions_campaignpageactions_updatecampaignconceptaction",
+      "web_app_src_app_actions_campaignpageactions_upsertrevisionnoteaction",
+      "web_app_src_app_actions_campaignpageactions_upsertvideoaction",
+      "web_app_src_app_campaigns_actions_videoactions_getinternalvideodata",
+      "web_app_src_app_campaigns_id_concepts_page",
+      "web_app_src_app_campaigns_id_concepts_page_campaignconceptspage",
+      "web_app_src_app_campaigns_id_listing_import_creator_page",
+      "web_app_src_app_campaigns_id_listing_import_creator_page_importcreatorpage",
+      "web_app_src_app_campaigns_id_listing_import_creator_spreadsheetimportcreatorclient",
+      "web_app_src_app_campaigns_id_listing_import_creator_spreadsheetimportcreatorclient_determinecontenttype",
+      "web_app_src_app_campaigns_id_listing_import_creator_spreadsheetimportcreatorclient_dragfillstate",
+      "web_app_src_app_campaigns_id_listing_import_creator_spreadsheetimportcreatorclient_getemptyrow",
+      "web_app_src_app_campaigns_id_listing_import_creator_spreadsheetimportcreatorclient_parsesmartnumber",
+      "web_app_src_app_campaigns_id_listing_import_creator_spreadsheetimportcreatorclient_spreadsheetimportcreatorclient",
+      "web_app_src_app_campaigns_id_listing_import_creator_spreadsheetimportcreatorclient_spreadsheetrow",
+      "web_app_src_app_campaigns_id_listing_page",
+      "web_app_src_app_campaigns_id_listing_page_campaignlistingcontent",
+      "web_app_src_app_campaigns_id_listing_page_campaignlistingpage",
+      "web_app_src_app_campaigns_id_listing_page_extractcampaignsnapshot",
+      "web_app_src_app_campaigns_id_video_import_importvideoclient",
+      "web_app_src_app_campaigns_id_video_import_importvideoclient_delay",
+      "web_app_src_app_campaigns_id_video_import_importvideoclient_importvideoclient",
+      "web_app_src_app_campaigns_id_video_import_importvideoclient_importvideoclientprops",
+      "web_app_src_app_campaigns_id_video_import_importvideoclient_isshortlink",
+      "web_app_src_app_campaigns_id_video_import_importvideoclient_stagingvideoitem",
+      "web_app_src_app_campaigns_id_video_page",
+      "web_app_src_app_campaigns_id_video_page_campaignvideopage",
+      "web_app_src_app_campaigns_id_video_page_dynamic",
+      "web_app_src_app_campaigns_id_video_page_revalidate",
+      "web_app_src_app_campaigns_id_video_videoclient",
+      "web_app_src_app_campaigns_id_video_videoclient_campaignvideopage",
+      "web_app_src_app_campaigns_id_video_videoclient_extractcampaignsnapshot",
+      "web_app_src_app_campaigns_id_video_videoclient_extractgdriveid",
+      "web_app_src_app_campaigns_id_video_videoclient_extracttiktokuploaddate",
+      "web_app_src_utils_formatters_formatdate",
+      "web_app_src_utils_formatters_formatdatetimeshort"
+    ],
+    "3": [
+      "web_app_src_app_actions_databaseactions",
+      "web_app_src_app_actions_databaseactions_addadsspendaction",
+      "web_app_src_app_actions_databaseactions_addauditlogaction",
+      "web_app_src_app_actions_databaseactions_addcampaigncreatoraction",
+      "web_app_src_app_actions_databaseactions_addcreatorfullaction",
+      "web_app_src_app_actions_databaseactions_addcreatornoteaction",
+      "web_app_src_app_actions_databaseactions_addcreatorsnapshotaction",
+      "web_app_src_app_actions_databaseactions_adddailyperformanceaction",
+      "web_app_src_app_actions_databaseactions_addlivescheduleaction",
+      "web_app_src_app_actions_databaseactions_addnicheaction",
+      "web_app_src_app_actions_databaseactions_addvideoaction",
+      "web_app_src_app_actions_databaseactions_deletecampaigncreatoraction",
+      "web_app_src_app_actions_databaseactions_deletelivescheduleaction",
+      "web_app_src_app_actions_databaseactions_ensurecampaigncreatorcolumns",
+      "web_app_src_app_actions_databaseactions_executelivesyncaction",
+      "web_app_src_app_actions_databaseactions_fetchallprofilesaction",
+      "web_app_src_app_actions_databaseactions_fetchcampaigncreatorsaction",
+      "web_app_src_app_actions_databaseactions_fetchcampaignfulldataaction",
+      "web_app_src_app_actions_databaseactions_fetchcreatoraddressesaction",
+      "web_app_src_app_actions_databaseactions_fetchcreatordetailaction",
+      "web_app_src_app_actions_databaseactions_fetchdailyperformanceaction",
+      "web_app_src_app_actions_databaseactions_fetchliveschedulesaction",
+      "web_app_src_app_actions_databaseactions_fetchlivesessionsaction",
+      "web_app_src_app_actions_databaseactions_fetchperformadataaction",
+      "web_app_src_app_actions_databaseactions_fetchportaldataaction",
+      "web_app_src_app_actions_databaseactions_fetchreportingdataaction",
+      "web_app_src_app_actions_databaseactions_fetchusercampaignsaction",
+      "web_app_src_app_actions_databaseactions_updateadsspendaction",
+      "web_app_src_app_actions_databaseactions_updatebrandaction",
+      "web_app_src_app_actions_databaseactions_updatecampaigncreatoraction",
+      "web_app_src_app_actions_databaseactions_updatecreatoraction",
+      "web_app_src_app_actions_databaseactions_updatecreatoraddressaction",
+      "web_app_src_app_actions_databaseactions_updatecreatorcontactaction",
+      "web_app_src_app_actions_databaseactions_updatecreatornichesaction",
+      "web_app_src_app_actions_databaseactions_updatecreatorpaymentaction",
+      "web_app_src_app_actions_databaseactions_updatedailyperformanceaction",
+      "web_app_src_app_actions_databaseactions_updatenicheaction",
+      "web_app_src_app_actions_databaseactions_updateprofileaction",
+      "web_app_src_app_actions_databaseactions_updateskuaction",
+      "web_app_src_app_actions_databaseactions_updateusercampaignsaction",
+      "web_app_src_app_actions_databaseactions_updatevideoapprovalaction",
+      "web_app_src_app_actions_storeactions_createbrandaction",
+      "web_app_src_app_actions_storeactions_createcampaignaction",
+      "web_app_src_app_actions_storeactions_createskuaction",
+      "web_app_src_app_actions_storeactions_deletecampaignaction",
+      "web_app_src_app_actions_storeactions_deleteskuaction",
+      "web_app_src_app_actions_storeactions_getinitialstoredata",
+      "web_app_src_app_actions_storeactions_updatecampaignaction",
+      "web_app_src_app_campaigns_id_layout_campaignfiltercontextwrapper",
+      "web_app_src_app_campaigns_page_campaigncarditem",
+      "web_app_src_app_campaigns_page_campaignspage",
+      "web_app_src_app_settings_page_settingspage",
+      "web_app_src_store_usedatabasestore",
+      "web_app_src_store_usedatabasestore_databasestate",
+      "web_app_src_store_usedatabasestore_usedatabasestore"
+    ],
+    "4": [
+      "web_app_src_app_actions_addressactions",
+      "web_app_src_app_actions_addressactions_bulkautodetectaddresscreatorsaction",
+      "web_app_src_app_actions_addressactions_fetchcampaignaddressesaction",
+      "web_app_src_app_actions_addressactions_fetchcampaigncreatorsforaddressaction",
+      "web_app_src_app_actions_addressactions_fetchcreatoraddressbookaction",
+      "web_app_src_app_actions_addressactions_importspreadsheetaddressesaction",
+      "web_app_src_app_actions_addressactions_saveaddressdetailsaction",
+      "web_app_src_app_actions_addressactions_syncmissingcampaignaddressesaction",
+      "web_app_src_app_actions_addressactions_updatecampaignaddressaction",
+      "web_app_src_app_actions_campaignpageactions_fetchlivepagedataaction",
+      "web_app_src_app_actions_campaignpageactions_fetchperformapagefulldataaction",
+      "web_app_src_app_actions_campaignpageactions_updateadsperformancekursaction",
+      "web_app_src_app_campaigns_actions_livestreamactions_getlivestreamdata",
+      "web_app_src_app_campaigns_id_alamat_import_page",
+      "web_app_src_app_campaigns_id_alamat_import_page_importalamatpage",
+      "web_app_src_app_campaigns_id_alamat_import_spreadsheetimportaddressclient",
+      "web_app_src_app_campaigns_id_alamat_import_spreadsheetimportaddressclient_dragfillstate",
+      "web_app_src_app_campaigns_id_alamat_import_spreadsheetimportaddressclient_getemptyrow",
+      "web_app_src_app_campaigns_id_alamat_import_spreadsheetimportaddressclient_spreadsheetimportaddressclient",
+      "web_app_src_app_campaigns_id_alamat_import_spreadsheetimportaddressclient_spreadsheetrow",
+      "web_app_src_app_campaigns_id_alamat_page",
+      "web_app_src_app_campaigns_id_alamat_page_alamatpage",
+      "web_app_src_app_campaigns_id_layout_campaignlayoutinner",
+      "web_app_src_app_campaigns_id_live_page",
+      "web_app_src_app_campaigns_id_live_page_liveschedulepage",
+      "web_app_src_app_campaigns_id_live_page_skeletonloader",
+      "web_app_src_app_campaigns_id_livestream_livestreamclient",
+      "web_app_src_app_campaigns_id_livestream_livestreamclient_campaignlivestreamclient",
+      "web_app_src_app_campaigns_id_livestream_page",
+      "web_app_src_app_campaigns_id_livestream_page_campaignlivestreampage",
+      "web_app_src_app_campaigns_id_performa_page",
+      "web_app_src_app_campaigns_id_performa_page_campaignperformapage",
+      "web_app_src_app_campaigns_id_performa_performaclient",
+      "web_app_src_app_campaigns_id_performa_performaclient_campaignperformaclient",
+      "web_app_src_providers_campaignfilterprovider",
+      "web_app_src_providers_campaignfilterprovider_campaignfiltercontext",
+      "web_app_src_providers_campaignfilterprovider_campaignfiltercontexttype",
+      "web_app_src_providers_campaignfilterprovider_campaignfilterprovider",
+      "web_app_src_providers_campaignfilterprovider_campaignfilterproviderprops",
+      "web_app_src_providers_campaignfilterprovider_filtertype",
+      "web_app_src_providers_campaignfilterprovider_usecampaignfilter",
+      "web_app_src_utils_exportcsv",
+      "web_app_src_utils_exportcsv_exporttocsv"
+    ],
+    "5": [
+      "web_app_scripts_create_notes_table",
+      "web_app_scripts_create_notes_table_campaign_creator_notes",
+      "web_app_src_app_actions_storeactions",
+      "web_app_src_db_schema",
+      "web_app_src_db_schema_accounts",
+      "web_app_src_db_schema_adnamemapping",
+      "web_app_src_db_schema_adsperformance",
+      "web_app_src_db_schema_adsspends",
+      "web_app_src_db_schema_adstopups",
+      "web_app_src_db_schema_auditlogs",
+      "web_app_src_db_schema_brands",
+      "web_app_src_db_schema_brandsrelations",
+      "web_app_src_db_schema_campaigncreatornotes",
+      "web_app_src_db_schema_campaigncreatorsrelations",
+      "web_app_src_db_schema_campaigns",
+      "web_app_src_db_schema_campaignsrelations",
+      "web_app_src_db_schema_creatoraddressbook",
+      "web_app_src_db_schema_creatoraddresses",
+      "web_app_src_db_schema_creatorbankaccounts",
+      "web_app_src_db_schema_creatorniches",
+      "web_app_src_db_schema_creatornotes",
+      "web_app_src_db_schema_creatorsrelations",
+      "web_app_src_db_schema_dailyperformance",
+      "web_app_src_db_schema_niches",
+      "web_app_src_db_schema_organicvideos",
+      "web_app_src_db_schema_paymentbatches",
+      "web_app_src_db_schema_paymentbatchesrelations",
+      "web_app_src_db_schema_paymentitems",
+      "web_app_src_db_schema_paymentitemsrelations",
+      "web_app_src_db_schema_profiles",
+      "web_app_src_db_schema_sales",
+      "web_app_src_db_schema_senderaccounts",
+      "web_app_src_db_schema_sessions",
+      "web_app_src_db_schema_skus",
+      "web_app_src_db_schema_tiktokauthorizations",
+      "web_app_src_db_schema_tiktoksynclogs",
+      "web_app_src_db_schema_usercampaigns",
+      "web_app_src_db_schema_users",
+      "web_app_src_db_schema_verificationtokens",
+      "web_app_src_db_schema_videosrelations",
+      "web_app_src_db_schema_whitelistedemails"
+    ],
+    "6": [
+      "web_app_src_app_activity_log_page",
+      "web_app_src_app_campaigns_actions_paymentactions_bulksyncbudgetrows",
+      "web_app_src_app_creator_pool_add_addcreatorclient",
+      "web_app_src_app_import_data_page",
+      "web_app_src_app_import_data_page_importdatapage",
+      "web_app_src_app_input_penjualan_page",
+      "web_app_src_app_invoice_page",
+      "web_app_src_app_portal_id_portaldashboardclient",
+      "web_app_src_app_portal_id_portaldashboardclient_sortableheader",
+      "web_app_src_app_settings_page",
+      "web_app_src_components_budgetsyncmodal",
+      "web_app_src_components_budgetsyncmodal_budgetsyncmodal",
+      "web_app_src_components_tiktoksynccontrolcard",
+      "web_app_src_components_ui_badge",
+      "web_app_src_components_ui_badge_badge",
+      "web_app_src_components_ui_badge_badgeprops",
+      "web_app_src_components_ui_card",
+      "web_app_src_components_ui_card_card",
+      "web_app_src_components_ui_card_cardcontent",
+      "web_app_src_components_ui_card_carddescription",
+      "web_app_src_components_ui_card_cardheader",
+      "web_app_src_components_ui_card_cardtitle",
+      "web_app_src_components_ui_table",
+      "web_app_src_components_ui_table_table",
+      "web_app_src_components_ui_table_tablebody",
+      "web_app_src_components_ui_table_tablecell",
+      "web_app_src_components_ui_table_tablehead",
+      "web_app_src_components_ui_table_tableheader",
+      "web_app_src_components_ui_table_tablerow",
+      "web_app_src_utils_cn",
+      "web_app_src_utils_cn_cn",
+      "web_app_src_utils_importbudgetsync",
+      "web_app_src_utils_importbudgetsync_budgetcolumnmapping",
+      "web_app_src_utils_importbudgetsync_budgetparseresult",
+      "web_app_src_utils_importbudgetsync_downloadbudgetsynctemplate",
+      "web_app_src_utils_importbudgetsync_parsebudgetfileheaders",
+      "web_app_src_utils_importbudgetsync_parsebudgetsyncfile",
+      "web_app_src_utils_importbudgetsync_parsedbudgetrow",
+      "xlsx"
+    ],
+    "7": [
+      "web_app_src_app_actions_creatoractions",
+      "web_app_src_app_actions_creatoractions_addcreatornote",
+      "web_app_src_app_actions_creatoractions_addcreatorsnapshot",
+      "web_app_src_app_actions_creatoractions_bulkimportcreatorsaction",
+      "web_app_src_app_actions_creatoractions_fetchcreatorprofile",
+      "web_app_src_app_actions_creatoractions_fetchcreatorspaginated",
+      "web_app_src_app_actions_creatoractions_fetchstaffprofiles",
+      "web_app_src_app_actions_creatoractions_updatecreatorcontact",
+      "web_app_src_app_actions_creatoractions_updatecreatormaster",
+      "web_app_src_app_actions_databaseactions_deletecreatoraddressbookaction",
+      "web_app_src_app_actions_databaseactions_fetchcreatornotesaction",
+      "web_app_src_app_actions_databaseactions_savecreatoraddressbookaction",
+      "web_app_src_app_campaigns_id_listing_creatorrow",
+      "web_app_src_app_campaigns_id_listing_creatorrow_areequal",
+      "web_app_src_app_campaigns_id_listing_creatorrow_creatorrow",
+      "web_app_src_app_campaigns_id_listing_creatorrow_creatorrowprops",
+      "web_app_src_app_creator_pool_id_page",
+      "web_app_src_app_creator_pool_id_page_creatorprofilepage",
+      "web_app_src_app_creator_pool_page",
+      "web_app_src_app_creator_pool_page_creatorpoolpage",
+      "web_app_src_components_multiselect",
+      "web_app_src_components_multiselect_multiselect",
+      "web_app_src_components_multiselect_multiselectprops",
+      "web_app_src_components_multiselect_option",
+      "web_app_src_hooks_usedraftlocalstorage",
+      "web_app_src_hooks_usedraftlocalstorage_usedraftlocalstorage",
+      "web_app_src_types_database_campaigncreator",
+      "web_app_src_types_database_creatorsnapshot",
+      "web_app_src_types_database_video",
+      "web_app_src_utils_computed",
+      "web_app_src_utils_computed_computecampaigngmv",
+      "web_app_src_utils_computed_computehighestvideogmv",
+      "web_app_src_utils_computed_getconceptcolor",
+      "web_app_src_utils_computed_getcreatortype",
+      "web_app_src_utils_computed_getjeniskerjasama",
+      "web_app_src_utils_computed_getlatestsnapshot",
+      "web_app_src_utils_formatters_formatabbreviated"
+    ],
+    "8": [
+      "ref_lucide_react",
+      "ref_react",
+      "web_app_src_app_actions_importactions_importliveorganicaction",
+      "web_app_src_app_auth_tiktok_shop_callback_error",
+      "web_app_src_app_auth_tiktok_shop_callback_error_tiktokcallbackerror",
+      "web_app_src_app_brand_portal_layout",
+      "web_app_src_app_brand_portal_layout_brandportallayout",
+      "web_app_src_app_campaigns_id_error",
+      "web_app_src_app_campaigns_id_error_campaignerror",
+      "web_app_src_app_campaigns_id_layout",
+      "web_app_src_app_campaigns_id_layout_campaignlayout",
+      "web_app_src_app_campaigns_id_listing_import_creator_error",
+      "web_app_src_app_campaigns_id_listing_import_creator_error_importcreatorerror",
+      "web_app_src_app_campaigns_page",
+      "web_app_src_app_extension_page",
+      "web_app_src_app_extension_page_extensionpage",
+      "web_app_src_app_login_page",
+      "web_app_src_app_login_page_loginpage",
+      "web_app_src_app_pending_page",
+      "web_app_src_app_pending_page_pendingpage",
+      "web_app_src_app_portal_id_dashboard_loading",
+      "web_app_src_app_portal_id_dashboard_loading_portalloading",
+      "web_app_src_app_skus_page",
+      "web_app_src_components_livesyncmodal",
+      "web_app_src_components_livesyncmodal_livesyncmodal",
+      "web_app_src_components_livesyncmodal_parserp",
+      "web_app_src_components_ui_button",
+      "web_app_src_components_ui_button_button",
+      "web_app_src_components_ui_button_buttonprops",
+      "web_app_src_components_ui_dialog",
+      "web_app_src_components_ui_dialog_dialogcontent",
+      "web_app_src_components_ui_dialog_dialogheader",
+      "web_app_src_components_ui_dialog_dialogoverlay",
+      "web_app_src_components_ui_dialog_dialogtitle",
+      "web_app_src_hooks_usesmartrealtime",
+      "web_app_src_hooks_usesmartrealtime_usesmartrealtime"
+    ],
+    "9": [
+      "ref_pg",
+      "web_app_scripts_check_pg_fks",
+      "web_app_scripts_check_pg_fks_check",
+      "web_app_scripts_check_pg_fks_pool",
+      "web_app_scripts_db_audit_omg",
+      "web_app_scripts_db_audit_omg_createclient",
+      "web_app_scripts_db_audit_omg_pool",
+      "web_app_scripts_db_audit_omg_run",
+      "web_app_scripts_fix_view_vt",
+      "web_app_scripts_fix_view_vt_client",
+      "web_app_scripts_fix_view_vt_run",
+      "web_app_scripts_get_view_def",
+      "web_app_scripts_get_view_def_client",
+      "web_app_scripts_get_view_def_run",
+      "web_app_scripts_get_views",
+      "web_app_scripts_get_views_check",
+      "web_app_scripts_get_views_client",
+      "web_app_scripts_get_views_env",
+      "web_app_scripts_get_views_fs",
+      "web_app_scripts_get_views_urlmatch",
+      "web_app_scripts_q",
+      "web_app_scripts_q_client",
+      "web_app_scripts_script",
+      "web_app_scripts_script2",
+      "web_app_scripts_script2_client",
+      "web_app_scripts_script_client",
+      "web_app_scripts_update_views_skus",
+      "web_app_scripts_update_views_skus_client",
+      "web_app_scripts_update_views_skus_fs",
+      "web_app_scripts_update_views_skus_updateviews"
+    ],
+    "10": [
+      "ref_papaparse",
+      "web_app_scripts_analyze_csv",
+      "web_app_scripts_analyze_csv_analyzefile",
+      "web_app_src_app_actions_addressactions_syncaddressbatchaction",
+      "web_app_src_app_actions_creatoractions_searchcreatorusernames",
+      "web_app_src_app_actions_databaseactions_executefullcampaignsyncaction",
+      "web_app_src_app_actions_databaseactions_fetchcampaignsynclistingdbaction",
+      "web_app_src_components_addresssyncmodal",
+      "web_app_src_components_addresssyncmodal_addresssyncmodal",
+      "web_app_src_components_campaignsyncmodal",
+      "web_app_src_components_campaignsyncmodal_campaignsyncmodal",
+      "web_app_src_components_ui_usernameautocomplete",
+      "web_app_src_components_ui_usernameautocomplete_usernameautocomplete",
+      "web_app_src_utils_importaddresssync",
+      "web_app_src_utils_importaddresssync_addresscolumnmapping",
+      "web_app_src_utils_importaddresssync_addressparseresult",
+      "web_app_src_utils_importaddresssync_downloadaddresssynctemplate",
+      "web_app_src_utils_importaddresssync_parseaddresssyncfile",
+      "web_app_src_utils_importaddresssync_parsedaddressrow",
+      "web_app_src_utils_importcampaignsync",
+      "web_app_src_utils_importcampaignsync_campaigncolumnmapping",
+      "web_app_src_utils_importcampaignsync_campaignparseresult",
+      "web_app_src_utils_importcampaignsync_downloadcampaignsynctemplate",
+      "web_app_src_utils_importcampaignsync_parsecampaignsyncfile",
+      "web_app_src_utils_importcampaignsync_parsedcampaigncreatorrow",
+      "web_app_src_utils_importcampaignsync_parsefileheaders",
+      "web_app_src_utils_stringsimilarity",
+      "web_app_src_utils_stringsimilarity_findclosestmatch",
+      "web_app_src_utils_stringsimilarity_levenshteindistance"
+    ],
+    "11": [
+      "web_app_src_app_actions_activityactions_fetchactivitylogsaction",
+      "web_app_src_app_activity_log_page_activitylogpage",
+      "web_app_src_app_ads_report_actions_deleteadperformanceaction",
+      "web_app_src_app_ads_report_actions_getadsreportdata",
+      "web_app_src_app_ads_report_actions_updateadperformanceaction",
+      "web_app_src_app_ads_report_page",
+      "web_app_src_app_ads_report_page_adsreportpage",
+      "web_app_src_app_ads_report_page_memoizedtablerow",
+      "web_app_src_app_input_penjualan_page_inputpenjualanpage",
+      "web_app_src_app_page",
+      "web_app_src_app_page_dashboard",
+      "web_app_src_components_notestimeline",
+      "web_app_src_components_notestimeline_notestimeline",
+      "web_app_src_components_notestimeline_notestimelineprops",
+      "web_app_src_components_notestimeline_timelinenote",
+      "web_app_src_components_sidebar",
+      "web_app_src_components_sidebar_navitems",
+      "web_app_src_components_sidebar_sidebar",
+      "web_app_src_components_stringcombobox",
+      "web_app_src_components_stringcombobox_stringcombobox",
+      "web_app_src_components_stringcombobox_stringcombobox_handleclickoutside",
+      "web_app_src_providers_authprovider",
+      "web_app_src_providers_authprovider_authcontext",
+      "web_app_src_providers_authprovider_authcontexttype",
+      "web_app_src_providers_authprovider_profile",
+      "web_app_src_providers_authprovider_useauth",
+      "web_app_src_providers_authprovider_usercampaign",
+      "web_app_src_utils_exporttoexcel",
+      "web_app_src_utils_exporttoexcel_exporttoexcel"
+    ],
+    "12": [
+      "fix_rpc_end_date",
+      "fix_rpc_end_date_public_get_campaign_creator_performance",
+      "fix_rpc_end_date_sql_organic_videos",
+      "manual_video_imports",
+      "web_app_scripts_db_rpc_creator_performance",
+      "web_app_scripts_db_rpc_creator_performance_public_get_campaign_creator_performance",
+      "web_app_scripts_db_rpc_creator_performance_sql_organic_videos",
+      "web_app_scripts_db_rpc_video_stats",
+      "web_app_scripts_db_rpc_video_stats_public_get_campaign_video_stats",
+      "web_app_scripts_db_rpc_video_stats_sql_organic_videos",
+      "web_app_supabase_migrations_20260610000001_phase_2",
+      "web_app_supabase_migrations_20260610000001_phase_2_ads_name_mappings",
+      "web_app_supabase_migrations_20260610000001_phase_2_idx_sales_campaign",
+      "web_app_supabase_migrations_20260610000001_phase_2_idx_sales_content",
+      "web_app_supabase_migrations_20260610000001_phase_2_idx_sales_creator",
+      "web_app_supabase_migrations_20260610000001_phase_2_idx_sales_sku",
+      "web_app_supabase_migrations_20260610000001_phase_2_idx_sales_tanggal",
+      "web_app_supabase_migrations_20260610000001_phase_2_idx_sales_type",
+      "web_app_supabase_migrations_20260610000001_phase_2_idx_skus_product",
+      "web_app_supabase_migrations_20260610000001_phase_2_sales",
+      "web_app_supabase_migrations_20260610000001_phase_2_skus",
+      "web_app_supabase_migrations_20260610000001_phase_2_vw_campaign_summary",
+      "web_app_supabase_migrations_20260730011120_update_performance_rpc_filters",
+      "web_app_supabase_migrations_20260730011120_update_performance_rpc_filters_public_get_campaign_creator_performance",
+      "web_app_supabase_migrations_20260730011120_update_performance_rpc_filters_sql_organic_videos",
+      "web_app_supabase_migrations_20260910_fix_video_stats_sku_filter",
+      "web_app_supabase_migrations_20260910_fix_video_stats_sku_filter_public_get_campaign_video_stats",
+      "web_app_supabase_migrations_20260910_fix_video_stats_sku_filter_sql_organic_videos"
+    ],
+    "13": [
+      "web_app_src_types_database",
+      "web_app_src_types_database_adnamemapping",
+      "web_app_src_types_database_adsperformance",
+      "web_app_src_types_database_adsspend",
+      "web_app_src_types_database_auditlog",
+      "web_app_src_types_database_brand",
+      "web_app_src_types_database_campaign",
+      "web_app_src_types_database_campaignsummary",
+      "web_app_src_types_database_creator",
+      "web_app_src_types_database_creatoraddress",
+      "web_app_src_types_database_creatoraddressbook",
+      "web_app_src_types_database_creatorcontact",
+      "web_app_src_types_database_creatorevaluation",
+      "web_app_src_types_database_creatorniche",
+      "web_app_src_types_database_creatornote",
+      "web_app_src_types_database_creatorpayment",
+      "web_app_src_types_database_dailyperformance",
+      "web_app_src_types_database_databaseschema",
+      "web_app_src_types_database_liveschedule",
+      "web_app_src_types_database_livesession",
+      "web_app_src_types_database_livesessionproduct",
+      "web_app_src_types_database_niche",
+      "web_app_src_types_database_organicvideo",
+      "web_app_src_types_database_payoutcreator",
+      "web_app_src_types_database_payoutrequest",
+      "web_app_src_types_database_sales",
+      "web_app_src_types_database_sku"
+    ],
+    "14": [
+      "ads_import",
+      "update_views",
+      "update_views_campaign_sales_summary",
+      "web_app_scripts_fix_live_stats_rpc",
+      "web_app_scripts_fix_live_stats_rpc_public_get_campaign_live_stats",
+      "web_app_scripts_fix_live_stats_rpc_sql_organic_videos",
+      "web_app_supabase_migrations_20260610000000_phase_1_brands",
+      "web_app_supabase_migrations_20260610000000_phase_1_campaigns",
+      "web_app_supabase_migrations_20260611000000_phase_6_approval",
+      "web_app_supabase_migrations_20260611000000_phase_6_approval_public_vw_campaign_summary",
+      "web_app_supabase_migrations_20260618000002_add_target_views",
+      "web_app_supabase_migrations_20260618000002_add_target_views_public_vw_campaign_summary",
+      "web_app_supabase_migrations_20260618000006_campaign_cascade_delete",
+      "web_app_supabase_migrations_20260618000006_campaign_cascade_delete_idx_campaigns_nama_lower",
+      "web_app_supabase_migrations_20260730093600_fix_sales_agg_rpc",
+      "web_app_supabase_migrations_20260730093600_fix_sales_agg_rpc_public_get_campaign_creator_performance",
+      "web_app_supabase_migrations_20260730093600_fix_sales_agg_rpc_sql_organic_videos",
+      "web_app_supabase_migrations_20260730185000_add_manual_video_imports",
+      "web_app_supabase_migrations_20260730185000_add_manual_video_imports_idx_mvi_campaign",
+      "web_app_supabase_migrations_20260730185000_add_manual_video_imports_idx_mvi_creator",
+      "web_app_supabase_migrations_20260730185000_add_manual_video_imports_idx_mvi_uid",
+      "web_app_supabase_migrations_20260730185000_add_manual_video_imports_public_get_campaign_creator_performance",
+      "web_app_supabase_migrations_20260730185000_add_manual_video_imports_public_manual_video_imports",
+      "web_app_supabase_migrations_20260730185000_add_manual_video_imports_sql_organic_videos"
+    ],
+    "15": [
+      "db_rpc_get_campaign_sales_stats",
+      "db_rpc_get_campaign_sales_stats_get_campaign_sales_stats",
+      "web_app_supabase_migrations_20260610000000_phase_1",
+      "web_app_supabase_migrations_20260610000000_phase_1_audit_logs",
+      "web_app_supabase_migrations_20260610000000_phase_1_creator_contacts",
+      "web_app_supabase_migrations_20260610000000_phase_1_creator_niches",
+      "web_app_supabase_migrations_20260610000000_phase_1_creator_notes",
+      "web_app_supabase_migrations_20260610000000_phase_1_creator_snapshots",
+      "web_app_supabase_migrations_20260610000000_phase_1_creators",
+      "web_app_supabase_migrations_20260610000000_phase_1_extract_content_uid",
+      "web_app_supabase_migrations_20260610000000_phase_1_log_cc_approval_changes",
+      "web_app_supabase_migrations_20260610000000_phase_1_log_cc_price_changes",
+      "web_app_supabase_migrations_20260610000000_phase_1_log_video_approval_changes",
+      "web_app_supabase_migrations_20260610000000_phase_1_niches",
+      "web_app_supabase_migrations_20260610000000_phase_1_trg_cc_approval",
+      "web_app_supabase_migrations_20260610000000_phase_1_trg_cc_price",
+      "web_app_supabase_migrations_20260610000000_phase_1_trg_extract_video_uid",
+      "web_app_supabase_migrations_20260610000000_phase_1_trg_video_approval",
+      "web_app_supabase_migrations_20260610000000_phase_1_vw_creator_latest_snapshot",
+      "web_app_supabase_migrations_20260610000000_phase_1_vw_creators_with_computed",
+      "web_app_supabase_migrations_20260727130600_create_performance_rpc",
+      "web_app_supabase_migrations_20260727130600_create_performance_rpc_get_performance_summary_v2",
+      "web_app_supabase_migrations_20260731150500_fix_get_performance_summary_v2",
+      "web_app_supabase_migrations_20260731150500_fix_get_performance_summary_v2_get_performance_summary_v2"
+    ],
+    "16": [
+      "ref_clsx",
+      "ref_eslint",
+      "ref_eslint_config_next",
+      "ref_exceljs",
+      "ref_postgres",
+      "ref_radix_ui_react_dialog",
+      "ref_react_dom",
+      "ref_swr",
+      "ref_tailwind_merge",
+      "ref_tailwindcss",
+      "ref_tailwindcss_postcss",
+      "ref_types_file_saver",
+      "ref_types_node",
+      "ref_types_papaparse",
+      "ref_types_pg",
+      "ref_types_react",
+      "ref_types_react_dom",
+      "ref_typescript",
+      "ref_zustand",
+      "web_app_package",
+      "web_app_package_json_ref_xlsx",
+      "web_app_package_name",
+      "web_app_package_private",
+      "web_app_package_version"
+    ],
+    "17": [
+      "web_app_src_app_actions_creatoractions_bulkautodetectcreatorsaction",
+      "web_app_src_app_actions_creatoractions_executespreadsheetimportaction",
+      "web_app_src_app_actions_creatoractions_verifyspreadsheetcreatorsaction",
+      "web_app_src_app_creator_pool_import_page",
+      "web_app_src_app_creator_pool_import_page_importcreatorpoolpage",
+      "web_app_src_app_creator_pool_import_spreadsheetimportclient",
+      "web_app_src_app_creator_pool_import_spreadsheetimportclient_dragfillstate",
+      "web_app_src_app_creator_pool_import_spreadsheetimportclient_getemptyrow",
+      "web_app_src_app_creator_pool_import_spreadsheetimportclient_spreadsheetimportclient",
+      "web_app_src_app_creator_pool_import_spreadsheetimportclient_spreadsheetrow",
+      "web_app_src_components_creatorsyncmodal",
+      "web_app_src_components_creatorsyncmodal_creatorsyncmodal",
+      "web_app_src_utils_exporterrorlog",
+      "web_app_src_utils_exporterrorlog_errorlogitem",
+      "web_app_src_utils_exporterrorlog_exporterrorlogtoexcel",
+      "web_app_src_utils_importcreatorsync",
+      "web_app_src_utils_importcreatorsync_columnmapping",
+      "web_app_src_utils_importcreatorsync_downloadcreatorsynctemplate",
+      "web_app_src_utils_importcreatorsync_getautotier",
+      "web_app_src_utils_importcreatorsync_parsecreatorsyncfile",
+      "web_app_src_utils_importcreatorsync_parsedcreatorrow",
+      "web_app_src_utils_importcreatorsync_parsefileheaders",
+      "web_app_src_utils_importcreatorsync_parseresult",
+      "web_app_src_utils_importcreatorsync_template_headers"
+    ],
+    "18": [
+      "ref_dotenv",
+      "web_app_scripts_check_schema_ts_web_app_scripts_check_schema",
+      "web_app_scripts_check_schema_ts_web_app_scripts_check_schema_run",
+      "web_app_scripts_check_schema_ts_web_app_scripts_check_schema_supabase",
+      "web_app_scripts_clean_db_force",
+      "web_app_scripts_clean_db_force_run",
+      "web_app_scripts_clean_db_force_run_deleteinchunks",
+      "web_app_scripts_clean_db_force_supabase",
+      "web_app_scripts_run_migration",
+      "web_app_scripts_run_migration_run",
+      "web_app_scripts_run_migration_supabase",
+      "web_app_scripts_scratch_query",
+      "web_app_scripts_scratch_query_run",
+      "web_app_scripts_scratch_query_supabase",
+      "web_app_scripts_test_awareness",
+      "web_app_scripts_test_awareness_main",
+      "web_app_scripts_test_awareness_supabase",
+      "web_app_scripts_test_insert_snapshot",
+      "web_app_scripts_test_insert_snapshot_main",
+      "web_app_scripts_test_insert_snapshot_supabase",
+      "web_app_scripts_test_query_main",
+      "web_app_scripts_test_query_ts_web_app_scripts_test_query_1ea529",
+      "web_app_scripts_test_query_ts_web_app_scripts_test_query_supabase_1ea529"
+    ],
+    "19": [
+      "ref_drizzle_orm",
+      "web_app_src_app_actions_activityactions",
+      "web_app_src_app_actions_tiktokshopactions_gettiktokauthstatusaction",
+      "web_app_src_app_actions_tiktokshopactions_gettiktoksynchistoryaction",
+      "web_app_src_app_campaigns_actions_dailyactions",
+      "web_app_src_app_campaigns_actions_livestreamactions",
+      "web_app_src_app_campaigns_actions_performaactions",
+      "web_app_src_app_campaigns_actions_performaactions_getinternalperformadata",
+      "web_app_src_app_campaigns_actions_videoactions",
+      "web_app_src_app_campaigns_id_video_import_page",
+      "web_app_src_app_campaigns_id_video_import_page_dynamic",
+      "web_app_src_app_campaigns_id_video_import_page_importvideopage",
+      "web_app_src_app_campaigns_id_video_import_page_revalidate",
+      "web_app_src_app_manajemen_akun_page",
+      "web_app_src_app_manajemen_akun_page_manajemenakunpage",
+      "web_app_src_app_portal_id_page",
+      "web_app_src_app_portal_id_page_portallogin",
+      "web_app_src_components_tiktoksynccontrolcard_tiktoksynccontrolcard",
+      "web_app_src_db_index",
+      "web_app_src_db_index_db",
+      "web_app_src_db_index_globalfordb",
+      "web_app_src_lib_reporting"
+    ],
+    "20": [
+      "web_app_package_dependencies",
+      "web_app_package_dependencies_clsx",
+      "web_app_package_dependencies_dotenv",
+      "web_app_package_dependencies_drizzle_orm",
+      "web_app_package_dependencies_exceljs",
+      "web_app_package_dependencies_file_saver",
+      "web_app_package_dependencies_lucide_react",
+      "web_app_package_dependencies_next",
+      "web_app_package_dependencies_next_auth",
+      "web_app_package_dependencies_papaparse",
+      "web_app_package_dependencies_pg",
+      "web_app_package_dependencies_postgres",
+      "web_app_package_dependencies_radix_ui_react_dialog",
+      "web_app_package_dependencies_radix_ui_react_label",
+      "web_app_package_dependencies_radix_ui_react_switch",
+      "web_app_package_dependencies_react",
+      "web_app_package_dependencies_react_dom",
+      "web_app_package_dependencies_swr",
+      "web_app_package_dependencies_tailwind_merge",
+      "web_app_package_dependencies_types_papaparse",
+      "web_app_package_dependencies_xlsx",
+      "web_app_package_dependencies_zustand"
+    ],
+    "21": [
+      "pembayaran",
+      "update_views_vw_campaign_summary",
+      "web_app_supabase_migrations_20260610000000_phase_1_campaign_creators",
+      "web_app_supabase_migrations_20260610000000_phase_1_idx_cc_campaign",
+      "web_app_supabase_migrations_20260610000000_phase_1_idx_cc_creator",
+      "web_app_supabase_migrations_20260610000000_phase_1_videos",
+      "web_app_supabase_migrations_20260610000004_phase_5_daily_performance",
+      "web_app_supabase_migrations_20260610000004_phase_5_daily_performance_daily_performance",
+      "web_app_supabase_migrations_20260610000004_phase_5_daily_performance_vw_campaign_summary",
+      "web_app_supabase_migrations_20260618000005_fix_vw_campaign_summary",
+      "web_app_supabase_migrations_20260618000005_fix_vw_campaign_summary_vw_campaign_summary",
+      "web_app_supabase_migrations_20260727113500_create_rpc_counts",
+      "web_app_supabase_migrations_20260727113500_create_rpc_counts_get_campaign_creator_counts",
+      "web_app_supabase_migrations_20260728130000_create_video_counts_rpc",
+      "web_app_supabase_migrations_20260728130000_create_video_counts_rpc_get_campaign_video_counts_fast",
+      "web_app_supabase_migrations_20260731155600_fix_get_campaign_top_skus",
+      "web_app_supabase_migrations_20260731155600_fix_get_campaign_top_skus_get_campaign_top_skus",
+      "web_app_supabase_migrations_20260918110000_update_video_counts_rpc_include_organic_live",
+      "web_app_supabase_migrations_20260918110000_update_video_counts_rpc_include_organic_live_get_campaign_video_counts_fast",
+      "web_app_supabase_migrations_20260918110000_update_video_counts_rpc_include_organic_live_sql_organic_videos"
+    ],
+    "22": [
+      "ref_cheerio",
+      "scratch_parser_package",
+      "scratch_parser_package_author",
+      "scratch_parser_package_dependencies",
+      "scratch_parser_package_dependencies_cheerio",
+      "scratch_parser_package_dependencies_xlsx",
+      "scratch_parser_package_description",
+      "scratch_parser_package_json_ref_xlsx",
+      "scratch_parser_package_keywords",
+      "scratch_parser_package_license",
+      "scratch_parser_package_main",
+      "scratch_parser_package_name",
+      "scratch_parser_package_scripts",
+      "scratch_parser_package_scripts_test",
+      "scratch_parser_package_type",
+      "scratch_parser_package_version",
+      "scratch_parser_parse",
+      "scratch_parser_parse_cheerio",
+      "scratch_parser_parse_fs",
+      "scratch_parser_parse_html"
+    ],
+    "23": [
+      "web_app_chrome_extension_manifest",
+      "web_app_chrome_extension_manifest_action",
+      "web_app_chrome_extension_manifest_action_default_icon",
+      "web_app_chrome_extension_manifest_action_default_popup",
+      "web_app_chrome_extension_manifest_background",
+      "web_app_chrome_extension_manifest_background_service_worker",
+      "web_app_chrome_extension_manifest_content_scripts",
+      "web_app_chrome_extension_manifest_default_icon_128",
+      "web_app_chrome_extension_manifest_default_icon_16",
+      "web_app_chrome_extension_manifest_default_icon_48",
+      "web_app_chrome_extension_manifest_description",
+      "web_app_chrome_extension_manifest_host_permissions",
+      "web_app_chrome_extension_manifest_icons",
+      "web_app_chrome_extension_manifest_icons_128",
+      "web_app_chrome_extension_manifest_icons_16",
+      "web_app_chrome_extension_manifest_icons_48",
+      "web_app_chrome_extension_manifest_manifest_version",
+      "web_app_chrome_extension_manifest_name",
+      "web_app_chrome_extension_manifest_permissions",
+      "web_app_chrome_extension_manifest_version"
+    ],
+    "24": [
+      "web_app_src_app_campaigns_id_alamat_loading",
+      "web_app_src_app_campaigns_id_alamat_loading_loading",
+      "web_app_src_app_campaigns_id_daily_loading",
+      "web_app_src_app_campaigns_id_daily_loading_loading",
+      "web_app_src_app_campaigns_id_keuangan_loading",
+      "web_app_src_app_campaigns_id_keuangan_loading_loading",
+      "web_app_src_app_campaigns_id_listing_loading",
+      "web_app_src_app_campaigns_id_listing_loading_loading",
+      "web_app_src_app_campaigns_id_live_loading",
+      "web_app_src_app_campaigns_id_live_loading_loading",
+      "web_app_src_app_campaigns_id_livestream_loading",
+      "web_app_src_app_campaigns_id_livestream_loading_loading",
+      "web_app_src_app_campaigns_id_performa_loading",
+      "web_app_src_app_campaigns_id_performa_loading_loading",
+      "web_app_src_app_campaigns_id_sku_loading",
+      "web_app_src_app_campaigns_id_sku_loading_loading",
+      "web_app_src_app_campaigns_id_video_loading",
+      "web_app_src_app_campaigns_id_video_loading_loading",
+      "web_app_src_components_tabloading",
+      "web_app_src_components_tabloading_tabloading"
+    ],
+    "25": [
+      "web_app_tsconfig",
+      "web_app_tsconfig_compileroptions",
+      "web_app_tsconfig_compileroptions_allowjs",
+      "web_app_tsconfig_compileroptions_esmoduleinterop",
+      "web_app_tsconfig_compileroptions_incremental",
+      "web_app_tsconfig_compileroptions_isolatedmodules",
+      "web_app_tsconfig_compileroptions_jsx",
+      "web_app_tsconfig_compileroptions_lib",
+      "web_app_tsconfig_compileroptions_module",
+      "web_app_tsconfig_compileroptions_moduleresolution",
+      "web_app_tsconfig_compileroptions_noemit",
+      "web_app_tsconfig_compileroptions_paths",
+      "web_app_tsconfig_compileroptions_plugins",
+      "web_app_tsconfig_compileroptions_resolvejsonmodule",
+      "web_app_tsconfig_compileroptions_skiplibcheck",
+      "web_app_tsconfig_compileroptions_strict",
+      "web_app_tsconfig_compileroptions_target",
+      "web_app_tsconfig_exclude",
+      "web_app_tsconfig_include"
+    ],
+    "26": [
+      "web_app_chrome_extension_popup",
+      "web_app_chrome_extension_popup_addcurrenttoqueue",
+      "web_app_chrome_extension_popup_appdatabase",
+      "web_app_chrome_extension_popup_formatfollowers",
+      "web_app_chrome_extension_popup_gettier",
+      "web_app_chrome_extension_popup_init",
+      "web_app_chrome_extension_popup_isindatabase",
+      "web_app_chrome_extension_popup_isinqueue",
+      "web_app_chrome_extension_popup_loadappdatabase",
+      "web_app_chrome_extension_popup_loadcurrenttab",
+      "web_app_chrome_extension_popup_queue",
+      "web_app_chrome_extension_popup_render",
+      "web_app_chrome_extension_popup_rendercurrentcard",
+      "web_app_chrome_extension_popup_renderfooter",
+      "web_app_chrome_extension_popup_renderqueuelist",
+      "web_app_chrome_extension_popup_savequeue",
+      "web_app_chrome_extension_popup_showstatus"
+    ],
+    "27": [
+      "public_profiles",
+      "web_app_supabase_migrations_20260826084300_finance_overhaul",
+      "web_app_supabase_migrations_20260826084300_finance_overhaul_creator_bank_accounts",
+      "web_app_supabase_migrations_20260826084300_finance_overhaul_payment_batches",
+      "web_app_supabase_migrations_20260826084300_finance_overhaul_payment_items",
+      "web_app_supabase_migrations_20260826084300_finance_overhaul_sender_accounts",
+      "web_app_supabase_migrations_20260827000001_optimize_mutations_view",
+      "web_app_supabase_migrations_20260827000001_optimize_mutations_view_idx_payment_batches_paid_at",
+      "web_app_supabase_migrations_20260827000001_optimize_mutations_view_idx_payment_items_final_status",
+      "web_app_supabase_migrations_20260827000001_optimize_mutations_view_vw_payment_mutations",
+      "web_app_supabase_migrations_20260914000000_finance_autosplit_and_view",
+      "web_app_supabase_migrations_20260914000000_finance_autosplit_and_view_idx_payment_batches_perf",
+      "web_app_supabase_migrations_20260914000000_finance_autosplit_and_view_idx_payment_items_perf",
+      "web_app_supabase_migrations_20260914000000_finance_autosplit_and_view_vw_campaign_budget_summary",
+      "web_app_supabase_migrations_20260915180000_rpc_get_payment_batches",
+      "web_app_supabase_migrations_20260915180000_rpc_get_payment_batches_rpc_get_payment_batches"
+    ],
+    "28": [
+      "web_app_src_app_actions_conceptactions",
+      "web_app_src_app_actions_conceptactions_createcampaignconcept",
+      "web_app_src_app_actions_conceptactions_deletecampaignconcept",
+      "web_app_src_app_actions_conceptactions_getcampaignconcepts",
+      "web_app_src_app_actions_conceptactions_updatecampaignconcept",
+      "web_app_src_app_actions_listingactions",
+      "web_app_src_app_actions_listingactions_addcreatortocampaignaction",
+      "web_app_src_app_actions_listingactions_batchupdatecampaigncreatorsaction",
+      "web_app_src_app_actions_listingactions_getcampaignlistingdata",
+      "web_app_src_app_actions_listingactions_removecreatorfromcampaignaction",
+      "web_app_src_db_schema_campaignconcepts",
+      "web_app_src_db_schema_campaigncreators",
+      "web_app_src_db_schema_creatorcontacts",
+      "web_app_src_db_schema_creators",
+      "web_app_src_db_schema_creatorsnapshots",
+      "web_app_src_db_schema_videos"
+    ],
+    "29": [
+      "web_app_src_app_portal_actions_portalactions",
+      "web_app_src_app_portal_actions_portalactions_batchupdatedata",
+      "web_app_src_app_portal_actions_portalactions_batchupdateresibyclient",
+      "web_app_src_app_portal_actions_portalactions_getportaldata",
+      "web_app_src_app_portal_actions_portalactions_loginportal",
+      "web_app_src_app_portal_actions_portalactions_logoutportal",
+      "web_app_src_app_portal_actions_portalactions_submitclientapproval",
+      "web_app_src_app_portal_actions_portalactions_updateclientnotes",
+      "web_app_src_app_portal_actions_portalactions_updateresibyclient",
+      "web_app_src_app_portal_id_dashboard_layout",
+      "web_app_src_app_portal_id_dashboard_layout_portaldashboardlayout",
+      "web_app_src_app_portal_id_dashboard_page",
+      "web_app_src_app_portal_id_dashboard_page_portaldashboardpage",
+      "web_app_src_app_portal_id_portaldashboardclient_portaldashboardclient",
+      "web_app_src_app_portal_id_portalloginform",
+      "web_app_src_app_portal_id_portalloginform_portalloginform"
+    ],
+    "30": [
+      "chrome_extension_manifest",
+      "chrome_extension_manifest_action",
+      "chrome_extension_manifest_action_default_popup",
+      "chrome_extension_manifest_action_default_title",
+      "chrome_extension_manifest_background",
+      "chrome_extension_manifest_background_service_worker",
+      "chrome_extension_manifest_content_scripts",
+      "chrome_extension_manifest_description",
+      "chrome_extension_manifest_host_permissions",
+      "chrome_extension_manifest_manifest_version",
+      "chrome_extension_manifest_name",
+      "chrome_extension_manifest_permissions",
+      "chrome_extension_manifest_version"
+    ],
+    "31": [
+      "web_app_src_app_actions_campaignpageactions_fetchdailyperformancepagedataaction",
+      "web_app_src_app_campaigns_actions_dailyactions_getdailydata",
+      "web_app_src_app_campaigns_id_daily_dailyclient",
+      "web_app_src_app_campaigns_id_daily_dailyclient_campaigndailyperformanceclient",
+      "web_app_src_app_campaigns_id_daily_dailyclient_createemptygroup",
+      "web_app_src_app_campaigns_id_daily_dailyclient_extracttiktokuploaddate",
+      "web_app_src_app_campaigns_id_daily_dailyclient_groupdata",
+      "web_app_src_app_campaigns_id_daily_dailyclient_towibdatestr",
+      "web_app_src_app_campaigns_id_daily_page",
+      "web_app_src_app_campaigns_id_daily_page_campaigndailyperformancepage",
+      "web_app_src_app_campaigns_id_daily_timelinetarget",
+      "web_app_src_app_campaigns_id_daily_timelinetarget_timelinetarget",
+      "web_app_src_app_campaigns_id_daily_timelinetarget_timelinetargetprops"
+    ],
+    "32": [
+      "db_migration_phase2_sales_ads",
+      "db_migration_phase2_sales_ads_idx_ads_campaign",
+      "db_migration_phase2_sales_ads_idx_ads_creator",
+      "db_migration_phase2_sales_ads_idx_sales_campaign",
+      "db_migration_phase2_sales_ads_idx_sales_content_uid",
+      "db_migration_phase2_sales_ads_idx_sales_creator",
+      "db_migration_phase2_sales_ads_public_ad_name_mapping",
+      "db_migration_phase2_sales_ads_public_ads_performance",
+      "db_migration_phase2_sales_ads_public_sales",
+      "db_migration_phase2_sales_ads_sql_public_campaigns",
+      "db_migration_phase2_sales_ads_sql_public_skus",
+      "public_creators"
+    ],
+    "33": [
+      "web_app_package_devdependencies",
+      "web_app_package_devdependencies_drizzle_kit",
+      "web_app_package_devdependencies_eslint",
+      "web_app_package_devdependencies_eslint_config_next",
+      "web_app_package_devdependencies_tailwindcss",
+      "web_app_package_devdependencies_tailwindcss_postcss",
+      "web_app_package_devdependencies_types_file_saver",
+      "web_app_package_devdependencies_types_node",
+      "web_app_package_devdependencies_types_pg",
+      "web_app_package_devdependencies_types_react",
+      "web_app_package_devdependencies_types_react_dom",
+      "web_app_package_devdependencies_typescript"
+    ],
+    "34": [
+      "web_app_scripts_sync_data",
+      "web_app_scripts_sync_data_createclient",
+      "web_app_scripts_sync_data_getorcreatebrand",
+      "web_app_scripts_sync_data_getorcreatecampaign",
+      "web_app_scripts_sync_data_parseapproval",
+      "web_app_scripts_sync_data_parsegmv",
+      "web_app_scripts_sync_data_parseprice",
+      "web_app_scripts_sync_data_processall",
+      "web_app_scripts_sync_data_processsheet",
+      "web_app_scripts_sync_data_sheetmapping",
+      "web_app_scripts_sync_data_supabase",
+      "web_app_scripts_sync_data_xlsx"
+    ],
+    "35": [
+      "web_app_src_app_manajemen_akun_actions",
+      "web_app_src_app_manajemen_akun_actions_addwhitelistemail",
+      "web_app_src_app_manajemen_akun_actions_approveuser",
+      "web_app_src_app_manajemen_akun_actions_assigncampaignstouser",
+      "web_app_src_app_manajemen_akun_actions_changeuserrole",
+      "web_app_src_app_manajemen_akun_actions_deactivateuser",
+      "web_app_src_app_manajemen_akun_actions_getadminuser",
+      "web_app_src_app_manajemen_akun_actions_rejectuser",
+      "web_app_src_app_manajemen_akun_actions_removewhitelistemail",
+      "web_app_src_app_manajemen_akun_manajemenakunclient",
+      "web_app_src_app_manajemen_akun_manajemenakunclient_manajemenakunclient",
+      "web_app_src_app_manajemen_akun_manajemenakunclient_userassignmentcard"
+    ],
+    "36": [
+      "web_app_src_app_layout",
+      "web_app_src_app_layout_metadata",
+      "web_app_src_app_layout_rootlayout",
+      "web_app_src_components_dataloader",
+      "web_app_src_components_dataloader_dataloader",
+      "web_app_src_components_globalloadingoverlay",
+      "web_app_src_components_globalloadingoverlay_globalloadingoverlay",
+      "web_app_src_components_globalloadingoverlay_skeletonblock",
+      "web_app_src_components_globalloadingoverlay_skeletontablerows",
+      "web_app_src_components_layoutwrapper",
+      "web_app_src_components_layoutwrapper_layoutwrapper"
+    ],
+    "37": [
+      "ref_file_saver",
+      "web_app_src_app_brand_portal_summary_page",
+      "web_app_src_app_brand_portal_summary_page_dynamic",
+      "web_app_src_app_brand_portal_summary_page_summarypage",
+      "web_app_src_app_brand_portal_summary_page_tabs",
+      "web_app_src_components_excelexportbutton",
+      "web_app_src_components_excelexportbutton_excelexportbutton",
+      "web_app_src_components_excelexportbutton_props",
+      "web_app_src_lib_reporting_fetchreportdata",
+      "web_app_src_lib_reporting_generateexcelbuffer"
+    ],
+    "38": [
+      "web_app_scripts_compare_omg",
+      "web_app_scripts_compare_omg_allcreators",
+      "web_app_scripts_compare_omg_diffs",
+      "web_app_scripts_compare_omg_getlegacygmv",
+      "web_app_scripts_compare_omg_getsalesfilegmv",
+      "web_app_scripts_compare_omg_legacy",
+      "web_app_scripts_compare_omg_raw1",
+      "web_app_scripts_compare_omg_raw2",
+      "web_app_scripts_compare_omg_rawcreators",
+      "web_app_scripts_compare_omg_xlsx"
+    ],
+    "39": [
+      "web_app_scripts_compare_wardah",
+      "web_app_scripts_compare_wardah_allcreators",
+      "web_app_scripts_compare_wardah_diffs",
+      "web_app_scripts_compare_wardah_getlegacygmv",
+      "web_app_scripts_compare_wardah_getsalesfilegmv",
+      "web_app_scripts_compare_wardah_legacy",
+      "web_app_scripts_compare_wardah_raw1",
+      "web_app_scripts_compare_wardah_raw2",
+      "web_app_scripts_compare_wardah_rawcreators",
+      "web_app_scripts_compare_wardah_xlsx"
+    ],
+    "40": [
+      "campaign_awareness_summary",
+      "campaign_total_awareness",
+      "db_rpc_get_campaign_performance",
+      "db_rpc_get_campaign_performance_get_campaign_performance",
+      "web_app_scripts_db_migration_ads_delta_view",
+      "web_app_scripts_db_migration_ads_delta_view_ads_performance_delta",
+      "web_app_supabase_migrations_20260610000001_phase_2_ads_performance",
+      "web_app_supabase_migrations_20260610000001_phase_2_idx_ads_campaign",
+      "web_app_supabase_migrations_20260610000001_phase_2_idx_ads_creator"
+    ],
+    "41": [
+      "chrome_extension_content",
+      "chrome_extension_content_getstatvalue",
+      "chrome_extension_content_injectbutton",
+      "chrome_extension_content_injectbutton_updatepreview",
+      "chrome_extension_content_iskalodata",
+      "chrome_extension_content_observer",
+      "chrome_extension_content_scrapedata",
+      "chrome_extension_content_scrapedata_parsevalue",
+      "chrome_extension_content_scrapekalodata"
+    ],
+    "42": [
+      "db_migration_phase2_daily_view",
+      "db_migration_phase2_daily_view_public_daily_performance",
+      "db_migration_phase2_daily_view_public_vw_campaign_summary",
+      "db_migration_phase2_daily_view_sql_public_campaign_creators",
+      "db_migration_phase2_daily_view_sql_public_campaigns",
+      "db_migration_phase2_daily_view_sql_public_sales",
+      "db_migration_phase2_daily_view_sql_public_videos",
+      "public_ads_performance",
+      "public_creator_payments"
+    ],
+    "43": [
+      "web_app_scripts_migrate_relations",
+      "web_app_scripts_migrate_relations_datapath",
+      "web_app_scripts_migrate_relations_filebudgeting",
+      "web_app_scripts_migrate_relations_filelisting",
+      "web_app_scripts_migrate_relations_filetracking",
+      "web_app_scripts_migrate_relations_findheaderrow",
+      "web_app_scripts_migrate_relations_normalizestr",
+      "web_app_scripts_migrate_relations_runrelationsmigration",
+      "web_app_scripts_migrate_relations_supabase"
+    ],
+    "44": [
+      "web_app_scripts_patch_creators_metrics",
+      "web_app_scripts_patch_creators_metrics_createclient",
+      "web_app_scripts_patch_creators_metrics_parseaudienceage",
+      "web_app_scripts_patch_creators_metrics_parsegmv",
+      "web_app_scripts_patch_creators_metrics_parseprice",
+      "web_app_scripts_patch_creators_metrics_run",
+      "web_app_scripts_patch_creators_metrics_sheetmapping",
+      "web_app_scripts_patch_creators_metrics_supabase",
+      "web_app_scripts_patch_creators_metrics_xlsx"
+    ],
+    "45": [
+      "web_app_src_lib_db_queries",
+      "web_app_src_lib_db_queries_getcampaigncreatorperformance",
+      "web_app_src_lib_db_queries_getcampaigndailystats",
+      "web_app_src_lib_db_queries_getcampaignlivestats",
+      "web_app_src_lib_db_queries_getcampaignsalesstats",
+      "web_app_src_lib_db_queries_getcampaigntopskus",
+      "web_app_src_lib_db_queries_getcampaignvideostats",
+      "web_app_src_lib_db_queries_getpaymentbatchesrpc",
+      "web_app_src_lib_db_queries_getperformancesummaryv2"
+    ],
+    "46": [
+      "ref_next_auth",
+      "web_app_src_app_api_auth_nextauth_route",
+      "web_app_src_app_api_auth_nextauth_route_get",
+      "web_app_src_app_api_auth_nextauth_route_post",
+      "web_app_src_auth",
+      "web_app_src_auth_handlers",
+      "web_app_src_auth_signin",
+      "web_app_src_auth_signout"
+    ],
+    "47": [
+      "web_app_scripts_audit",
+      "web_app_scripts_audit_datapath",
+      "web_app_scripts_audit_filelisting",
+      "web_app_scripts_audit_findheaderrow",
+      "web_app_scripts_audit_normalizelink",
+      "web_app_scripts_audit_normalizephone",
+      "web_app_scripts_audit_normalizeusername",
+      "web_app_scripts_audit_runaudit"
+    ],
+    "48": [
+      "web_app_scripts_find_discrepancies",
+      "web_app_scripts_find_discrepancies_datapath",
+      "web_app_scripts_find_discrepancies_filebudgeting",
+      "web_app_scripts_find_discrepancies_filelisting",
+      "web_app_scripts_find_discrepancies_filetracking",
+      "web_app_scripts_find_discrepancies_finddifferences",
+      "web_app_scripts_find_discrepancies_normalizestr",
+      "web_app_scripts_find_discrepancies_supabase"
+    ],
+    "49": [
+      "web_app_scripts_fix_campaigns",
+      "web_app_scripts_fix_campaigns_datapath",
+      "web_app_scripts_fix_campaigns_filelisting",
+      "web_app_scripts_fix_campaigns_filetracking",
+      "web_app_scripts_fix_campaigns_findheaderrow",
+      "web_app_scripts_fix_campaigns_fixcampaigns",
+      "web_app_scripts_fix_campaigns_normalizestr",
+      "web_app_scripts_fix_campaigns_supabase"
+    ],
+    "50": [
+      "web_app_scripts_fix_iswhite",
+      "web_app_scripts_fix_iswhite_datapath",
+      "web_app_scripts_fix_iswhite_filelisting",
+      "web_app_scripts_fix_iswhite_fixiswhite",
+      "web_app_scripts_fix_iswhite_normalizestr",
+      "web_app_scripts_fix_iswhite_require",
+      "web_app_scripts_fix_iswhite_supabase",
+      "web_app_scripts_fix_iswhite_xlsx"
+    ],
+    "51": [
+      "web_app_scripts_migrate_datapath",
+      "web_app_scripts_migrate_filelisting",
+      "web_app_scripts_migrate_filetracking",
+      "web_app_scripts_migrate_findheaderrow",
+      "web_app_scripts_migrate_normalizestr",
+      "web_app_scripts_migrate_runmigration",
+      "web_app_scripts_migrate_ts_web_app_scripts_migrate",
+      "web_app_scripts_migrate_ts_web_app_scripts_migrate_supabase"
+    ],
+    "52": [
+      "web_app_scripts_sync_sku",
+      "web_app_scripts_sync_sku_createclient",
+      "web_app_scripts_sync_sku_dotenv",
+      "web_app_scripts_sync_sku_fs",
+      "web_app_scripts_sync_sku_mapcampaign",
+      "web_app_scripts_sync_sku_run",
+      "web_app_scripts_sync_sku_supabase",
+      "web_app_scripts_sync_sku_xlsx"
+    ],
+    "53": [
+      "web_app_scripts_validate_migration",
+      "web_app_scripts_validate_migration_datapath",
+      "web_app_scripts_validate_migration_filebudgeting",
+      "web_app_scripts_validate_migration_filelisting",
+      "web_app_scripts_validate_migration_filetracking",
+      "web_app_scripts_validate_migration_normalizestr",
+      "web_app_scripts_validate_migration_supabase",
+      "web_app_scripts_validate_migration_validate"
+    ],
+    "54": [
+      "web_app_src_app_ads_report_actions",
+      "web_app_src_app_ads_report_actions_addadsallocationaction",
+      "web_app_src_app_ads_report_actions_addadstopupaction",
+      "web_app_src_app_ads_report_actions_deleteadsallocationaction",
+      "web_app_src_app_ads_report_actions_deleteadstopupaction",
+      "web_app_src_app_ads_report_actions_fetchadsbudgetingdataaction",
+      "web_app_src_app_ads_report_budgeting_ads_page",
+      "web_app_src_app_ads_report_budgeting_ads_page_budgetingadspage"
+    ],
+    "55": [
+      "web_app_scripts_audit_omg",
+      "web_app_scripts_audit_omg_data",
+      "web_app_scripts_audit_omg_newkeyset",
+      "web_app_scripts_audit_omg_oldkeyset",
+      "web_app_scripts_audit_omg_omg_makeup_skus",
+      "web_app_scripts_audit_omg_workbook",
+      "web_app_scripts_audit_omg_xlsx"
+    ],
+    "56": [
+      "web_app_scripts_check_approval",
+      "web_app_scripts_check_approval_approvals",
+      "web_app_scripts_check_approval_data",
+      "web_app_scripts_check_approval_parseddata",
+      "web_app_scripts_check_approval_rows",
+      "web_app_scripts_check_approval_workbook",
+      "web_app_scripts_check_approval_xlsx"
+    ],
+    "57": [
+      "web_app_scripts_fix_campaigns_fast",
+      "web_app_scripts_fix_campaigns_fast_datapath",
+      "web_app_scripts_fix_campaigns_fast_filelisting",
+      "web_app_scripts_fix_campaigns_fast_findheaderrow",
+      "web_app_scripts_fix_campaigns_fast_fixcampaignsfast",
+      "web_app_scripts_fix_campaigns_fast_normalizestr",
+      "web_app_scripts_fix_campaigns_fast_supabase"
+    ],
+    "58": [
+      "web_app_scripts_parse_qahira",
+      "web_app_scripts_parse_qahira_approved",
+      "web_app_scripts_parse_qahira_data",
+      "web_app_scripts_parse_qahira_parseddata",
+      "web_app_scripts_parse_qahira_rows",
+      "web_app_scripts_parse_qahira_workbook",
+      "web_app_scripts_parse_qahira_xlsx"
+    ],
+    "59": [
+      "web_app_scripts_patch_approval",
+      "web_app_scripts_patch_approval_createclient",
+      "web_app_scripts_patch_approval_parseapproval",
+      "web_app_scripts_patch_approval_run",
+      "web_app_scripts_patch_approval_sheetmapping",
+      "web_app_scripts_patch_approval_supabase",
+      "web_app_scripts_patch_approval_xlsx"
+    ],
+    "60": [
+      "web_app_scripts_patch_ui",
+      "web_app_scripts_patch_ui_bdcontent",
+      "web_app_scripts_patch_ui_bdfile",
+      "web_app_scripts_patch_ui_cccontent",
+      "web_app_scripts_patch_ui_ccfile",
+      "web_app_scripts_patch_ui_fs",
+      "web_app_scripts_patch_ui_path"
+    ],
+    "61": [
+      "web_app_src_utils_importadssync",
+      "web_app_src_utils_importadssync_columnmapping",
+      "web_app_src_utils_importadssync_downloadadssynctemplate",
+      "web_app_src_utils_importadssync_enrichedadsrow",
+      "web_app_src_utils_importadssync_parseadssyncfile",
+      "web_app_src_utils_importadssync_parsedadsrow",
+      "web_app_src_utils_importadssync_parsefileheaders"
+    ],
+    "62": [
+      "scratch_parser",
+      "scratch_parser_dom",
+      "scratch_parser_fs",
+      "scratch_parser_html",
+      "scratch_parser_jsdom",
+      "scratch_parser_scrapekalodata"
+    ],
+    "63": [
+      "web_app_scripts_analyze",
+      "web_app_scripts_analyze_basepath",
+      "web_app_scripts_analyze_files",
+      "web_app_scripts_analyze_fs",
+      "web_app_scripts_analyze_path",
+      "web_app_scripts_analyze_xlsx"
+    ],
+    "64": [
+      "web_app_scripts_find_iswhite_qahira",
+      "web_app_scripts_find_iswhite_qahira_datapath",
+      "web_app_scripts_find_iswhite_qahira_filelisting",
+      "web_app_scripts_find_iswhite_qahira_findspecificdiffs",
+      "web_app_scripts_find_iswhite_qahira_normalizestr",
+      "web_app_scripts_find_iswhite_qahira_supabase"
+    ],
+    "65": [
+      "web_app_scripts_migrate_finance",
+      "web_app_scripts_migrate_finance_datapath",
+      "web_app_scripts_migrate_finance_filebudgeting",
+      "web_app_scripts_migrate_finance_normalizestr",
+      "web_app_scripts_migrate_finance_runfinancemigration",
+      "web_app_scripts_migrate_finance_supabase"
+    ],
+    "66": [
+      "web_app_scripts_parse_excel",
+      "web_app_scripts_parse_excel_data",
+      "web_app_scripts_parse_excel_parseddata",
+      "web_app_scripts_parse_excel_rows",
+      "web_app_scripts_parse_excel_workbook",
+      "web_app_scripts_parse_excel_xlsx"
+    ],
+    "67": [
+      "web_app_scripts_read_sku",
+      "web_app_scripts_read_sku_fs",
+      "web_app_scripts_read_sku_grouped",
+      "web_app_scripts_read_sku_rows",
+      "web_app_scripts_read_sku_workbook",
+      "web_app_scripts_read_sku_xlsx"
+    ],
+    "68": [
+      "web_app_src_app_actions_invoiceactions",
+      "web_app_src_app_actions_invoiceactions_approveinvoiceaction",
+      "web_app_src_app_actions_invoiceactions_fetchinvoicedataaction",
+      "web_app_src_app_actions_invoiceactions_fetchinvoicerincianaction",
+      "web_app_src_app_actions_invoiceactions_rejectinvoiceaction",
+      "web_app_src_app_invoice_page_invoicepage"
+    ],
+    "69": [
+      "ref_next",
+      "web_app_next_config",
+      "web_app_next_config_nextconfig",
+      "web_app_src_app_manifest",
+      "web_app_src_app_manifest_manifest"
+    ],
+    "70": [
+      "web_app_package_scripts",
+      "web_app_package_scripts_build",
+      "web_app_package_scripts_dev",
+      "web_app_package_scripts_lint",
+      "web_app_package_scripts_start"
+    ],
+    "71": [
+      "web_app_scratch_fix_padding",
+      "web_app_scratch_fix_padding_content1",
+      "web_app_scratch_fix_padding_file1",
+      "web_app_scratch_fix_padding_fs",
+      "web_app_scratch_fix_padding_path"
+    ],
+    "72": [
+      "web_app_scripts_analyze_d987",
+      "web_app_scripts_analyze_d987_data",
+      "web_app_scripts_analyze_d987_uniquevideos",
+      "web_app_scripts_analyze_d987_workbook",
+      "web_app_scripts_analyze_d987_xlsx"
+    ],
+    "73": [
+      "web_app_scripts_backup_and_reset",
+      "web_app_scripts_backup_and_reset_createclient",
+      "web_app_scripts_backup_and_reset_fs",
+      "web_app_scripts_backup_and_reset_run",
+      "web_app_scripts_backup_and_reset_supabase"
+    ],
+    "74": [
+      "web_app_scripts_check_all_excel",
+      "web_app_scripts_check_all_excel_checkexcel",
+      "web_app_scripts_check_all_excel_fs",
+      "web_app_scripts_check_all_excel_path",
+      "web_app_scripts_check_all_excel_xlsx"
+    ],
+    "75": [
+      "web_app_scripts_check_brands",
+      "web_app_scripts_check_brands_brands",
+      "web_app_scripts_check_brands_data",
+      "web_app_scripts_check_brands_workbook",
+      "web_app_scripts_check_brands_xlsx"
+    ],
+    "76": [
+      "web_app_scripts_check_counts",
+      "web_app_scripts_check_counts_checkcount",
+      "web_app_scripts_check_counts_createclient",
+      "web_app_scripts_check_counts_run",
+      "web_app_scripts_check_counts_supabase"
+    ],
+    "77": [
+      "web_app_scripts_check_legacy",
+      "web_app_scripts_check_legacy_data",
+      "web_app_scripts_check_legacy_wardahrows",
+      "web_app_scripts_check_legacy_workbook",
+      "web_app_scripts_check_legacy_xlsx"
+    ],
+    "78": [
+      "web_app_scripts_check_schema_checkcolumns",
+      "web_app_scripts_check_schema_js_web_app_scripts_check_schema_2bc138",
+      "web_app_scripts_check_schema_js_web_app_scripts_check_schema_createclient_2bc138",
+      "web_app_scripts_check_schema_js_web_app_scripts_check_schema_run",
+      "web_app_scripts_check_schema_js_web_app_scripts_check_schema_supabase"
+    ],
+    "79": [
+      "web_app_scripts_check_top_products",
+      "web_app_scripts_check_top_products_fs",
+      "web_app_scripts_check_top_products_gettopproducts",
+      "web_app_scripts_check_top_products_path",
+      "web_app_scripts_check_top_products_xlsx"
+    ],
+    "80": [
+      "web_app_scripts_find_dupes",
+      "web_app_scripts_find_dupes_datapath",
+      "web_app_scripts_find_dupes_filelisting",
+      "web_app_scripts_find_dupes_finddupesinsheet",
+      "web_app_scripts_find_dupes_normalizestr"
+    ],
+    "81": [
+      "web_app_scripts_fix_all_campaigns",
+      "web_app_scripts_fix_all_campaigns_createclient",
+      "web_app_scripts_fix_all_campaigns_run",
+      "web_app_scripts_fix_all_campaigns_supabase",
+      "web_app_scripts_fix_all_campaigns_xlsx"
+    ],
+    "82": [
+      "web_app_scripts_fix_campaign15",
+      "web_app_scripts_fix_campaign15_createclient",
+      "web_app_scripts_fix_campaign15_run",
+      "web_app_scripts_fix_campaign15_supabase",
+      "web_app_scripts_fix_campaign15_xlsx"
+    ],
+    "83": [
+      "web_app_scripts_fix_contacts_snapshots",
+      "web_app_scripts_fix_contacts_snapshots_filelisting",
+      "web_app_scripts_fix_contacts_snapshots_fixcontactsandsnapshots",
+      "web_app_scripts_fix_contacts_snapshots_normalizestr",
+      "web_app_scripts_fix_contacts_snapshots_supabase"
+    ],
+    "84": [
+      "web_app_scripts_fix_organic_gmv",
+      "web_app_scripts_fix_organic_gmv_createclient",
+      "web_app_scripts_fix_organic_gmv_parsetiktokdate",
+      "web_app_scripts_fix_organic_gmv_run",
+      "web_app_scripts_fix_organic_gmv_supabase"
+    ],
+    "85": [
+      "web_app_scripts_fix_salsa",
+      "web_app_scripts_fix_salsa_createclient",
+      "web_app_scripts_fix_salsa_run",
+      "web_app_scripts_fix_salsa_supabase",
+      "web_app_scripts_fix_salsa_xlsx"
+    ],
+    "86": [
+      "web_app_scripts_fix_videos",
+      "web_app_scripts_fix_videos_filelisting",
+      "web_app_scripts_fix_videos_fixvideos",
+      "web_app_scripts_fix_videos_normalizestr",
+      "web_app_scripts_fix_videos_supabase"
+    ],
+    "87": [
+      "web_app_scripts_migrate_finance_fast",
+      "web_app_scripts_migrate_finance_fast_filebudgeting",
+      "web_app_scripts_migrate_finance_fast_normalizestr",
+      "web_app_scripts_migrate_finance_fast_runfinancemigrationfast",
+      "web_app_scripts_migrate_finance_fast_supabase"
+    ],
+    "88": [
+      "web_app_scripts_patch_gmv",
+      "web_app_scripts_patch_gmv_createclient",
+      "web_app_scripts_patch_gmv_run",
+      "web_app_scripts_patch_gmv_supabase",
+      "web_app_scripts_patch_gmv_xlsx"
+    ],
+    "89": [
+      "web_app_scripts_patch_payment_actions",
+      "web_app_scripts_patch_payment_actions_content",
+      "web_app_scripts_patch_payment_actions_file",
+      "web_app_scripts_patch_payment_actions_fs",
+      "web_app_scripts_patch_payment_actions_path"
+    ],
+    "90": [
+      "web_app_scripts_patch_payouts",
+      "web_app_scripts_patch_payouts_createclient",
+      "web_app_scripts_patch_payouts_levenshteindistance",
+      "web_app_scripts_patch_payouts_run",
+      "web_app_scripts_patch_payouts_supabase"
+    ],
+    "91": [
+      "web_app_scripts_reset_and_patch",
+      "web_app_scripts_reset_and_patch_createclient",
+      "web_app_scripts_reset_and_patch_run",
+      "web_app_scripts_reset_and_patch_supabase",
+      "web_app_scripts_reset_and_patch_xlsx"
+    ],
+    "92": [
+      "web_app_scripts_run_import",
+      "web_app_scripts_run_import_createclient",
+      "web_app_scripts_run_import_run",
+      "web_app_scripts_run_import_supabase",
+      "web_app_scripts_run_import_xlsx"
+    ],
+    "93": [
+      "web_app_scripts_run_sql",
+      "web_app_scripts_run_sql_createclient",
+      "web_app_scripts_run_sql_fs",
+      "web_app_scripts_run_sql_path",
+      "web_app_scripts_run_sql_run"
+    ],
+    "94": [
+      "web_app_scripts_test_address",
+      "web_app_scripts_test_address_anonkey",
+      "web_app_scripts_test_address_envfile",
+      "web_app_scripts_test_address_supabase",
+      "web_app_scripts_test_address_testinsert"
+    ],
+    "95": [
+      "web_app_scripts_test_bang_fey",
+      "web_app_scripts_test_bang_fey_anonkey",
+      "web_app_scripts_test_bang_fey_checkbangfey",
+      "web_app_scripts_test_bang_fey_envfile",
+      "web_app_scripts_test_bang_fey_supabase"
+    ],
+    "96": [
+      "web_app_scripts_test_contacts",
+      "web_app_scripts_test_contacts_anonkey",
+      "web_app_scripts_test_contacts_envfile",
+      "web_app_scripts_test_contacts_supabase",
+      "web_app_scripts_test_contacts_testcontacts"
+    ],
+    "97": [
+      "web_app_scripts_test_schema_anonkey",
+      "web_app_scripts_test_schema_checkschema",
+      "web_app_scripts_test_schema_envfile",
+      "web_app_scripts_test_schema_mjs_web_app_scripts_test_schema",
+      "web_app_scripts_test_schema_supabase"
+    ],
+    "98": [
+      "web_app_scripts_test_update_anonkey",
+      "web_app_scripts_test_update_envfile",
+      "web_app_scripts_test_update_mjs_web_app_scripts_test_update",
+      "web_app_scripts_test_update_mjs_web_app_scripts_test_update_supabase",
+      "web_app_scripts_test_update_testfetchandupdate"
+    ],
+    "99": [
+      "web_app_scripts_test_view",
+      "web_app_scripts_test_view_check",
+      "web_app_scripts_test_view_createclient",
+      "web_app_scripts_test_view_dotenv",
+      "web_app_scripts_test_view_supabase"
+    ],
+    "100": [
+      "web_app_scripts_test_view2",
+      "web_app_scripts_test_view2_check",
+      "web_app_scripts_test_view2_createclient",
+      "web_app_scripts_test_view2_dotenv",
+      "web_app_scripts_test_view2_supabase"
+    ],
+    "101": [
+      "web_app_scripts_verify_all",
+      "web_app_scripts_verify_all_anonkey",
+      "web_app_scripts_verify_all_check",
+      "web_app_scripts_verify_all_envfile",
+      "web_app_scripts_verify_all_supabase"
+    ],
+    "102": [
+      "web_app_scripts_verify_omg",
+      "web_app_scripts_verify_omg_anonkey",
+      "web_app_scripts_verify_omg_check",
+      "web_app_scripts_verify_omg_envfile",
+      "web_app_scripts_verify_omg_supabase"
+    ],
+    "103": [
+      "web_app_scripts_verify_reconciliation",
+      "web_app_scripts_verify_reconciliation_findheaderrow",
+      "web_app_scripts_verify_reconciliation_normalizestr",
+      "web_app_scripts_verify_reconciliation_run",
+      "web_app_scripts_verify_reconciliation_xlsx"
+    ],
+    "104": [
+      "web_app_supabase_migrations_20260610000002_phase_3",
+      "web_app_supabase_migrations_20260610000002_phase_3_log_cc_status_bayar_changes",
+      "web_app_supabase_migrations_20260610000002_phase_3_payout_creator",
+      "web_app_supabase_migrations_20260610000002_phase_3_payout_requests",
+      "web_app_supabase_migrations_20260610000002_phase_3_trg_cc_status_bayar"
+    ],
+    "105": [
+      "scratch_parser_audit_omg",
+      "scratch_parser_audit_omg_createclient",
+      "scratch_parser_audit_omg_run",
+      "scratch_parser_audit_omg_xlsx"
+    ],
+    "106": [
+      "web_app_chrome_extension_content",
+      "web_app_chrome_extension_content_extractpartnercenter",
+      "web_app_chrome_extension_content_parsecount",
+      "web_app_chrome_extension_content_savedata"
+    ],
+    "107": [
+      "web_app_scratch_check_db",
+      "web_app_scratch_check_db_check",
+      "web_app_scratch_check_db_createclient",
+      "web_app_scratch_check_db_supabase"
+    ],
+    "108": [
+      "web_app_scratch_check_kahf",
+      "web_app_scratch_check_kahf_check",
+      "web_app_scratch_check_kahf_createclient",
+      "web_app_scratch_check_kahf_supabase"
+    ],
+    "109": [
+      "web_app_scratch_check_kahf_rpc",
+      "web_app_scratch_check_kahf_rpc_check",
+      "web_app_scratch_check_kahf_rpc_createclient",
+      "web_app_scratch_check_kahf_rpc_supabase"
+    ],
+    "110": [
+      "web_app_scratch_check_schema",
+      "web_app_scratch_check_schema_check",
+      "web_app_scratch_check_schema_createclient",
+      "web_app_scratch_check_schema_supabase"
+    ],
+    "111": [
+      "web_app_scratch_test_import",
+      "web_app_scratch_test_import_createclient",
+      "web_app_scratch_test_import_supabase",
+      "web_app_scratch_test_import_test"
+    ],
+    "112": [
+      "web_app_scratch_test_insert",
+      "web_app_scratch_test_insert_createclient",
+      "web_app_scratch_test_insert_supabase",
+      "web_app_scratch_test_insert_testinsert"
+    ],
+    "113": [
+      "web_app_scratch_test_nan",
+      "web_app_scratch_test_nan_createclient",
+      "web_app_scratch_test_nan_supabase",
+      "web_app_scratch_test_nan_test"
+    ],
+    "114": [
+      "web_app_scripts_alter_db",
+      "web_app_scripts_alter_db_alterdb",
+      "web_app_scripts_alter_db_createclient",
+      "web_app_scripts_alter_db_supabaseadmin"
+    ],
+    "115": [
+      "web_app_scripts_audit_omg_new",
+      "web_app_scripts_audit_omg_new_omg_makeup_skus",
+      "web_app_scripts_audit_omg_new_processfiles",
+      "web_app_scripts_audit_omg_new_xlsx"
+    ],
+    "116": [
+      "web_app_scripts_audit_performa",
+      "web_app_scripts_audit_performa_checkrls",
+      "web_app_scripts_audit_performa_createclient",
+      "web_app_scripts_audit_performa_supabase"
+    ],
+    "117": [
+      "web_app_scripts_check",
+      "web_app_scripts_check_createclient",
+      "web_app_scripts_check_fix",
+      "web_app_scripts_check_supabase"
+    ],
+    "118": [
+      "web_app_scripts_check2",
+      "web_app_scripts_check2_check",
+      "web_app_scripts_check2_createclient",
+      "web_app_scripts_check2_supabase"
+    ],
+    "119": [
+      "web_app_scripts_check_ads",
+      "web_app_scripts_check_ads_check",
+      "web_app_scripts_check_ads_createclient",
+      "web_app_scripts_check_ads_supabase"
+    ],
+    "120": [
+      "web_app_scripts_check_all_constraints",
+      "web_app_scripts_check_all_constraints_check",
+      "web_app_scripts_check_all_constraints_createclient",
+      "web_app_scripts_check_all_constraints_supabaseadmin"
+    ],
+    "121": [
+      "web_app_scripts_check_all_sales_types",
+      "web_app_scripts_check_all_sales_types_checkallsalestypes",
+      "web_app_scripts_check_all_sales_types_createclient",
+      "web_app_scripts_check_all_sales_types_supabase"
+    ],
+    "122": [
+      "web_app_scripts_check_anon",
+      "web_app_scripts_check_anon_createclient",
+      "web_app_scripts_check_anon_run",
+      "web_app_scripts_check_anon_supabaseanon"
+    ],
+    "123": [
+      "web_app_scripts_check_arnilawati",
+      "web_app_scripts_check_arnilawati_createclient",
+      "web_app_scripts_check_arnilawati_run",
+      "web_app_scripts_check_arnilawati_supabase"
+    ],
+    "124": [
+      "web_app_scripts_check_arnilawati2",
+      "web_app_scripts_check_arnilawati2_createclient",
+      "web_app_scripts_check_arnilawati2_run",
+      "web_app_scripts_check_arnilawati2_supabase"
+    ],
+    "125": [
+      "web_app_scripts_check_budgets",
+      "web_app_scripts_check_budgets_check",
+      "web_app_scripts_check_budgets_createclient",
+      "web_app_scripts_check_budgets_supabase"
+    ],
+    "126": [
+      "web_app_scripts_check_campaign17",
+      "web_app_scripts_check_campaign17_createclient",
+      "web_app_scripts_check_campaign17_run",
+      "web_app_scripts_check_campaign17_supabase"
+    ],
+    "127": [
+      "web_app_scripts_check_campaigns",
+      "web_app_scripts_check_campaigns_checkcampaigns",
+      "web_app_scripts_check_campaigns_createclient",
+      "web_app_scripts_check_campaigns_supabase"
+    ],
+    "128": [
+      "web_app_scripts_check_cols",
+      "web_app_scripts_check_cols_checkcols",
+      "web_app_scripts_check_cols_createclient",
+      "web_app_scripts_check_cols_supabase"
+    ],
+    "129": [
+      "web_app_scripts_check_columns",
+      "web_app_scripts_check_columns_check",
+      "web_app_scripts_check_columns_createclient",
+      "web_app_scripts_check_columns_supabase"
+    ],
+    "130": [
+      "web_app_scripts_check_constraint",
+      "web_app_scripts_check_constraint_createclient",
+      "web_app_scripts_check_constraint_supabaseadmin",
+      "web_app_scripts_check_constraint_test"
+    ],
+    "131": [
+      "web_app_scripts_check_constraint_def",
+      "web_app_scripts_check_constraint_def_check",
+      "web_app_scripts_check_constraint_def_createclient",
+      "web_app_scripts_check_constraint_def_supabaseadmin"
+    ],
+    "132": [
+      "web_app_scripts_check_creator_pool",
+      "web_app_scripts_check_creator_pool_check",
+      "web_app_scripts_check_creator_pool_createclient",
+      "web_app_scripts_check_creator_pool_supabase"
+    ],
+    "133": [
+      "web_app_scripts_check_creators",
+      "web_app_scripts_check_creators_createclient",
+      "web_app_scripts_check_creators_run",
+      "web_app_scripts_check_creators_supabase"
+    ],
+    "134": [
+      "web_app_scripts_check_db_createclient",
+      "web_app_scripts_check_db_js_web_app_scripts_check_db",
+      "web_app_scripts_check_db_js_web_app_scripts_check_db_check",
+      "web_app_scripts_check_db_supabaseadmin"
+    ],
+    "135": [
+      "web_app_scripts_check_duplicates",
+      "web_app_scripts_check_duplicates_checkduplicates",
+      "web_app_scripts_check_duplicates_createclient",
+      "web_app_scripts_check_duplicates_supabase"
+    ],
+    "136": [
+      "web_app_scripts_check_enum",
+      "web_app_scripts_check_enum_check",
+      "web_app_scripts_check_enum_createclient",
+      "web_app_scripts_check_enum_supabaseadmin"
+    ],
+    "137": [
+      "web_app_scripts_check_enum2",
+      "web_app_scripts_check_enum2_check",
+      "web_app_scripts_check_enum2_createclient",
+      "web_app_scripts_check_enum2_supabaseadmin"
+    ],
+    "138": [
+      "web_app_scripts_check_excel_checkexcel",
+      "web_app_scripts_check_excel_filepaths",
+      "web_app_scripts_check_excel_js_web_app_scripts_check_excel_6a5d91",
+      "web_app_scripts_check_excel_js_web_app_scripts_check_excel_xlsx_6a5d91"
+    ],
+    "139": [
+      "web_app_scripts_check_excel_data",
+      "web_app_scripts_check_excel_js_web_app_scripts_check_excel_3f1437",
+      "web_app_scripts_check_excel_js_web_app_scripts_check_excel_xlsx_3f1437",
+      "web_app_scripts_check_excel_workbook"
+    ],
+    "140": [
+      "web_app_scripts_check_fk",
+      "web_app_scripts_check_fk_createclient",
+      "web_app_scripts_check_fk_supabaseadmin",
+      "web_app_scripts_check_fk_test"
+    ],
+    "141": [
+      "web_app_scripts_check_fk_exact",
+      "web_app_scripts_check_fk_exact_check",
+      "web_app_scripts_check_fk_exact_createclient",
+      "web_app_scripts_check_fk_exact_supabaseadmin"
+    ],
+    "142": [
+      "web_app_scripts_check_headers",
+      "web_app_scripts_check_headers_sheets",
+      "web_app_scripts_check_headers_workbook",
+      "web_app_scripts_check_headers_xlsx"
+    ],
+    "143": [
+      "web_app_scripts_check_item",
+      "web_app_scripts_check_item_check",
+      "web_app_scripts_check_item_createclient",
+      "web_app_scripts_check_item_supabaseadmin"
+    ],
+    "144": [
+      "web_app_scripts_check_matcha",
+      "web_app_scripts_check_matcha_createclient",
+      "web_app_scripts_check_matcha_run",
+      "web_app_scripts_check_matcha_supabase"
+    ],
+    "145": [
+      "web_app_scripts_check_null_price",
+      "web_app_scripts_check_null_price_createclient",
+      "web_app_scripts_check_null_price_run",
+      "web_app_scripts_check_null_price_supabase"
+    ],
+    "146": [
+      "web_app_scripts_check_null_users",
+      "web_app_scripts_check_null_users_createclient",
+      "web_app_scripts_check_null_users_run",
+      "web_app_scripts_check_null_users_supabase"
+    ],
+    "147": [
+      "web_app_scripts_check_raw",
+      "web_app_scripts_check_raw_check",
+      "web_app_scripts_check_raw_createclient",
+      "web_app_scripts_check_raw_supabaseadmin"
+    ],
+    "148": [
+      "web_app_scripts_check_riska",
+      "web_app_scripts_check_riska_createclient",
+      "web_app_scripts_check_riska_run",
+      "web_app_scripts_check_riska_supabase"
+    ],
+    "149": [
+      "web_app_scripts_check_sales",
+      "web_app_scripts_check_sales_createclient",
+      "web_app_scripts_check_sales_supabase",
+      "web_app_scripts_check_sales_test"
+    ],
+    "150": [
+      "web_app_scripts_check_schema_check",
+      "web_app_scripts_check_schema_js_web_app_scripts_check_schema_createclient_d74791",
+      "web_app_scripts_check_schema_js_web_app_scripts_check_schema_d74791",
+      "web_app_scripts_check_schema_supabaseadmin"
+    ],
+    "151": [
+      "web_app_scripts_check_syntax",
+      "web_app_scripts_check_syntax_check",
+      "web_app_scripts_check_syntax_createclient",
+      "web_app_scripts_check_syntax_supabaseadmin"
+    ],
+    "152": [
+      "web_app_scripts_check_table",
+      "web_app_scripts_check_table_check",
+      "web_app_scripts_check_table_createclient",
+      "web_app_scripts_check_table_supabaseadmin"
+    ],
+    "153": [
+      "web_app_scripts_check_total",
+      "web_app_scripts_check_total_createclient",
+      "web_app_scripts_check_total_run",
+      "web_app_scripts_check_total_supabase"
+    ],
+    "154": [
+      "web_app_scripts_check_total_creators",
+      "web_app_scripts_check_total_creators_createclient",
+      "web_app_scripts_check_total_creators_run",
+      "web_app_scripts_check_total_creators_supabase"
+    ],
+    "155": [
+      "web_app_scripts_check_total_videos",
+      "web_app_scripts_check_total_videos_createclient",
+      "web_app_scripts_check_total_videos_run",
+      "web_app_scripts_check_total_videos_supabase"
+    ],
+    "156": [
+      "web_app_scripts_check_trigger2",
+      "web_app_scripts_check_trigger2_check",
+      "web_app_scripts_check_trigger2_createclient",
+      "web_app_scripts_check_trigger2_supabaseadmin"
+    ],
+    "157": [
+      "web_app_scripts_check_trigger_pg",
+      "web_app_scripts_check_trigger_pg_check",
+      "web_app_scripts_check_trigger_pg_createclient",
+      "web_app_scripts_check_trigger_pg_supabaseadmin"
+    ],
+    "158": [
+      "web_app_scripts_check_triggers",
+      "web_app_scripts_check_triggers_check",
+      "web_app_scripts_check_triggers_createclient",
+      "web_app_scripts_check_triggers_supabaseadmin"
+    ],
+    "159": [
+      "web_app_scripts_check_unmapped",
+      "web_app_scripts_check_unmapped_checkunmappedsales",
+      "web_app_scripts_check_unmapped_createclient",
+      "web_app_scripts_check_unmapped_supabase"
+    ],
+    "160": [
+      "web_app_scripts_check_update",
+      "web_app_scripts_check_update_createclient",
+      "web_app_scripts_check_update_run",
+      "web_app_scripts_check_update_supabase"
+    ],
+    "161": [
+      "web_app_scripts_check_videos",
+      "web_app_scripts_check_videos_createclient",
+      "web_app_scripts_check_videos_run",
+      "web_app_scripts_check_videos_supabase"
+    ],
+    "162": [
+      "web_app_scripts_check_view",
+      "web_app_scripts_check_view_check",
+      "web_app_scripts_check_view_createclient",
+      "web_app_scripts_check_view_supabase"
+    ],
+    "163": [
+      "web_app_scripts_clean_all_dupes",
+      "web_app_scripts_clean_all_dupes_createclient",
+      "web_app_scripts_clean_all_dupes_run",
+      "web_app_scripts_clean_all_dupes_sb"
+    ],
+    "164": [
+      "web_app_scripts_clean_db_clean",
+      "web_app_scripts_clean_db_createclient",
+      "web_app_scripts_clean_db_js_web_app_scripts_clean_db",
+      "web_app_scripts_clean_db_js_web_app_scripts_clean_db_supabase"
+    ],
+    "165": [
+      "web_app_scripts_cleanup_duplicates",
+      "web_app_scripts_cleanup_duplicates_createclient",
+      "web_app_scripts_cleanup_duplicates_run",
+      "web_app_scripts_cleanup_duplicates_supabase"
+    ],
+    "166": [
+      "web_app_scripts_cleanup_duplicates_v2",
+      "web_app_scripts_cleanup_duplicates_v2_createclient",
+      "web_app_scripts_cleanup_duplicates_v2_run",
+      "web_app_scripts_cleanup_duplicates_v2_supabase"
+    ],
+    "167": [
+      "web_app_scripts_cleanup_videos",
+      "web_app_scripts_cleanup_videos_cleanupvideos",
+      "web_app_scripts_cleanup_videos_createclient",
+      "web_app_scripts_cleanup_videos_supabase"
+    ],
+    "168": [
+      "web_app_scripts_create_loadings",
+      "web_app_scripts_create_loadings_fs",
+      "web_app_scripts_create_loadings_path",
+      "web_app_scripts_create_loadings_tabs"
+    ],
+    "169": [
+      "web_app_scripts_debug_gap",
+      "web_app_scripts_debug_gap_checkgap",
+      "web_app_scripts_debug_gap_createclient",
+      "web_app_scripts_debug_gap_supabase"
+    ],
+    "170": [
+      "web_app_scripts_debug_videos",
+      "web_app_scripts_debug_videos_checkvideos",
+      "web_app_scripts_debug_videos_createclient",
+      "web_app_scripts_debug_videos_supabase"
+    ],
+    "171": [
+      "web_app_scripts_del_dup",
+      "web_app_scripts_del_dup_createclient",
+      "web_app_scripts_del_dup_deletedups",
+      "web_app_scripts_del_dup_supabase"
+    ],
+    "172": [
+      "web_app_scripts_find_campaign",
+      "web_app_scripts_find_campaign_createclient",
+      "web_app_scripts_find_campaign_run",
+      "web_app_scripts_find_campaign_supabase"
+    ],
+    "173": [
+      "web_app_scripts_find_pass",
+      "web_app_scripts_find_pass_fs",
+      "web_app_scripts_find_pass_processlinebyline",
+      "web_app_scripts_find_pass_readline"
+    ],
+    "174": [
+      "web_app_scripts_fix_sql",
+      "web_app_scripts_fix_sql_createclient",
+      "web_app_scripts_fix_sql_fix",
+      "web_app_scripts_fix_sql_supabase"
+    ],
+    "175": [
+      "web_app_scripts_fix_urutan",
+      "web_app_scripts_fix_urutan_createclient",
+      "web_app_scripts_fix_urutan_fixurutan",
+      "web_app_scripts_fix_urutan_supabase"
+    ],
+    "176": [
+      "web_app_scripts_fix_video_links",
+      "web_app_scripts_fix_video_links_createclient",
+      "web_app_scripts_fix_video_links_fixlinks",
+      "web_app_scripts_fix_video_links_supabase"
+    ],
+    "177": [
+      "web_app_scripts_inspect",
+      "web_app_scripts_inspect_data",
+      "web_app_scripts_inspect_workbook",
+      "web_app_scripts_inspect_xlsx"
+    ],
+    "178": [
+      "web_app_scripts_inspect2",
+      "web_app_scripts_inspect2_data",
+      "web_app_scripts_inspect2_workbook",
+      "web_app_scripts_inspect2_xlsx"
+    ],
+    "179": [
+      "web_app_scripts_inspect_680",
+      "web_app_scripts_inspect_680_createclient",
+      "web_app_scripts_inspect_680_inspect",
+      "web_app_scripts_inspect_680_supabase"
+    ],
+    "180": [
+      "web_app_scripts_merge_duplicate_creators",
+      "web_app_scripts_merge_duplicate_creators_createclient",
+      "web_app_scripts_merge_duplicate_creators_run",
+      "web_app_scripts_merge_duplicate_creators_supabase"
+    ],
+    "181": [
+      "web_app_scripts_migrate_createclient",
+      "web_app_scripts_migrate_js_web_app_scripts_migrate",
+      "web_app_scripts_migrate_js_web_app_scripts_migrate_supabase",
+      "web_app_scripts_migrate_run"
+    ],
+    "182": [
+      "web_app_scripts_patch_videos",
+      "web_app_scripts_patch_videos_createclient",
+      "web_app_scripts_patch_videos_run",
+      "web_app_scripts_patch_videos_supabase"
+    ],
+    "183": [
+      "web_app_scripts_query2",
+      "web_app_scripts_query2_createclient",
+      "web_app_scripts_query2_run",
+      "web_app_scripts_query2_supabase"
+    ],
+    "184": [
+      "web_app_scripts_query3",
+      "web_app_scripts_query3_createclient",
+      "web_app_scripts_query3_run",
+      "web_app_scripts_query3_supabase"
+    ],
+    "185": [
+      "web_app_scripts_query_supabase_check",
+      "web_app_scripts_query_supabase_createclient",
+      "web_app_scripts_query_supabase_js_web_app_scripts_query_supabase",
+      "web_app_scripts_query_supabase_supabase"
+    ],
+    "186": [
+      "web_app_scripts_read_daily_performance",
+      "web_app_scripts_read_daily_performance_data",
+      "web_app_scripts_read_daily_performance_workbook",
+      "web_app_scripts_read_daily_performance_xlsx"
+    ],
+    "187": [
+      "web_app_scripts_read_excel_data",
+      "web_app_scripts_read_excel_js_web_app_scripts_read_excel_2a2b85",
+      "web_app_scripts_read_excel_js_web_app_scripts_read_excel_workbook_2a2b85",
+      "web_app_scripts_read_excel_js_web_app_scripts_read_excel_xlsx_2a2b85"
+    ],
+    "188": [
+      "web_app_scripts_read_excel_fs",
+      "web_app_scripts_read_excel_js_web_app_scripts_read_excel_3bfb14",
+      "web_app_scripts_read_excel_js_web_app_scripts_read_excel_workbook_3bfb14",
+      "web_app_scripts_read_excel_js_web_app_scripts_read_excel_xlsx_3bfb14"
+    ],
+    "189": [
+      "web_app_scripts_read_excel_temp",
+      "web_app_scripts_read_excel_temp_data",
+      "web_app_scripts_read_excel_temp_workbook",
+      "web_app_scripts_read_excel_temp_xlsx"
+    ],
+    "190": [
+      "web_app_scripts_reconstruct_ads",
+      "web_app_scripts_reconstruct_ads_createclient",
+      "web_app_scripts_reconstruct_ads_run",
+      "web_app_scripts_reconstruct_ads_supabase"
+    ],
+    "191": [
+      "web_app_scripts_remap_sales",
+      "web_app_scripts_remap_sales_createclient",
+      "web_app_scripts_remap_sales_remapdata",
+      "web_app_scripts_remap_sales_supabase"
+    ],
+    "192": [
+      "web_app_scripts_remap_sales_rest",
+      "web_app_scripts_remap_sales_rest_createclient",
+      "web_app_scripts_remap_sales_rest_remaprest",
+      "web_app_scripts_remap_sales_rest_supabase"
+    ],
+    "193": [
+      "web_app_scripts_resolve_duplicates",
+      "web_app_scripts_resolve_duplicates_createclient",
+      "web_app_scripts_resolve_duplicates_resolveduplicates",
+      "web_app_scripts_resolve_duplicates_supabase"
+    ],
+    "194": [
+      "web_app_scripts_roundicon",
+      "web_app_scripts_roundicon_fs",
+      "web_app_scripts_roundicon_roundimage",
+      "web_app_scripts_roundicon_sharp"
+    ],
+    "195": [
+      "web_app_scripts_scratch_dupes",
+      "web_app_scripts_scratch_dupes_createclient",
+      "web_app_scripts_scratch_dupes_run",
+      "web_app_scripts_scratch_dupes_sb"
+    ],
+    "196": [
+      "web_app_scripts_seed_tiktok_niches",
+      "web_app_scripts_seed_tiktok_niches_newniches",
+      "web_app_scripts_seed_tiktok_niches_seed",
+      "web_app_scripts_seed_tiktok_niches_supabase"
+    ],
+    "197": [
+      "web_app_scripts_test_55",
+      "web_app_scripts_test_55_check",
+      "web_app_scripts_test_55_createclient",
+      "web_app_scripts_test_55_supabaseadmin"
+    ],
+    "198": [
+      "web_app_scripts_test_action",
+      "web_app_scripts_test_action_createclient",
+      "web_app_scripts_test_action_supabase",
+      "web_app_scripts_test_action_test"
+    ],
+    "199": [
+      "web_app_scripts_test_action_batch",
+      "web_app_scripts_test_action_batch_createclient",
+      "web_app_scripts_test_action_batch_supabase",
+      "web_app_scripts_test_action_batch_test"
+    ],
+    "200": [
+      "web_app_scripts_test_ads_delta",
+      "web_app_scripts_test_ads_delta_createclient",
+      "web_app_scripts_test_ads_delta_run",
+      "web_app_scripts_test_ads_delta_supabase"
+    ],
+    "201": [
+      "web_app_scripts_test_anon",
+      "web_app_scripts_test_anon_createclient",
+      "web_app_scripts_test_anon_supabase",
+      "web_app_scripts_test_anon_test"
+    ],
+    "202": [
+      "web_app_scripts_test_campaign_rls",
+      "web_app_scripts_test_campaign_rls_createclient",
+      "web_app_scripts_test_campaign_rls_supabaseadmin",
+      "web_app_scripts_test_campaign_rls_test"
+    ],
+    "203": [
+      "web_app_scripts_test_constraint",
+      "web_app_scripts_test_constraint_createclient",
+      "web_app_scripts_test_constraint_supabase",
+      "web_app_scripts_test_constraint_test"
+    ],
+    "204": [
+      "web_app_scripts_test_detail",
+      "web_app_scripts_test_detail_createclient",
+      "web_app_scripts_test_detail_supabaseadmin",
+      "web_app_scripts_test_detail_test"
+    ],
+    "205": [
+      "web_app_scripts_test_executive",
+      "web_app_scripts_test_executive_createclient",
+      "web_app_scripts_test_executive_supabaseadmin",
+      "web_app_scripts_test_executive_test"
+    ],
+    "206": [
+      "web_app_scripts_test_fetch_js_web_app_scripts_test_fetch_495cd1",
+      "web_app_scripts_test_fetch_js_web_app_scripts_test_fetch_createclient_495cd1",
+      "web_app_scripts_test_fetch_js_web_app_scripts_test_fetch_supabase_495cd1",
+      "web_app_scripts_test_fetch_run"
+    ],
+    "207": [
+      "web_app_scripts_test_fetch_js_web_app_scripts_test_fetch_708767",
+      "web_app_scripts_test_fetch_js_web_app_scripts_test_fetch_createclient_708767",
+      "web_app_scripts_test_fetch_js_web_app_scripts_test_fetch_supabase_708767",
+      "web_app_scripts_test_fetch_testfetch"
+    ],
+    "208": [
+      "web_app_scripts_test_filter",
+      "web_app_scripts_test_filter_createclient",
+      "web_app_scripts_test_filter_run",
+      "web_app_scripts_test_filter_supabase"
+    ],
+    "209": [
+      "web_app_scripts_test_nurulaini",
+      "web_app_scripts_test_nurulaini_check",
+      "web_app_scripts_test_nurulaini_createclient",
+      "web_app_scripts_test_nurulaini_s"
+    ],
+    "210": [
+      "web_app_scripts_test_query2",
+      "web_app_scripts_test_query2_createclient",
+      "web_app_scripts_test_query2_run",
+      "web_app_scripts_test_query2_supabase"
+    ],
+    "211": [
+      "web_app_scripts_test_query_js_web_app_scripts_test_query_7d0a53",
+      "web_app_scripts_test_query_js_web_app_scripts_test_query_createclient_7d0a53",
+      "web_app_scripts_test_query_js_web_app_scripts_test_query_run",
+      "web_app_scripts_test_query_js_web_app_scripts_test_query_supabase_7d0a53"
+    ],
+    "212": [
+      "web_app_scripts_test_query_js_web_app_scripts_test_query_createclient_d4fe43",
+      "web_app_scripts_test_query_js_web_app_scripts_test_query_d4fe43",
+      "web_app_scripts_test_query_js_web_app_scripts_test_query_supabase_d4fe43",
+      "web_app_scripts_test_query_test"
+    ],
+    "213": [
+      "web_app_scripts_test_rls",
+      "web_app_scripts_test_rls_createclient",
+      "web_app_scripts_test_rls_supabaseadmin",
+      "web_app_scripts_test_rls_test"
+    ],
+    "214": [
+      "web_app_scripts_test_rls2",
+      "web_app_scripts_test_rls2_createclient",
+      "web_app_scripts_test_rls2_supabase",
+      "web_app_scripts_test_rls2_test"
+    ],
+    "215": [
+      "web_app_scripts_test_rls3",
+      "web_app_scripts_test_rls3_createclient",
+      "web_app_scripts_test_rls3_supabaseadmin",
+      "web_app_scripts_test_rls3_test"
+    ],
+    "216": [
+      "web_app_scripts_test_schema_createclient",
+      "web_app_scripts_test_schema_js_web_app_scripts_test_schema",
+      "web_app_scripts_test_schema_supabaseadmin",
+      "web_app_scripts_test_schema_test"
+    ],
+    "217": [
+      "web_app_scripts_test_summary_anon",
+      "web_app_scripts_test_summary_anon_createclient",
+      "web_app_scripts_test_summary_anon_supabase",
+      "web_app_scripts_test_summary_anon_test"
+    ],
+    "218": [
+      "web_app_scripts_test_summary_fix",
+      "web_app_scripts_test_summary_fix_createclient",
+      "web_app_scripts_test_summary_fix_supabase",
+      "web_app_scripts_test_summary_fix_test"
+    ],
+    "219": [
+      "web_app_scripts_test_syntax",
+      "web_app_scripts_test_syntax_createclient",
+      "web_app_scripts_test_syntax_run",
+      "web_app_scripts_test_syntax_supabase"
+    ],
+    "220": [
+      "web_app_scripts_test_update_js_web_app_scripts_test_update_09dd73",
+      "web_app_scripts_test_update_js_web_app_scripts_test_update_createclient_09dd73",
+      "web_app_scripts_test_update_js_web_app_scripts_test_update_supabase",
+      "web_app_scripts_test_update_testupdate"
+    ],
+    "221": [
+      "web_app_scripts_test_update_js_web_app_scripts_test_update_bf6d04",
+      "web_app_scripts_test_update_js_web_app_scripts_test_update_createclient_bf6d04",
+      "web_app_scripts_test_update_supabaseadmin",
+      "web_app_scripts_test_update_test"
+    ],
+    "222": [
+      "web_app_scripts_test_videos",
+      "web_app_scripts_test_videos_createclient",
+      "web_app_scripts_test_videos_main",
+      "web_app_scripts_test_videos_supabase"
+    ],
+    "223": [
+      "web_app_scripts_test_videos2",
+      "web_app_scripts_test_videos2_createclient",
+      "web_app_scripts_test_videos2_main",
+      "web_app_scripts_test_videos2_supabase"
+    ],
+    "224": [
+      "web_app_scripts_verify",
+      "web_app_scripts_verify_createclient",
+      "web_app_scripts_verify_run",
+      "web_app_scripts_verify_supabase"
+    ],
+    "225": [
+      "web_app_scripts_verify_5_brands",
+      "web_app_scripts_verify_5_brands_createclient",
+      "web_app_scripts_verify_5_brands_run",
+      "web_app_scripts_verify_5_brands_supabase"
+    ],
+    "226": [
+      "web_app_src_app_actions_creatoractions_addcreatorfull",
+      "web_app_src_app_creator_pool_add_addcreatorclient_addcreatorclient",
+      "web_app_src_app_creator_pool_add_page",
+      "web_app_src_app_creator_pool_add_page_addcreatorpage"
+    ],
+    "227": [
+      "web_app_src_app_actions_databaseactions_searchcreatorsaction",
+      "web_app_src_components_searchableselect",
+      "web_app_src_components_searchableselect_searchableselect",
+      "web_app_src_components_searchableselect_searchableselect_handleclickoutside"
+    ],
+    "228": [
+      "old_uploadorganik",
+      "old_uploadorganik_supabase",
+      "old_uploadorganik_uploadorganik"
+    ],
+    "229": [
+      "ref_radix_ui_react_label",
+      "web_app_src_components_ui_label",
+      "web_app_src_components_ui_label_label"
+    ],
+    "230": [
+      "ref_radix_ui_react_switch",
+      "web_app_src_components_ui_switch",
+      "web_app_src_components_ui_switch_switch"
+    ],
+    "231": [
+      "web_app_scratch_fix_button_sizes",
+      "web_app_scratch_fix_button_sizes_content",
+      "web_app_scratch_fix_button_sizes_fs"
+    ],
+    "232": [
+      "web_app_scratch_fix_buttons",
+      "web_app_scratch_fix_buttons_code",
+      "web_app_scratch_fix_buttons_fs"
+    ],
+    "233": [
+      "web_app_scratch_fix_classnames",
+      "web_app_scratch_fix_classnames_code",
+      "web_app_scratch_fix_classnames_fs"
+    ],
+    "234": [
+      "web_app_scratch_fix_daily",
+      "web_app_scratch_fix_daily_content",
+      "web_app_scratch_fix_daily_fs"
+    ],
+    "235": [
+      "web_app_scratch_fix_performa",
+      "web_app_scratch_fix_performa_content",
+      "web_app_scratch_fix_performa_fs"
+    ],
+    "236": [
+      "web_app_scratch_fix_tables",
+      "web_app_scratch_fix_tables_code",
+      "web_app_scratch_fix_tables_fs"
+    ],
+    "237": [
+      "web_app_scratch_fix_variant_attrs",
+      "web_app_scratch_fix_variant_attrs_content",
+      "web_app_scratch_fix_variant_attrs_fs"
+    ],
+    "238": [
+      "web_app_scratch_migrate",
+      "web_app_scratch_migrate_code",
+      "web_app_scratch_migrate_fs"
+    ],
+    "239": [
+      "web_app_scripts_analyze_excel",
+      "web_app_scripts_analyze_excel_analyzefiles",
+      "web_app_scripts_analyze_excel_xlsx"
+    ],
+    "240": [
+      "web_app_scripts_audit_new_excel",
+      "web_app_scripts_audit_new_excel_createclient",
+      "web_app_scripts_audit_new_excel_run"
+    ],
+    "241": [
+      "web_app_scripts_check_db2",
+      "web_app_scripts_check_db2_check",
+      "web_app_scripts_check_db2_supabase"
+    ],
+    "242": [
+      "web_app_scripts_check_db3",
+      "web_app_scripts_check_db3_check",
+      "web_app_scripts_check_db3_supabase"
+    ],
+    "243": [
+      "web_app_scripts_check_db_supabase",
+      "web_app_scripts_check_db_ts_web_app_scripts_check_db",
+      "web_app_scripts_check_db_ts_web_app_scripts_check_db_check"
+    ],
+    "244": [
+      "web_app_scripts_check_live_tables",
+      "web_app_scripts_check_live_tables_check",
+      "web_app_scripts_check_live_tables_supabase"
+    ],
+    "245": [
+      "web_app_scripts_clean_db_cleandb",
+      "web_app_scripts_clean_db_ts_web_app_scripts_clean_db",
+      "web_app_scripts_clean_db_ts_web_app_scripts_clean_db_supabase"
+    ],
+    "246": [
+      "web_app_scripts_find_dates",
+      "web_app_scripts_find_dates_createclient",
+      "web_app_scripts_find_dates_run"
+    ],
+    "247": [
+      "web_app_scripts_fix_brands",
+      "web_app_scripts_fix_brands_fixbrands",
+      "web_app_scripts_fix_brands_supabase"
+    ],
+    "248": [
+      "web_app_scripts_get_rpc",
+      "web_app_scripts_get_rpc_run",
+      "web_app_scripts_get_rpc_supabase"
+    ],
+    "249": [
+      "web_app_scripts_inspect_listing",
+      "web_app_scripts_inspect_listing_run",
+      "web_app_scripts_inspect_listing_xlsx"
+    ],
+    "250": [
+      "web_app_scripts_list_sheets",
+      "web_app_scripts_list_sheets_workbook",
+      "web_app_scripts_list_sheets_xlsx"
+    ],
+    "251": [
+      "web_app_scripts_patch_actions",
+      "web_app_scripts_patch_actions_content",
+      "web_app_scripts_patch_actions_fs"
+    ],
+    "252": [
+      "web_app_scripts_query",
+      "web_app_scripts_query_createclient",
+      "web_app_scripts_query_js_web_app_scripts_query_supabase"
+    ],
+    "253": [
+      "web_app_scripts_scratch_test",
+      "web_app_scripts_scratch_test_main",
+      "web_app_scripts_scratch_test_supabase"
+    ],
+    "254": [
+      "web_app_scripts_temp",
+      "web_app_scripts_temp_createclient",
+      "web_app_scripts_temp_supabase"
+    ],
+    "255": [
+      "web_app_scripts_test_count",
+      "web_app_scripts_test_count_createclient",
+      "web_app_scripts_test_count_supabase"
+    ],
+    "256": [
+      "web_app_scripts_test_count_creators",
+      "web_app_scripts_test_count_creators_check",
+      "web_app_scripts_test_count_creators_supabase"
+    ],
+    "257": [
+      "web_app_scripts_test_query_mjs_web_app_scripts_test_query",
+      "web_app_scripts_test_query_mjs_web_app_scripts_test_query_run",
+      "web_app_scripts_test_query_mjs_web_app_scripts_test_query_supabase"
+    ],
+    "258": [
+      "web_app_scripts_test_query_ts_web_app_scripts_test_query_415151",
+      "web_app_scripts_test_query_ts_web_app_scripts_test_query_run",
+      "web_app_scripts_test_query_ts_web_app_scripts_test_query_supabase_415151"
+    ],
+    "259": [
+      "web_app_scripts_test_video",
+      "web_app_scripts_test_video_run",
+      "web_app_scripts_test_video_supabase"
+    ],
+    "260": [
+      "web_app_src_app_actions_storeactions_getauthprofileaction",
+      "web_app_src_providers_authprovider_authprovider",
+      "web_app_src_providers_authprovider_authprovider_loadauth"
+    ],
+    "261": [
+      "web_app_src_proxy",
+      "web_app_src_proxy_config",
+      "web_app_src_proxy_proxy"
+    ],
+    "262": [
+      "web_app_supabase_migrations_20260716000000_brand_portal_rpcs",
+      "web_app_supabase_migrations_20260716000000_brand_portal_rpcs_get_campaign_top_skus",
+      "web_app_supabase_migrations_20260716000000_brand_portal_rpcs_get_campaign_video_gmv"
+    ],
+    "263": [
+      "web_app_supabase_migrations_20260909_optimize_livestream_rpc",
+      "web_app_supabase_migrations_20260909_optimize_livestream_rpc_public_get_campaign_live_stats",
+      "web_app_supabase_migrations_20260909_optimize_livestream_rpc_sql_organic_videos"
+    ],
+    "264": [
+      "chrome_extension_popup",
+      "chrome_extension_popup_renderqueue"
+    ],
+    "265": [
+      "read_excel",
+      "read_excel_get_excel_info"
+    ],
+    "266": [
+      "ref_drizzle_kit",
+      "web_app_drizzle_config"
+    ],
+    "267": [
+      "update_graphify",
+      "update_graphify_main"
+    ],
+    "268": [
+      "web_app_eslint_config",
+      "web_app_eslint_config_eslintconfig"
+    ],
+    "269": [
+      "web_app_postcss_config",
+      "web_app_postcss_config_config"
+    ],
+    "270": [
+      "web_app_scripts_check_excel_check_excel",
+      "web_app_scripts_check_excel_py_web_app_scripts_check_excel"
+    ],
+    "271": [
+      "web_app_scripts_db_rpc_daily_stats",
+      "web_app_scripts_db_rpc_daily_stats_public_get_campaign_daily_stats"
+    ],
+    "272": [
+      "web_app_scripts_test",
+      "web_app_scripts_test_puppeteer"
+    ],
+    "273": [
+      "web_app_scripts_test_crash",
+      "web_app_scripts_test_crash_puppeteer"
+    ],
+    "274": [
+      "web_app_scripts_test_tiktok",
+      "web_app_scripts_test_tiktok_test"
+    ],
+    "275": [
+      "web_app_src_app_api_expand_tiktok_route",
+      "web_app_src_app_api_expand_tiktok_route_post"
+    ],
+    "276": [
+      "web_app_src_app_auth_callback_route",
+      "web_app_src_app_auth_callback_route_get"
+    ],
+    "277": [
+      "web_app_src_app_portal_id_layout",
+      "web_app_src_app_portal_id_layout_portallayout"
+    ],
+    "278": [
+      "web_app_supabase_migrations_20260731160400_revert_get_campaign_top_skus",
+      "web_app_supabase_migrations_20260731160400_revert_get_campaign_top_skus_get_campaign_top_skus"
+    ],
+    "279": [
+      "web_app_supabase_migrations_20260910_fix_sales_sku_fk_cascade_sql_public_sales",
+      "web_app_supabase_migrations_20260910_fix_sales_sku_fk_cascade_sql_public_skus"
+    ],
+    "280": [
+      "ads_spends"
+    ],
+    "281": [
+      "audit_omg"
+    ],
+    "282": [
+      "chrome_extension_background"
+    ],
+    "283": [
+      "creator_addresses"
+    ],
+    "284": [
+      "db_add_ekspedisi"
+    ],
+    "285": [
+      "db_update_audience"
+    ],
+    "286": [
+      "db_update_mcn"
+    ],
+    "287": [
+      "test_rpc"
+    ],
+    "288": [
+      "web_app_chrome_extension_background"
+    ],
+    "289": [
+      "web_app_scripts_add_target_creator_tiers"
+    ],
+    "290": [
+      "web_app_scripts_clean_dupes"
+    ],
+    "291": [
+      "web_app_scripts_db_organic_videos_alter"
+    ],
+    "292": [
+      "web_app_scripts_db_organic_videos_alter_sql_organic_videos"
+    ],
+    "293": [
+      "web_app_scripts_fetch_proc"
+    ],
+    "294": [
+      "web_app_scripts_fix_constraint"
+    ],
+    "295": [
+      "web_app_scripts_public_schema"
+    ],
+    "296": [
+      "web_app_supabase_migrations_20260610000003_phase_4"
+    ],
+    "297": [
+      "web_app_supabase_migrations_20260616000000_phase_9_followers"
+    ],
+    "298": [
+      "web_app_supabase_migrations_20260618000000_add_sku_to_videos"
+    ],
+    "299": [
+      "web_app_supabase_migrations_20260618000000_add_sku_to_videos_sql_public_videos"
+    ],
+    "300": [
+      "web_app_supabase_migrations_20260618000003_add_budgeting_fields"
+    ],
+    "301": [
+      "web_app_supabase_migrations_20260618000003_add_budgeting_fields_sql_public_campaign_creators"
+    ],
+    "302": [
+      "web_app_supabase_migrations_20260619141036_add_notes_to_ads_spends"
+    ],
+    "303": [
+      "web_app_supabase_migrations_20260625000000_add_updated_by_to_snapshots"
+    ],
+    "304": [
+      "web_app_supabase_migrations_20260628000000_enable_rls"
+    ],
+    "305": [
+      "web_app_supabase_migrations_20260803150000_add_target_creator_tiers"
+    ],
+    "306": [
+      "web_app_supabase_migrations_20260806100200_add_target_creator_live"
+    ],
+    "307": [
+      "web_app_supabase_migrations_20260810140700_add_concept_metadata"
+    ],
+    "308": [
+      "web_app_supabase_migrations_20260818041121_add_notes_client"
+    ],
+    "309": [
+      "web_app_supabase_migrations_20260827000000_add_notes_to_payment_items"
+    ],
+    "310": [
+      "web_app_supabase_migrations_20260827000002_backfill_bank_data"
+    ],
+    "311": [
+      "web_app_supabase_migrations_20260828000001_unified_expense_types"
+    ],
+    "312": [
+      "web_app_supabase_migrations_20260903000000_add_split_gmv_30d"
+    ],
+    "313": [
+      "web_app_supabase_migrations_20260910_fix_sales_sku_fk_cascade"
+    ],
+    "314": [
+      "web_app_supabase_migrations_20260917000000_add_videos_draft_and_approval_columns"
+    ],
+    "315": [
+      "web_app_supabase_migrations_20260917150000_add_creator_admin_columns"
+    ],
+    "316": [
+      "web_app_temp_original"
+    ]
+  },
+  "cohesion": {
+    "0": 0.06688963210702341,
+    "1": 0.053297199638663056,
+    "2": 0.06698564593301436,
+    "3": 0.07744107744107744,
+    "4": 0.08527131782945736,
+    "5": 0.05975609756097561,
+    "6": 0.19433198380566802,
+    "7": 0.1021021021021021,
+    "8": 0.11746031746031746,
+    "9": 0.06666666666666667,
+    "10": 0.13793103448275862,
+    "11": 0.11083743842364532,
+    "12": 0.10846560846560846,
+    "13": 0.07407407407407407,
+    "14": 0.10869565217391304,
+    "15": 0.12318840579710146,
+    "16": 0.08333333333333333,
+    "17": 0.15579710144927536,
+    "18": 0.08695652173913043,
+    "19": 0.18181818181818182,
+    "20": 0.09090909090909091,
+    "21": 0.14210526315789473,
+    "22": 0.1,
+    "23": 0.1,
+    "24": 0.14736842105263157,
+    "25": 0.10526315789473684,
+    "26": 0.27941176470588236,
+    "27": 0.25,
+    "28": 0.125,
+    "29": 0.21666666666666667,
+    "30": 0.15384615384615385,
+    "31": 0.23076923076923078,
+    "32": 0.2727272727272727,
+    "33": 0.16666666666666666,
+    "34": 0.25757575757575757,
+    "35": 0.48484848484848486,
+    "36": 0.23636363636363636,
+    "37": 0.28888888888888886,
+    "38": 0.2,
+    "39": 0.2,
+    "40": 0.2222222222222222,
+    "41": 0.3888888888888889,
+    "42": 0.25,
+    "43": 0.2777777777777778,
+    "44": 0.3055555555555556,
+    "45": 0.2222222222222222,
+    "46": 0.2857142857142857,
+    "47": 0.39285714285714285,
+    "48": 0.2857142857142857,
+    "49": 0.32142857142857145,
+    "50": 0.2857142857142857,
+    "51": 0.32142857142857145,
+    "52": 0.2857142857142857,
+    "53": 0.2857142857142857,
+    "54": 0.6071428571428571,
+    "55": 0.2857142857142857,
+    "56": 0.2857142857142857,
+    "57": 0.38095238095238093,
+    "58": 0.2857142857142857,
+    "59": 0.3333333333333333,
+    "60": 0.2857142857142857,
+    "61": 0.3333333333333333,
+    "62": 0.3333333333333333,
+    "63": 0.3333333333333333,
+    "64": 0.4,
+    "65": 0.4,
+    "66": 0.3333333333333333,
+    "67": 0.3333333333333333,
+    "68": 0.5333333333333333,
+    "69": 0.4,
+    "70": 0.4,
+    "71": 0.4,
+    "72": 0.4,
+    "73": 0.4,
+    "74": 0.4,
+    "75": 0.4,
+    "76": 0.5,
+    "77": 0.4,
+    "78": 0.5,
+    "79": 0.4,
+    "80": 0.5,
+    "81": 0.4,
+    "82": 0.4,
+    "83": 0.5,
+    "84": 0.5,
+    "85": 0.4,
+    "86": 0.5,
+    "87": 0.5,
+    "88": 0.4,
+    "89": 0.4,
+    "90": 0.5,
+    "91": 0.4,
+    "92": 0.4,
+    "93": 0.4,
+    "94": 0.4,
+    "95": 0.4,
+    "96": 0.4,
+    "97": 0.4,
+    "98": 0.4,
+    "99": 0.4,
+    "100": 0.4,
+    "101": 0.4,
+    "102": 0.4,
+    "103": 0.6,
+    "104": 0.6,
+    "105": 0.5,
+    "106": 0.8333333333333334,
+    "107": 0.5,
+    "108": 0.5,
+    "109": 0.5,
+    "110": 0.5,
+    "111": 0.5,
+    "112": 0.5,
+    "113": 0.5,
+    "114": 0.5,
+    "115": 0.5,
+    "116": 0.5,
+    "117": 0.5,
+    "118": 0.5,
+    "119": 0.5,
+    "120": 0.5,
+    "121": 0.5,
+    "122": 0.5,
+    "123": 0.5,
+    "124": 0.5,
+    "125": 0.5,
+    "126": 0.5,
+    "127": 0.5,
+    "128": 0.5,
+    "129": 0.5,
+    "130": 0.5,
+    "131": 0.5,
+    "132": 0.5,
+    "133": 0.5,
+    "134": 0.5,
+    "135": 0.5,
+    "136": 0.5,
+    "137": 0.5,
+    "138": 0.5,
+    "139": 0.5,
+    "140": 0.5,
+    "141": 0.5,
+    "142": 0.5,
+    "143": 0.5,
+    "144": 0.5,
+    "145": 0.5,
+    "146": 0.5,
+    "147": 0.5,
+    "148": 0.5,
+    "149": 0.5,
+    "150": 0.5,
+    "151": 0.5,
+    "152": 0.5,
+    "153": 0.5,
+    "154": 0.5,
+    "155": 0.5,
+    "156": 0.5,
+    "157": 0.5,
+    "158": 0.5,
+    "159": 0.5,
+    "160": 0.5,
+    "161": 0.5,
+    "162": 0.5,
+    "163": 0.5,
+    "164": 0.5,
+    "165": 0.5,
+    "166": 0.5,
+    "167": 0.5,
+    "168": 0.5,
+    "169": 0.5,
+    "170": 0.5,
+    "171": 0.5,
+    "172": 0.5,
+    "173": 0.5,
+    "174": 0.5,
+    "175": 0.5,
+    "176": 0.5,
+    "177": 0.5,
+    "178": 0.5,
+    "179": 0.5,
+    "180": 0.5,
+    "181": 0.5,
+    "182": 0.5,
+    "183": 0.5,
+    "184": 0.5,
+    "185": 0.5,
+    "186": 0.5,
+    "187": 0.5,
+    "188": 0.5,
+    "189": 0.5,
+    "190": 0.5,
+    "191": 0.5,
+    "192": 0.5,
+    "193": 0.5,
+    "194": 0.6666666666666666,
+    "195": 0.5,
+    "196": 0.5,
+    "197": 0.5,
+    "198": 0.5,
+    "199": 0.5,
+    "200": 0.5,
+    "201": 0.5,
+    "202": 0.5,
+    "203": 0.5,
+    "204": 0.5,
+    "205": 0.5,
+    "206": 0.5,
+    "207": 0.5,
+    "208": 0.5,
+    "209": 0.5,
+    "210": 0.5,
+    "211": 0.5,
+    "212": 0.5,
+    "213": 0.5,
+    "214": 0.5,
+    "215": 0.5,
+    "216": 0.5,
+    "217": 0.5,
+    "218": 0.5,
+    "219": 0.5,
+    "220": 0.5,
+    "221": 0.5,
+    "222": 0.5,
+    "223": 0.5,
+    "224": 0.5,
+    "225": 0.5,
+    "226": 0.5,
+    "227": 0.6666666666666666,
+    "228": 0.6666666666666666,
+    "229": 0.6666666666666666,
+    "230": 0.6666666666666666,
+    "231": 0.6666666666666666,
+    "232": 0.6666666666666666,
+    "233": 0.6666666666666666,
+    "234": 0.6666666666666666,
+    "235": 0.6666666666666666,
+    "236": 0.6666666666666666,
+    "237": 0.6666666666666666,
+    "238": 0.6666666666666666,
+    "239": 0.6666666666666666,
+    "240": 0.6666666666666666,
+    "241": 0.6666666666666666,
+    "242": 0.6666666666666666,
+    "243": 0.6666666666666666,
+    "244": 0.6666666666666666,
+    "245": 0.6666666666666666,
+    "246": 0.6666666666666666,
+    "247": 0.6666666666666666,
+    "248": 0.6666666666666666,
+    "249": 0.6666666666666666,
+    "250": 0.6666666666666666,
+    "251": 0.6666666666666666,
+    "252": 0.6666666666666666,
+    "253": 0.6666666666666666,
+    "254": 0.6666666666666666,
+    "255": 0.6666666666666666,
+    "256": 0.6666666666666666,
+    "257": 0.6666666666666666,
+    "258": 0.6666666666666666,
+    "259": 0.6666666666666666,
+    "260": 1.0,
+    "261": 0.6666666666666666,
+    "262": 0.6666666666666666,
+    "263": 0.6666666666666666,
+    "264": 1.0,
+    "265": 1.0,
+    "266": 1.0,
+    "267": 1.0,
+    "268": 1.0,
+    "269": 1.0,
+    "270": 1.0,
+    "271": 1.0,
+    "272": 1.0,
+    "273": 1.0,
+    "274": 1.0,
+    "275": 1.0,
+    "276": 1.0,
+    "277": 1.0,
+    "278": 1.0,
+    "279": 1.0,
+    "280": 1.0,
+    "281": 1.0,
+    "282": 1.0,
+    "283": 1.0,
+    "284": 1.0,
+    "285": 1.0,
+    "286": 1.0,
+    "287": 1.0,
+    "288": 1.0,
+    "289": 1.0,
+    "290": 1.0,
+    "291": 1.0,
+    "292": 1.0,
+    "293": 1.0,
+    "294": 1.0,
+    "295": 1.0,
+    "296": 1.0,
+    "297": 1.0,
+    "298": 1.0,
+    "299": 1.0,
+    "300": 1.0,
+    "301": 1.0,
+    "302": 1.0,
+    "303": 1.0,
+    "304": 1.0,
+    "305": 1.0,
+    "306": 1.0,
+    "307": 1.0,
+    "308": 1.0,
+    "309": 1.0,
+    "310": 1.0,
+    "311": 1.0,
+    "312": 1.0,
+    "313": 1.0,
+    "314": 1.0,
+    "315": 1.0,
+    "316": 1.0
+  },
+  "gods": [
+    {
+      "id": "web_app_src_store_usedatabasestore_usedatabasestore",
+      "label": "useDatabaseStore",
+      "degree": 97
+    },
+    {
+      "id": "ref_react",
+      "label": "react",
+      "degree": 92
+    },
+    {
+      "id": "ref_lucide_react",
+      "label": "lucide-react",
+      "degree": 66
+    },
+    {
+      "id": "web_app_src_providers_authprovider_useauth",
+      "label": "useAuth()",
+      "degree": 50
+    },
+    {
+      "id": "web_app_src_auth_auth",
+      "label": "auth",
+      "degree": 37
+    },
+    {
+      "id": "ref_drizzle_orm",
+      "label": "drizzle-orm",
+      "degree": 34
+    },
+    {
+      "id": "ref_dotenv",
+      "label": "dotenv",
+      "degree": 32
+    },
+    {
+      "id": "web_app_src_app_campaigns_id_listing_page_campaignlistingcontent",
+      "label": "CampaignListingContent()",
+      "degree": 28
+    },
+    {
+      "id": "web_app_src_db_index_db",
+      "label": "DB",
+      "degree": 28
+    },
+    {
+      "id": "web_app_supabase_migrations_20260610000000_phase_1_campaigns",
+      "label": "campaigns",
+      "degree": 28
+    }
+  ],
+  "surprises": [
+    {
+      "source": "get_campaign_performance()",
+      "target": "campaign_creators",
+      "source_files": [
+        "db_rpc_get_campaign_performance.sql",
+        "web-app/supabase/migrations/20260610000000_phase_1.sql"
+      ],
+      "confidence": "EXTRACTED",
+      "relation": "reads_from",
+      "why": "connects across different repos/directories; bridges separate communities"
+    },
+    {
+      "source": "get_campaign_performance()",
+      "target": "campaigns",
+      "source_files": [
+        "db_rpc_get_campaign_performance.sql",
+        "web-app/supabase/migrations/20260610000000_phase_1.sql"
+      ],
+      "confidence": "EXTRACTED",
+      "relation": "reads_from",
+      "why": "connects across different repos/directories; bridges separate communities"
+    },
+    {
+      "source": "get_campaign_performance()",
+      "target": "creators",
+      "source_files": [
+        "db_rpc_get_campaign_performance.sql",
+        "web-app/supabase/migrations/20260610000000_phase_1.sql"
+      ],
+      "confidence": "EXTRACTED",
+      "relation": "reads_from",
+      "why": "connects across different repos/directories; bridges separate communities"
+    },
+    {
+      "source": "get_campaign_performance()",
+      "target": "videos",
+      "source_files": [
+        "db_rpc_get_campaign_performance.sql",
+        "web-app/supabase/migrations/20260610000000_phase_1.sql"
+      ],
+      "confidence": "EXTRACTED",
+      "relation": "reads_from",
+      "why": "connects across different repos/directories; bridges separate communities"
+    },
+    {
+      "source": "get_campaign_performance()",
+      "target": "sales",
+      "source_files": [
+        "db_rpc_get_campaign_performance.sql",
+        "web-app/supabase/migrations/20260610000001_phase_2.sql"
+      ],
+      "confidence": "EXTRACTED",
+      "relation": "reads_from",
+      "why": "connects across different repos/directories; bridges separate communities"
+    }
+  ],
+  "questions": [
+    {
+      "type": "bridge_node",
+      "question": "Why does `react` connect `Community 8` to `Community 0`, `Community 1`, `Community 2`, `Community 4`, `Community 6`, `Community 7`, `Community 10`, `Community 11`, `Community 16`, `Community 17`, `Community 19`, `Community 29`, `Community 31`, `Community 35`, `Community 36`, `Community 37`, `Community 54`, `Community 226`, `Community 227`, `Community 229`, `Community 230`?",
+      "why": "High betweenness centrality (0.052) - this node is a cross-community bridge."
+    },
+    {
+      "type": "bridge_node",
+      "question": "Why does `dotenv` connect `Community 18` to `Community 256`, `Community 16`, `Community 43`, `Community 48`, `Community 49`, `Community 50`, `Community 51`, `Community 52`, `Community 53`, `Community 57`, `Community 64`, `Community 65`, `Community 196`, `Community 83`, `Community 86`, `Community 87`, `Community 99`, `Community 100`, `Community 241`, `Community 242`, `Community 243`, `Community 244`, `Community 245`, `Community 247`, `Community 253`?",
+      "why": "High betweenness centrality (0.051) - this node is a cross-community bridge."
+    },
+    {
+      "type": "bridge_node",
+      "question": "Why does `profiles` connect `Community 5` to `Community 27`?",
+      "why": "High betweenness centrality (0.037) - this node is a cross-community bridge."
+    },
+    {
+      "type": "isolated_nodes",
+      "question": "What connects `isKalodata`, `manifest_version`, `name` to the rest of the system?",
+      "why": "748 weakly-connected nodes found - possible documentation gaps or missing edges."
+    },
+    {
+      "type": "low_cohesion",
+      "question": "Should `Community 0` be split into smaller, more focused modules?",
+      "why": "Cohesion score 0.06688963210702341 - nodes in this community are weakly interconnected."
+    },
+    {
+      "type": "low_cohesion",
+      "question": "Should `Community 1` be split into smaller, more focused modules?",
+      "why": "Cohesion score 0.053297199638663056 - nodes in this community are weakly interconnected."
+    },
+    {
+      "type": "low_cohesion",
+      "question": "Should `Community 2` be split into smaller, more focused modules?",
+      "why": "Cohesion score 0.06698564593301436 - nodes in this community are weakly interconnected."
+    }
+  ]
+}

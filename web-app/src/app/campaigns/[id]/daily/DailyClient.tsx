@@ -6,13 +6,74 @@ import { useDatabaseStore } from "@/store/useDatabaseStore";
 import { fetchDailyPerformancePageDataAction } from "@/app/actions/campaignPageActions";
 import TimelineTarget from "./TimelineTarget";
 
-const toWIBDateStr = (utcString: string | null | undefined): string | null => {
+const toWIBDateStr = (utcString: string | number | null | undefined): string | null => {
   if (!utcString) return null;
-  const d = new Date(utcString);
+  const str = String(utcString).trim();
+  if (!str || str === '-' || str === '0') return null;
+
+  let d: Date;
+  if (/^\d{10}$/.test(str)) {
+    d = new Date(Number(str) * 1000);
+  } else if (/^\d{13}$/.test(str)) {
+    d = new Date(Number(str));
+  } else if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+    return str;
+  } else {
+    d = new Date(str);
+  }
   if (isNaN(d.getTime())) return null;
   const wibTime = new Date(d.getTime() + (7 * 60 * 60 * 1000));
   return wibTime.toISOString().substring(0, 10);
 };
+
+function extractTikTokUploadDate(videoId: string): string | null {
+  try {
+    const cleanId = videoId.trim();
+    if (!/^\d{15,22}$/.test(cleanId)) return null;
+    const id = BigInt(cleanId);
+    const timestamp = Number(id >> BigInt(32)) * 1000;
+    const d = new Date(timestamp);
+    if (isNaN(d.getTime())) return null;
+    const wibTime = new Date(d.getTime() + (7 * 60 * 60 * 1000));
+    return wibTime.toISOString().substring(0, 10);
+  } catch {
+    return null;
+  }
+}
+
+interface GroupData {
+  gmv: number;
+  gmvAds: number;
+  gmvLive: number;
+  gmvVT: number;
+  ordersLive: number;
+  ordersVT: number;
+  videos: Set<string>;
+  liveSessions: Set<string>;
+  videoCreators: Set<string>;
+  liveCreators: Set<string>;
+  pendingCreators: Map<string, string>;
+  approvedCreators: Map<string, string>;
+  pendingLiveCreators: Map<string, string>;
+  approvedLiveCreators: Map<string, string>;
+}
+
+const createEmptyGroup = (): GroupData => ({
+  gmv: 0,
+  gmvAds: 0,
+  gmvLive: 0,
+  gmvVT: 0,
+  ordersLive: 0,
+  ordersVT: 0,
+  videos: new Set<string>(),
+  liveSessions: new Set<string>(),
+  videoCreators: new Set<string>(),
+  liveCreators: new Set<string>(),
+  pendingCreators: new Map<string, string>(),
+  approvedCreators: new Map<string, string>(),
+  pendingLiveCreators: new Map<string, string>(),
+  approvedLiveCreators: new Map<string, string>()
+});
 
 export default function CampaignDailyPerformanceClient({ campaignId }: { campaignId: number }) {
 
@@ -48,18 +109,26 @@ export default function CampaignDailyPerformanceClient({ campaignId }: { campaig
       const allAds = res.ads || [];
       const allSales = res.sales || [];
       const allOrganicVideos = res.organicVideos || [];
+      const allLiveSessions = (res as any).liveSessions || [];
 
       const snapshotTierMap = new Map<number, string>();
 
       // Grouping
-      const grouped: Record<string, { gmv: number; gmvAds: number; creators: Map<string, string>; pendingCreators: Map<string, string>; videos: Set<string>; videoCreators: Set<string>; gmvLive: number; gmvVT: number; ordersLive: number; ordersVT: number; liveSessions: Set<string>; liveCreators: Map<string, string>; pendingLiveCreators: Map<string, string> }> = {};
-      const monthlyGrouped: Record<string, { gmv: number; gmvAds: number; creators: Map<string, string>; pendingCreators: Map<string, string>; videos: Set<string>; videoCreators: Set<string>; gmvLive: number; gmvVT: number; ordersLive: number; ordersVT: number; liveSessions: Set<string>; liveCreators: Map<string, string>; pendingLiveCreators: Map<string, string> }> = {};
+      const grouped: Record<string, GroupData> = {};
+      const monthlyGrouped: Record<string, GroupData> = {};
 
-      // 4. Compute daily sales stats directly from sales table
+      const initGroup = (dateStr: string) => {
+        if (!grouped[dateStr]) grouped[dateStr] = createEmptyGroup();
+      };
+      const initMonthlyGroup = (monthStr: string) => {
+        if (!monthlyGrouped[monthStr]) monthlyGrouped[monthStr] = createEmptyGroup();
+      };
+
+      // 1. Compute daily sales stats directly from sales table
       const approvedUsernameSet = new Set(
         allVideosFromCreators
           .filter(cc => cc.approval === 'approved' || cc.approval === 'alternate')
-          .map(cc => cc.creators?.username?.toLowerCase())
+          .map(cc => (cc.creators?.username || '').toLowerCase().trim())
           .filter(Boolean)
       );
 
@@ -73,11 +142,11 @@ export default function CampaignDailyPerformanceClient({ campaignId }: { campaig
       }>();
 
       allSales.forEach(s => {
-        const u = (s.creator_username || '').toLowerCase();
+        const u = (s.creator_username || '').toLowerCase().trim();
         if (approvedUsernameSet.size > 0 && !approvedUsernameSet.has(u)) return;
         if (!hasSkus || !s.product_id || !skuSet.has(s.product_id)) return;
 
-        const dateStr = s.tanggal ? (s.tanggal.includes('T') ? toWIBDateStr(s.tanggal) : s.tanggal.substring(0, 10)) : null;
+        const dateStr = toWIBDateStr(s.tanggal);
         if (!dateStr) return;
 
         if (!dailySalesMap.has(dateStr)) {
@@ -92,8 +161,8 @@ export default function CampaignDailyPerformanceClient({ campaignId }: { campaig
         }
         const day = dailySalesMap.get(dateStr)!;
         const gmv = Number(s.gmv || 0);
-        const qty = Number(s.quantity || 0);
-        const cType = (s.content_type || '').toLowerCase();
+        const qty = Number(s.quantity || 1);
+        const cType = (s.content_type || '').toLowerCase().trim();
 
         day.total_gmv += gmv;
 
@@ -115,33 +184,27 @@ export default function CampaignDailyPerformanceClient({ campaignId }: { campaig
           
           if (campaignStartStr && dateStr < campaignStartStr) return;
 
-          if (!grouped[dateStr]) grouped[dateStr] = { gmv: 0, gmvAds: 0, creators: new Map(), pendingCreators: new Map(), videos: new Set(), videoCreators: new Set(), gmvLive: 0, gmvVT: 0, ordersLive: 0, ordersVT: 0, liveSessions: new Set(), liveCreators: new Map(), pendingLiveCreators: new Map() };
-          
+          initGroup(dateStr);
           grouped[dateStr].gmvLive += (stat.gmv_live || 0);
           grouped[dateStr].ordersLive += (stat.orders_live || 0);
           grouped[dateStr].gmvVT += (stat.gmv_vt || 0);
           grouped[dateStr].ordersVT += (stat.orders_vt || 0);
           grouped[dateStr].gmv += (stat.total_gmv || 0);
-          
-          // We DO NOT add active_creators from sales to grouped[dateStr].creators, because we only want to count *approved* creators on this date.
-          // We DO NOT add active_videos from sales to grouped[dateStr].videos, because we only want to count *uploaded* videos on this date, not videos that made a sale on this date.
 
           const monthStr = dateStr.substring(0, 7);
-          if (!monthlyGrouped[monthStr]) monthlyGrouped[monthStr] = { gmv: 0, gmvAds: 0, creators: new Map(), pendingCreators: new Map(), videos: new Set(), videoCreators: new Set(), gmvLive: 0, gmvVT: 0, ordersLive: 0, ordersVT: 0, liveSessions: new Set(), liveCreators: new Map(), pendingLiveCreators: new Map() };
-          
+          initMonthlyGroup(monthStr);
           monthlyGrouped[monthStr].gmvLive += (stat.gmv_live || 0);
           monthlyGrouped[monthStr].ordersLive += (stat.orders_live || 0);
           monthlyGrouped[monthStr].gmvVT += (stat.gmv_vt || 0);
           monthlyGrouped[monthStr].ordersVT += (stat.orders_vt || 0);
           monthlyGrouped[monthStr].gmv += (stat.total_gmv || 0);
-          
-          // We DO NOT add active_videos from sales to monthlyGrouped[monthStr].videos either.
         });
       }
 
+      // 2. Map Campaign Creators (Created / Approved targets) & uploaded videos
       if (allVideosFromCreators.length > 0) {
         allVideosFromCreators.forEach(cc => {
-          const username = cc.creators?.username || 'unknown';
+          const username = (cc.creators?.username || 'unknown').toLowerCase().trim();
           const resolvedTier = cc.tier || snapshotTierMap.get(cc.creator_id) || 'Nano';
 
           let cType = cc.content_type || '-';
@@ -154,20 +217,21 @@ export default function CampaignDailyPerformanceClient({ campaignId }: { campaig
           }
           const isLiveCreator = cType.toLowerCase().includes('live');
 
+          // Added / Pending creator tracking
           if (cc.created_at) {
             const addedDateStr = toWIBDateStr(cc.created_at);
             let countAdded = true;
             if (addedDateStr && campaignStartStr && addedDateStr < campaignStartStr) countAdded = false;
             
             if (countAdded && addedDateStr) {
-              if (!grouped[addedDateStr]) grouped[addedDateStr] = { gmv: 0, gmvAds: 0, creators: new Map(), pendingCreators: new Map(), videos: new Set(), videoCreators: new Set(), gmvLive: 0, gmvVT: 0, ordersLive: 0, ordersVT: 0, liveSessions: new Set(), liveCreators: new Map(), pendingLiveCreators: new Map() };
+              initGroup(addedDateStr);
               grouped[addedDateStr].pendingCreators.set(username, resolvedTier);
               if (isLiveCreator) {
                 grouped[addedDateStr].pendingLiveCreators.set(username, resolvedTier);
               }
 
-              const monthStr = cc.created_at.substring(0, 7);
-              if (!monthlyGrouped[monthStr]) monthlyGrouped[monthStr] = { gmv: 0, gmvAds: 0, creators: new Map(), pendingCreators: new Map(), videos: new Set(), videoCreators: new Set(), gmvLive: 0, gmvVT: 0, ordersLive: 0, ordersVT: 0, liveSessions: new Set(), liveCreators: new Map(), pendingLiveCreators: new Map() };
+              const monthStr = addedDateStr.substring(0, 7);
+              initMonthlyGroup(monthStr);
               monthlyGrouped[monthStr].pendingCreators.set(username, resolvedTier);
               if (isLiveCreator) {
                 monthlyGrouped[monthStr].pendingLiveCreators.set(username, resolvedTier);
@@ -175,83 +239,127 @@ export default function CampaignDailyPerformanceClient({ campaignId }: { campaig
             }
           }
 
+          // Approved creator tracking
           if (cc.approved_at) {
             const approvedDateStr = toWIBDateStr(cc.approved_at);
             let countCreator = true;
             if (approvedDateStr && campaignStartStr && approvedDateStr < campaignStartStr) countCreator = false;
             
             if (countCreator && approvedDateStr) {
-              if (!grouped[approvedDateStr]) grouped[approvedDateStr] = { gmv: 0, gmvAds: 0, creators: new Map(), pendingCreators: new Map(), videos: new Set(), videoCreators: new Set(), gmvLive: 0, gmvVT: 0, ordersLive: 0, ordersVT: 0, liveSessions: new Set(), liveCreators: new Map(), pendingLiveCreators: new Map() };
-              grouped[approvedDateStr].creators.set(username, resolvedTier);
+              initGroup(approvedDateStr);
+              grouped[approvedDateStr].approvedCreators.set(username, resolvedTier);
               if (isLiveCreator) {
-                grouped[approvedDateStr].liveCreators.set(username, resolvedTier);
+                grouped[approvedDateStr].approvedLiveCreators.set(username, resolvedTier);
               }
 
-              const monthStr = cc.approved_at.substring(0, 7);
-              if (!monthlyGrouped[monthStr]) monthlyGrouped[monthStr] = { gmv: 0, gmvAds: 0, creators: new Map(), pendingCreators: new Map(), videos: new Set(), videoCreators: new Set(), gmvLive: 0, gmvVT: 0, ordersLive: 0, ordersVT: 0, liveSessions: new Set(), liveCreators: new Map(), pendingLiveCreators: new Map() };
-              monthlyGrouped[monthStr].creators.set(username, resolvedTier);
+              const monthStr = approvedDateStr.substring(0, 7);
+              initMonthlyGroup(monthStr);
+              monthlyGrouped[monthStr].approvedCreators.set(username, resolvedTier);
               if (isLiveCreator) {
-                monthlyGrouped[monthStr].liveCreators.set(username, resolvedTier);
+                monthlyGrouped[monthStr].approvedLiveCreators.set(username, resolvedTier);
               }
             }
           }
 
-          if (!hasSkus || !cc.videos || cc.videos.length === 0) return;
-          cc.videos.forEach((v: any) => {
-            if (!v.created_at || !v.link_video) return; 
-            const dateStr = toWIBDateStr(v.created_at);
-            if (!dateStr) return;
-            if (campaignStartStr && dateStr < campaignStartStr) return;
-            
-            if (!grouped[dateStr]) grouped[dateStr] = { gmv: 0, gmvAds: 0, creators: new Map(), pendingCreators: new Map(), videos: new Set(), videoCreators: new Set(), gmvLive: 0, gmvVT: 0, ordersLive: 0, ordersVT: 0, liveSessions: new Set(), liveCreators: new Map(), pendingLiveCreators: new Map() };
-            
-            // Extract TikTok video ID to avoid double counting with organic videos
-            let videoId = v.id.toString();
-            const match = v.link_video.match(/\/video\/(\d+)/);
-            if (match && match[1]) {
-              videoId = match[1];
-            }
-            
-            grouped[dateStr].videos.add(videoId);
-            grouped[dateStr].videoCreators.add(username);
+          // Track uploaded videos from creator submissions
+          if (cc.videos && cc.videos.length > 0) {
+            cc.videos.forEach((v: any) => {
+              if (!v.link_video) return; // Ignore empty draft slots
+              
+              // Extract TikTok video ID
+              const match = v.link_video.match(/\/video\/(\d+)/);
+              const videoId = match ? match[1] : (v.content_uid || v.id).toString();
+              
+              // Accurate TikTok upload date via Snowflake ID, fallback to created_at
+              let uploadDateStr = match ? extractTikTokUploadDate(match[1]) : null;
+              if (!uploadDateStr && v.created_at) {
+                uploadDateStr = toWIBDateStr(v.created_at);
+              }
+              if (!uploadDateStr) return;
+              if (campaignStartStr && uploadDateStr < campaignStartStr) return;
 
-            const monthStr = v.created_at.substring(0, 7);
-            if (!monthlyGrouped[monthStr]) monthlyGrouped[monthStr] = { gmv: 0, gmvAds: 0, creators: new Map(), pendingCreators: new Map(), videos: new Set(), videoCreators: new Set(), gmvLive: 0, gmvVT: 0, ordersLive: 0, ordersVT: 0, liveSessions: new Set(), liveCreators: new Map(), pendingLiveCreators: new Map() };
-            monthlyGrouped[monthStr].videos.add(videoId);
-            monthlyGrouped[monthStr].videoCreators.add(username);
-          });
-        });
+              initGroup(uploadDateStr);
+              grouped[uploadDateStr].videos.add(videoId);
+              if (username && username !== 'unknown') {
+                grouped[uploadDateStr].videoCreators.add(username);
+              }
 
-        // Map organic videos already fetched in parallel Phase 1
-        allOrganicVideos.forEach(v => {
-          if (!hasSkus || !v.product_id || !skuSet.has(v.product_id)) return;
-          if (!v.post_time || !v.content_uid) return;
-          const dateStr = toWIBDateStr(String(v.post_time));
-          if (!dateStr) return;
-          if (campaignStartStr && dateStr < campaignStartStr) return;
-
-          if (!grouped[dateStr]) grouped[dateStr] = { gmv: 0, gmvAds: 0, creators: new Map(), pendingCreators: new Map(), videos: new Set(), videoCreators: new Set(), gmvLive: 0, gmvVT: 0, ordersLive: 0, ordersVT: 0, liveSessions: new Set(), liveCreators: new Map(), pendingLiveCreators: new Map() };
-          const monthStr = dateStr.substring(0, 7);
-          if (!monthlyGrouped[monthStr]) monthlyGrouped[monthStr] = { gmv: 0, gmvAds: 0, creators: new Map(), pendingCreators: new Map(), videos: new Set(), videoCreators: new Set(), gmvLive: 0, gmvVT: 0, ordersLive: 0, ordersVT: 0, liveSessions: new Set(), liveCreators: new Map(), pendingLiveCreators: new Map() };
-
-          if (v.content_type === 'Video') {
-            grouped[dateStr].videos.add(v.content_uid.toString());
-            if (v.creator_username) grouped[dateStr].videoCreators.add(v.creator_username);
-            monthlyGrouped[monthStr].videos.add(v.content_uid.toString());
-            if (v.creator_username) monthlyGrouped[monthStr].videoCreators.add(v.creator_username);
-          } else if (v.content_type === 'Livestream' || v.content_type === 'Live') {
-            const uidStr = v.content_uid ? v.content_uid.toString() : '';
-            const isDummy = !uidStr || uidStr === '-' || uidStr === '0' || uidStr.toLowerCase() === 'n/a' || uidStr === 'null';
-            const uniqueKey = isDummy ? `dummy_${v.creator_username}_${dateStr}_${Math.random()}` : uidStr;
-            
-            grouped[dateStr].liveSessions.add(uniqueKey);
-            monthlyGrouped[monthStr].liveSessions.add(uniqueKey);
+              const monthStr = uploadDateStr.substring(0, 7);
+              initMonthlyGroup(monthStr);
+              monthlyGrouped[monthStr].videos.add(videoId);
+              if (username && username !== 'unknown') {
+                monthlyGrouped[monthStr].videoCreators.add(username);
+              }
+            });
           }
         });
       }
 
+      // 3. Map Organic Videos & Livestreams from TikTok Sync / Organic Import
+      if (allOrganicVideos.length > 0) {
+        allOrganicVideos.forEach(v => {
+          if (!hasSkus || !v.product_id || !skuSet.has(v.product_id)) return;
+          if (!v.content_uid) return;
+          const uidStr = v.content_uid.toString();
+          const cType = (v.content_type || '').toLowerCase();
+          const isLive = cType.includes('live') || cType.includes('livestream');
 
+          let dateStr: string | null = null;
+          if (!isLive) {
+            dateStr = extractTikTokUploadDate(uidStr) || toWIBDateStr(v.post_time);
+          } else {
+            dateStr = toWIBDateStr(v.post_time);
+          }
 
+          if (!dateStr) return;
+          if (campaignStartStr && dateStr < campaignStartStr) return;
+
+          initGroup(dateStr);
+          const monthStr = dateStr.substring(0, 7);
+          initMonthlyGroup(monthStr);
+
+          const creatorUname = (v.creator_username || '').toLowerCase().trim();
+
+          if (!isLive) {
+            grouped[dateStr].videos.add(uidStr);
+            if (creatorUname) grouped[dateStr].videoCreators.add(creatorUname);
+            monthlyGrouped[monthStr].videos.add(uidStr);
+            if (creatorUname) monthlyGrouped[monthStr].videoCreators.add(creatorUname);
+          } else {
+            const isDummy = !uidStr || uidStr === '-' || uidStr === '0' || uidStr.toLowerCase() === 'n/a' || uidStr === 'null';
+            const uniqueKey = isDummy ? `dummy_${creatorUname}_${dateStr}_${v.id || Math.random()}` : uidStr;
+
+            grouped[dateStr].liveSessions.add(uniqueKey);
+            if (creatorUname) grouped[dateStr].liveCreators.add(creatorUname);
+            monthlyGrouped[monthStr].liveSessions.add(uniqueKey);
+            if (creatorUname) monthlyGrouped[monthStr].liveCreators.add(creatorUname);
+          }
+        });
+      }
+
+      // 4. Map Live Sessions from live_sessions table
+      if (allLiveSessions.length > 0) {
+        allLiveSessions.forEach((ls: any) => {
+          if (!ls.start_time) return;
+          const dateStr = toWIBDateStr(ls.start_time);
+          if (!dateStr) return;
+          if (campaignStartStr && dateStr < campaignStartStr) return;
+
+          initGroup(dateStr);
+          const monthStr = dateStr.substring(0, 7);
+          initMonthlyGroup(monthStr);
+
+          const uidStr = (ls.content_uid || ls.id).toString();
+          const creatorUname = (ls.username || ls.creator_username || '').toLowerCase().trim();
+
+          grouped[dateStr].liveSessions.add(uidStr);
+          if (creatorUname) grouped[dateStr].liveCreators.add(creatorUname);
+          monthlyGrouped[monthStr].liveSessions.add(uidStr);
+          if (creatorUname) monthlyGrouped[monthStr].liveCreators.add(creatorUname);
+        });
+      }
+
+      // 5. Ads Performance delta computation
       if (allAds.length > 0) {
         const previousAdValues: Record<string, number> = {};
         allAds.forEach(ad => {
@@ -263,7 +371,6 @@ export default function CampaignDailyPerformanceClient({ campaignId }: { campaig
           const prevGmv = previousAdValues[ad.ad_id] || 0;
           const deltaUsd = currentGmv - prevGmv;
           
-          // Ensure we record the memory of this ad's revenue even if it's before campaign start
           previousAdValues[ad.ad_id] = currentGmv;
 
           if (campaignStartStr && dateStr < campaignStartStr) return;
@@ -272,11 +379,11 @@ export default function CampaignDailyPerformanceClient({ campaignId }: { campaig
             const kurs = (ad.kurs && ad.kurs < 1000) ? ad.kurs * 1000 : (ad.kurs || 16000);
             const deltaIdr = deltaUsd * kurs;
             
-            if (!grouped[dateStr]) grouped[dateStr] = { gmv: 0, gmvAds: 0, creators: new Map(), pendingCreators: new Map(), videos: new Set(), videoCreators: new Set(), gmvLive: 0, gmvVT: 0, ordersLive: 0, ordersVT: 0, liveSessions: new Set(), liveCreators: new Map(), pendingLiveCreators: new Map() };
+            initGroup(dateStr);
             grouped[dateStr].gmvAds += deltaIdr;
             
             const monthStr = dateStr.substring(0, 7);
-            if (!monthlyGrouped[monthStr]) monthlyGrouped[monthStr] = { gmv: 0, gmvAds: 0, creators: new Map(), pendingCreators: new Map(), videos: new Set(), videoCreators: new Set(), gmvLive: 0, gmvVT: 0, ordersLive: 0, ordersVT: 0, liveSessions: new Set(), liveCreators: new Map(), pendingLiveCreators: new Map() };
+            initMonthlyGroup(monthStr);
             monthlyGrouped[monthStr].gmvAds += deltaIdr;
           }
         });
@@ -295,56 +402,73 @@ export default function CampaignDailyPerformanceClient({ campaignId }: { campaig
       };
 
       const formattedDaily = Object.keys(grouped).map(date => {
-        const pendingTiers = getTierCounts(grouped[date].pendingCreators);
-        const approvedTiers = getTierCounts(grouped[date].creators);
-        const pendingLiveTiers = getTierCounts(grouped[date].pendingLiveCreators);
-        const approvedLiveTiers = getTierCounts(grouped[date].liveCreators);
+        const g = grouped[date];
+        const pendingTiers = getTierCounts(g.pendingCreators);
+        const approvedTiers = getTierCounts(g.approvedCreators);
+        const pendingLiveTiers = getTierCounts(g.pendingLiveCreators);
+        const approvedLiveTiers = getTierCounts(g.approvedLiveCreators);
+
+        // Active creators = distinct union of creators who uploaded VT or performed Live on this date
+        const activeCreators = new Set([
+          ...Array.from(g.videoCreators),
+          ...Array.from(g.liveCreators)
+        ]);
+
         return {
           date,
-          gmvOrganic: grouped[date].gmv,
-          gmvLive: grouped[date].gmvLive,
-          gmvVT: grouped[date].gmvVT,
-          ordersLive: grouped[date].ordersLive,
-          ordersVT: grouped[date].ordersVT,
-          gmvAds: grouped[date].gmvAds,
-          totalCreators: grouped[date].creators.size,
-          totalPendingCreators: grouped[date].pendingCreators.size,
+          gmvOrganic: g.gmv,
+          gmvLive: g.gmvLive,
+          gmvVT: g.gmvVT,
+          ordersLive: g.ordersLive,
+          ordersVT: g.ordersVT,
+          gmvAds: g.gmvAds,
+          totalActiveCreators: activeCreators.size,
+          totalCreators: g.approvedCreators.size,
+          totalPendingCreators: g.pendingCreators.size,
           pendingNano: pendingTiers.nano, pendingMicro: pendingTiers.micro, pendingMacro: pendingTiers.macro, pendingMega: pendingTiers.mega,
           approvedNano: approvedTiers.nano, approvedMicro: approvedTiers.micro, approvedMacro: approvedTiers.macro, approvedMega: approvedTiers.mega,
-          totalLiveCreators: grouped[date].liveCreators.size,
-          totalPendingLiveCreators: grouped[date].pendingLiveCreators.size,
+          totalLiveCreators: g.approvedLiveCreators.size,
+          totalPendingLiveCreators: g.pendingLiveCreators.size,
           pendingLiveNano: pendingLiveTiers.nano, pendingLiveMicro: pendingLiveTiers.micro, pendingLiveMacro: pendingLiveTiers.macro, pendingLiveMega: pendingLiveTiers.mega,
           approvedLiveNano: approvedLiveTiers.nano, approvedLiveMicro: approvedLiveTiers.micro, approvedLiveMacro: approvedLiveTiers.macro, approvedLiveMega: approvedLiveTiers.mega,
-          totalVideos: grouped[date].videos.size,
-          totalVideoCreators: grouped[date].videoCreators.size,
-          totalLiveSessions: grouped[date].liveSessions.size
+          totalVideos: g.videos.size,
+          totalVideoCreators: g.videoCreators.size,
+          totalLiveSessions: g.liveSessions.size
         };
       }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
       const formattedMonthly = Object.keys(monthlyGrouped).map(month => {
-        const pendingTiers = getTierCounts(monthlyGrouped[month].pendingCreators);
-        const approvedTiers = getTierCounts(monthlyGrouped[month].creators);
-        const pendingLiveTiers = getTierCounts(monthlyGrouped[month].pendingLiveCreators);
-        const approvedLiveTiers = getTierCounts(monthlyGrouped[month].liveCreators);
+        const g = monthlyGrouped[month];
+        const pendingTiers = getTierCounts(g.pendingCreators);
+        const approvedTiers = getTierCounts(g.approvedCreators);
+        const pendingLiveTiers = getTierCounts(g.pendingLiveCreators);
+        const approvedLiveTiers = getTierCounts(g.approvedLiveCreators);
+
+        const activeCreators = new Set([
+          ...Array.from(g.videoCreators),
+          ...Array.from(g.liveCreators)
+        ]);
+
         return {
           month,
-          gmvOrganic: monthlyGrouped[month].gmv,
-          gmvLive: monthlyGrouped[month].gmvLive,
-          gmvVT: monthlyGrouped[month].gmvVT,
-          ordersLive: monthlyGrouped[month].ordersLive,
-          ordersVT: monthlyGrouped[month].ordersVT,
-          gmvAds: monthlyGrouped[month].gmvAds,
-          totalCreators: monthlyGrouped[month].creators.size,
-          totalPendingCreators: monthlyGrouped[month].pendingCreators.size,
+          gmvOrganic: g.gmv,
+          gmvLive: g.gmvLive,
+          gmvVT: g.gmvVT,
+          ordersLive: g.ordersLive,
+          ordersVT: g.ordersVT,
+          gmvAds: g.gmvAds,
+          totalActiveCreators: activeCreators.size,
+          totalCreators: g.approvedCreators.size,
+          totalPendingCreators: g.pendingCreators.size,
           pendingNano: pendingTiers.nano, pendingMicro: pendingTiers.micro, pendingMacro: pendingTiers.macro, pendingMega: pendingTiers.mega,
           approvedNano: approvedTiers.nano, approvedMicro: approvedTiers.micro, approvedMacro: approvedTiers.macro, approvedMega: approvedTiers.mega,
-          totalLiveCreators: monthlyGrouped[month].liveCreators.size,
-          totalPendingLiveCreators: monthlyGrouped[month].pendingLiveCreators.size,
+          totalLiveCreators: g.approvedLiveCreators.size,
+          totalPendingLiveCreators: g.pendingLiveCreators.size,
           pendingLiveNano: pendingLiveTiers.nano, pendingLiveMicro: pendingLiveTiers.micro, pendingLiveMacro: pendingLiveTiers.macro, pendingLiveMega: pendingLiveTiers.mega,
           approvedLiveNano: approvedLiveTiers.nano, approvedLiveMicro: approvedLiveTiers.micro, approvedLiveMacro: approvedLiveTiers.macro, approvedLiveMega: approvedLiveTiers.mega,
-          totalVideos: monthlyGrouped[month].videos.size,
-          totalVideoCreators: monthlyGrouped[month].videoCreators.size,
-          totalLiveSessions: monthlyGrouped[month].liveSessions.size
+          totalVideos: g.videos.size,
+          totalVideoCreators: g.videoCreators.size,
+          totalLiveSessions: g.liveSessions.size
         };
       }).sort((a, b) => new Date(b.month + '-01').getTime() - new Date(a.month + '-01').getTime());
 
@@ -606,8 +730,8 @@ export default function CampaignDailyPerformanceClient({ campaignId }: { campaig
                          <span className="font-bold text-rose-700 bg-rose-50/80 px-2 py-0.5 rounded text-[12px] min-w-[70px] inline-block">{d.totalLiveSessions || 0} Live</span>
                       </div>
                     </td>
-                    <td className="text-center text-text-soft font-medium align-top pt-[20px]">
-                      {d.totalCreators}
+                    <td className="text-center text-text font-bold align-top pt-[20px]">
+                      {d.totalActiveCreators || 0}
                     </td>
                     <td className="text-center align-top pt-[16px]">
                       <div className="flex flex-col items-center gap-1 text-[12px] font-medium text-slate-600">

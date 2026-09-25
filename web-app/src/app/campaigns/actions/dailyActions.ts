@@ -17,6 +17,7 @@ export async function getDailyData(campaignId: number) {
       ads: res.ads,
       sales: res.sales,
       organicVideos: res.organicVideos,
+      liveSessions: (res as any).liveSessions || [],
     };
   } catch (error: any) {
     console.error('Error in getDailyData:', error);
