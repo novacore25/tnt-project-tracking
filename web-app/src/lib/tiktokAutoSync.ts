@@ -27,15 +27,21 @@ export interface TikTokSyncResult {
   error?: string;
 }
 
+export interface TikTokAutoSyncOptions {
+  campaignId?: number;
+  triggerType?: 'cron' | 'manual';
+  daysBack?: number;
+  startDate?: string;
+  endDate?: string;
+  month?: string;
+  onProgress?: (progress: SyncProgressUpdate) => void;
+}
+
 /**
  * Execute Complete TikTok Shop OpenAPI Auto-Sync Pipeline
  * Syncs Sales, Video VT Performance, and Livestream Sessions
  */
-export async function runTikTokAutoSync(options?: {
-  campaignId?: number;
-  triggerType?: 'cron' | 'manual';
-  onProgress?: (progress: SyncProgressUpdate) => void;
-}): Promise<TikTokSyncResult> {
+export async function runTikTokAutoSync(options?: TikTokAutoSyncOptions): Promise<TikTokSyncResult> {
   const startTime = Date.now();
   const triggerType = options?.triggerType || 'cron';
   const emitProgress = (update: SyncProgressUpdate) => {
@@ -199,7 +205,7 @@ export async function runTikTokAutoSync(options?: {
     const videoRowsToInsert: any[] = [];
     const syncErrors: string[] = [];
 
-    // 4. SYNC TAP ORDERS ACROSS 90-DAY TIME WINDOWS VIA 202603 OPENAPI
+    // 4. SYNC TAP ORDERS ACROSS DYNAMIC TIME WINDOWS VIA 202603 OPENAPI
     const tapMatchupAsset = assets.find((a: any) => 
       (a.category?.name || '').toLowerCase().includes('match-up') ||
       (a.category?.name || '').toLowerCase().includes('seller') ||
@@ -207,20 +213,61 @@ export async function runTikTokAutoSync(options?: {
     );
     const tapCipher = tapMatchupAsset?.cipher || tapMatchupAsset?.category_asset_cipher || cipher;
 
+    // Calculate time range based on options (month, custom date range, or daysBack)
+    let overallStartSec: number;
+    let overallEndSec: number;
+    let rangeDescription = '';
+
+    if (options?.month) {
+      const parts = options.month.split('-');
+      const y = parseInt(parts[0], 10);
+      const m = parseInt(parts[1], 10);
+      const startObj = new Date(Date.UTC(y, m - 1, 1, 0, 0, 0));
+      const endObj = new Date(Date.UTC(y, m, 0, 23, 59, 59));
+      overallStartSec = Math.floor(startObj.getTime() / 1000);
+      overallEndSec = Math.floor(endObj.getTime() / 1000);
+      rangeDescription = `Bulan ${options.month}`;
+    } else if (options?.startDate && options?.endDate) {
+      overallStartSec = Math.floor(new Date(`${options.startDate}T00:00:00+07:00`).getTime() / 1000);
+      overallEndSec = Math.floor(new Date(`${options.endDate}T23:59:59+07:00`).getTime() / 1000);
+      rangeDescription = `${options.startDate} s/d ${options.endDate}`;
+    } else {
+      const days = options?.daysBack || 90;
+      const nowSec = Math.floor(Date.now() / 1000);
+      overallEndSec = nowSec;
+      overallStartSec = nowSec - (days * 24 * 3600);
+      rangeDescription = `${days} hari terakhir`;
+    }
+
     emitProgress({
       stage: 'orders',
       percent: 30,
-      message: 'Menarik seluruh transaksi pesanan TAP 90 hari terakhir via OpenAPI 202603...'
+      message: `Menarik transaksi pesanan TAP (${rangeDescription}) via OpenAPI 202603...`
     });
 
-    const nowSec = Math.floor(Date.now() / 1000);
     const THIRTY_DAYS = 30 * 24 * 3600;
-    // Split 90 days into three 30-day windows to comply with TikTok Shop API restrictions
-    const timeWindows = [
-      { ge: nowSec - THIRTY_DAYS, lt: nowSec, label: '0-30 Hari' },
-      { ge: nowSec - (2 * THIRTY_DAYS), lt: nowSec - THIRTY_DAYS, label: '30-60 Hari' },
-      { ge: nowSec - (3 * THIRTY_DAYS), lt: nowSec - (2 * THIRTY_DAYS), label: '60-90 Hari' }
-    ];
+    // Split the date span into <= 30-day windows to comply with TikTok Shop OpenAPI constraints
+    const timeWindows: { ge: number; lt: number; label: string }[] = [];
+    let curEnd = overallEndSec;
+    while (curEnd > overallStartSec) {
+      const curStart = Math.max(overallStartSec, curEnd - THIRTY_DAYS);
+      const startLabel = new Date(curStart * 1000).toISOString().split('T')[0];
+      const endLabel = new Date(curEnd * 1000).toISOString().split('T')[0];
+      timeWindows.push({
+        ge: curStart,
+        lt: curEnd,
+        label: `${startLabel} s/d ${endLabel}`
+      });
+      curEnd = curStart;
+    }
+
+    diagnosticData.syncRange = {
+      description: rangeDescription,
+      startSec: overallStartSec,
+      endSec: overallEndSec,
+      windowsCount: timeWindows.length,
+      windows: timeWindows
+    };
 
     const orderEndpoint = '/affiliate_partner/202603/orders/search';
 

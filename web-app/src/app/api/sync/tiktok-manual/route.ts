@@ -7,6 +7,10 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));
     const campaignId = body.campaignId ? Number(body.campaignId) : undefined;
+    const daysBack = body.daysBack ? Number(body.daysBack) : undefined;
+    const startDate = body.startDate ? String(body.startDate) : undefined;
+    const endDate = body.endDate ? String(body.endDate) : undefined;
+    const month = body.month ? String(body.month) : undefined;
 
     const encoder = new TextEncoder();
     const stream = new TransformStream();
@@ -25,6 +29,10 @@ export async function POST(req: NextRequest) {
       try {
         const result = await runTikTokAutoSync({
           campaignId,
+          daysBack,
+          startDate,
+          endDate,
+          month,
           triggerType: 'manual',
           onProgress: (progress) => {
             sendEvent({ type: 'progress', ...progress });

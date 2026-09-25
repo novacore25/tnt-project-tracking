@@ -6,7 +6,8 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { 
   RefreshCw, CheckCircle2, AlertCircle, Clock, Zap, 
-  ExternalLink, Database, ShieldCheck, ArrowRight, Activity 
+  ExternalLink, Database, ShieldCheck, ArrowRight, Activity,
+  Calendar, SlidersHorizontal, ChevronRight
 } from 'lucide-react';
 import { 
   getTikTokAuthStatusAction, 
@@ -21,6 +22,12 @@ export function TikTokSyncControlCard() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<any>(null);
+
+  // Sync Range States
+  const [syncRangeMode, setSyncRangeMode] = useState<'90d' | '180d' | '30d' | 'month' | 'custom'>('90d');
+  const [selectedMonth, setSelectedMonth] = useState<string>('2026-05');
+  const [customStartDate, setCustomStartDate] = useState<string>('2026-05-01');
+  const [customEndDate, setCustomEndDate] = useState<string>(new Date().toISOString().split('T')[0]);
 
   // Live Progress States
   const [progressPercent, setProgressPercent] = useState(0);
@@ -89,11 +96,26 @@ export function TikTokSyncControlCard() {
         }
       }
 
+      // Build payload based on selected range mode
+      const payload: Record<string, any> = {};
+      if (syncRangeMode === '180d') {
+        payload.daysBack = 180;
+      } else if (syncRangeMode === '30d') {
+        payload.daysBack = 30;
+      } else if (syncRangeMode === 'month') {
+        payload.month = selectedMonth;
+      } else if (syncRangeMode === 'custom') {
+        payload.startDate = customStartDate;
+        payload.endDate = customEndDate;
+      } else {
+        payload.daysBack = 90;
+      }
+
       // Call streaming API route for live progress updates
       const response = await fetch('/api/sync/tiktok-manual', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({})
+        body: JSON.stringify(payload)
       });
 
       if (!response.ok && !response.body) {
@@ -208,26 +230,154 @@ export function TikTokSyncControlCard() {
         </div>
 
         {/* Right Action Column */}
-        <div className="flex flex-col sm:flex-row lg:flex-col gap-3 w-full lg:w-auto shrink-0">
+        <div className="flex flex-col gap-3 w-full lg:w-80 shrink-0">
+          {/* Range Selector Controls */}
+          <div className="bg-slate-950/70 p-3 rounded-xl border border-indigo-500/30 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-indigo-300 flex items-center gap-1.5">
+                <SlidersHorizontal className="w-3.5 h-3.5" /> Rentang Tarik Data:
+              </span>
+              <span className="text-[10px] text-slate-400 font-mono">
+                {syncRangeMode === '180d' ? '6 Bulan' : syncRangeMode === '90d' ? '3 Bulan' : syncRangeMode === '30d' ? '1 Bulan' : syncRangeMode === 'month' ? selectedMonth : 'Custom'}
+              </span>
+            </div>
+
+            {/* Range Presets Tabs */}
+            <div className="grid grid-cols-3 gap-1 text-[11px] font-medium">
+              <button
+                type="button"
+                onClick={() => setSyncRangeMode('90d')}
+                className={`py-1.5 px-2 rounded-lg transition-all text-center ${
+                  syncRangeMode === '90d'
+                    ? 'bg-indigo-600 text-white font-bold shadow-sm'
+                    : 'bg-slate-800/80 hover:bg-slate-800 text-slate-300'
+                }`}
+              >
+                90 Hari
+              </button>
+              <button
+                type="button"
+                onClick={() => setSyncRangeMode('180d')}
+                className={`py-1.5 px-2 rounded-lg transition-all text-center relative ${
+                  syncRangeMode === '180d'
+                    ? 'bg-indigo-600 text-white font-bold shadow-sm'
+                    : 'bg-slate-800/80 hover:bg-slate-800 text-slate-300'
+                }`}
+              >
+                180 Hari
+              </button>
+              <button
+                type="button"
+                onClick={() => setSyncRangeMode('30d')}
+                className={`py-1.5 px-2 rounded-lg transition-all text-center ${
+                  syncRangeMode === '30d'
+                    ? 'bg-indigo-600 text-white font-bold shadow-sm'
+                    : 'bg-slate-800/80 hover:bg-slate-800 text-slate-300'
+                }`}
+              >
+                30 Hari
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-1 text-[11px] font-medium pt-0.5">
+              <button
+                type="button"
+                onClick={() => setSyncRangeMode('month')}
+                className={`py-1 px-2 rounded-lg transition-all text-center ${
+                  syncRangeMode === 'month'
+                    ? 'bg-indigo-600 text-white font-bold shadow-sm'
+                    : 'bg-slate-800/80 hover:bg-slate-800 text-slate-300'
+                }`}
+              >
+                📅 Pilih Bulan
+              </button>
+              <button
+                type="button"
+                onClick={() => setSyncRangeMode('custom')}
+                className={`py-1 px-2 rounded-lg transition-all text-center ${
+                  syncRangeMode === 'custom'
+                    ? 'bg-indigo-600 text-white font-bold shadow-sm'
+                    : 'bg-slate-800/80 hover:bg-slate-800 text-slate-300'
+                }`}
+              >
+                ⚙ Custom Range
+              </button>
+            </div>
+
+            {/* Sub-controls: Month selector */}
+            {syncRangeMode === 'month' && (
+              <div className="pt-1 space-y-1 animate-in fade-in duration-200">
+                <label className="text-[10px] text-slate-400 block font-medium">Pilih Bulan Target:</label>
+                <select
+                  value={selectedMonth}
+                  onChange={(e) => setSelectedMonth(e.target.value)}
+                  className="w-full bg-slate-900 border border-indigo-500/40 rounded-lg px-2 py-1 text-xs text-indigo-100 font-medium focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                >
+                  <option value="2026-05">Mei 2026 (Historical Awal)</option>
+                  <option value="2026-06">Juni 2026</option>
+                  <option value="2026-07">Juli 2026</option>
+                  <option value="2026-08">Agustus 2026</option>
+                  <option value="2026-09">September 2026 (Bulan Ini)</option>
+                </select>
+              </div>
+            )}
+
+            {/* Sub-controls: Custom Date Range */}
+            {syncRangeMode === 'custom' && (
+              <div className="pt-1 space-y-1.5 animate-in fade-in duration-200 text-[11px]">
+                <div className="grid grid-cols-2 gap-1.5">
+                  <div>
+                    <label className="text-[10px] text-slate-400 block">Dari:</label>
+                    <input
+                      type="date"
+                      value={customStartDate}
+                      onChange={(e) => setCustomStartDate(e.target.value)}
+                      className="w-full bg-slate-900 border border-indigo-500/40 rounded-lg px-1.5 py-1 text-[11px] text-indigo-100 font-mono focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-slate-400 block">Sampai:</label>
+                    <input
+                      type="date"
+                      value={customEndDate}
+                      onChange={(e) => setCustomEndDate(e.target.value)}
+                      className="w-full bg-slate-900 border border-indigo-500/40 rounded-lg px-1.5 py-1 text-[11px] text-indigo-100 font-mono focus:outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
           <Button
             onClick={handleSyncNow}
             disabled={isSyncing || !isConnected}
-            className={`w-full font-bold px-6 py-5 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2.5 ${
+            className={`w-full font-bold px-4 py-3 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 text-sm ${
               isConnected && !isSyncing
                 ? 'bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white shadow-emerald-900/30'
                 : 'bg-slate-800 text-slate-400 border border-slate-700'
             }`}
           >
             <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
-            {isSyncing ? 'Sedang Menarik Data...' : '⚡ Sync Sekarang (Tarik Data)'}
+            {isSyncing 
+              ? 'Sedang Menarik Data...' 
+              : syncRangeMode === '180d'
+                ? '⚡ Sync 180 Hari (6 Bulan)'
+                : syncRangeMode === 'month'
+                  ? `⚡ Sync Bulan ${selectedMonth}`
+                  : syncRangeMode === 'custom'
+                    ? '⚡ Sync Rentang Tanggal'
+                    : syncRangeMode === '30d'
+                      ? '⚡ Sync 30 Hari'
+                      : '⚡ Sync 90 Hari (Standar)'}
           </Button>
 
           {!isConnected && (
             <a
               href="/auth/tiktok-shop/callback"
-              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600/30 hover:bg-indigo-600/50 border border-indigo-400/30 text-xs font-semibold text-indigo-200 transition-colors"
+              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600/30 hover:bg-indigo-600/50 border border-indigo-400/30 text-xs font-semibold text-indigo-200 transition-colors text-center"
             >
-              <ShieldCheck className="w-4 h-4" /> Hubungkan Akun Partner Center <ExternalLink className="w-3.5 h-3.5" />
+              <ShieldCheck className="w-4 h-4" /> Hubungkan Partner Center <ExternalLink className="w-3.5 h-3.5" />
             </a>
           )}
         </div>

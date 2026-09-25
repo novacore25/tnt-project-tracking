@@ -305,11 +305,18 @@ export async function getTikTokAuthStatusAction() {
 /**
  * Trigger manual auto-sync pipeline from UI
  */
-export async function triggerManualTikTokSyncAction(campaignId?: number) {
+export async function triggerManualTikTokSyncAction(options?: number | {
+  campaignId?: number;
+  daysBack?: number;
+  startDate?: string;
+  endDate?: string;
+  month?: string;
+}) {
   try {
     const { runTikTokAutoSync } = await import('@/lib/tiktokAutoSync');
+    const opts = typeof options === 'number' ? { campaignId: options } : (options || {});
     const res = await runTikTokAutoSync({
-      campaignId,
+      ...opts,
       triggerType: 'manual'
     });
     return res;
