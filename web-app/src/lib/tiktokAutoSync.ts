@@ -110,7 +110,7 @@ export async function runTikTokAutoSync(options?: {
 
     emitProgress({
       stage: 'campaigns',
-      percent: 25,
+      percent: 20,
       message: 'Mengambil daftar kampanye TAP aktif dari TikTok Shop...'
     });
 
@@ -138,20 +138,211 @@ export async function runTikTokAutoSync(options?: {
       GROUP BY c.id, c.nama
     `)) as any[];
 
+    // Map internal campaigns by Product IDs and Names
+    const skuToCampaignMap = new Map<string, number>();
+    internalCampaigns.forEach(ic => {
+      (ic.product_ids || []).forEach((pid: any) => {
+        if (pid) skuToCampaignMap.set(String(pid).trim(), ic.id);
+      });
+    });
+
     let totalSalesCount = 0;
     let totalVideosCount = 0;
     let campaignsProcessed = 0;
     const syncDetails: any[] = [];
+    const salesRowsToInsert: any[] = [];
+    const videoRowsToInsert: any[] = [];
 
+    // 4. SYNC ORDERS (TAP & CAP)
+    emitProgress({
+      stage: 'orders',
+      percent: 30,
+      message: 'Menarik data transaksi pesanan affiliate TikTok...'
+    });
+
+    const nowSec = Math.floor(Date.now() / 1000);
+    const ninetyDaysAgo = nowSec - (90 * 24 * 3600);
+
+    // 4a. Fetch TAP Affiliate Orders
+    try {
+      let nextPageToken = '';
+      let page = 0;
+      do {
+        page++;
+        const queryParams: Record<string, any> = {
+          category_asset_cipher: cipher,
+          page_size: 100
+        };
+        if (nextPageToken) queryParams.page_token = nextPageToken;
+
+        const tapOrdersRes = await callTikTokShopApi(
+          '/affiliate_partner/202411/orders/search',
+          'POST',
+          accessToken,
+          queryParams,
+          {
+            create_time_ge: ninetyDaysAgo,
+            create_time_lt: nowSec
+          }
+        );
+
+        const tapOrders = tapOrdersRes.data?.data?.orders || [];
+        nextPageToken = tapOrdersRes.data?.data?.next_page_token || '';
+
+        for (const ord of tapOrders) {
+          const orderId = String(ord.id || ord.order_id || '').trim();
+          if (!orderId) continue;
+
+          const orderDate = ord.create_time 
+            ? new Date(Number(ord.create_time) * 1000).toISOString()
+            : new Date().toISOString();
+
+          // Unpack SKUs from order (can be object or array)
+          const rawSkus = ord.skus;
+          const skuList = Array.isArray(rawSkus) ? rawSkus : (rawSkus ? [rawSkus] : [{}]);
+
+          for (const sku of skuList) {
+            const pId = sku.product_id ? String(sku.product_id).trim() : null;
+            const uname = (sku.creator_username || ord.creator_username || '').toLowerCase().trim();
+            const cUid = sku.content_id ? String(sku.content_id).trim() : (ord.content_id ? String(ord.content_id).trim() : null);
+            const rawCType = (sku.content_type || ord.content_type || '').toUpperCase();
+            const cType = (rawCType === 'LIVE' || rawCType === 'LIVESTREAM') ? 'livestream' : 'video';
+            
+            // GMV derivation
+            const gmv = Number(
+              sku.estimated_commission_base?.amount || 
+              sku.actual_commission_base?.amount || 
+              sku.price?.amount || 
+              ord.order_amount || 
+              ord.gmv || 0
+            );
+            const qty = Number(sku.quantity || ord.quantity || 1);
+            const price = Number(sku.price?.amount || (qty > 0 ? (gmv / qty) : gmv));
+            const status = sku.status || ord.status || 'COMPLETED';
+            const isRefund = status === 'CANCELLED' || status === 'REFUND' || Number(sku.refunded_quantity || 0) > 0;
+            const commRate = sku.tap_commission_rate || sku.creator_commission_rate || null;
+            const tapCampaignId = sku.campaign_id || ord.campaign_id || null;
+
+            // Link campaign
+            let matchedCampId: number | null = null;
+            if (pId && skuToCampaignMap.has(pId)) {
+              matchedCampId = skuToCampaignMap.get(pId)!;
+            }
+
+            salesRowsToInsert.push({
+              order_id: orderId,
+              campaign_id: matchedCampId,
+              creator_username: uname || null,
+              content_uid: cUid,
+              product_id: pId,
+              tanggal: orderDate,
+              price,
+              quantity: qty,
+              gmv,
+              is_refund: isRefund,
+              content_type: cType,
+              order_status: status,
+              commission_rate: commRate,
+              attribution_type: 'TAP',
+              tiktok_campaign_id: tapCampaignId,
+              raw_data: { order: ord, sku }
+            });
+
+            // Automatically register video/live content if present in sales
+            if (cUid && uname) {
+              videoRowsToInsert.push({
+                content_uid: cUid,
+                creator_username: uname,
+                content_type: cType,
+                video_views: 0,
+                video_likes: 0,
+                video_product_rpm: 0,
+                duration_str: null,
+                product_id: pId,
+                campaign_id: matchedCampId,
+                tiktok_campaign_id: tapCampaignId,
+                tanggal: orderDate,
+                raw_data: { autoGeneratedFromOrder: orderId, sku }
+              });
+            }
+          }
+        }
+      } while (nextPageToken && page < 5);
+    } catch (ordErr) {
+      console.warn('[TikTok AutoSync] TAP orders fetch warning:', ordErr);
+    }
+
+    // 4b. Fetch CAP Affiliate Orders
+    try {
+      const capOrdersRes = await callTikTokShopApi(
+        '/affiliate_partner/202504/cap_order/search',
+        'POST',
+        accessToken,
+        {
+          category_asset_cipher: cipher,
+          page_size: 100
+        },
+        {
+          create_time_ge: ninetyDaysAgo,
+          create_time_lt: nowSec
+        }
+      );
+
+      const capOrders = capOrdersRes.data?.data?.orders || capOrdersRes.data?.data?.cap_orders || [];
+      for (const ord of capOrders) {
+        const orderId = String(ord.id || ord.order_id || '').trim();
+        if (!orderId) continue;
+
+        const orderDate = ord.create_time 
+          ? new Date(Number(ord.create_time) * 1000).toISOString()
+          : new Date().toISOString();
+
+        const pId = ord.product_id ? String(ord.product_id).trim() : null;
+        const uname = (ord.creator_username || ord.creator_name || '').toLowerCase().trim();
+        const cUid = ord.content_id ? String(ord.content_id).trim() : null;
+        const rawCType = (ord.content_type || '').toUpperCase();
+        const cType = (rawCType === 'LIVE' || rawCType === 'LIVESTREAM') ? 'livestream' : 'video';
+        const gmv = Number(ord.gmv || ord.order_amount || ord.commission_base || 0);
+        const qty = Number(ord.quantity || ord.item_count || 1);
+        const price = Number(ord.price?.amount || (qty > 0 ? (gmv / qty) : gmv));
+        const status = ord.status || 'COMPLETED';
+
+        let matchedCampId: number | null = null;
+        if (pId && skuToCampaignMap.has(pId)) {
+          matchedCampId = skuToCampaignMap.get(pId)!;
+        }
+
+        salesRowsToInsert.push({
+          order_id: orderId,
+          campaign_id: matchedCampId,
+          creator_username: uname || null,
+          content_uid: cUid,
+          product_id: pId,
+          tanggal: orderDate,
+          price,
+          quantity: qty,
+          gmv,
+          is_refund: status === 'CANCELLED' || status === 'REFUND',
+          content_type: cType,
+          order_status: status,
+          commission_rate: ord.commission_rate || null,
+          attribution_type: 'CAP',
+          tiktok_campaign_id: ord.campaign_id || null,
+          raw_data: ord
+        });
+      }
+    } catch (capErr) {
+      console.warn('[TikTok AutoSync] CAP orders fetch warning:', capErr);
+    }
+
+    // 5. SYNC CAMPAIGN PRODUCTS & CREATOR CONTENT PERFORMANCE
     const totalTap = tapCampaigns.length;
-
-    // 4. Iterate and Sync each Campaign
     for (let i = 0; i < totalTap; i++) {
       const tap = tapCampaigns[i];
-      const tapId = String(tap.campaign_id || tap.id);
-      const tapName = tap.campaign_name || tap.name || '';
+      const tapId = String(tap.id || tap.campaign_id);
+      const tapName = tap.name || tap.campaign_name || '';
 
-      const percentBase = 30 + Math.round((i / (totalTap || 1)) * 45);
+      const percentBase = 45 + Math.round((i / (totalTap || 1)) * 35);
       emitProgress({
         stage: 'products',
         percent: percentBase,
@@ -159,25 +350,30 @@ export async function runTikTokAutoSync(options?: {
         totalCampaigns: totalTap,
         campaignIndex: i + 1,
         currentCampaign: tapName,
-        salesCount: totalSalesCount,
-        videosCount: totalVideosCount
+        salesCount: salesRowsToInsert.length,
+        videosCount: videoRowsToInsert.length
       });
 
-      // 4a. Fetch Campaign Products first
-      const prodRes = await callTikTokShopApi(
-        `/affiliate_partner/202405/campaigns/${tapId}/products`,
-        'GET',
-        accessToken,
-        {
-          category_asset_cipher: cipher,
-          page_size: 50
-        }
-      );
+      // 5a. Fetch Products in this TAP campaign
+      let products: any[] = [];
+      try {
+        const prodRes = await callTikTokShopApi(
+          `/affiliate_partner/202405/campaigns/${tapId}/products`,
+          'GET',
+          accessToken,
+          {
+            category_asset_cipher: cipher,
+            page_size: 50
+          }
+        );
+        products = prodRes.data?.data?.products || [];
+      } catch (e) {
+        console.warn(`[TikTok AutoSync] Failed to fetch products for campaign ${tapId}:`, e);
+      }
 
-      const products = prodRes.data?.data?.products || [];
-      const productIds = products.map((p: any) => String(p.product_id || p.id));
+      const productIds = products.map((p: any) => String(p.id || p.product_id));
 
-      // Match with internal campaign
+      // Match internal campaign
       let matchedCampaign = internalCampaigns.find(ic => {
         const cProductIds: string[] = (ic.product_ids || []).map(String);
         return productIds.some(pid => cProductIds.includes(String(pid)));
@@ -192,20 +388,12 @@ export async function runTikTokAutoSync(options?: {
         });
       }
 
-      if (options?.campaignId && matchedCampaign && matchedCampaign.id !== options.campaignId) {
-        continue;
-      }
-
       const campaignDbId = matchedCampaign ? matchedCampaign.id : null;
-      console.log(`[TikTok AutoSync] Processing TAP Campaign: "${tapName}" (ID: ${tapId}) -> DB Campaign ID: ${campaignDbId || 'Unassigned'}`);
 
-      const salesRowsToInsert: any[] = [];
-      const videoRowsToInsert: any[] = [];
-
-      // 4b. Fetch Performance per Product in parallel for extreme speed
-      const perfResults = await Promise.all(
+      // 5b. Fetch performance per product in parallel
+      await Promise.all(
         products.map(async (prod: any) => {
-          const pId = String(prod.product_id || prod.id);
+          const pId = String(prod.id || prod.product_id);
           try {
             const perfRes = await callTikTokShopApi(
               `/affiliate_partner/202501/campaigns/${tapId}/products/${pId}/performance`,
@@ -216,144 +404,108 @@ export async function runTikTokAutoSync(options?: {
                 page_size: 50
               }
             );
-            return {
-              productId: pId,
-              creatorsPerf: perfRes.data?.data?.creator_performances || perfRes.data?.data?.performances || []
-            };
-          } catch (e) {
-            return { productId: pId, creatorsPerf: [] };
+
+            const creators = perfRes.data?.data?.promotion_creators || [];
+            
+            // For each creator with content, fetch statistics
+            await Promise.all(
+              creators.map(async (pc: any) => {
+                const uname = (pc.creator?.user_name || pc.creator?.nick_name || '').toLowerCase().trim();
+                const tempId = pc.creator?.creator_temp_id;
+                if (!tempId) return;
+
+                try {
+                  const statRes = await callTikTokShopApi(
+                    `/affiliate_partner/202508/campaigns/${tapId}/products/${pId}/creator/${tempId}/content/statistics`,
+                    'GET',
+                    accessToken,
+                    {
+                      category_asset_cipher: cipher
+                    }
+                  );
+
+                  const statsList = statRes.data?.data?.creator_content_statistics || [];
+                  for (const stat of statsList) {
+                    let cUid = '';
+                    const match = (stat.source_url || stat.linked_tiktok_video || '').match(/\/video\/(\d+)/);
+                    if (match && match[1]) {
+                      cUid = match[1];
+                    } else if (stat.source_url) {
+                      cUid = stat.source_url;
+                    }
+
+                    if (!cUid) continue;
+
+                    const isLive = stat.content_type === 'LIVE_ROOM' || stat.content_type === '2';
+                    const cType = isLive ? 'livestream' : 'video';
+                    const views = Number(stat.view_count || 0);
+                    const likes = Number(stat.like_count || 0);
+                    const postTime = stat.published_date 
+                      ? new Date(stat.published_date).toISOString() 
+                      : new Date().toISOString();
+
+                    videoRowsToInsert.push({
+                      content_uid: cUid,
+                      creator_username: uname || 'unknown',
+                      content_type: cType,
+                      video_views: views,
+                      video_likes: likes,
+                      video_product_rpm: 0,
+                      duration_str: null,
+                      product_id: pId,
+                      campaign_id: campaignDbId,
+                      tiktok_campaign_id: tapId,
+                      tanggal: postTime,
+                      raw_data: stat
+                    });
+                  }
+                } catch (statErr) {
+                  // ignore content statistics error
+                }
+              })
+            );
+          } catch (perfErr) {
+            // ignore performance error
           }
         })
       );
-
-      for (const pr of perfResults) {
-        const pId = pr.productId;
-        for (const cp of pr.creatorsPerf) {
-          const uname = (cp.creator_username || cp.username || '').toLowerCase().trim();
-          const contents = cp.contents || cp.content_list || [];
-
-          for (const item of contents) {
-            const cUid = String(item.content_uid || item.video_id || item.room_id || '').trim();
-            if (!cUid) continue;
-
-            const isLive = item.content_type === 'livestream' || item.content_type === 'live' || item.type === 2;
-            const cType = isLive ? 'livestream' : 'video';
-            const views = Number(item.views || item.video_views || item.play_count || 0);
-            const likes = isLive ? 0 : Number(item.likes || item.video_likes || item.like_count || 0);
-            const rpm = Number(item.product_rpm || item.rpm || 0);
-            const durationStr = item.duration_str || item.live_duration || null;
-            const postTime = item.post_time 
-              ? new Date(Number(item.post_time) * 1000).toISOString()
-              : (item.tanggal || new Date().toISOString());
-
-            videoRowsToInsert.push({
-              content_uid: cUid,
-              creator_username: uname || 'unknown',
-              content_type: cType,
-              video_views: views,
-              video_likes: likes,
-              video_product_rpm: rpm,
-              duration_str: durationStr,
-              product_id: pId,
-              campaign_id: campaignDbId,
-              tiktok_campaign_id: tapId,
-              tanggal: postTime,
-              raw_data: item
-            });
-          }
-        }
-      }
-
-      // 4c. Fetch Affiliate Orders (Sales) for the last 60 days
-      const nowSec = Math.floor(Date.now() / 1000);
-      const sixtyDaysAgo = nowSec - (60 * 24 * 3600);
-
-      const ordersRes = await callTikTokShopApi(
-        '/affiliate_partner/202411/orders/search',
-        'POST',
-        accessToken,
-        {
-          category_asset_cipher: cipher,
-          page_size: 100
-        },
-        {
-          campaign_id: tapId,
-          create_time_ge: sixtyDaysAgo,
-          create_time_lt: nowSec
-        }
-      );
-
-      const ordersList = ordersRes.data?.data?.orders || ordersRes.data?.data?.order_list || [];
-
-      for (const ord of ordersList) {
-        const orderId = String(ord.order_id || ord.id || '').trim();
-        if (!orderId) continue;
-
-        const pId = ord.product_id ? String(ord.product_id).trim() : null;
-        const uname = (ord.creator_username || ord.creator_name || '').toLowerCase().trim();
-        const cUid = ord.content_uid ? String(ord.content_uid).trim() : null;
-        const cType = (ord.content_type === 'livestream' || ord.content_type === 'live') ? 'livestream' : 'video';
-        const gmv = Number(ord.gmv || ord.order_amount || ord.commission_base || 0);
-        const qty = Number(ord.quantity || ord.item_count || 1);
-        const price = qty > 0 ? (gmv / qty) : gmv;
-        const status = ord.order_status || ord.status || 'COMPLETED';
-        const isRefund = ord.is_refund || status === 'REFUND' || status === 'CANCELLED';
-        const commRate = ord.commission_rate || null;
-        const orderDate = ord.create_time 
-          ? new Date(Number(ord.create_time) * 1000).toISOString()
-          : (ord.tanggal || new Date().toISOString());
-
-        salesRowsToInsert.push({
-          order_id: orderId,
-          campaign_id: campaignDbId,
-          creator_username: uname || null,
-          content_uid: cUid,
-          product_id: pId,
-          tanggal: orderDate,
-          price,
-          quantity: qty,
-          gmv,
-          is_refund: isRefund,
-          content_type: cType,
-          order_status: status,
-          commission_rate: commRate,
-          attribution_type: ord.attribution_type || 'TAP',
-          tiktok_campaign_id: tapId,
-          raw_data: ord
-        });
-      }
-
-      // 4d. Execute Bulk Upsert
-      if (salesRowsToInsert.length > 0 || videoRowsToInsert.length > 0) {
-        await executeSalesImportChunkAction(salesRowsToInsert, videoRowsToInsert, false);
-        totalSalesCount += salesRowsToInsert.length;
-        totalVideosCount += videoRowsToInsert.length;
-      }
 
       campaignsProcessed++;
       syncDetails.push({
         tapCampaignId: tapId,
         tapCampaignName: tapName,
         matchedCampaignId: campaignDbId,
-        productsCount: products.length,
-        salesCount: salesRowsToInsert.length,
-        videosCount: videoRowsToInsert.length
+        productsCount: products.length
       });
     }
 
     emitProgress({
-      stage: 'mapping',
+      stage: 'saving',
       percent: 85,
-      message: 'Menghubungkan data penjualan & kreator ke database internal...',
+      message: 'Menyimpan data penjualan & konten ke database...',
+      salesCount: salesRowsToInsert.length,
+      videosCount: videoRowsToInsert.length
+    });
+
+    // 6. EXECUTE BULK UPSERT
+    if (salesRowsToInsert.length > 0 || videoRowsToInsert.length > 0) {
+      await executeSalesImportChunkAction(salesRowsToInsert, videoRowsToInsert, false);
+      totalSalesCount = salesRowsToInsert.length;
+      totalVideosCount = videoRowsToInsert.length;
+    }
+
+    emitProgress({
+      stage: 'mapping',
+      percent: 92,
+      message: 'Menghubungkan kreator & produk ke kampanye internal...',
       salesCount: totalSalesCount,
       videosCount: totalVideosCount
     });
 
-    // 5. Run Global Unmapped Auto-Sync & Creator Association
-    console.log('[TikTok AutoSync] Running global auto-mapping for unmapped creators & products...');
+    // 7. RUN GLOBAL AUTO-MAPPER
     const unmappedRes = await syncAllUnmappedGlobal();
 
-    // 6. Update last_synced_at & Log Execution
+    // 8. UPDATE LAST_SYNCED_AT & LOG
     const durationMs = Date.now() - startTime;
     await db.execute(sql`
       UPDATE tiktok_authorizations
@@ -389,6 +541,7 @@ export async function runTikTokAutoSync(options?: {
     const durationMs = Date.now() - startTime;
     console.error('[TikTok AutoSync] Execution error:', error);
     await logSyncExecution(triggerType, 'failed', 0, 0, 0, error.message, null, durationMs);
+    emitProgress({ stage: 'error', percent: 100, message: error.message });
     return {
       success: false,
       message: `Gagal sinkronisasi: ${error.message}`,
