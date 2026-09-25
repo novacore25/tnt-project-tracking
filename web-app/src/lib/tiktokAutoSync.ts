@@ -421,6 +421,8 @@ export async function runTikTokAutoSync(options?: {
         });
       }
 
+      const campaignDbId = matchedCampaign ? matchedCampaign.id : null;
+
       // 5b. If global order search found no orders, also try fetching orders specifically for this campaign
       if (salesRowsToInsert.length === 0) {
         try {
