@@ -681,8 +681,8 @@ export async function runTikTokAutoSync(options?: {
         products.map(async (prod: any) => {
           const pId = String(prod.id || prod.product_id);
           try {
-            const perfRes = await callTikTokShopApi(
-              `/affiliate_partner/202501/campaigns/${tapId}/products/${pId}/performance`,
+            let perfRes = await callTikTokShopApi(
+              `/affiliate_partner/202508/campaigns/${tapId}/products/${pId}/performance`,
               'GET',
               accessToken,
               {
@@ -690,6 +690,18 @@ export async function runTikTokAutoSync(options?: {
                 page_size: 50
               }
             );
+
+            if (!perfRes.success) {
+              perfRes = await callTikTokShopApi(
+                `/affiliate_partner/202501/campaigns/${tapId}/products/${pId}/performance`,
+                'GET',
+                accessToken,
+                {
+                  category_asset_cipher: cipher,
+                  page_size: 50
+                }
+              );
+            }
 
             const creators = perfRes.data?.data?.promotion_creators || [];
             if (diagnosticData.productLogs.length < 20) {
@@ -704,7 +716,7 @@ export async function runTikTokAutoSync(options?: {
               });
             }
             
-            // For each creator with content, fetch statistics
+            // For each creator with content, fetch statistics for VIDEO and LIVE_ROOM
             await Promise.all(
               creators.map(async (pc: any) => {
                 const uname = (pc.creator?.user_name || pc.creator?.nick_name || '').toLowerCase().trim();
@@ -712,54 +724,69 @@ export async function runTikTokAutoSync(options?: {
                 const affProdId = pc.affiliate_product_id || pId;
                 if (!tempId) return;
 
-                try {
-                  const statRes = await callTikTokShopApi(
-                    `/affiliate_partner/202508/campaigns/${tapId}/products/${pId}/creator/${tempId}/content/statistics`,
-                    'GET',
-                    accessToken,
-                    {
-                      category_asset_cipher: cipher,
-                      affiliate_product_id: affProdId
+                const contentTypes = ['VIDEO', 'LIVE_ROOM'];
+                for (const cTypeParam of contentTypes) {
+                  try {
+                    const statRes = await callTikTokShopApi(
+                      `/affiliate_partner/202508/campaigns/${tapId}/products/${pId}/creator/${tempId}/content/statistics`,
+                      'GET',
+                      accessToken,
+                      {
+                        category_asset_cipher: cipher,
+                        affiliate_product_id: affProdId,
+                        content_type: cTypeParam
+                      }
+                    );
+
+                    const statsList = statRes.data?.data?.creator_content_statistics || [];
+                    for (const stat of statsList) {
+                      let cUid = '';
+                      const match = (stat.source_url || stat.linked_tiktok_video || '').match(/\/video\/(\d+)/);
+                      if (match && match[1]) {
+                        cUid = match[1];
+                      } else if (stat.source_url) {
+                        cUid = stat.source_url;
+                      } else if (stat.content_id) {
+                        cUid = String(stat.content_id);
+                      }
+
+                      if (!cUid) continue;
+
+                      const isLive = cTypeParam === 'LIVE_ROOM' || stat.content_type === 'LIVE_ROOM' || stat.content_type === '2';
+                      const cType = isLive ? 'livestream' : 'video';
+                      const views = Number(stat.view_count || 0);
+                      const likes = Number(stat.like_count || 0);
+                      const postTime = stat.published_date 
+                        ? new Date(stat.published_date).toISOString() 
+                        : (stat.content_end_date ? new Date(stat.content_end_date).toISOString() : new Date().toISOString());
+
+                      // Check if already in videoRowsToInsert
+                      const existingIdx = videoRowsToInsert.findIndex(v => v.content_uid === cUid);
+                      if (existingIdx >= 0) {
+                        // Update with richer stats
+                        videoRowsToInsert[existingIdx].video_views = Math.max(videoRowsToInsert[existingIdx].video_views, views);
+                        videoRowsToInsert[existingIdx].video_likes = Math.max(videoRowsToInsert[existingIdx].video_likes, likes);
+                        videoRowsToInsert[existingIdx].raw_data = { ...videoRowsToInsert[existingIdx].raw_data, ...stat };
+                      } else {
+                        videoRowsToInsert.push({
+                          content_uid: cUid,
+                          creator_username: uname || 'unknown',
+                          content_type: cType,
+                          video_views: views,
+                          video_likes: likes,
+                          video_product_rpm: 0,
+                          duration_str: null,
+                          product_id: pId,
+                          campaign_id: campaignDbId,
+                          tiktok_campaign_id: tapId,
+                          tanggal: postTime,
+                          raw_data: stat
+                        });
+                      }
                     }
-                  );
-
-                  const statsList = statRes.data?.data?.creator_content_statistics || [];
-                  for (const stat of statsList) {
-                    let cUid = '';
-                    const match = (stat.source_url || stat.linked_tiktok_video || '').match(/\/video\/(\d+)/);
-                    if (match && match[1]) {
-                      cUid = match[1];
-                    } else if (stat.source_url) {
-                      cUid = stat.source_url;
-                    }
-
-                    if (!cUid) continue;
-
-                    const isLive = stat.content_type === 'LIVE_ROOM' || stat.content_type === '2';
-                    const cType = isLive ? 'livestream' : 'video';
-                    const views = Number(stat.view_count || 0);
-                    const likes = Number(stat.like_count || 0);
-                    const postTime = stat.published_date 
-                      ? new Date(stat.published_date).toISOString() 
-                      : new Date().toISOString();
-
-                    videoRowsToInsert.push({
-                      content_uid: cUid,
-                      creator_username: uname || 'unknown',
-                      content_type: cType,
-                      video_views: views,
-                      video_likes: likes,
-                      video_product_rpm: 0,
-                      duration_str: null,
-                      product_id: pId,
-                      campaign_id: campaignDbId,
-                      tiktok_campaign_id: tapId,
-                      tanggal: postTime,
-                      raw_data: stat
-                    });
+                  } catch (statErr) {
+                    // ignore content statistics error
                   }
-                } catch (statErr) {
-                  // ignore content statistics error
                 }
               })
             );
