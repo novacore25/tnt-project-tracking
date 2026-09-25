@@ -169,8 +169,8 @@ export function Sidebar() {
             </div>
           )}
 
-          {/* Khusus Finance, Executive, Admin */}
-          {['finance', 'executive', 'admin'].includes(profile?.role) && (
+          {/* Khusus Manager, Finance, Executive, Admin */}
+          {['manager', 'finance', 'executive', 'admin'].includes(profile?.role) && (
             <div className="mt-2">
               <div className="navsection">Finance</div>
               <Link
