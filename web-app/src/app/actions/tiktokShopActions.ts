@@ -264,14 +264,23 @@ export async function getTikTokAuthStatusAction() {
         seller_base_region TEXT,
         status TEXT DEFAULT 'active',
         last_synced_at TIMESTAMPTZ,
+        sync_status TEXT DEFAULT 'idle',
+        sync_progress_message TEXT,
+        sync_progress_percent INT DEFAULT 0,
+        sync_trigger_type TEXT,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
+      ALTER TABLE tiktok_authorizations ADD COLUMN IF NOT EXISTS sync_status TEXT DEFAULT 'idle';
+      ALTER TABLE tiktok_authorizations ADD COLUMN IF NOT EXISTS sync_progress_message TEXT;
+      ALTER TABLE tiktok_authorizations ADD COLUMN IF NOT EXISTS sync_progress_percent INT DEFAULT 0;
+      ALTER TABLE tiktok_authorizations ADD COLUMN IF NOT EXISTS sync_trigger_type TEXT;
     `);
 
     const rows = await db.execute(sql`
       SELECT id, seller_name, open_id, category_asset_cipher, seller_base_region, 
-             status, last_synced_at, access_token_expire_in, created_at, updated_at
+             status, last_synced_at, sync_status, sync_progress_message, sync_progress_percent,
+             sync_trigger_type, access_token_expire_in, created_at, updated_at
       FROM tiktok_authorizations
       WHERE status = 'active'
       ORDER BY id DESC
@@ -294,7 +303,11 @@ export async function getTikTokAuthStatusAction() {
         categoryAssetCipher: record.category_asset_cipher,
         lastSyncedAt: record.last_synced_at,
         isExpiringSoon: isTokenExpiringSoon,
-        expiresAt: expireSec ? new Date(expireSec * 1000).toISOString() : null
+        expiresAt: expireSec ? new Date(expireSec * 1000).toISOString() : null,
+        syncStatus: record.sync_status || 'idle',
+        syncProgressMessage: record.sync_progress_message,
+        syncProgressPercent: Number(record.sync_progress_percent) || 0,
+        syncTriggerType: record.sync_trigger_type || 'cron'
       }
     };
   } catch (error: any) {

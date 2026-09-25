@@ -44,12 +44,29 @@ export interface TikTokAutoSyncOptions {
 export async function runTikTokAutoSync(options?: TikTokAutoSyncOptions): Promise<TikTokSyncResult> {
   const startTime = Date.now();
   const triggerType = options?.triggerType || 'cron';
+  const updateDbProgress = async (stage: string, percent: number, message: string) => {
+    try {
+      await db.execute(sql`
+        UPDATE tiktok_authorizations
+        SET sync_status = 'running',
+            sync_progress_percent = ${percent},
+            sync_progress_message = ${message},
+            sync_trigger_type = ${triggerType},
+            updated_at = NOW()
+        WHERE status = 'active'
+      `);
+    } catch (e) {
+      // ignore
+    }
+  };
+
   const emitProgress = (update: SyncProgressUpdate) => {
     try {
       if (options?.onProgress) options.onProgress(update);
     } catch (e) {
       // ignore
     }
+    updateDbProgress(update.stage, update.percent, update.message);
   };
 
   try {
@@ -658,7 +675,12 @@ export async function runTikTokAutoSync(options?: TikTokAutoSyncOptions): Promis
     const durationMs = Date.now() - startTime;
     await db.execute(sql`
       UPDATE tiktok_authorizations
-      SET last_synced_at = NOW()
+      SET last_synced_at = NOW(),
+          sync_status = 'idle',
+          sync_progress_percent = 100,
+          sync_progress_message = ${summaryMsg},
+          sync_trigger_type = ${triggerType},
+          updated_at = NOW()
       WHERE status = 'active'
     `);
 
@@ -701,6 +723,19 @@ export async function runTikTokAutoSync(options?: TikTokAutoSyncOptions): Promis
   } catch (error: any) {
     const durationMs = Date.now() - startTime;
     console.error('[TikTok AutoSync] Execution error:', error);
+    try {
+      await db.execute(sql`
+        UPDATE tiktok_authorizations
+        SET sync_status = 'idle',
+            sync_progress_percent = 0,
+            sync_progress_message = ${error.message},
+            sync_trigger_type = ${triggerType},
+            updated_at = NOW()
+        WHERE status = 'active'
+      `);
+    } catch (dbErr) {
+      // ignore
+    }
     await logSyncExecution(triggerType, 'failed', 0, 0, 0, error.message, null, durationMs);
     emitProgress({ stage: 'error', percent: 100, message: error.message });
     return {

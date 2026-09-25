@@ -36,8 +36,8 @@ export function TikTokSyncControlCard() {
   const [liveSalesCount, setLiveSalesCount] = useState(0);
   const [liveVideosCount, setLiveVideosCount] = useState(0);
 
-  const loadData = async () => {
-    setIsLoading(true);
+  const loadData = async (silent = false) => {
+    if (!silent) setIsLoading(true);
     try {
       let statusRes = await getTikTokAuthStatusAction();
       
@@ -57,19 +57,25 @@ export function TikTokSyncControlCard() {
         }
       }
 
-      const historyRes = await getTikTokSyncHistoryAction(3);
+      const historyRes = await getTikTokSyncHistoryAction(5);
       setStatus(statusRes);
       setHistory(historyRes || []);
     } catch (err) {
       console.warn('Failed loading TikTok sync status:', err);
     } finally {
-      setIsLoading(false);
+      if (!silent) setIsLoading(false);
     }
   };
 
   useEffect(() => {
     loadData();
-  }, []);
+    const isBackgroundRunning = status?.data?.syncStatus === 'running';
+    const intervalTime = isBackgroundRunning || isSyncing ? 3000 : 15000;
+    const interval = setInterval(() => {
+      loadData(true);
+    }, intervalTime);
+    return () => clearInterval(interval);
+  }, [status?.data?.syncStatus, isSyncing]);
 
   const handleSyncNow = async () => {
     setIsSyncing(true);
@@ -222,10 +228,35 @@ export function TikTokSyncControlCard() {
             <span className="text-slate-500">• Setiap Hari</span>
           </div>
 
-          {authData?.lastSyncedAt && !isSyncing && (
-            <p className="text-xs text-emerald-400/90 font-medium pt-1">
-              Terakhir sinkron: {new Date(authData.lastSyncedAt).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })} WIB
-            </p>
+          {/* Last Synced Report / Live Status Banner */}
+          {authData?.lastSyncedAt && !isSyncing && authData?.syncStatus !== 'running' && (
+            <div className="pt-2 flex items-center gap-2 flex-wrap text-xs">
+              <span className="text-emerald-400 font-medium">
+                Terakhir sinkron: {new Date(authData.lastSyncedAt).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })} WIB
+              </span>
+              <span className={`px-2 py-0.5 rounded text-[11px] font-semibold border ${
+                authData.syncTriggerType === 'cron' 
+                  ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40' 
+                  : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+              }`}>
+                {authData.syncTriggerType === 'cron' ? '🤖 Otomatis (Jadwal VPS)' : '👤 Manual'}
+              </span>
+              {history.length > 0 && (
+                <span className="text-slate-400 text-[11px] bg-slate-800/80 px-2 py-0.5 rounded border border-slate-700/50">
+                  {history[0]?.sales_count || 0} orders • {history[0]?.videos_count || 0} konten ({((history[0]?.duration_ms || 0) / 1000).toFixed(1)}s)
+                </span>
+              )}
+            </div>
+          )}
+
+          {/* Real-time background sync badge if running in background */}
+          {authData?.syncStatus === 'running' && !isSyncing && (
+            <div className="pt-2 flex items-center gap-2 text-xs">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-300 font-semibold animate-pulse">
+                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                Auto-Sync sedang berjalan di background VPS ({authData.syncProgressPercent || 10}%)...
+              </span>
+            </div>
           )}
         </div>
 
@@ -383,36 +414,44 @@ export function TikTokSyncControlCard() {
         </div>
       </div>
 
-      {/* LIVE SYNC PROGRESS BAR & STATUS */}
-      {isSyncing && (
+      {/* LIVE SYNC PROGRESS BAR & STATUS (Manual or Background) */}
+      {(isSyncing || authData?.syncStatus === 'running') && (
         <div className="mt-6 pt-5 border-t border-indigo-500/20 space-y-3 animate-in fade-in duration-300">
           <div className="flex items-center justify-between text-xs font-semibold">
             <div className="flex items-center gap-2 text-indigo-300">
               <RefreshCw className="w-3.5 h-3.5 animate-spin text-teal-400" />
-              <span>{progressMessage || 'Sedang memproses sinkronisasi TikTok...'}</span>
+              <span>
+                {isSyncing 
+                  ? (progressMessage || 'Sedang memproses sinkronisasi TikTok...') 
+                  : (authData?.syncProgressMessage || 'Auto-Sync sedang berjalan di background server VPS...')}
+              </span>
             </div>
-            <span className="text-teal-400 font-mono font-bold text-sm">{progressPercent}%</span>
+            <span className="text-teal-400 font-mono font-bold text-sm">
+              {isSyncing ? progressPercent : (authData?.syncProgressPercent || 10)}%
+            </span>
           </div>
 
           {/* Progress Bar Track */}
           <div className="w-full bg-slate-800/90 rounded-full h-2.5 overflow-hidden border border-indigo-900/50 p-0.5">
             <div 
               className="bg-gradient-to-r from-teal-400 via-indigo-400 to-emerald-400 h-full rounded-full transition-all duration-500 shadow-sm"
-              style={{ width: `${Math.max(5, progressPercent)}%` }}
+              style={{ width: `${Math.max(5, isSyncing ? progressPercent : (authData?.syncProgressPercent || 10))}%` }}
             />
           </div>
 
-          {/* Live Counter Badges */}
-          <div className="flex items-center gap-4 text-xs pt-1">
-            <div className="flex items-center gap-1.5 bg-slate-800/80 px-2.5 py-1 rounded-lg border border-slate-700/50">
-              <span className="text-slate-400">Pesanan (Sales):</span>
-              <span className="font-bold text-emerald-400 font-mono">{liveSalesCount}</span>
+          {/* Live Counter Badges (if manual sync) */}
+          {isSyncing && (
+            <div className="flex items-center gap-4 text-xs pt-1">
+              <div className="flex items-center gap-1.5 bg-slate-800/80 px-2.5 py-1 rounded-lg border border-slate-700/50">
+                <span className="text-slate-400">Pesanan (Sales):</span>
+                <span className="font-bold text-emerald-400 font-mono">{liveSalesCount}</span>
+              </div>
+              <div className="flex items-center gap-1.5 bg-slate-800/80 px-2.5 py-1 rounded-lg border border-slate-700/50">
+                <span className="text-slate-400">Konten Video & Live:</span>
+                <span className="font-bold text-teal-400 font-mono">{liveVideosCount}</span>
+              </div>
             </div>
-            <div className="flex items-center gap-1.5 bg-slate-800/80 px-2.5 py-1 rounded-lg border border-slate-700/50">
-              <span className="text-slate-400">Konten Video & Live:</span>
-              <span className="font-bold text-teal-400 font-mono">{liveVideosCount}</span>
-            </div>
-          </div>
+          )}
         </div>
       )}
 
