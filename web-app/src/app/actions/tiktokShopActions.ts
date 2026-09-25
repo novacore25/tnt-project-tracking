@@ -343,7 +343,7 @@ export async function getTikTokSyncHistoryAction(limit: number = 5) {
 
     const rows = await db.execute(sql`
       SELECT id, trigger_type, status, sales_count, videos_count, 
-             campaigns_count, message, duration_ms, created_at
+             campaigns_count, message, details, duration_ms, created_at
       FROM tiktok_sync_logs
       ORDER BY id DESC
       LIMIT ${limit}

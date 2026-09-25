@@ -289,6 +289,157 @@ export function TikTokSyncControlCard() {
           </button>
         </div>
       )}
+
+      {/* DIAGNOSTIC LOG VIEWER ACCORDION */}
+      {history.length > 0 && (
+        <DiagnosticLogViewer history={history} latestResult={syncResult} />
+      )}
     </div>
   );
 }
+
+/**
+ * Diagnostic Log Viewer Sub-component
+ */
+function DiagnosticLogViewer({ history, latestResult }: { history: any[]; latestResult: any }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [selectedLogIndex, setSelectedLogIndex] = useState(0);
+
+  const activeLog = history[selectedLogIndex] || history[0];
+  const details = latestResult?.details || activeLog?.details || {};
+
+  const handleCopyJson = () => {
+    navigator.clipboard.writeText(JSON.stringify(details, null, 2));
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="mt-5 pt-4 border-t border-indigo-500/20">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="flex items-center justify-between w-full text-xs font-semibold text-indigo-300 hover:text-indigo-100 transition-colors py-1.5"
+      >
+        <span className="flex items-center gap-2">
+          <Database className="w-3.5 h-3.5 text-indigo-400" />
+          <span>🔍 Log Diagnostik & Analisis Respon TikTok OpenAPI {isOpen ? '(Tutup)' : '(Klik untuk Analisis Lengkap)'}</span>
+        </span>
+        <span className="text-[11px] bg-indigo-900/60 border border-indigo-700/50 px-2 py-0.5 rounded text-indigo-200">
+          {isOpen ? 'Sembunyikan ▲' : 'Lihat Detail ▼'}
+        </span>
+      </button>
+
+      {isOpen && (
+        <div className="mt-4 p-4 rounded-xl bg-slate-950/80 border border-indigo-500/30 text-xs space-y-4 animate-in fade-in duration-300">
+          
+          {/* Header & Controls */}
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-3 border-b border-slate-800">
+            <div>
+              <p className="font-bold text-slate-200">Riwayat & Analisis Eksekusi Terakhir</p>
+              <p className="text-[11px] text-slate-400">
+                Waktu: {activeLog?.created_at ? new Date(activeLog.created_at).toLocaleString('id-ID') : 'Baru saja'} | Durasi: {activeLog?.duration_ms || 0}ms
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleCopyJson}
+                className="px-2.5 py-1 bg-indigo-600/30 hover:bg-indigo-600/50 border border-indigo-400/30 rounded text-[11px] font-medium text-indigo-200 transition-colors"
+              >
+                {copied ? '✓ Tersalin' : '📋 Salin JSON Diagnostik'}
+              </button>
+            </div>
+          </div>
+
+          {/* Quick Metrics */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+            <div className="bg-slate-900/90 p-2.5 rounded-lg border border-slate-800">
+              <span className="text-[10px] text-slate-400 uppercase font-semibold block">Kampanye TAP</span>
+              <span className="text-base font-bold text-indigo-300 font-mono">
+                {details?.campaignsList?.length || activeLog?.campaigns_count || 0}
+              </span>
+            </div>
+            <div className="bg-slate-900/90 p-2.5 rounded-lg border border-slate-800">
+              <span className="text-[10px] text-slate-400 uppercase font-semibold block">Orders Direspons</span>
+              <span className="text-base font-bold text-emerald-400 font-mono">
+                {activeLog?.sales_count || 0}
+              </span>
+            </div>
+            <div className="bg-slate-900/90 p-2.5 rounded-lg border border-slate-800">
+              <span className="text-[10px] text-slate-400 uppercase font-semibold block">Konten Terdeteksi</span>
+              <span className="text-base font-bold text-teal-400 font-mono">
+                {activeLog?.videos_count || 0}
+              </span>
+            </div>
+            <div className="bg-slate-900/90 p-2.5 rounded-lg border border-slate-800">
+              <span className="text-[10px] text-slate-400 uppercase font-semibold block">Status API</span>
+              <span className="text-base font-bold text-amber-300 font-mono">
+                {activeLog?.status?.toUpperCase() || 'OK'}
+              </span>
+            </div>
+          </div>
+
+          {/* Section: Order API Call Details */}
+          {details?.orderApiLogs && details.orderApiLogs.length > 0 && (
+            <div className="space-y-2">
+              <p className="font-semibold text-slate-300 text-[11px] flex items-center gap-1.5">
+                <span>📡 Hasil Request Endpoint Pesanan (Orders Search):</span>
+              </p>
+              <div className="space-y-1.5">
+                {details.orderApiLogs.map((log: any, idx: number) => (
+                  <div key={idx} className="bg-slate-900/80 p-2.5 rounded-lg border border-slate-800 flex flex-col sm:flex-row justify-between gap-2">
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-mono text-indigo-300 font-medium">{log.endpoint}</span>
+                        <span className="bg-slate-800 px-1.5 py-0.5 rounded text-[10px] text-slate-300 font-mono">{log.label}</span>
+                        <Badge className={`text-[10px] px-1.5 py-0 ${log.success ? 'bg-emerald-500/20 text-emerald-300' : 'bg-red-500/20 text-red-300'}`}>
+                          HTTP {log.httpStatus} | Code {log.code}
+                        </Badge>
+                      </div>
+                      <p className="text-[11px] text-slate-400">Pesan TikTok: "{log.message}"</p>
+                    </div>
+                    <div className="sm:text-right shrink-0">
+                      <span className="text-[11px] font-mono font-bold text-slate-200">
+                        {log.ordersCount} pesanan ditemukan
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Section: TAP Campaigns Found */}
+          {details?.campaignsList && details.campaignsList.length > 0 && (
+            <div className="space-y-2">
+              <p className="font-semibold text-slate-300 text-[11px]">
+                🎯 Daftar Kampanye TAP Ditemukan di Partner Center ({details.campaignsList.length}):
+              </p>
+              <div className="max-h-36 overflow-y-auto space-y-1 pr-1 bg-slate-900/60 p-2 rounded-lg border border-slate-800/80">
+                {details.campaignsList.map((c: any, i: number) => (
+                  <div key={i} className="flex items-center justify-between py-1 px-2 hover:bg-slate-800/50 rounded text-[11px]">
+                    <span className="text-slate-300 font-medium truncate max-w-xs">{i + 1}. {c.name || 'Tanpa Nama'}</span>
+                    <span className="font-mono text-slate-400 text-[10px] shrink-0">ID: {c.id} ({c.status})</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Raw JSON Accordion */}
+          <details className="group">
+            <summary className="cursor-pointer text-[11px] text-indigo-400 font-semibold hover:text-indigo-300">
+              ▸ Lihat Respon Mentah (Raw JSON Details)
+            </summary>
+            <pre className="mt-2 p-3 bg-black/80 rounded-lg text-[10px] text-emerald-400 font-mono overflow-x-auto max-h-48">
+              {JSON.stringify(details, null, 2)}
+            </pre>
+          </details>
+
+        </div>
+      )}
+    </div>
+  );
+}
+

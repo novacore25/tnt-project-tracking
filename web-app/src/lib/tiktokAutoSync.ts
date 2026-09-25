@@ -74,27 +74,51 @@ export async function runTikTokAutoSync(options?: {
 
     const accessToken = tokenInfo.accessToken;
     let cipher = tokenInfo.categoryAssetCipher;
+    const diagnosticData: Record<string, any> = {
+      startTime: new Date(startTime).toISOString(),
+      triggerType,
+      auth: {
+        sellerName: tokenInfo.sellerName,
+        activeCipher: cipher,
+        allAssets: []
+      },
+      orderApiLogs: [],
+      campaignsList: [],
+      productLogs: [],
+      syncErrors: []
+    };
 
-    // If cipher missing, fetch from category_assets API
-    if (!cipher) {
+    // 1b. Fetch all category assets to inspect available ciphers
+    try {
       const assetRes = await callTikTokShopApi(
         '/authorization/202405/category_assets',
         'GET',
         accessToken
       );
-      if (assetRes.success && assetRes.data?.data?.category_assets?.length > 0) {
-        cipher = assetRes.data.data.category_assets[0].category_asset_cipher;
+      diagnosticData.auth.categoryAssetsApi = {
+        success: assetRes.success,
+        code: assetRes.data?.code,
+        message: assetRes.data?.message
+      };
+
+      const assets = assetRes.data?.data?.category_assets || [];
+      diagnosticData.auth.allAssets = assets;
+      if (!cipher && assets.length > 0) {
+        cipher = assets[0].category_asset_cipher;
+        diagnosticData.auth.activeCipher = cipher;
         await db.execute(sql`
           UPDATE tiktok_authorizations
           SET category_asset_cipher = ${cipher}
           WHERE status = 'active'
         `);
       }
+    } catch (e: any) {
+      diagnosticData.auth.categoryAssetsError = e.message;
     }
 
     if (!cipher) {
       const errMsg = "Tidak dapat menemukan category_asset_cipher dari akun Partner Center";
-      await logSyncExecution(triggerType, 'failed', 0, 0, 0, errMsg, null, Date.now() - startTime);
+      await logSyncExecution(triggerType, 'failed', 0, 0, 0, errMsg, diagnosticData, Date.now() - startTime);
       emitProgress({ stage: 'error', percent: 100, message: errMsg });
       return {
         success: false,
@@ -104,6 +128,7 @@ export async function runTikTokAutoSync(options?: {
         campaignsProcessed: 0,
         salesUpserted: 0,
         videosUpserted: 0,
+        details: diagnosticData,
         error: errMsg
       };
     }
@@ -127,6 +152,14 @@ export async function runTikTokAutoSync(options?: {
     );
 
     const tapCampaigns = tapCampRes.data?.data?.campaigns || [];
+    diagnosticData.campaignsList = tapCampaigns.map((tc: any) => ({
+      id: tc.id,
+      name: tc.name,
+      status: tc.status,
+      startTime: tc.campaign_start_time,
+      endTime: tc.campaign_end_time
+    }));
+
     console.log(`[TikTok AutoSync] Found ${tapCampaigns.length} ongoing TAP campaigns in Partner Center.`);
 
     // 3. Load Internal Database Campaigns & SKUs for Matching
@@ -194,15 +227,28 @@ export async function runTikTokAutoSync(options?: {
             }
           );
 
+          const tapOrders = tapOrdersRes.data?.data?.orders || [];
+          nextPageToken = tapOrdersRes.data?.data?.next_page_token || '';
+
+          diagnosticData.orderApiLogs.push({
+            endpoint: '/affiliate_partner/202411/orders/search',
+            label: tw.label,
+            page,
+            success: tapOrdersRes.success,
+            httpStatus: tapOrdersRes.status,
+            code: tapOrdersRes.data?.code,
+            message: tapOrdersRes.data?.message || 'OK',
+            ordersCount: tapOrders.length,
+            nextPageToken: !!nextPageToken,
+            rawPreview: tapOrders.length > 0 ? tapOrders.slice(0, 2) : tapOrdersRes.data
+          });
+
           if (!tapOrdersRes.success) {
             console.warn(`[TikTok AutoSync] TAP orders fetch (${tw.label}, p${page}) notice:`, tapOrdersRes.data?.message || 'Failed');
             if (tapOrdersRes.data?.message) {
               syncErrors.push(`TAP Orders (${tw.label}): ${tapOrdersRes.data.message}`);
             }
           }
-
-          const tapOrders = tapOrdersRes.data?.data?.orders || [];
-          nextPageToken = tapOrdersRes.data?.data?.next_page_token || '';
 
           for (const ord of tapOrders) {
             const orderId = String(ord.id || ord.order_id || '').trim();
@@ -636,8 +682,17 @@ export async function runTikTokAutoSync(options?: {
       WHERE status = 'active'
     `);
 
+    const fullDiagnostics = {
+      ...diagnosticData,
+      syncDetails,
+      unmappedRes,
+      totalSalesCount,
+      totalVideosCount,
+      campaignsProcessed
+    };
+
     const summaryMsg = `Sukses sinkronisasi ${campaignsProcessed} kampanye (${totalSalesCount} order sales, ${totalVideosCount} video/live konten, ${unmappedRes.totalSalesUpdated || 0} mapping updated).`;
-    await logSyncExecution(triggerType, 'success', totalSalesCount, totalVideosCount, campaignsProcessed, summaryMsg, { syncDetails, unmappedRes, syncErrors }, durationMs);
+    await logSyncExecution(triggerType, 'success', totalSalesCount, totalVideosCount, campaignsProcessed, summaryMsg, fullDiagnostics, durationMs);
 
     emitProgress({
       stage: 'done',
@@ -657,7 +712,7 @@ export async function runTikTokAutoSync(options?: {
       campaignsProcessed,
       salesUpserted: totalSalesCount,
       videosUpserted: totalVideosCount,
-      details: { syncDetails, unmappedRes, syncErrors }
+      details: fullDiagnostics
     };
 
   } catch (error: any) {
