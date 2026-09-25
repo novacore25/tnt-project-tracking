@@ -72,6 +72,15 @@ export default function TikTokCallbackClient() {
         if (savedRefresh) setRefreshToken(savedRefresh);
         if (savedCipher) setPartnerCipher(savedCipher);
 
+        if (savedToken) {
+          saveTikTokAuthTokensAction({
+            access_token: savedToken,
+            refresh_token: savedRefresh || '',
+            category_asset_cipher: savedCipher || 'ROW_fyGlKwAAAAB6jCmj_Z8Zc6uknZJUdZAi',
+            seller_name: 'TNT Media (Agency)'
+          }).catch(err => console.warn('Auto-sync token to database error:', err));
+        }
+
         if (urlCode && !savedToken) {
           handleExchangeCode(urlCode);
         }
@@ -80,6 +89,21 @@ export default function TikTokCallbackClient() {
       }
     }
   }, []);
+
+  const handleSyncToDatabase = async () => {
+    if (!accessToken) return;
+    try {
+      await saveTikTokAuthTokensAction({
+        access_token: accessToken,
+        refresh_token: refreshToken || '',
+        category_asset_cipher: partnerCipher || 'ROW_fyGlKwAAAAB6jCmj_Z8Zc6uknZJUdZAi',
+        seller_name: sellerName || 'TNT Media (Agency)'
+      });
+      alert('✓ Otorisasi TikTok berhasil disimpan & dihubungkan ke database server!');
+    } catch (err: any) {
+      alert('Gagal menyimpan ke server: ' + err.message);
+    }
+  };
 
   const handleExchangeCode = async (authCode: string) => {
     setIsExchanging(true);
@@ -103,7 +127,8 @@ export default function TikTokCallbackClient() {
           access_token_expire_in: res.data.access_token_expire_in,
           refresh_token_expire_in: res.data.refresh_token_expire_in,
           open_id: res.data.open_id,
-          seller_base_region: res.data.seller_base_region || 'ID'
+          seller_base_region: res.data.seller_base_region || 'ID',
+          category_asset_cipher: partnerCipher || 'ROW_fyGlKwAAAAB6jCmj_Z8Zc6uknZJUdZAi'
         });
 
         try {
@@ -338,13 +363,22 @@ export default function TikTokCallbackClient() {
                   <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
                   <span>Access Token Berhasil Diperoleh & Aktif! {sellerName && `(Akun: ${sellerName})`}</span>
                 </div>
-                <button
-                  type="button"
-                  onClick={handleClearTokens}
-                  className="self-start sm:self-auto px-2.5 py-1 text-xs text-rose-700 hover:text-rose-900 border border-rose-200 hover:border-rose-300 rounded bg-white hover:bg-rose-50 transition-colors"
-                >
-                  Reset Token
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleSyncToDatabase}
+                    className="px-2.5 py-1 text-xs text-indigo-700 hover:text-indigo-900 border border-indigo-200 hover:border-indigo-300 rounded bg-white hover:bg-indigo-50 transition-colors flex items-center gap-1 font-semibold"
+                  >
+                    <Database className="w-3.5 h-3.5" /> Hubungkan ke Database Server
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleClearTokens}
+                    className="self-start sm:self-auto px-2.5 py-1 text-xs text-rose-700 hover:text-rose-900 border border-rose-200 hover:border-rose-300 rounded bg-white hover:bg-rose-50 transition-colors"
+                  >
+                    Reset Token
+                  </button>
+                </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

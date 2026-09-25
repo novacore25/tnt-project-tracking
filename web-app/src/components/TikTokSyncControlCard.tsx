@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { 
   getTikTokAuthStatusAction, 
+  saveTikTokAuthTokensAction,
   triggerManualTikTokSyncAction, 
   getTikTokSyncHistoryAction 
 } from '@/app/actions/tiktokShopActions';
@@ -24,10 +25,25 @@ export function TikTokSyncControlCard() {
   const loadData = async () => {
     setIsLoading(true);
     try {
-      const [statusRes, historyRes] = await Promise.all([
-        getTikTokAuthStatusAction(),
-        getTikTokSyncHistoryAction(3)
-      ]);
+      let statusRes = await getTikTokAuthStatusAction();
+      
+      // Auto-heal: If database doesn't have token record yet, check browser localStorage
+      if (!statusRes?.isConnected && typeof window !== 'undefined') {
+        const localToken = localStorage.getItem('tts_access_token');
+        const localRefresh = localStorage.getItem('tts_refresh_token') || '';
+        const localCipher = localStorage.getItem('tts_partner_cipher') || 'ROW_fyGlKwAAAAB6jCmj_Z8Zc6uknZJUdZAi';
+        if (localToken) {
+          await saveTikTokAuthTokensAction({
+            access_token: localToken,
+            refresh_token: localRefresh,
+            category_asset_cipher: localCipher,
+            seller_name: 'TNT Media (Agency)'
+          });
+          statusRes = await getTikTokAuthStatusAction();
+        }
+      }
+
+      const historyRes = await getTikTokSyncHistoryAction(3);
       setStatus(statusRes);
       setHistory(historyRes || []);
     } catch (err) {
@@ -45,6 +61,21 @@ export function TikTokSyncControlCard() {
     setIsSyncing(true);
     setSyncResult(null);
     try {
+      // Ensure token is saved in DB if available in localStorage
+      if (!status?.isConnected && typeof window !== 'undefined') {
+        const localToken = localStorage.getItem('tts_access_token');
+        const localRefresh = localStorage.getItem('tts_refresh_token') || '';
+        const localCipher = localStorage.getItem('tts_partner_cipher') || 'ROW_fyGlKwAAAAB6jCmj_Z8Zc6uknZJUdZAi';
+        if (localToken) {
+          await saveTikTokAuthTokensAction({
+            access_token: localToken,
+            refresh_token: localRefresh,
+            category_asset_cipher: localCipher,
+            seller_name: 'TNT Media (Agency)'
+          });
+        }
+      }
+
       const res = await triggerManualTikTokSyncAction();
       setSyncResult(res);
       await loadData();
