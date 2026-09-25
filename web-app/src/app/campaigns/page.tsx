@@ -214,26 +214,26 @@ export default function CampaignsPage() {
                       <label className="text-sm font-medium">Target Video (Pcs)</label>
                       <input type="number" min="0" className="input" value={formData.target_video} onChange={e => setFormData({...formData, target_video: e.target.value})} placeholder="Opsional" />
                     </div>
-                    <div className="col-span-2 bg-slate-50 border border-slate-200 rounded-lg p-[16px] space-y-[12px]">
-                      <h5 className="font-semibold text-sm text-text">Detail Target Kreator (Umum/Video)</h5>
-                      <div className="grid grid-cols-2 sm:grid-cols-5 gap-[12px]">
-                        <div className="space-y-[6px]">
+                    <div className="col-span-2 border border-line rounded-xl p-4 space-y-3 bg-bg/40">
+                      <h5 className="font-bold text-xs uppercase tracking-wider text-text-soft">Detail Target Kreator (Umum/Video)</h5>
+                      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                        <div className="space-y-1.5">
                           <label className="text-xs font-medium text-text-soft">Total</label>
                           <input type="number" min="0" className="input text-sm" value={formData.target_creator} onChange={e => setFormData({...formData, target_creator: e.target.value})} placeholder="Opsional" />
                         </div>
-                        <div className="space-y-[6px]">
+                        <div className="space-y-1.5">
                           <label className="text-xs font-medium text-text-soft">Nano</label>
                           <input type="number" min="0" className="input text-sm" value={formData.target_creator_nano || ''} onChange={e => setFormData({...formData, target_creator_nano: e.target.value})} />
                         </div>
-                        <div className="space-y-[6px]">
+                        <div className="space-y-1.5">
                           <label className="text-xs font-medium text-text-soft">Micro</label>
                           <input type="number" min="0" className="input text-sm" value={formData.target_creator_micro || ''} onChange={e => setFormData({...formData, target_creator_micro: e.target.value})} />
                         </div>
-                        <div className="space-y-[6px]">
+                        <div className="space-y-1.5">
                           <label className="text-xs font-medium text-text-soft">Macro</label>
                           <input type="number" min="0" className="input text-sm" value={formData.target_creator_macro || ''} onChange={e => setFormData({...formData, target_creator_macro: e.target.value})} />
                         </div>
-                        <div className="space-y-[6px]">
+                        <div className="space-y-1.5">
                           <label className="text-xs font-medium text-text-soft">Mega</label>
                           <input type="number" min="0" className="input text-sm" value={formData.target_creator_mega || ''} onChange={e => setFormData({...formData, target_creator_mega: e.target.value})} />
                         </div>
@@ -241,26 +241,26 @@ export default function CampaignsPage() {
                     </div>
 
                     {/* NEW LIVE TARGET BLOCK */}
-                    <div className="col-span-2 bg-slate-50 border border-slate-200 rounded-lg p-[16px] space-y-[12px]">
-                      <h5 className="font-semibold text-sm text-text">Detail Target Creator Live</h5>
-                      <div className="grid grid-cols-2 sm:grid-cols-5 gap-[12px]">
-                        <div className="space-y-[6px]">
+                    <div className="col-span-2 border border-line rounded-xl p-4 space-y-3 bg-bg/40">
+                      <h5 className="font-bold text-xs uppercase tracking-wider text-text-soft">Detail Target Creator Live</h5>
+                      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                        <div className="space-y-1.5">
                           <label className="text-xs font-medium text-text-soft">Total Live</label>
                           <input type="number" min="0" className="input text-sm" value={formData.target_creator_live || ''} onChange={e => setFormData({...formData, target_creator_live: e.target.value})} />
                         </div>
-                        <div className="space-y-[6px]">
+                        <div className="space-y-1.5">
                           <label className="text-xs font-medium text-text-soft">Nano Live</label>
                           <input type="number" min="0" className="input text-sm" value={formData.target_creator_live_nano || ''} onChange={e => setFormData({...formData, target_creator_live_nano: e.target.value})} />
                         </div>
-                        <div className="space-y-[6px]">
+                        <div className="space-y-1.5">
                           <label className="text-xs font-medium text-text-soft">Micro Live</label>
                           <input type="number" min="0" className="input text-sm" value={formData.target_creator_live_micro || ''} onChange={e => setFormData({...formData, target_creator_live_micro: e.target.value})} />
                         </div>
-                        <div className="space-y-[6px]">
+                        <div className="space-y-1.5">
                           <label className="text-xs font-medium text-text-soft">Macro Live</label>
                           <input type="number" min="0" className="input text-sm" value={formData.target_creator_live_macro || ''} onChange={e => setFormData({...formData, target_creator_live_macro: e.target.value})} />
                         </div>
-                        <div className="space-y-[6px]">
+                        <div className="space-y-1.5">
                           <label className="text-xs font-medium text-text-soft">Mega Live</label>
                           <input type="number" min="0" className="input text-sm" value={formData.target_creator_live_mega || ''} onChange={e => setFormData({...formData, target_creator_live_mega: e.target.value})} />
                         </div>
