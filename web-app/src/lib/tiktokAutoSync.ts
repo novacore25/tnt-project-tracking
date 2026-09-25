@@ -481,26 +481,6 @@ export async function runTikTokAutoSync(options?: TikTokAutoSyncOptions): Promis
 
       const campaignDbId = matchedCampaign ? matchedCampaign.id : null;
 
-      // Auto-register discovered TAP campaign SKUs into internal campaign skus table if missing
-      if (campaignDbId && products.length > 0) {
-        for (const prod of products) {
-          const pId = String(prod.id || prod.product_id || '').trim();
-          const pTitle = prod.title || prod.name || prod.product_name || `Produk ${pId}`;
-          if (pId && !skuToCampaignMap.has(pId)) {
-            try {
-              await db.execute(sql`
-                INSERT INTO skus (campaign_id, product_id, nama_produk)
-                VALUES (${campaignDbId}, ${pId}, ${pTitle})
-              `);
-              skuToCampaignMap.set(pId, campaignDbId);
-              console.log(`[TikTok AutoSync] Auto-registered SKU ${pId} (${pTitle}) for campaign ${campaignDbId}`);
-            } catch (skuErr: any) {
-              // Ignore duplicate or constraint error
-            }
-          }
-        }
-      }
-
       // 5b. Fetch performance per product with creator pagination
       for (const prod of products) {
         const pId = String(prod.id || prod.product_id);

@@ -112,8 +112,7 @@ export default function CampaignPerformaClient({ campaignId }: { campaignId: num
 
       if (currentHasSkus) {
         salesData.forEach((s: any) => {
-          const isBelong = (s.product_id && skuSet.has(s.product_id)) || s.campaign_id === campaignId || !s.product_id;
-          if (!isBelong) return;
+          if (!s.product_id || !skuSet.has(s.product_id)) return;
           const u = (s.creator_username || '').toLowerCase();
           const gmv = Number(s.gmv || 0);
           const qty = Number(s.quantity || 0);
@@ -140,8 +139,7 @@ export default function CampaignPerformaClient({ campaignId }: { campaignId: num
       const orgUidMap = new Map<string, { views: number; likes: number; creator: string; contentType: string }>();
       if (currentHasSkus) {
         (orgVidsData || []).forEach((v: any) => {
-          const isBelong = (v.product_id && skuSet.has(v.product_id)) || v.campaign_id === campaignId || !v.product_id;
-          if (!isBelong) return;
+          if (!v.product_id || !skuSet.has(v.product_id)) return;
           const uid = v.content_uid;
           if (!uid) return;
 
@@ -209,7 +207,7 @@ export default function CampaignPerformaClient({ campaignId }: { campaignId: num
 
       const videoGmvData = currentHasSkus
         ? salesData
-            .filter((s: any) => (s.product_id && skuSet.has(s.product_id)) || s.campaign_id === campaignId || !s.product_id)
+            .filter((s: any) => s.product_id && skuSet.has(s.product_id))
             .map((s: any) => ({
               creator_username: s.creator_username,
               content_uid: s.content_uid,
