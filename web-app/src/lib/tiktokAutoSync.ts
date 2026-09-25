@@ -4,6 +4,17 @@ import { callTikTokShopApi, getValidTikTokToken, saveTikTokAuthTokens } from '@/
 import { executeSalesImportChunkAction } from '@/app/actions/importActions';
 import { syncAllUnmappedGlobal } from '@/lib/syncUnmapped';
 
+export interface SyncProgressUpdate {
+  stage: 'auth' | 'campaigns' | 'products' | 'orders' | 'saving' | 'mapping' | 'done' | 'error';
+  percent: number;
+  message: string;
+  totalCampaigns?: number;
+  campaignIndex?: number;
+  currentCampaign?: string;
+  salesCount?: number;
+  videosCount?: number;
+}
+
 export interface TikTokSyncResult {
   success: boolean;
   message: string;
@@ -23,18 +34,32 @@ export interface TikTokSyncResult {
 export async function runTikTokAutoSync(options?: {
   campaignId?: number;
   triggerType?: 'cron' | 'manual';
+  onProgress?: (progress: SyncProgressUpdate) => void;
 }): Promise<TikTokSyncResult> {
   const startTime = Date.now();
   const triggerType = options?.triggerType || 'cron';
+  const emitProgress = (update: SyncProgressUpdate) => {
+    try {
+      if (options?.onProgress) options.onProgress(update);
+    } catch (e) {
+      // ignore
+    }
+  };
 
   try {
     console.log(`[TikTok AutoSync] Starting auto-sync pipeline (trigger: ${triggerType})...`);
+    emitProgress({
+      stage: 'auth',
+      percent: 10,
+      message: 'Memeriksa dan memvalidasi otorisasi Partner Center...'
+    });
 
     // 1. Get Valid Access Token & Category Asset Cipher
     const tokenInfo = await getValidTikTokToken();
     if (!tokenInfo.isValid || !tokenInfo.accessToken) {
       const errMsg = tokenInfo.error || "Akses token TikTok tidak valid";
       await logSyncExecution(triggerType, 'failed', 0, 0, 0, errMsg, null, Date.now() - startTime);
+      emitProgress({ stage: 'error', percent: 100, message: errMsg });
       return {
         success: false,
         message: errMsg,
@@ -59,7 +84,6 @@ export async function runTikTokAutoSync(options?: {
       );
       if (assetRes.success && assetRes.data?.data?.category_assets?.length > 0) {
         cipher = assetRes.data.data.category_assets[0].category_asset_cipher;
-        // Save cipher to database
         await db.execute(sql`
           UPDATE tiktok_authorizations
           SET category_asset_cipher = ${cipher}
@@ -71,6 +95,7 @@ export async function runTikTokAutoSync(options?: {
     if (!cipher) {
       const errMsg = "Tidak dapat menemukan category_asset_cipher dari akun Partner Center";
       await logSyncExecution(triggerType, 'failed', 0, 0, 0, errMsg, null, Date.now() - startTime);
+      emitProgress({ stage: 'error', percent: 100, message: errMsg });
       return {
         success: false,
         message: errMsg,
@@ -82,6 +107,12 @@ export async function runTikTokAutoSync(options?: {
         error: errMsg
       };
     }
+
+    emitProgress({
+      stage: 'campaigns',
+      percent: 25,
+      message: 'Mengambil daftar kampanye TAP aktif dari TikTok Shop...'
+    });
 
     // 2. Fetch Active TAP Campaigns from OpenAPI
     const tapCampRes = await callTikTokShopApi(
@@ -112,12 +143,27 @@ export async function runTikTokAutoSync(options?: {
     let campaignsProcessed = 0;
     const syncDetails: any[] = [];
 
+    const totalTap = tapCampaigns.length;
+
     // 4. Iterate and Sync each Campaign
-    for (const tap of tapCampaigns) {
+    for (let i = 0; i < totalTap; i++) {
+      const tap = tapCampaigns[i];
       const tapId = String(tap.campaign_id || tap.id);
       const tapName = tap.campaign_name || tap.name || '';
 
-      // 4a. Fetch Campaign Products first so we can match by product_id
+      const percentBase = 30 + Math.round((i / (totalTap || 1)) * 45);
+      emitProgress({
+        stage: 'products',
+        percent: percentBase,
+        message: `Menarik performa konten & live: "${tapName}" (${i + 1}/${totalTap})...`,
+        totalCampaigns: totalTap,
+        campaignIndex: i + 1,
+        currentCampaign: tapName,
+        salesCount: totalSalesCount,
+        videosCount: totalVideosCount
+      });
+
+      // 4a. Fetch Campaign Products first
       const prodRes = await callTikTokShopApi(
         `/affiliate_partner/202405/campaigns/${tapId}/products`,
         'GET',
@@ -131,14 +177,12 @@ export async function runTikTokAutoSync(options?: {
       const products = prodRes.data?.data?.products || [];
       const productIds = products.map((p: any) => String(p.product_id || p.id));
 
-      // Match with internal campaign:
-      // 1. Match by SKU / Product ID intersection
+      // Match with internal campaign
       let matchedCampaign = internalCampaigns.find(ic => {
         const cProductIds: string[] = (ic.product_ids || []).map(String);
         return productIds.some(pid => cProductIds.includes(String(pid)));
       });
 
-      // 2. Fallback: match by name similarity
       if (!matchedCampaign && tapName) {
         const cleanTapName = tapName.toLowerCase().trim();
         matchedCampaign = internalCampaigns.find(ic => {
@@ -148,7 +192,6 @@ export async function runTikTokAutoSync(options?: {
         });
       }
 
-      // If campaignId filter provided, skip non-matching
       if (options?.campaignId && matchedCampaign && matchedCampaign.id !== options.campaignId) {
         continue;
       }
@@ -159,27 +202,36 @@ export async function runTikTokAutoSync(options?: {
       const salesRowsToInsert: any[] = [];
       const videoRowsToInsert: any[] = [];
 
-      // 4b. Fetch Performance per Product
-      for (const prod of products) {
-        const pId = String(prod.product_id || prod.id);
-
-        const perfRes = await callTikTokShopApi(
-          `/affiliate_partner/202501/campaigns/${tapId}/products/${pId}/performance`,
-          'GET',
-          accessToken,
-          {
-            category_asset_cipher: cipher,
-            page_size: 50
+      // 4b. Fetch Performance per Product in parallel for extreme speed
+      const perfResults = await Promise.all(
+        products.map(async (prod: any) => {
+          const pId = String(prod.product_id || prod.id);
+          try {
+            const perfRes = await callTikTokShopApi(
+              `/affiliate_partner/202501/campaigns/${tapId}/products/${pId}/performance`,
+              'GET',
+              accessToken,
+              {
+                category_asset_cipher: cipher,
+                page_size: 50
+              }
+            );
+            return {
+              productId: pId,
+              creatorsPerf: perfRes.data?.data?.creator_performances || perfRes.data?.data?.performances || []
+            };
+          } catch (e) {
+            return { productId: pId, creatorsPerf: [] };
           }
-        );
+        })
+      );
 
-        const creatorsPerf = perfRes.data?.data?.creator_performances || perfRes.data?.data?.performances || [];
-
-        for (const cp of creatorsPerf) {
+      for (const pr of perfResults) {
+        const pId = pr.productId;
+        for (const cp of pr.creatorsPerf) {
           const uname = (cp.creator_username || cp.username || '').toLowerCase().trim();
           const contents = cp.contents || cp.content_list || [];
 
-          // Process each content (Video VT or Livestream)
           for (const item of contents) {
             const cUid = String(item.content_uid || item.video_id || item.room_id || '').trim();
             if (!cUid) continue;
@@ -289,6 +341,14 @@ export async function runTikTokAutoSync(options?: {
       });
     }
 
+    emitProgress({
+      stage: 'mapping',
+      percent: 85,
+      message: 'Menghubungkan data penjualan & kreator ke database internal...',
+      salesCount: totalSalesCount,
+      videosCount: totalVideosCount
+    });
+
     // 5. Run Global Unmapped Auto-Sync & Creator Association
     console.log('[TikTok AutoSync] Running global auto-mapping for unmapped creators & products...');
     const unmappedRes = await syncAllUnmappedGlobal();
@@ -303,6 +363,14 @@ export async function runTikTokAutoSync(options?: {
 
     const summaryMsg = `Sukses sinkronisasi ${campaignsProcessed} kampanye (${totalSalesCount} order sales, ${totalVideosCount} video/live konten, ${unmappedRes.totalSalesUpdated || 0} mapping updated).`;
     await logSyncExecution(triggerType, 'success', totalSalesCount, totalVideosCount, campaignsProcessed, summaryMsg, { syncDetails, unmappedRes }, durationMs);
+
+    emitProgress({
+      stage: 'done',
+      percent: 100,
+      message: summaryMsg,
+      salesCount: totalSalesCount,
+      videosCount: totalVideosCount
+    });
 
     console.log(`[TikTok AutoSync] Finished successfully in ${durationMs}ms.`);
 

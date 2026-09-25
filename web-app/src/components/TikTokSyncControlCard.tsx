@@ -22,6 +22,13 @@ export function TikTokSyncControlCard() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<any>(null);
 
+  // Live Progress States
+  const [progressPercent, setProgressPercent] = useState(0);
+  const [progressMessage, setProgressMessage] = useState('');
+  const [currentStage, setCurrentStage] = useState<string>('');
+  const [liveSalesCount, setLiveSalesCount] = useState(0);
+  const [liveVideosCount, setLiveVideosCount] = useState(0);
+
   const loadData = async () => {
     setIsLoading(true);
     try {
@@ -60,6 +67,12 @@ export function TikTokSyncControlCard() {
   const handleSyncNow = async () => {
     setIsSyncing(true);
     setSyncResult(null);
+    setProgressPercent(5);
+    setProgressMessage('Menyiapkan koneksi sinkronisasi...');
+    setCurrentStage('auth');
+    setLiveSalesCount(0);
+    setLiveVideosCount(0);
+
     try {
       // Ensure token is saved in DB if available in localStorage
       if (!status?.isConnected && typeof window !== 'undefined') {
@@ -76,11 +89,64 @@ export function TikTokSyncControlCard() {
         }
       }
 
-      const res = await triggerManualTikTokSyncAction();
-      setSyncResult(res);
+      // Call streaming API route for live progress updates
+      const response = await fetch('/api/sync/tiktok-manual', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+      });
+
+      if (!response.ok && !response.body) {
+        throw new Error(`HTTP error ${response.status}: Gagal memulai sinkronisasi`);
+      }
+
+      if (!response.body) {
+        const json = await response.json();
+        setSyncResult(json);
+        await loadData();
+        return;
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const parts = buffer.split('\n\n');
+        buffer = parts.pop() || '';
+
+        for (const part of parts) {
+          const trimmed = part.trim();
+          if (trimmed.startsWith('data: ')) {
+            try {
+              const payload = JSON.parse(trimmed.replace(/^data:\s*/, ''));
+              if (payload.type === 'progress') {
+                setProgressPercent(payload.percent || 0);
+                setProgressMessage(payload.message || '');
+                if (payload.stage) setCurrentStage(payload.stage);
+                if (payload.salesCount !== undefined) setLiveSalesCount(payload.salesCount);
+                if (payload.videosCount !== undefined) setLiveVideosCount(payload.videosCount);
+              } else if (payload.type === 'complete') {
+                setSyncResult(payload.result);
+                setProgressPercent(100);
+                setProgressMessage('Sinkronisasi selesai!');
+              } else if (payload.type === 'error') {
+                setSyncResult({ success: false, message: payload.message || 'Terjadi kesalahan' });
+              }
+            } catch (jsonErr) {
+              console.warn('SSE parse error:', jsonErr);
+            }
+          }
+        }
+      }
+
       await loadData();
     } catch (err: any) {
-      setSyncResult({ success: false, message: err.message || 'Gagal sinkronisasi' });
+      setSyncResult({ success: false, message: err.message || 'Gagal sinkronisasi data' });
     } finally {
       setIsSyncing(false);
     }
@@ -90,7 +156,7 @@ export function TikTokSyncControlCard() {
   const authData = status?.data;
 
   return (
-    <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 rounded-2xl p-6 text-white shadow-xl border border-indigo-500/20 mb-6">
+    <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 rounded-2xl p-6 text-white shadow-xl border border-indigo-500/20 mb-6 transition-all">
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
         
         {/* Left Info Column */}
@@ -134,7 +200,7 @@ export function TikTokSyncControlCard() {
             <span className="text-slate-500">• Setiap Hari</span>
           </div>
 
-          {authData?.lastSyncedAt && (
+          {authData?.lastSyncedAt && !isSyncing && (
             <p className="text-xs text-emerald-400/90 font-medium pt-1">
               Terakhir sinkron: {new Date(authData.lastSyncedAt).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })} WIB
             </p>
@@ -147,13 +213,13 @@ export function TikTokSyncControlCard() {
             onClick={handleSyncNow}
             disabled={isSyncing || !isConnected}
             className={`w-full font-bold px-6 py-5 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2.5 ${
-              isConnected
+              isConnected && !isSyncing
                 ? 'bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white shadow-emerald-900/30'
-                : 'bg-slate-800 text-slate-400 cursor-not-allowed border border-slate-700'
+                : 'bg-slate-800 text-slate-400 border border-slate-700'
             }`}
           >
             <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
-            {isSyncing ? 'Menarik Data TikTok...' : '⚡ Sync Sekarang (Tarik Data)'}
+            {isSyncing ? 'Sedang Menarik Data...' : '⚡ Sync Sekarang (Tarik Data)'}
           </Button>
 
           {!isConnected && (
@@ -167,18 +233,60 @@ export function TikTokSyncControlCard() {
         </div>
       </div>
 
-      {/* Sync Feedback Toast / Banner */}
-      {syncResult && (
-        <div className={`mt-4 p-3.5 rounded-xl text-xs font-medium flex items-center justify-between gap-3 border ${
-          syncResult.success 
-            ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-200' 
-            : 'bg-red-950/60 border-red-500/40 text-red-200'
-        }`}>
-          <div className="flex items-center gap-2">
-            {syncResult.success ? <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" /> : <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />}
-            <span>{syncResult.message}</span>
+      {/* LIVE SYNC PROGRESS BAR & STATUS */}
+      {isSyncing && (
+        <div className="mt-6 pt-5 border-t border-indigo-500/20 space-y-3 animate-in fade-in duration-300">
+          <div className="flex items-center justify-between text-xs font-semibold">
+            <div className="flex items-center gap-2 text-indigo-300">
+              <RefreshCw className="w-3.5 h-3.5 animate-spin text-teal-400" />
+              <span>{progressMessage || 'Sedang memproses sinkronisasi TikTok...'}</span>
+            </div>
+            <span className="text-teal-400 font-mono font-bold text-sm">{progressPercent}%</span>
           </div>
-          <button onClick={() => setSyncResult(null)} className="text-slate-400 hover:text-white">✕</button>
+
+          {/* Progress Bar Track */}
+          <div className="w-full bg-slate-800/90 rounded-full h-2.5 overflow-hidden border border-indigo-900/50 p-0.5">
+            <div 
+              className="bg-gradient-to-r from-teal-400 via-indigo-400 to-emerald-400 h-full rounded-full transition-all duration-500 shadow-sm"
+              style={{ width: `${Math.max(5, progressPercent)}%` }}
+            />
+          </div>
+
+          {/* Live Counter Badges */}
+          <div className="flex items-center gap-4 text-xs pt-1">
+            <div className="flex items-center gap-1.5 bg-slate-800/80 px-2.5 py-1 rounded-lg border border-slate-700/50">
+              <span className="text-slate-400">Pesanan (Sales):</span>
+              <span className="font-bold text-emerald-400 font-mono">{liveSalesCount}</span>
+            </div>
+            <div className="flex items-center gap-1.5 bg-slate-800/80 px-2.5 py-1 rounded-lg border border-slate-700/50">
+              <span className="text-slate-400">Konten Video & Live:</span>
+              <span className="font-bold text-teal-400 font-mono">{liveVideosCount}</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Sync Feedback Toast / Banner */}
+      {syncResult && !isSyncing && (
+        <div className={`mt-5 p-4 rounded-xl text-xs font-medium flex items-center justify-between gap-3 border animate-in fade-in duration-300 ${
+          syncResult.success 
+            ? 'bg-emerald-950/70 border-emerald-500/50 text-emerald-200 shadow-lg shadow-emerald-950/50' 
+            : 'bg-red-950/70 border-red-500/50 text-red-200 shadow-lg shadow-red-950/50'
+        }`}>
+          <div className="flex items-center gap-2.5">
+            {syncResult.success ? (
+              <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+            ) : (
+              <AlertCircle className="w-5 h-5 text-red-400 shrink-0" />
+            )}
+            <span className="leading-relaxed">{syncResult.message}</span>
+          </div>
+          <button 
+            onClick={() => setSyncResult(null)} 
+            className="text-slate-400 hover:text-white p-1 rounded transition-colors"
+          >
+            ✕
+          </button>
         </div>
       )}
     </div>
