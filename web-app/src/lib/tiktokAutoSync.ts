@@ -100,11 +100,11 @@ export async function runTikTokAutoSync(options?: {
 
     // 3. Load Internal Database Campaigns & SKUs for Matching
     const internalCampaigns = (await db.execute(sql`
-      SELECT c.id, c.nama_campaign, c.tiktok_campaign_ids,
+      SELECT c.id, c.nama as nama_campaign,
              COALESCE(json_agg(s.product_id) FILTER (WHERE s.product_id IS NOT NULL), '[]') as product_ids
       FROM campaigns c
       LEFT JOIN skus s ON s.campaign_id = c.id
-      GROUP BY c.id
+      GROUP BY c.id, c.nama
     `)) as any[];
 
     let totalSalesCount = 0;
@@ -117,28 +117,7 @@ export async function runTikTokAutoSync(options?: {
       const tapId = String(tap.campaign_id || tap.id);
       const tapName = tap.campaign_name || tap.name || '';
 
-      // Match with internal campaign
-      let matchedCampaign = internalCampaigns.find(ic => {
-        const ids: string[] = ic.tiktok_campaign_ids || [];
-        return ids.includes(tapId);
-      });
-
-      if (!matchedCampaign) {
-        // Fallback: match by name similarity or product_id
-        matchedCampaign = internalCampaigns.find(ic => 
-          ic.nama_campaign?.toLowerCase().trim() === tapName.toLowerCase().trim()
-        );
-      }
-
-      // If campaignId filter provided, skip non-matching
-      if (options?.campaignId && matchedCampaign && matchedCampaign.id !== options.campaignId) {
-        continue;
-      }
-
-      const campaignDbId = matchedCampaign ? matchedCampaign.id : null;
-      console.log(`[TikTok AutoSync] Processing TAP Campaign: "${tapName}" (ID: ${tapId}) -> DB Campaign ID: ${campaignDbId || 'Unassigned'}`);
-
-      // 4a. Fetch Campaign Products
+      // 4a. Fetch Campaign Products first so we can match by product_id
       const prodRes = await callTikTokShopApi(
         `/affiliate_partner/202405/campaigns/${tapId}/products`,
         'GET',
@@ -151,6 +130,31 @@ export async function runTikTokAutoSync(options?: {
 
       const products = prodRes.data?.data?.products || [];
       const productIds = products.map((p: any) => String(p.product_id || p.id));
+
+      // Match with internal campaign:
+      // 1. Match by SKU / Product ID intersection
+      let matchedCampaign = internalCampaigns.find(ic => {
+        const cProductIds: string[] = (ic.product_ids || []).map(String);
+        return productIds.some(pid => cProductIds.includes(String(pid)));
+      });
+
+      // 2. Fallback: match by name similarity
+      if (!matchedCampaign && tapName) {
+        const cleanTapName = tapName.toLowerCase().trim();
+        matchedCampaign = internalCampaigns.find(ic => {
+          if (!ic.nama_campaign) return false;
+          const cleanCampName = ic.nama_campaign.toLowerCase().trim();
+          return cleanCampName === cleanTapName || cleanTapName.includes(cleanCampName) || cleanCampName.includes(cleanTapName);
+        });
+      }
+
+      // If campaignId filter provided, skip non-matching
+      if (options?.campaignId && matchedCampaign && matchedCampaign.id !== options.campaignId) {
+        continue;
+      }
+
+      const campaignDbId = matchedCampaign ? matchedCampaign.id : null;
+      console.log(`[TikTok AutoSync] Processing TAP Campaign: "${tapName}" (ID: ${tapId}) -> DB Campaign ID: ${campaignDbId || 'Unassigned'}`);
 
       const salesRowsToInsert: any[] = [];
       const videoRowsToInsert: any[] = [];
