@@ -214,58 +214,70 @@ export async function runTikTokAutoSync(options?: {
       { ge: nowSec - (3 * THIRTY_DAYS), lt: nowSec - (2 * THIRTY_DAYS), label: '60-90d' }
     ];
 
+    // Prioritize "Seller and Scalable Creator Match-Up" for TAP orders
+    candidateCiphers.sort((a, b) => {
+      if (a.category.includes('Match-Up') || a.category.includes('Seller')) return -1;
+      if (b.category.includes('Match-Up') || b.category.includes('Seller')) return 1;
+      return 0;
+    });
+
+    const orderEndpoints = [
+      '/affiliate_partner/202603/orders/search',
+      '/affiliate_partner/202411/orders/search'
+    ];
+
     for (const cand of candidateCiphers) {
       console.log(`[TikTok AutoSync] Querying orders with cipher (${cand.category}): ${cand.cipher}...`);
 
-      // 4a. Fetch TAP Affiliate Orders across time windows
-      for (const tw of timeWindows) {
-        try {
-          let nextPageToken = '';
-          let page = 0;
-          do {
-            page++;
-            const queryParams: Record<string, any> = {
-              category_asset_cipher: cand.cipher,
-              page_size: 100
-            };
-            if (nextPageToken) queryParams.page_token = nextPageToken;
+      // 4a. Fetch TAP Affiliate Orders across endpoints and time windows
+      for (const endpoint of orderEndpoints) {
+        for (const tw of timeWindows) {
+          try {
+            let nextPageToken = '';
+            let page = 0;
+            do {
+              page++;
+              const queryParams: Record<string, any> = {
+                category_asset_cipher: cand.cipher,
+                page_size: 100
+              };
+              if (nextPageToken) queryParams.page_token = nextPageToken;
 
-            const tapOrdersRes = await callTikTokShopApi(
-              '/affiliate_partner/202411/orders/search',
-              'POST',
-              accessToken,
-              queryParams,
-              {
-                create_time_ge: tw.ge,
-                create_time_lt: tw.lt
+              const tapOrdersRes = await callTikTokShopApi(
+                endpoint,
+                'POST',
+                accessToken,
+                queryParams,
+                {
+                  create_time_ge: tw.ge,
+                  create_time_lt: tw.lt
+                }
+              );
+
+              const tapOrders = tapOrdersRes.data?.data?.orders || [];
+              nextPageToken = tapOrdersRes.data?.data?.next_page_token || '';
+
+              diagnosticData.orderApiLogs.push({
+                endpoint,
+                category: cand.category,
+                cipher: cand.cipher,
+                label: tw.label,
+                page,
+                success: tapOrdersRes.success,
+                httpStatus: tapOrdersRes.status,
+                code: tapOrdersRes.data?.code,
+                message: tapOrdersRes.data?.message || 'OK',
+                ordersCount: tapOrders.length,
+                nextPageToken: !!nextPageToken,
+                rawPreview: tapOrders.length > 0 ? tapOrders.slice(0, 2) : tapOrdersRes.data
+              });
+
+              if (!tapOrdersRes.success) {
+                console.warn(`[TikTok AutoSync] TAP orders fetch (${endpoint}, ${cand.category}, ${tw.label}) notice:`, tapOrdersRes.data?.message || 'Failed');
+                if (tapOrdersRes.data?.code === 98001008 || tapOrdersRes.data?.code === 16032001) {
+                  break;
+                }
               }
-            );
-
-            const tapOrders = tapOrdersRes.data?.data?.orders || [];
-            nextPageToken = tapOrdersRes.data?.data?.next_page_token || '';
-
-            diagnosticData.orderApiLogs.push({
-              endpoint: '/affiliate_partner/202411/orders/search',
-              category: cand.category,
-              cipher: cand.cipher,
-              label: tw.label,
-              page,
-              success: tapOrdersRes.success,
-              httpStatus: tapOrdersRes.status,
-              code: tapOrdersRes.data?.code,
-              message: tapOrdersRes.data?.message || 'OK',
-              ordersCount: tapOrders.length,
-              nextPageToken: !!nextPageToken,
-              rawPreview: tapOrders.length > 0 ? tapOrders.slice(0, 2) : tapOrdersRes.data
-            });
-
-            if (!tapOrdersRes.success) {
-              console.warn(`[TikTok AutoSync] TAP orders fetch (${cand.category}, ${tw.label}) notice:`, tapOrdersRes.data?.message || 'Failed');
-              // If permission denied for this specific category cipher, break early to try other ciphers
-              if (tapOrdersRes.data?.code === 98001008) {
-                break;
-              }
-            }
 
             for (const ord of tapOrders) {
               const orderId = String(ord.id || ord.order_id || '').trim();
@@ -352,6 +364,7 @@ export async function runTikTokAutoSync(options?: {
         }
       }
     }
+  }
 
     // 4b. Fetch CAP Affiliate Orders across candidate ciphers & time windows
     for (const cand of candidateCiphers) {
@@ -506,22 +519,23 @@ export async function runTikTokAutoSync(options?: {
 
       // 5b. Fetch TAP Orders specifically for this Campaign ID across time windows
       if (products.length > 0 || i < 15) {
-        for (const tw of timeWindows) {
-          try {
-            const campOrderRes = await callTikTokShopApi(
-              '/affiliate_partner/202411/orders/search',
-              'POST',
-              accessToken,
-              {
-                category_asset_cipher: cipher,
-                page_size: 100
-              },
-              {
-                campaign_id: tapId,
-                create_time_ge: tw.ge,
-                create_time_lt: tw.lt
-              }
-            );
+        for (const ep of ['/affiliate_partner/202603/orders/search', '/affiliate_partner/202411/orders/search']) {
+          for (const tw of timeWindows) {
+            try {
+              const campOrderRes = await callTikTokShopApi(
+                ep,
+                'POST',
+                accessToken,
+                {
+                  category_asset_cipher: cipher,
+                  page_size: 100
+                },
+                {
+                  campaign_id: tapId,
+                  create_time_ge: tw.ge,
+                  create_time_lt: tw.lt
+                }
+              );
 
             const campOrders = campOrderRes.data?.data?.orders || [];
             if (i < 5 || campOrders.length > 0) {
@@ -611,6 +625,7 @@ export async function runTikTokAutoSync(options?: {
           }
         }
       }
+    }
 
       // 5c. Fetch performance per product in parallel
       await Promise.all(
