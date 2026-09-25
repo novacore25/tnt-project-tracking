@@ -531,7 +531,39 @@ function CampaignListingContent() {
   const [isDuplicateModalOpen, setIsDuplicateModalOpen] = useState(false);
   const [isMerging, setIsMerging] = useState(false);
   const [selectedCreators, setSelectedCreators] = useState<Set<number>>(new Set());
+  const isSelectionLoaded = useRef(false);
   const [bulkActionProcessing, setBulkActionProcessing] = useState(false);
+
+  // Load selection from localStorage
+  useEffect(() => {
+    if (!campaignId || typeof window === 'undefined') return;
+    try {
+      const saved = localStorage.getItem(`selected_creators_campaign_${campaignId}`);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          setSelectedCreators(new Set(parsed.map(Number).filter(Boolean)));
+        }
+      }
+    } catch (e) {
+      console.error('Failed to load selected creators from localStorage', e);
+    }
+    isSelectionLoaded.current = true;
+  }, [campaignId]);
+
+  // Persist selection to localStorage
+  useEffect(() => {
+    if (!campaignId || !isSelectionLoaded.current || typeof window === 'undefined') return;
+    try {
+      if (selectedCreators.size > 0) {
+        localStorage.setItem(`selected_creators_campaign_${campaignId}`, JSON.stringify(Array.from(selectedCreators)));
+      } else {
+        localStorage.removeItem(`selected_creators_campaign_${campaignId}`);
+      }
+    } catch (e) {
+      console.error('Failed to save selected creators to localStorage', e);
+    }
+  }, [selectedCreators, campaignId]);
 
   // Add Creator Modal State
   type DynamicRow = { id: string; username: string; price: string; qtyVt: string; qtyLive: string; contentType: string };
@@ -1826,11 +1858,36 @@ function CampaignListingContent() {
     });
   }
 
+  const handleUncheckAll = () => {
+    setSelectedCreators(new Set());
+    if (typeof window !== 'undefined' && campaignId) {
+      try {
+        localStorage.removeItem(`selected_creators_campaign_${campaignId}`);
+      } catch (e) {
+        console.error(e);
+      }
+    }
+  };
+
   const toggleSelectAll = () => {
-    if (selectedCreators.size === displayData.length && displayData.length > 0) {
-      setSelectedCreators(new Set());
+    if (displayData.length === 0) return;
+    const allDisplaySelected = displayData.every((c: any) => selectedCreators.has(c.id));
+    if (allDisplaySelected) {
+      // Unselect only the items in current display
+      setSelectedCreators(prev => {
+        const next = new Set(prev);
+        displayData.forEach((c: any) => next.delete(c.id));
+        return next;
+      });
     } else {
-      setSelectedCreators(new Set(displayData.map((c: any) => c.id).filter(Boolean)));
+      // Select all items currently in display, keeping existing selections
+      setSelectedCreators(prev => {
+        const next = new Set(prev);
+        displayData.forEach((c: any) => {
+          if (c.id) next.add(c.id);
+        });
+        return next;
+      });
     }
   };
 
@@ -1862,7 +1919,7 @@ function CampaignListingContent() {
       const res = await batchUpdateCampaignCreatorsApprovalAction(creatorIds, status, profile?.id);
       if (!res.success) throw new Error(res.error);
       
-      setSelectedCreators(new Set());
+      handleUncheckAll();
       // Refetch from DB with await to get the freshly written data
       await fetchListing(0, true);
       fetchCounts();
@@ -1883,7 +1940,7 @@ function CampaignListingContent() {
       if (!res.success) throw new Error(res.error);
       
       setListingData(prev => prev.filter(c => !creatorIds.includes(c.id)));
-      setSelectedCreators(new Set());
+      handleUncheckAll();
       fetchListing();
       fetchCounts();
     } catch (err: any) {
@@ -2053,6 +2110,16 @@ function CampaignListingContent() {
             />
             <span className="font-medium whitespace-nowrap">Unattributed (Sisa + GMV)</span>
           </label>
+          {selectedCreators.size > 0 && (
+            <button 
+              onClick={handleUncheckAll}
+              className="btn btn-outline text-amber-600 border-amber-300 hover:bg-amber-50 flex items-center gap-1.5 text-xs py-1.5"
+              title="Batalkan semua pilihan kreator yang sedang dicentang"
+            >
+              <X className="w-3.5 h-3.5" />
+              Uncheck All ({selectedCreators.size})
+            </button>
+          )}
           {(statusFilter !== 'all' || filterTier || filterLevel || filterNiche || filterAddedBy || filterActionBy || filterPendingWithVideo || filterUnattributed || filterContentType || filterConcept || filterActionDate) && (
             <button 
               onClick={() => {
@@ -2598,8 +2665,9 @@ function CampaignListingContent() {
                   <input 
                     type="checkbox" 
                     className="rounded border-slate-300 text-p300 focus:ring-p300 cursor-pointer w-4 h-4"
-                    checked={displayData.length > 0 && selectedCreators.size === displayData.length}
+                    checked={displayData.length > 0 && displayData.every((c: any) => selectedCreators.has(c.id))}
                     onChange={toggleSelectAll}
+                    title={displayData.length > 0 && displayData.every((c: any) => selectedCreators.has(c.id)) ? "Batal pilih semua baris ini" : "Pilih semua baris ini"}
                   />
                 )}
               </th>
@@ -2907,17 +2975,35 @@ function CampaignListingContent() {
 
       {/* Floating Bulk Action Toolbar */}
       {hasAccess && selectedCreators.size > 0 && (
-        <div className="fixed bottom-[24px] left-1/2 -translate-x-1/2 bg-white rounded-full shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-slate-200 p-2 pr-4 flex items-center gap-4 z-50 animate-in slide-in-from-bottom-10 fade-in duration-300">
+        <div className="fixed bottom-[24px] left-1/2 -translate-x-1/2 bg-white rounded-full shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-slate-200 p-2 pr-4 flex items-center gap-3 z-50 animate-in slide-in-from-bottom-10 fade-in duration-300">
           <div className="bg-p300 text-white w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm shadow-inner">
             {selectedCreators.size}
           </div>
           <span className="text-sm font-semibold text-slate-700 whitespace-nowrap">Creator Terpilih</span>
-          <div className="w-[1px] h-[24px] bg-slate-200 mx-2"></div>
+          
+          <button 
+            onClick={handleUncheckAll}
+            title="Batalkan semua pilihan centang"
+            className="px-2.5 py-1 text-xs font-semibold rounded-full bg-slate-100 text-slate-600 hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors flex items-center gap-1 border border-slate-200"
+          >
+            <X className="w-3.5 h-3.5" />
+            Uncheck All
+          </button>
+
+          <div className="w-[1px] h-[24px] bg-slate-200 mx-1"></div>
           <div className="flex items-center gap-2">
             <button 
               onClick={() => {
                 const idsToOpen = Array.from(selectedCreators);
-                const creatorsToOpen = displayData.filter((cc: any) => idsToOpen.includes(cc.id));
+                const allKnown = [...listingData, ...displayData];
+                const seen = new Set();
+                const creatorsToOpen = allKnown.filter((cc: any) => {
+                  if (idsToOpen.includes(cc.id) && !seen.has(cc.id)) {
+                    seen.add(cc.id);
+                    return true;
+                  }
+                  return false;
+                });
                 creatorsToOpen.forEach((cc: any) => {
                   const username = cc.creators?.username;
                   if (username) {
