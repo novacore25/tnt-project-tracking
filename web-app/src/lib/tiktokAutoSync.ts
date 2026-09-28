@@ -46,9 +46,10 @@ export async function runTikTokAutoSync(options?: TikTokAutoSyncOptions): Promis
   const triggerType = options?.triggerType || 'cron';
   const updateDbProgress = async (stage: string, percent: number, message: string) => {
     try {
+      const syncStatus = (stage === 'done' || stage === 'error' || percent >= 100) ? 'idle' : 'running';
       await db.execute(sql`
         UPDATE tiktok_authorizations
-        SET sync_status = 'running',
+        SET sync_status = ${syncStatus},
             sync_progress_percent = ${percent},
             sync_progress_message = ${message},
             sync_trigger_type = ${triggerType},

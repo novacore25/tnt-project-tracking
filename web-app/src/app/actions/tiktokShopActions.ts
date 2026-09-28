@@ -296,6 +296,23 @@ export async function getTikTokAuthStatusAction() {
     const expireSec = Number(record.access_token_expire_in) || 0;
     const isTokenExpiringSoon = expireSec > 0 && (expireSec - nowSec < 24 * 3600);
 
+    // Auto-heal stale 'running' status (if progress is 100% or last updated > 3 mins ago)
+    let currentSyncStatus = record.sync_status || 'idle';
+    const percent = Number(record.sync_progress_percent) || 0;
+    const updatedAtSec = Math.floor(new Date(record.updated_at || record.created_at).getTime() / 1000);
+    if (currentSyncStatus === 'running' && (percent >= 100 || (nowSec - updatedAtSec) > 180)) {
+      currentSyncStatus = 'idle';
+      try {
+        await db.execute(sql`
+          UPDATE tiktok_authorizations
+          SET sync_status = 'idle'
+          WHERE id = ${record.id}
+        `);
+      } catch (e) {
+        // ignore
+      }
+    }
+
     return {
       isConnected: true,
       data: {
@@ -304,9 +321,9 @@ export async function getTikTokAuthStatusAction() {
         lastSyncedAt: record.last_synced_at,
         isExpiringSoon: isTokenExpiringSoon,
         expiresAt: expireSec ? new Date(expireSec * 1000).toISOString() : null,
-        syncStatus: record.sync_status || 'idle',
+        syncStatus: currentSyncStatus,
         syncProgressMessage: record.sync_progress_message,
-        syncProgressPercent: Number(record.sync_progress_percent) || 0,
+        syncProgressPercent: percent,
         syncTriggerType: record.sync_trigger_type || 'cron'
       }
     };
