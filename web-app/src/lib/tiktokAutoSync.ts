@@ -567,6 +567,47 @@ export async function runTikTokAutoSync(options?: TikTokAutoSyncOptions): Promis
           }
         } while (perfNextPageToken && perfPage < 20);
 
+        // 5b-fallback: If performance returned no/few creators, fetch creators from the
+        // campaign creator list endpoint (captures new creators who posted but have no orders yet)
+        if (creators.length < 5) {
+          try {
+            let creatorListPageToken = '';
+            let creatorListPage = 0;
+            do {
+              creatorListPage++;
+              const creatorListParams: Record<string, any> = {
+                category_asset_cipher: tapCipher,
+                product_id: pId,
+                page_size: 100
+              };
+              if (creatorListPageToken) creatorListParams.page_token = creatorListPageToken;
+
+              const creatorListRes = await callTikTokShopApi(
+                `/affiliate_partner/202405/campaigns/${tapId}/creators`,
+                'GET',
+                accessToken,
+                creatorListParams
+              );
+
+              const listCreators = creatorListRes.data?.data?.creators || creatorListRes.data?.data?.promotion_creators || [];
+              if (listCreators.length > 0) {
+                console.log(`[TikTok AutoSync] Creator list fallback for ${tapName}/${pId}: ${listCreators.length} creators found`);
+                // Merge, deduplicate by creator_temp_id
+                for (const lc of listCreators) {
+                  const tempId = lc.creator?.creator_temp_id || lc.creator_temp_id;
+                  if (tempId && !creators.some((c: any) => (c.creator?.creator_temp_id || c.creator_temp_id) === tempId)) {
+                    creators.push(lc);
+                  }
+                }
+              }
+              creatorListPageToken = creatorListRes.data?.data?.next_page_token || '';
+            } while (creatorListPageToken && creatorListPage < 5);
+          } catch (creatorListErr: any) {
+            // Fallback endpoint may not exist for all API versions, silently ignore
+            console.warn(`[TikTok AutoSync] Creator list fallback error (${tapName}/${pId}):`, creatorListErr.message);
+          }
+        }
+
         // For each creator with content, fetch statistics for VIDEO and LIVE_ROOM
         await Promise.all(
           creators.map(async (pc: any) => {
