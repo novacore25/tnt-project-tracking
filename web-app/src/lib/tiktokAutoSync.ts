@@ -673,6 +673,20 @@ export async function runTikTokAutoSync(options?: TikTokAutoSyncOptions): Promis
 
     // 8. UPDATE LAST_SYNCED_AT & LOG
     const durationMs = Date.now() - startTime;
+    const mappingText = (unmappedRes.totalSalesUpdated || 0) > 0
+      ? `${unmappedRes.totalSalesUpdated} order re-mapped`
+      : 'semua order langsung terpetakan';
+    const summaryMsg = `Sukses sinkronisasi ${campaignsProcessed} kampanye (${totalSalesCount} order sales, ${totalVideosCount} video/live konten, ${mappingText}).`;
+
+    const fullDiagnostics = {
+      ...diagnosticData,
+      syncDetails,
+      unmappedRes,
+      totalSalesCount,
+      totalVideosCount,
+      campaignsProcessed
+    };
+
     await db.execute(sql`
       UPDATE tiktok_authorizations
       SET last_synced_at = NOW(),
@@ -684,19 +698,6 @@ export async function runTikTokAutoSync(options?: TikTokAutoSyncOptions): Promis
       WHERE status = 'active'
     `);
 
-    const fullDiagnostics = {
-      ...diagnosticData,
-      syncDetails,
-      unmappedRes,
-      totalSalesCount,
-      totalVideosCount,
-      campaignsProcessed
-    };
-
-    const mappingText = (unmappedRes.totalSalesUpdated || 0) > 0
-      ? `${unmappedRes.totalSalesUpdated} order re-mapped`
-      : 'semua order langsung terpetakan';
-    const summaryMsg = `Sukses sinkronisasi ${campaignsProcessed} kampanye (${totalSalesCount} order sales, ${totalVideosCount} video/live konten, ${mappingText}).`;
     await logSyncExecution(triggerType, 'success', totalSalesCount, totalVideosCount, campaignsProcessed, summaryMsg, fullDiagnostics, durationMs);
 
     emitProgress({
