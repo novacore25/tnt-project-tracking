@@ -707,11 +707,25 @@ export async function runTikTokAutoSync(options?: TikTokAutoSyncOptions): Promis
       videosCount: videoRowsToInsert.length
     });
 
-    // 6. EXECUTE BULK UPSERT
-    if (salesRowsToInsert.length > 0 || videoRowsToInsert.length > 0) {
-      await executeSalesImportChunkAction(salesRowsToInsert, videoRowsToInsert, false);
+    // 6. EXECUTE BULK UPSERT — mirror persis flow manual import:
+    //    Sales   → tabel `sales`          (same as tab Organik Sales)
+    //    Videos  → tabel `organic_videos` (same as tab Awareness Video / Awareness Live)
+    //
+    // CATATAN: organic_videos tidak menerima campaign_id = NULL (NOT NULL constraint).
+    // Video yang belum terpetakan ke campaign akan dilewati untuk organic_videos
+    // TAPI tetap disimpan sebagai referensi melalui sales.content_uid.
+    const videoRowsMapped = videoRowsToInsert.filter((v: any) => v.campaign_id != null);
+    const videoRowsUnmapped = videoRowsToInsert.filter((v: any) => v.campaign_id == null);
+
+    if (videoRowsUnmapped.length > 0) {
+      console.log(`[TikTok AutoSync] ${videoRowsUnmapped.length} video rows skipped (no campaign mapping) - will be re-mapped after syncAllUnmappedGlobal`);
+    }
+
+    if (salesRowsToInsert.length > 0 || videoRowsMapped.length > 0) {
+      // isVideoMode=true agar step Auto Populate videos table (tab video) juga berjalan
+      await executeSalesImportChunkAction(salesRowsToInsert, videoRowsMapped, true);
       totalSalesCount = salesRowsToInsert.length;
-      totalVideosCount = videoRowsToInsert.length;
+      totalVideosCount = videoRowsMapped.length;
     }
 
     emitProgress({
