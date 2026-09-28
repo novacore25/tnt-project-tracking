@@ -150,6 +150,14 @@ export async function getInitialStoreData() {
  */
 export async function createCampaignAction(data: any) {
   try {
+    const rawTiktokIds = data.tiktok_campaign_ids !== undefined
+      ? (Array.isArray(data.tiktok_campaign_ids)
+          ? (data.tiktok_campaign_ids.length > 0 ? `{${data.tiktok_campaign_ids.map((id: string) => `"${String(id).trim()}"`).join(',')}}` : '{}')
+          : (typeof data.tiktok_campaign_ids === 'string' && data.tiktok_campaign_ids.trim()
+              ? `{${data.tiktok_campaign_ids.split(',').map((id: string) => `"${id.trim()}"`).join(',')}}`
+              : '{}'))
+      : '{}';
+
     const [newCampaign] = await db.execute(sql`
       INSERT INTO campaigns (
         brand_id, nama, tipe_campaign, persiapan_14hari, start_date, end_date,
@@ -157,14 +165,16 @@ export async function createCampaignAction(data: any) {
         target_creator_nano, target_creator_micro, target_creator_macro, target_creator_mega,
         target_creator_live, target_creator_live_nano, target_creator_live_micro, target_creator_live_macro, target_creator_live_mega,
         target_views, budget_creator_plafon, budget_ads_plafon,
-        vsa_gmv_max, pic, assist, file_concept_url, status, campaign_group, require_client_approval
+        vsa_gmv_max, pic, assist, file_concept_url, status, campaign_group, require_client_approval,
+        pin, tiktok_campaign_ids
       ) VALUES (
         ${data.brand_id}, ${data.nama}, ${data.tipe_campaign}, ${data.persiapan_14hari || null}, ${data.start_date}, ${data.end_date},
         ${data.target_gmv ? Number(data.target_gmv) : null}, ${data.target_video ? Number(data.target_video) : null}, ${data.target_creator ? Number(data.target_creator) : null},
         ${data.target_creator_nano ? Number(data.target_creator_nano) : 0}, ${data.target_creator_micro ? Number(data.target_creator_micro) : 0}, ${data.target_creator_macro ? Number(data.target_creator_macro) : 0}, ${data.target_creator_mega ? Number(data.target_creator_mega) : 0},
         ${data.target_creator_live ? Number(data.target_creator_live) : null}, ${data.target_creator_live_nano ? Number(data.target_creator_live_nano) : 0}, ${data.target_creator_live_micro ? Number(data.target_creator_live_micro) : 0}, ${data.target_creator_live_macro ? Number(data.target_creator_live_macro) : 0}, ${data.target_creator_live_mega ? Number(data.target_creator_live_mega) : 0},
         ${data.target_views ? Number(data.target_views) : null}, ${Number(data.budget_creator_plafon || 0)}, ${Number(data.budget_ads_plafon || 0)},
-        ${data.vsa_gmv_max ? Number(data.vsa_gmv_max) : null}, ${data.pic || null}, ${data.assist || null}, ${data.file_concept_url || null}, ${data.status || 'aktif'}, ${data.campaign_group || 'Tim Campaign'}, ${data.require_client_approval || false}
+        ${data.vsa_gmv_max ? Number(data.vsa_gmv_max) : null}, ${data.pic || null}, ${data.assist || null}, ${data.file_concept_url || null}, ${data.status || 'aktif'}, ${data.campaign_group || 'Tim Campaign'}, ${data.require_client_approval || false},
+        ${data.pin ? String(data.pin).trim() : '1234'}, ${sql`${rawTiktokIds}::text[]`}
       )
       RETURNING *
     `) as any[];
@@ -183,6 +193,14 @@ export async function createCampaignAction(data: any) {
  */
 export async function updateCampaignAction(id: number, data: any) {
   try {
+    const rawTiktokIds = data.tiktok_campaign_ids !== undefined
+      ? (Array.isArray(data.tiktok_campaign_ids)
+          ? (data.tiktok_campaign_ids.length > 0 ? `{${data.tiktok_campaign_ids.map((id: string) => `"${String(id).trim()}"`).join(',')}}` : '{}')
+          : (typeof data.tiktok_campaign_ids === 'string' && data.tiktok_campaign_ids.trim()
+              ? `{${data.tiktok_campaign_ids.split(',').map((id: string) => `"${id.trim()}"`).join(',')}}`
+              : '{}'))
+      : null;
+
     await db.execute(sql`
       UPDATE campaigns SET
         nama = COALESCE(${data.nama !== undefined ? data.nama : null}, nama),
@@ -199,10 +217,16 @@ export async function updateCampaignAction(id: number, data: any) {
         target_creator_macro = ${data.target_creator_macro !== undefined ? Number(data.target_creator_macro) : sql`target_creator_macro`},
         target_creator_mega = ${data.target_creator_mega !== undefined ? Number(data.target_creator_mega) : sql`target_creator_mega`},
         target_creator_live = ${data.target_creator_live !== undefined ? (data.target_creator_live ? Number(data.target_creator_live) : null) : sql`target_creator_live`},
+        target_creator_live_nano = ${data.target_creator_live_nano !== undefined ? Number(data.target_creator_live_nano) : sql`target_creator_live_nano`},
+        target_creator_live_micro = ${data.target_creator_live_micro !== undefined ? Number(data.target_creator_live_micro) : sql`target_creator_live_micro`},
+        target_creator_live_macro = ${data.target_creator_live_macro !== undefined ? Number(data.target_creator_live_macro) : sql`target_creator_live_macro`},
+        target_creator_live_mega = ${data.target_creator_live_mega !== undefined ? Number(data.target_creator_live_mega) : sql`target_creator_live_mega`},
         target_views = ${data.target_views !== undefined ? (data.target_views ? Number(data.target_views) : null) : sql`target_views`},
         budget_creator_plafon = ${data.budget_creator_plafon !== undefined ? Number(data.budget_creator_plafon) : sql`budget_creator_plafon`},
         budget_ads_plafon = ${data.budget_ads_plafon !== undefined ? Number(data.budget_ads_plafon) : sql`budget_ads_plafon`},
         require_client_approval = ${data.require_client_approval !== undefined ? data.require_client_approval : sql`require_client_approval`},
+        pin = ${data.pin !== undefined ? (data.pin ? String(data.pin).trim() : null) : sql`pin`},
+        tiktok_campaign_ids = ${rawTiktokIds !== null ? sql`${rawTiktokIds}::text[]` : sql`tiktok_campaign_ids`},
         status = COALESCE(${data.status !== undefined ? data.status : null}, status),
         pic = ${data.pic !== undefined ? data.pic : sql`pic`},
         assist = ${data.assist !== undefined ? data.assist : sql`assist`}
@@ -212,6 +236,7 @@ export async function updateCampaignAction(id: number, data: any) {
     revalidatePath('/');
     revalidatePath('/campaigns');
     revalidatePath(`/campaigns/${id}`);
+    revalidatePath(`/portal/${id}`);
     return { success: true };
   } catch (error: any) {
     console.error('Error updating campaign:', error);
