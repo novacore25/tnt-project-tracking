@@ -156,29 +156,40 @@ export async function runTikTokAutoSync(options?: TikTokAutoSyncOptions): Promis
       message: 'Mengambil daftar kampanye TAP aktif dari TikTok Shop...'
     });
 
-    // 2. Fetch All TAP Campaigns from OpenAPI (with pagination)
+    // 2. Fetch All TAP Campaigns from OpenAPI - fetch ONGOING + COMPLETED + UPCOMING to capture all campaigns
     let tapCampaigns: any[] = [];
-    let campNextPageToken = '';
-    let campPage = 0;
-    do {
-      campPage++;
-      const campParams: Record<string, any> = {
-        category_asset_cipher: tapCipher,
-        page_size: 100
-      };
-      if (campNextPageToken) campParams.page_token = campNextPageToken;
+    const campaignStatusesToFetch = ['ONGOING', 'COMPLETED', 'UPCOMING'];
 
-      const tapCampRes = await callTikTokShopApi(
-        '/affiliate_partner/202405/campaigns',
-        'GET',
-        accessToken,
-        campParams
-      );
+    for (const campStatus of campaignStatusesToFetch) {
+      let campNextPageToken = '';
+      let campPage = 0;
+      do {
+        campPage++;
+        const campParams: Record<string, any> = {
+          category_asset_cipher: tapCipher,
+          page_size: 100,
+          status: campStatus
+        };
+        if (campNextPageToken) campParams.page_token = campNextPageToken;
 
-      const camps = tapCampRes.data?.data?.campaigns || [];
-      tapCampaigns = tapCampaigns.concat(camps);
-      campNextPageToken = tapCampRes.data?.data?.next_page_token || '';
-    } while (campNextPageToken && campPage < 20);
+        const tapCampRes = await callTikTokShopApi(
+          '/affiliate_partner/202405/campaigns',
+          'GET',
+          accessToken,
+          campParams
+        );
+
+        const camps = tapCampRes.data?.data?.campaigns || [];
+        // Deduplicate by campaign ID
+        for (const camp of camps) {
+          if (!tapCampaigns.some((c: any) => String(c.id) === String(camp.id))) {
+            tapCampaigns.push(camp);
+          }
+        }
+        campNextPageToken = tapCampRes.data?.data?.next_page_token || '';
+        console.log(`[TikTok AutoSync] Campaigns (status=${campStatus}, page=${campPage}): ${camps.length} found`);
+      } while (campNextPageToken && campPage < 20);
+    }
 
     diagnosticData.campaignsList = tapCampaigns.map((tc: any) => ({
       id: tc.id,
@@ -188,7 +199,8 @@ export async function runTikTokAutoSync(options?: TikTokAutoSyncOptions): Promis
       endTime: tc.campaign_end_time
     }));
 
-    console.log(`[TikTok AutoSync] Found ${tapCampaigns.length} total TAP campaigns in Partner Center.`);
+    console.log(`[TikTok AutoSync] Found ${tapCampaigns.length} total TAP campaigns (ONGOING+COMPLETED+UPCOMING).`);
+
 
     // 3. Load Internal Database Campaigns & SKUs for Matching
     const internalCampaigns = (await db.execute(sql`
