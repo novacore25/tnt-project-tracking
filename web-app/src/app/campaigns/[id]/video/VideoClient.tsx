@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useState, useEffect } from "react";
 import { useDatabaseStore } from "@/store/useDatabaseStore";
@@ -167,9 +167,11 @@ export default function CampaignVideoPage({
   const [filterConcept, setFilterConcept] = useState('');
   const [sortBy, setSortBy] = useState('latest_post');
   const [expandedGroups, setExpandedGroups] = useState<Set<number>>(new Set());
+  const [clientPage, setClientPage] = useState(1);
   const [viewMode, setViewMode] = useState<'creator' | 'video' | 'draft' | 'date' | 'audit'>('creator');
   const [auditFilterStatus, setAuditFilterStatus] = useState<'all' | 'connected' | 'unconnected' | 'pending'>('all');
   const [auditSearch, setAuditSearch] = useState('');
+  const [auditPage, setAuditPage] = useState(0);
   const [copiedId, setCopiedId] = useState<number | null>(null);
   const [isFiltering, setIsFiltering] = useState(false);
 
