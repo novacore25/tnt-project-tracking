@@ -839,42 +839,40 @@ export default function SpreadsheetImportCreatorClient() {
         } else {
           if (lastSnap.ratecard) checkAndUpdate('rate_card', lastSnap.ratecard);
           
-          const hasFollowers = row.followers && Number(row.followers) > 0;
-          const hasGmv = (row.gmv_30_days && Number(row.gmv_30_days) > 0) || 
-                         (row.gmv_30_days_video && Number(row.gmv_30_days_video) > 0) || 
-                         (row.gmv_30_days_live && Number(row.gmv_30_days_live) > 0);
+          const hasNoWa = Boolean(row.no_wa && row.no_wa.trim() && row.no_wa.trim() !== '-');
+          const hasFollowers = Boolean(row.followers && Number(row.followers) > 0);
+          const hasGmv = Boolean((row.gmv_30_days && Number(row.gmv_30_days) > 0) || 
+                                 (row.gmv_30_days_video && Number(row.gmv_30_days_video) > 0) || 
+                                 (row.gmv_30_days_live && Number(row.gmv_30_days_live) > 0));
 
-          if (!hasFollowers || !hasGmv) {
+          if (!hasNoWa || !hasFollowers || !hasGmv) {
             row.status = 'incomplete';
             hasIncompletes = true;
-            if (!hasFollowers && !hasGmv) {
-              row.errorMsg = 'Followers & GMV wajib diisi';
-            } else if (!hasFollowers) {
-              row.errorMsg = 'Followers wajib diisi';
-            } else {
-              row.errorMsg = 'Minimal salah satu GMV (30D / Video / Live) wajib diisi';
-            }
+            const missing: string[] = [];
+            if (!hasNoWa) missing.push('No WA');
+            if (!hasFollowers) missing.push('Followers');
+            if (!hasGmv) missing.push('Minimal 1 GMV');
+            row.errorMsg = `${missing.join(', ')} wajib diisi`;
           } else {
             row.status = 'baru';
             row.errorMsg = undefined;
           }
         }
       } else {
-        const hasFollowers = row.followers && Number(row.followers) > 0;
-        const hasGmv = (row.gmv_30_days && Number(row.gmv_30_days) > 0) || 
-                       (row.gmv_30_days_video && Number(row.gmv_30_days_video) > 0) || 
-                       (row.gmv_30_days_live && Number(row.gmv_30_days_live) > 0);
+        const hasNoWa = Boolean(row.no_wa && row.no_wa.trim() && row.no_wa.trim() !== '-');
+        const hasFollowers = Boolean(row.followers && Number(row.followers) > 0);
+        const hasGmv = Boolean((row.gmv_30_days && Number(row.gmv_30_days) > 0) || 
+                               (row.gmv_30_days_video && Number(row.gmv_30_days_video) > 0) || 
+                               (row.gmv_30_days_live && Number(row.gmv_30_days_live) > 0));
 
-        if (!hasFollowers || !hasGmv) {
+        if (!hasNoWa || !hasFollowers || !hasGmv) {
           row.status = 'incomplete';
           hasIncompletes = true;
-          if (!hasFollowers && !hasGmv) {
-            row.errorMsg = 'Followers & GMV wajib diisi';
-          } else if (!hasFollowers) {
-            row.errorMsg = 'Followers wajib diisi';
-          } else {
-            row.errorMsg = 'Minimal salah satu GMV (30D / Video / Live) wajib diisi';
-          }
+          const missing: string[] = [];
+          if (!hasNoWa) missing.push('No WA');
+          if (!hasFollowers) missing.push('Followers');
+          if (!hasGmv) missing.push('Minimal 1 GMV');
+          row.errorMsg = `${missing.join(', ')} wajib diisi`;
         } else {
           row.status = 'baru';
           row.errorMsg = undefined;
@@ -904,34 +902,33 @@ export default function SpreadsheetImportCreatorClient() {
       const currentRows = rows.filter(r => r && (r.username || '').trim());
       const incompleteCount = currentRows.filter(r => r.status === 'incomplete' || r.status === 'error').length;
       if (incompleteCount > 0) {
-        alert(`❌ Tidak dapat menyimpan ke database!\n\nTerdapat ${incompleteCount} kreator yang datanya belum lengkap atau bermasalah.\n\nHarap lengkapi kolom Followers dan minimal salah satu GMV (30 Days / Video / Live) yang ditandai merah sebelum menyimpan agar seluruh kreator dapat tersimpan tanpa ada yang tertinggal.`);
+        alert(`❌ Tidak dapat menyimpan ke database!\n\nTerdapat ${incompleteCount} kreator yang datanya belum lengkap atau bermasalah.\n\nHarap lengkapi kolom No WA, Followers, dan minimal salah satu GMV (30 Days / Video / Live) yang ditandai merah sebelum menyimpan agar seluruh kreator dapat tersimpan tanpa ada yang tertinggal.`);
       }
     }
   };
 
-  const handleUpdateIncomplete = (idx: number, field: 'followers' | 'gmv_30_days' | 'gmv_30_days_video' | 'gmv_30_days_live', val: string) => {
-    const cleaned = parseSmartNumber(val);
+  const handleUpdateIncomplete = (idx: number, field: 'no_wa' | 'followers' | 'gmv_30_days' | 'gmv_30_days_video' | 'gmv_30_days_live', val: string) => {
+    const cleaned = field === 'no_wa' ? val.trim() : parseSmartNumber(val);
     const newInc = [...incompleteRows];
     newInc[idx][field] = cleaned;
     
     const rowItem = newInc[idx];
-    const hasFollowers = rowItem.followers && Number(rowItem.followers) > 0;
-    const hasGmv = (rowItem.gmv_30_days && Number(rowItem.gmv_30_days) > 0) || 
-                   (rowItem.gmv_30_days_video && Number(rowItem.gmv_30_days_video) > 0) || 
-                   (rowItem.gmv_30_days_live && Number(rowItem.gmv_30_days_live) > 0);
+    const hasNoWa = Boolean(rowItem.no_wa && rowItem.no_wa.trim() && rowItem.no_wa.trim() !== '-');
+    const hasFollowers = Boolean(rowItem.followers && Number(rowItem.followers) > 0);
+    const hasGmv = Boolean((rowItem.gmv_30_days && Number(rowItem.gmv_30_days) > 0) || 
+                           (rowItem.gmv_30_days_video && Number(rowItem.gmv_30_days_video) > 0) || 
+                           (rowItem.gmv_30_days_live && Number(rowItem.gmv_30_days_live) > 0));
 
-    if (hasFollowers && hasGmv) {
+    if (hasNoWa && hasFollowers && hasGmv) {
       rowItem.status = 'baru';
       rowItem.errorMsg = undefined;
     } else {
       rowItem.status = 'incomplete';
-      if (!hasFollowers && !hasGmv) {
-        rowItem.errorMsg = 'Followers & GMV wajib diisi';
-      } else if (!hasFollowers) {
-        rowItem.errorMsg = 'Followers wajib diisi';
-      } else {
-        rowItem.errorMsg = 'Minimal salah satu GMV (30D / Video / Live) wajib diisi';
-      }
+      const missing: string[] = [];
+      if (!hasNoWa) missing.push('No WA');
+      if (!hasFollowers) missing.push('Followers');
+      if (!hasGmv) missing.push('Minimal 1 GMV');
+      rowItem.errorMsg = `${missing.join(', ')} wajib diisi`;
     }
     
     setIncompleteRows(newInc);
@@ -1144,7 +1141,7 @@ export default function SpreadsheetImportCreatorClient() {
                 <tr>
                   <th className="w-12 px-2 py-2 bg-slate-100 border-b border-r border-slate-300 sticky top-0 z-10 text-center text-xs font-semibold text-slate-500">No</th>
                   <TableHeader title="Username *" width="w-48" />
-                  <TableHeader title="No WA" width="w-40" />
+                  <TableHeader title="No WA *" width="w-40" />
                   <TableHeader title="Followers *" width="w-32" />
                   <TableHeader title="Level" width="w-24" />
                   <TableHeader title="GMV 30 Days *" width="w-40" />
@@ -1171,7 +1168,19 @@ export default function SpreadsheetImportCreatorClient() {
                       </td>
                       
                       <td className="relative p-0 border-b border-r border-slate-300 group">
-                        <input type="text" value={row.no_wa || ''} onChange={(e) => updateCell(idx, 'no_wa', e.target.value)} onPaste={(e) => handlePaste(e, idx, 'no_wa')} className={`w-full h-full min-h-[36px] px-3 py-1 outline-none text-sm transition-colors focus:bg-blue-50 w-40`} />
+                        {(() => {
+                          const isNoWaMissing = (row.status === 'incomplete' || row.status === 'error') && (!row.no_wa || !row.no_wa.trim() || row.no_wa.trim() === '-');
+                          return (
+                            <input 
+                              type="text" 
+                              value={row.no_wa || ''} 
+                              onChange={(e) => updateCell(idx, 'no_wa', e.target.value)} 
+                              onPaste={(e) => handlePaste(e, idx, 'no_wa')} 
+                              placeholder={isNoWaMissing ? 'Wajib isi' : ''}
+                              className={`w-full h-full min-h-[36px] px-3 py-1 outline-none text-sm transition-colors w-40 ${isNoWaMissing ? 'bg-rose-50/80 text-rose-900 border-2 border-rose-400 placeholder-rose-400 font-medium' : 'focus:bg-blue-50'}`} 
+                            />
+                          );
+                        })()}
                       </td>
                       
                       <td className="relative p-0 border-b border-r border-slate-300 group">
@@ -1447,8 +1456,9 @@ export default function SpreadsheetImportCreatorClient() {
                       <thead className="bg-white border-b border-slate-100 text-slate-500 text-xs">
                         <tr>
                           <th className="px-4 py-3 font-medium">Username</th>
-                          <th className="px-4 py-3 font-medium w-48">Followers</th>
-                          <th className="px-4 py-3 font-medium w-48">GMV 30 Days</th>
+                          <th className="px-4 py-3 font-medium w-40">No WA</th>
+                          <th className="px-4 py-3 font-medium w-40">Followers</th>
+                          <th className="px-4 py-3 font-medium w-40">GMV 30 Days</th>
                           <th className="px-4 py-3 font-medium w-32">GMV (Video)</th>
                           <th className="px-4 py-3 font-medium w-32">GMV (Live)</th>
                           <th className="px-4 py-3 font-medium">Status</th>
@@ -1456,22 +1466,26 @@ export default function SpreadsheetImportCreatorClient() {
                       </thead>
                       <tbody className="divide-y divide-slate-100 bg-white">
                         {incompleteRows.map((r, idx) => {
-                          const missF = !r.followers;
-                          const missG = !r.gmv_30_days && !r.gmv_30_days_video && !r.gmv_30_days_live;
+                          const missWa = !r.no_wa || !r.no_wa.trim() || r.no_wa.trim() === '-';
+                          const missF = !r.followers || Number(r.followers) <= 0;
+                          const missG = (!r.gmv_30_days || Number(r.gmv_30_days) <= 0) && (!r.gmv_30_days_video || Number(r.gmv_30_days_video) <= 0) && (!r.gmv_30_days_live || Number(r.gmv_30_days_live) <= 0);
                           return (
                             <tr key={`inc_${r.id}`} className={r.status === 'baru' ? 'bg-emerald-50/30' : 'bg-white'}>
                               <td className="px-4 py-3 font-medium text-slate-700">@{r.username}</td>
                               <td className="px-4 py-3">
-                                <input type="text" value={r.followers} onChange={e => handleUpdateIncomplete(idx, 'followers', e.target.value)} placeholder="0" className={`w-full px-3 py-1.5 text-sm border rounded ${missF ? 'border-red-300 focus:border-red-500 outline-none focus:ring-1 ring-red-500' : 'border-slate-200'}`} />
+                                <input type="text" value={r.no_wa || ''} onChange={e => handleUpdateIncomplete(idx, 'no_wa', e.target.value)} placeholder="08..." className={`w-full px-3 py-1.5 text-sm border rounded ${missWa ? 'border-red-300 focus:border-red-500 outline-none focus:ring-1 ring-red-500 bg-rose-50/50' : 'border-slate-200'}`} />
                               </td>
                               <td className="px-4 py-3">
-                                <input type="text" value={r.gmv_30_days} onChange={e => handleUpdateIncomplete(idx, 'gmv_30_days', e.target.value)} placeholder="0" className={`w-full px-3 py-1.5 text-sm border rounded ${missG ? 'border-red-300 focus:border-red-500 outline-none focus:ring-1 ring-red-500' : 'border-slate-200'}`} />
+                                <input type="text" value={r.followers || ''} onChange={e => handleUpdateIncomplete(idx, 'followers', e.target.value)} placeholder="0" className={`w-full px-3 py-1.5 text-sm border rounded ${missF ? 'border-red-300 focus:border-red-500 outline-none focus:ring-1 ring-red-500 bg-rose-50/50' : 'border-slate-200'}`} />
                               </td>
                               <td className="px-4 py-3">
-                                <input type="text" value={r.gmv_30_days_video} onChange={e => handleUpdateIncomplete(idx, 'gmv_30_days_video', e.target.value)} placeholder="0" className="w-full px-3 py-1.5 text-sm border border-slate-200 rounded" />
+                                <input type="text" value={r.gmv_30_days || ''} onChange={e => handleUpdateIncomplete(idx, 'gmv_30_days', e.target.value)} placeholder="0" className={`w-full px-3 py-1.5 text-sm border rounded ${missG ? 'border-red-300 focus:border-red-500 outline-none focus:ring-1 ring-red-500 bg-rose-50/50' : 'border-slate-200'}`} />
                               </td>
                               <td className="px-4 py-3">
-                                <input type="text" value={r.gmv_30_days_live} onChange={e => handleUpdateIncomplete(idx, 'gmv_30_days_live', e.target.value)} placeholder="0" className="w-full px-3 py-1.5 text-sm border border-slate-200 rounded" />
+                                <input type="text" value={r.gmv_30_days_video || ''} onChange={e => handleUpdateIncomplete(idx, 'gmv_30_days_video', e.target.value)} placeholder="0" className="w-full px-3 py-1.5 text-sm border border-slate-200 rounded" />
+                              </td>
+                              <td className="px-4 py-3">
+                                <input type="text" value={r.gmv_30_days_live || ''} onChange={e => handleUpdateIncomplete(idx, 'gmv_30_days_live', e.target.value)} placeholder="0" className="w-full px-3 py-1.5 text-sm border border-slate-200 rounded" />
                               </td>
                               <td className="px-4 py-3">
                                 {r.status === 'baru' ? (
