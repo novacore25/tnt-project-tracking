@@ -1245,7 +1245,7 @@ export default function CampaignDailyPerformanceClient({ campaignId }: { campaig
                                       <thead className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-200 text-left sticky top-0">
                                         <tr>
                                           <th className="py-2 px-3 w-10 text-center">#</th>
-                                          <th className="py-2 px-3">Order ID</th>
+                                          <th className="py-2 px-3">Order ID (TikTok)</th>
                                           <th className="py-2 px-3">Kreator</th>
                                           <th className="py-2 px-3">Video ID Asal</th>
                                           <th className="py-2 px-3">Produk / SKU</th>
@@ -1266,12 +1266,21 @@ export default function CampaignDailyPerformanceClient({ campaignId }: { campaig
                                           filteredOrdersVT.map((o: OrderDetailItem, oIdx: number) => {
                                             const isTikTokVid = /^\d{15,22}$/.test(o.contentUid || '');
                                             const vidUrl = isTikTokVid ? `https://www.tiktok.com/@${o.creator}/video/${o.contentUid}` : null;
+                                            
+                                            const parts = (o.orderId || '').split('_');
+                                            const cleanOrderId = parts[0] || o.orderId;
+                                            const skuIdFromKey = parts.length > 1 ? parts[1] : null;
 
                                             return (
                                               <tr key={o.orderId || oIdx} className="hover:bg-slate-50">
                                                 <td className="py-2 px-3 text-center text-slate-400 font-mono">{oIdx + 1}</td>
-                                                <td className="py-2 px-3 font-mono font-semibold text-slate-800 select-all">
-                                                  {o.orderId}
+                                                <td className="py-2 px-3 font-mono" title={`Full Key: ${o.orderId}`}>
+                                                  <span className="font-bold text-slate-900 select-all">{cleanOrderId}</span>
+                                                  {skuIdFromKey && (
+                                                    <span className="block text-[10px] text-slate-400 font-normal">
+                                                      SKU: {skuIdFromKey}
+                                                    </span>
+                                                  )}
                                                 </td>
                                                 <td className="py-2 px-3 font-semibold text-indigo-600">
                                                   @{o.creator}
@@ -1344,7 +1353,7 @@ export default function CampaignDailyPerformanceClient({ campaignId }: { campaig
                                       <thead className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-200 text-left sticky top-0">
                                         <tr>
                                           <th className="py-2 px-3 w-10 text-center">#</th>
-                                          <th className="py-2 px-3">Order ID</th>
+                                          <th className="py-2 px-3">Order ID (TikTok)</th>
                                           <th className="py-2 px-3">Kreator</th>
                                           <th className="py-2 px-3">Livestream Room ID</th>
                                           <th className="py-2 px-3">Produk / SKU</th>
@@ -1362,46 +1371,57 @@ export default function CampaignDailyPerformanceClient({ campaignId }: { campaig
                                             </td>
                                           </tr>
                                         ) : (
-                                          filteredOrdersLive.map((o: OrderDetailItem, oIdx: number) => (
-                                            <tr key={o.orderId || oIdx} className="hover:bg-slate-50">
-                                              <td className="py-2 px-3 text-center text-slate-400 font-mono">{oIdx + 1}</td>
-                                              <td className="py-2 px-3 font-mono font-semibold text-slate-800 select-all">
-                                                {o.orderId}
-                                              </td>
-                                              <td className="py-2 px-3 font-semibold text-rose-600">
-                                                @{o.creator}
-                                              </td>
-                                              <td className="py-2 px-3 font-mono text-[11px] text-slate-500">
-                                                {o.contentUid || '-'}
-                                              </td>
-                                              <td className="py-2 px-3 text-slate-700 max-w-xs truncate" title={o.productName}>
-                                                <span>{o.productName || '-'}</span>
-                                                {o.productId && o.productId !== '-' && (
-                                                  <span className="block text-[10px] text-slate-400 font-mono">ID: {o.productId}</span>
-                                                )}
-                                              </td>
-                                              <td className="py-2 px-3 text-center font-bold text-slate-800">
-                                                {o.quantity}
-                                              </td>
-                                              <td className="py-2 px-3 text-right text-slate-600 font-medium">
-                                                Rp {Math.round(o.price || 0).toLocaleString()}
-                                              </td>
-                                              <td className="py-2 px-3 text-right font-bold text-rose-600">
-                                                Rp {Math.round(o.gmv || 0).toLocaleString()}
-                                              </td>
-                                              <td className="py-2 px-3 text-center">
-                                                {o.isRefund ? (
-                                                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
-                                                    Refund
-                                                  </span>
-                                                ) : (
-                                                  <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                                    {o.status || 'Success'}
-                                                  </span>
-                                                )}
-                                              </td>
-                                            </tr>
-                                          ))
+                                          filteredOrdersLive.map((o: OrderDetailItem, oIdx: number) => {
+                                            const parts = (o.orderId || '').split('_');
+                                            const cleanOrderId = parts[0] || o.orderId;
+                                            const skuIdFromKey = parts.length > 1 ? parts[1] : null;
+
+                                            return (
+                                              <tr key={o.orderId || oIdx} className="hover:bg-slate-50">
+                                                <td className="py-2 px-3 text-center text-slate-400 font-mono">{oIdx + 1}</td>
+                                                <td className="py-2 px-3 font-mono" title={`Full Key: ${o.orderId}`}>
+                                                  <span className="font-bold text-slate-900 select-all">{cleanOrderId}</span>
+                                                  {skuIdFromKey && (
+                                                    <span className="block text-[10px] text-slate-400 font-normal">
+                                                      SKU: {skuIdFromKey}
+                                                    </span>
+                                                  )}
+                                                </td>
+                                                <td className="py-2 px-3 font-semibold text-rose-600">
+                                                  @{o.creator}
+                                                </td>
+                                                <td className="py-2 px-3 font-mono text-[11px] text-slate-500">
+                                                  {o.contentUid || '-'}
+                                                </td>
+                                                <td className="py-2 px-3 text-slate-700 max-w-xs truncate" title={o.productName}>
+                                                  <span>{o.productName || '-'}</span>
+                                                  {o.productId && o.productId !== '-' && (
+                                                    <span className="block text-[10px] text-slate-400 font-mono">ID: {o.productId}</span>
+                                                  )}
+                                                </td>
+                                                <td className="py-2 px-3 text-center font-bold text-slate-800">
+                                                  {o.quantity}
+                                                </td>
+                                                <td className="py-2 px-3 text-right text-slate-600 font-medium">
+                                                  Rp {Math.round(o.price || 0).toLocaleString()}
+                                                </td>
+                                                <td className="py-2 px-3 text-right font-bold text-rose-600">
+                                                  Rp {Math.round(o.gmv || 0).toLocaleString()}
+                                                </td>
+                                                <td className="py-2 px-3 text-center">
+                                                  {o.isRefund ? (
+                                                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                                                      Refund
+                                                    </span>
+                                                  ) : (
+                                                    <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                                      {o.status || 'Success'}
+                                                    </span>
+                                                  )}
+                                                </td>
+                                              </tr>
+                                            );
+                                          })
                                         )}
                                       </tbody>
                                     </table>
