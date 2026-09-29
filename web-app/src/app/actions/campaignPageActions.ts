@@ -245,17 +245,17 @@ export async function fetchDailyPerformancePageDataAction(campaignId: number) {
   try {
     const [campaignRes, skusRes, ccRes, vidRes, adsRes, salesRes, orgRes, liveRes] = await Promise.all([
       db.execute(sql`SELECT * FROM campaigns WHERE id = ${campaignId} LIMIT 1`).catch(() => []) as Promise<any[]>,
-      db.execute(sql`SELECT product_id FROM skus WHERE campaign_id = ${campaignId}`).catch(() => []) as Promise<any[]>,
+      db.execute(sql`SELECT id, product_id, nama_produk FROM skus WHERE campaign_id = ${campaignId}`).catch(() => []) as Promise<any[]>,
       db.execute(sql`
         SELECT 
           cc.id, cc.creator_id, cc.tier, cc.approval, cc.created_at, cc.approved_at, cc.content_type, cc.qty_vt, cc.qty_live,
-          c.username
+          c.username, c.nama_asli
         FROM campaign_creators cc
         LEFT JOIN creators c ON cc.creator_id = c.id
         WHERE cc.campaign_id = ${campaignId}
       `).catch(() => []) as Promise<any[]>,
       db.execute(sql`
-        SELECT v.id, v.campaign_creator_id, v.created_at, v.link_video
+        SELECT v.id, v.campaign_creator_id, v.created_at, v.link_video, v.content_uid, v.views, v.likes
         FROM videos v
         JOIN campaign_creators cc ON v.campaign_creator_id = cc.id
         WHERE cc.campaign_id = ${campaignId}
@@ -267,20 +267,20 @@ export async function fetchDailyPerformancePageDataAction(campaignId: number) {
         ORDER BY tanggal ASC
       `).catch(() => []) as Promise<any[]>,
       db.execute(sql`
-        SELECT tanggal, gmv, quantity, creator_username, content_uid, content_type, product_id
+        SELECT order_id, tanggal, gmv, quantity, price, creator_username, content_uid, content_type, product_id, order_status, is_refund, commission_rate
         FROM sales
         WHERE campaign_id = ${campaignId}
+        ORDER BY id DESC
       `).catch(() => []) as Promise<any[]>,
       db.execute(sql`
-        SELECT content_uid, post_time, content_type, creator_username, product_id
+        SELECT content_uid, post_time, content_type, creator_username, product_id, video_views, video_likes, duration_str, video_product_rpm
         FROM organic_videos
         WHERE campaign_id = ${campaignId}
       `).catch(() => []) as Promise<any[]>,
       db.execute(sql`
-        SELECT ls.id, ls.content_uid, ls.start_time, c.username
+        SELECT ls.id, ls.livestream_room_id, ls.start_time, ls.end_time, ls.creator_username, ls.duration_str, ls.live_views, ls.live_likes
         FROM live_sessions ls
         JOIN campaign_creators cc ON ls.campaign_creator_id = cc.id
-        LEFT JOIN creators c ON cc.creator_id = c.id
         WHERE cc.campaign_id = ${campaignId}
       `).catch(() => []) as Promise<any[]>
     ]);

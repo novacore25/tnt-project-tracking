@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { useDatabaseStore } from "@/store/useDatabaseStore";
 import { fetchDailyPerformancePageDataAction } from "@/app/actions/campaignPageActions";
 import TimelineTarget from "./TimelineTarget";
+import { ChevronDown, ChevronRight, Video, Radio, ShoppingBag, ExternalLink, Search } from "lucide-react";
 
 const toWIBDateStr = (utcString: string | number | null | undefined): string | null => {
   if (!utcString) return null;
@@ -41,6 +42,41 @@ function extractTikTokUploadDate(videoId: string): string | null {
   }
 }
 
+export interface VideoDetailItem {
+  videoId: string;
+  creator: string;
+  linkVideo?: string;
+  views?: number;
+  likes?: number;
+  postTime?: string;
+  productId?: string;
+  productName?: string;
+  source?: string;
+}
+
+export interface LiveDetailItem {
+  roomId: string;
+  creator: string;
+  views?: number;
+  likes?: number;
+  startTime?: string;
+  duration?: string;
+  source?: string;
+}
+
+export interface OrderDetailItem {
+  orderId: string;
+  creator: string;
+  contentUid?: string;
+  productId?: string;
+  productName?: string;
+  gmv: number;
+  quantity: number;
+  price: number;
+  status?: string;
+  isRefund?: boolean;
+}
+
 interface GroupData {
   gmv: number;
   gmvAds: number;
@@ -56,6 +92,10 @@ interface GroupData {
   approvedCreators: Map<string, string>;
   pendingLiveCreators: Map<string, string>;
   approvedLiveCreators: Map<string, string>;
+  videoList: VideoDetailItem[];
+  liveList: LiveDetailItem[];
+  ordersVTList: OrderDetailItem[];
+  ordersLiveList: OrderDetailItem[];
 }
 
 const createEmptyGroup = (): GroupData => ({
@@ -72,7 +112,11 @@ const createEmptyGroup = (): GroupData => ({
   pendingCreators: new Map<string, string>(),
   approvedCreators: new Map<string, string>(),
   pendingLiveCreators: new Map<string, string>(),
-  approvedLiveCreators: new Map<string, string>()
+  approvedLiveCreators: new Map<string, string>(),
+  videoList: [],
+  liveList: [],
+  ordersVTList: [],
+  ordersLiveList: []
 });
 
 export default function CampaignDailyPerformanceClient({ campaignId }: { campaignId: number }) {
@@ -83,6 +127,18 @@ export default function CampaignDailyPerformanceClient({ campaignId }: { campaig
   const [monthlyData, setMonthlyData] = useState<any[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 50;
+
+  // Accordion state
+  const [expandedDates, setExpandedDates] = useState<Record<string, boolean>>({});
+  const [activeTabPerDate, setActiveTabPerDate] = useState<Record<string, 'videos' | 'orders_vt' | 'orders_live'>>({});
+  const [searchPerDate, setSearchPerDate] = useState<Record<string, string>>({});
+
+  const toggleExpand = (date: string) => {
+    setExpandedDates(prev => ({
+      ...prev,
+      [date]: !prev[date]
+    }));
+  };
 
   const totalPages = Math.ceil(dailyData.length / pageSize);
   const paginatedDaily = React.useMemo(() => {
@@ -103,6 +159,11 @@ export default function CampaignDailyPerformanceClient({ campaignId }: { campaig
 
       const skuSet = new Set((res.skus || []).map((s: any) => s.product_id).filter(Boolean));
       const hasSkus = skuSet.size > 0;
+
+      const skuNameMap = new Map<string, string>();
+      (res.skus || []).forEach((s: any) => {
+        if (s.product_id) skuNameMap.set(String(s.product_id).trim(), s.nama_produk || s.product_id);
+      });
 
       const allVideosFromCreators = res.campaignCreators || [];
       const allVideos = res.videos || [];
@@ -162,16 +223,52 @@ export default function CampaignDailyPerformanceClient({ campaignId }: { campaig
         const day = dailySalesMap.get(dateStr)!;
         const gmv = Number(s.gmv || 0);
         const qty = Number(s.quantity || 1);
+        const price = Number(s.price || (qty > 0 ? gmv / qty : 0));
         const cType = (s.content_type || '').toLowerCase().trim();
+        const isLive = cType === 'livestream' || cType === 'live';
+        const pId = s.product_id ? String(s.product_id).trim() : '-';
+        const prodName = skuNameMap.get(pId) || pId;
 
         day.total_gmv += gmv;
 
-        if (cType === 'livestream' || cType === 'live') {
+        if (isLive) {
           day.gmv_live += gmv;
           day.orders_live += qty;
         } else {
           day.gmv_vt += gmv;
           day.orders_vt += qty;
+        }
+
+        // Store detail item for accordion
+        if (!campaignStartStr || dateStr >= campaignStartStr) {
+          initGroup(dateStr);
+          if (isLive) {
+            grouped[dateStr].ordersLiveList.push({
+              orderId: s.order_id || '-',
+              creator: u || 'unknown',
+              contentUid: s.content_uid || '-',
+              productId: pId,
+              productName: prodName,
+              gmv,
+              quantity: qty,
+              price,
+              status: s.order_status || 'COMPLETED',
+              isRefund: !!s.is_refund
+            });
+          } else {
+            grouped[dateStr].ordersVTList.push({
+              orderId: s.order_id || '-',
+              creator: u || 'unknown',
+              contentUid: s.content_uid || '-',
+              productId: pId,
+              productName: prodName,
+              gmv,
+              quantity: qty,
+              price,
+              status: s.order_status || 'COMPLETED',
+              isRefund: !!s.is_refund
+            });
+          }
         }
       });
 
@@ -284,6 +381,18 @@ export default function CampaignDailyPerformanceClient({ campaignId }: { campaig
                 grouped[uploadDateStr].videoCreators.add(username);
               }
 
+              if (!grouped[uploadDateStr].videoList.some(item => item.videoId === videoId)) {
+                grouped[uploadDateStr].videoList.push({
+                  videoId,
+                  creator: username || 'unknown',
+                  linkVideo: v.link_video || `https://www.tiktok.com/@${username}/video/${videoId}`,
+                  views: Number(v.views || 0),
+                  likes: Number(v.likes || 0),
+                  postTime: uploadDateStr,
+                  source: 'Submission Slot'
+                });
+              }
+
               const monthStr = uploadDateStr.substring(0, 7);
               initMonthlyGroup(monthStr);
               monthlyGrouped[monthStr].videos.add(videoId);
@@ -319,12 +428,32 @@ export default function CampaignDailyPerformanceClient({ campaignId }: { campaig
           initMonthlyGroup(monthStr);
 
           const creatorUname = (v.creator_username || '').toLowerCase().trim();
+          const prodName = skuNameMap.get(String(v.product_id).trim()) || v.product_id;
 
           if (!isLive) {
             grouped[dateStr].videos.add(uidStr);
             if (creatorUname) grouped[dateStr].videoCreators.add(creatorUname);
             monthlyGrouped[monthStr].videos.add(uidStr);
             if (creatorUname) monthlyGrouped[monthStr].videoCreators.add(creatorUname);
+
+            const existingVid = grouped[dateStr].videoList.find(item => item.videoId === uidStr);
+            if (existingVid) {
+              existingVid.views = Math.max(existingVid.views || 0, Number(v.video_views || 0));
+              existingVid.likes = Math.max(existingVid.likes || 0, Number(v.video_likes || 0));
+              if (!existingVid.productName && prodName) existingVid.productName = prodName;
+            } else {
+              grouped[dateStr].videoList.push({
+                videoId: uidStr,
+                creator: creatorUname || 'unknown',
+                linkVideo: `https://www.tiktok.com/@${creatorUname}/video/${uidStr}`,
+                views: Number(v.video_views || 0),
+                likes: Number(v.video_likes || 0),
+                postTime: dateStr,
+                productId: v.product_id,
+                productName: prodName,
+                source: 'Auto-Sync / Organic'
+              });
+            }
           } else {
             const isDummy = !uidStr || uidStr === '-' || uidStr === '0' || uidStr.toLowerCase() === 'n/a' || uidStr === 'null';
             const uniqueKey = isDummy ? `dummy_${creatorUname}_${dateStr}_${v.id || Math.random()}` : uidStr;
@@ -333,6 +462,18 @@ export default function CampaignDailyPerformanceClient({ campaignId }: { campaig
             if (creatorUname) grouped[dateStr].liveCreators.add(creatorUname);
             monthlyGrouped[monthStr].liveSessions.add(uniqueKey);
             if (creatorUname) monthlyGrouped[monthStr].liveCreators.add(creatorUname);
+
+            if (!grouped[dateStr].liveList.some(item => item.roomId === uniqueKey)) {
+              grouped[dateStr].liveList.push({
+                roomId: uidStr || uniqueKey,
+                creator: creatorUname || 'unknown',
+                views: Number(v.video_views || 0),
+                likes: Number(v.video_likes || 0),
+                startTime: dateStr,
+                duration: v.duration_str || '-',
+                source: 'Auto-Sync / Live'
+              });
+            }
           }
         });
       }
@@ -349,13 +490,25 @@ export default function CampaignDailyPerformanceClient({ campaignId }: { campaig
           const monthStr = dateStr.substring(0, 7);
           initMonthlyGroup(monthStr);
 
-          const uidStr = (ls.content_uid || ls.id).toString();
+          const uidStr = (ls.livestream_room_id || ls.content_uid || ls.id).toString();
           const creatorUname = (ls.username || ls.creator_username || '').toLowerCase().trim();
 
           grouped[dateStr].liveSessions.add(uidStr);
           if (creatorUname) grouped[dateStr].liveCreators.add(creatorUname);
           monthlyGrouped[monthStr].liveSessions.add(uidStr);
           if (creatorUname) monthlyGrouped[monthStr].liveCreators.add(creatorUname);
+
+          if (!grouped[dateStr].liveList.some(item => item.roomId === uidStr)) {
+            grouped[dateStr].liveList.push({
+              roomId: uidStr,
+              creator: creatorUname || 'unknown',
+              views: Number(ls.live_views || 0),
+              likes: Number(ls.live_likes || 0),
+              startTime: dateStr,
+              duration: ls.duration_str || '-',
+              source: 'Live Session'
+            });
+          }
         });
       }
 
@@ -433,7 +586,12 @@ export default function CampaignDailyPerformanceClient({ campaignId }: { campaig
           approvedLiveNano: approvedLiveTiers.nano, approvedLiveMicro: approvedLiveTiers.micro, approvedLiveMacro: approvedLiveTiers.macro, approvedLiveMega: approvedLiveTiers.mega,
           totalVideos: g.videos.size,
           totalVideoCreators: g.videoCreators.size,
-          totalLiveSessions: g.liveSessions.size
+          totalLiveSessions: g.liveSessions.size,
+          // Detailed lists for drilldown
+          videoList: g.videoList,
+          liveList: g.liveList,
+          ordersVTList: g.ordersVTList,
+          ordersLiveList: g.ordersLiveList
         };
       }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
@@ -694,63 +852,570 @@ export default function CampaignDailyPerformanceClient({ campaignId }: { campaig
         </div>
         <div className="tbl-wrap !border-0 !rounded-none">
           <table className="w-full">
-            <thead className="border-b border-line">
+            <thead className="border-b border-line bg-slate-50/80">
               <tr>
-                <th className="py-[16px] whitespace-nowrap">Tanggal</th>
-                <th className="py-[16px] text-center">Video / Sesi Live</th>
-                <th className="py-[16px] text-center">Kreator Aktif</th>
-                <th className="py-[16px] text-center">Orders (VT/Live)</th>
-                <th className="py-[16px] text-right">GMV Organik</th>
-                <th className="py-[16px] text-right pr-6">GMV Ads</th>
+                <th className="py-[16px] pl-4 whitespace-nowrap text-left font-bold text-slate-700">Tanggal</th>
+                <th className="py-[16px] text-center font-bold text-slate-700">Video / Sesi Live</th>
+                <th className="py-[16px] text-center font-bold text-slate-700">Kreator Aktif</th>
+                <th className="py-[16px] text-center font-bold text-slate-700">Orders (VT/Live)</th>
+                <th className="py-[16px] text-right font-bold text-slate-700">GMV Organik</th>
+                <th className="py-[16px] text-right font-bold text-slate-700">GMV Ads</th>
+                <th className="py-[16px] text-center pr-4 font-bold text-slate-700 w-16">Detail</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={5} className="text-center py-8 text-text-soft">
-                    Mengkalkulasi data dari ribuan baris CSV...
+                  <td colSpan={7} className="text-center py-12 text-text-soft">
+                    <div className="flex flex-col items-center justify-center gap-2">
+                      <div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+                      <span>Mengkalkulasi data dari ribuan baris CSV...</span>
+                    </div>
                   </td>
                 </tr>
               ) : dailyData.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="text-center py-8 text-text-soft">
+                  <td colSpan={7} className="text-center py-12 text-text-soft">
                     Belum ada data untuk campaign ini.
                   </td>
                 </tr>
               ) : (
-                paginatedDaily.map((d, idx) => (
-                  <tr key={idx} className="border-b border-line hover:bg-slate-50/50">
-                    <td className="font-medium text-text whitespace-nowrap align-top pt-[20px]">
-                      {new Date(d.date).toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
-                    </td>
-                    
-                    <td className="text-center align-top pt-[16px]">
-                      <div className="flex flex-col items-center gap-1.5">
-                         <span className="font-bold text-indigo-700 bg-indigo-50/80 px-2 py-0.5 rounded text-[12px] min-w-[70px] inline-block">{d.totalVideos} VT</span>
-                         <span className="font-bold text-rose-700 bg-rose-50/80 px-2 py-0.5 rounded text-[12px] min-w-[70px] inline-block">{d.totalLiveSessions || 0} Live</span>
-                      </div>
-                    </td>
-                    <td className="text-center text-text font-bold align-top pt-[20px]">
-                      {d.totalActiveCreators || 0}
-                    </td>
-                    <td className="text-center align-top pt-[16px]">
-                      <div className="flex flex-col items-center gap-1 text-[12px] font-medium text-slate-600">
-                         <span className="px-2 py-0.5">{d.ordersVT || 0} VT</span>
-                         <span className="px-2 py-0.5">{d.ordersLive || 0} Live</span>
-                      </div>
-                    </td>
-                    <td className="text-right align-top pt-[16px]">
-                      <div className="flex flex-col items-end gap-1 text-[13px]">
-                         <span className="font-bold text-emerald-600">VT: Rp {(d.gmvVT || 0).toLocaleString()}</span>
-                         <span className="font-bold text-rose-600">Live: Rp {(d.gmvLive || 0).toLocaleString()}</span>
-                         <span className="text-[11px] text-slate-400 mt-1 border-t border-slate-100 pt-1">Total: Rp {(d.gmvOrganic || 0).toLocaleString()}</span>
-                      </div>
-                    </td>
-                    <td className="text-right font-bold text-blue-600 pr-6 align-top pt-[20px]">
-                      Rp {(d.gmvAds || 0).toLocaleString()}
-                    </td>
-                  </tr>
-                ))
+                paginatedDaily.map((d, idx) => {
+                  const isExpanded = !!expandedDates[d.date];
+                  const currentTab = activeTabPerDate[d.date] || 'videos';
+                  const searchTerm = (searchPerDate[d.date] || '').toLowerCase().trim();
+
+                  // Filtered data based on search term
+                  const filteredVideos = (d.videoList || []).filter((v: VideoDetailItem) => {
+                    if (!searchTerm) return true;
+                    return (
+                      (v.creator || '').toLowerCase().includes(searchTerm) ||
+                      (v.videoId || '').toLowerCase().includes(searchTerm) ||
+                      (v.productName || '').toLowerCase().includes(searchTerm)
+                    );
+                  });
+
+                  const filteredLive = (d.liveList || []).filter((l: LiveDetailItem) => {
+                    if (!searchTerm) return true;
+                    return (
+                      (l.creator || '').toLowerCase().includes(searchTerm) ||
+                      (l.roomId || '').toLowerCase().includes(searchTerm)
+                    );
+                  });
+
+                  const filteredOrdersVT = (d.ordersVTList || []).filter((o: OrderDetailItem) => {
+                    if (!searchTerm) return true;
+                    return (
+                      (o.orderId || '').toLowerCase().includes(searchTerm) ||
+                      (o.creator || '').toLowerCase().includes(searchTerm) ||
+                      (o.contentUid || '').toLowerCase().includes(searchTerm) ||
+                      (o.productName || '').toLowerCase().includes(searchTerm) ||
+                      (o.productId || '').toLowerCase().includes(searchTerm)
+                    );
+                  });
+
+                  const filteredOrdersLive = (d.ordersLiveList || []).filter((o: OrderDetailItem) => {
+                    if (!searchTerm) return true;
+                    return (
+                      (o.orderId || '').toLowerCase().includes(searchTerm) ||
+                      (o.creator || '').toLowerCase().includes(searchTerm) ||
+                      (o.contentUid || '').toLowerCase().includes(searchTerm) ||
+                      (o.productName || '').toLowerCase().includes(searchTerm) ||
+                      (o.productId || '').toLowerCase().includes(searchTerm)
+                    );
+                  });
+
+                  return (
+                    <React.Fragment key={d.date || idx}>
+                      {/* Main Summary Row */}
+                      <tr 
+                        onClick={() => toggleExpand(d.date)}
+                        className={`border-b border-line cursor-pointer transition-colors ${
+                          isExpanded ? 'bg-indigo-50/60 font-medium' : 'hover:bg-slate-50/80'
+                        }`}
+                      >
+                        <td className="font-semibold text-text whitespace-nowrap align-top pt-[18px] pb-[16px] pl-4">
+                          <div className="flex items-center gap-2">
+                            <span className="p-1 rounded bg-slate-100 text-slate-500 hover:text-indigo-600 transition-colors">
+                              {isExpanded ? (
+                                <ChevronDown className="w-4 h-4 text-indigo-600" />
+                              ) : (
+                                <ChevronRight className="w-4 h-4 text-slate-400" />
+                              )}
+                            </span>
+                            <div>
+                              <span>{new Date(d.date).toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                              <span className="block text-[11px] text-slate-400 font-normal">
+                                {isExpanded ? 'Tutup Detail' : 'Klik untuk rincian data'}
+                              </span>
+                            </div>
+                          </div>
+                        </td>
+                        
+                        <td className="text-center align-top pt-[16px] pb-[16px]">
+                          <div className="flex flex-col items-center gap-1.5">
+                             <span className="font-bold text-indigo-700 bg-indigo-50 px-2.5 py-0.5 rounded text-[12px] min-w-[72px] inline-block border border-indigo-100/60">
+                               {d.totalVideos} VT
+                             </span>
+                             <span className="font-bold text-rose-700 bg-rose-50 px-2.5 py-0.5 rounded text-[12px] min-w-[72px] inline-block border border-rose-100/60">
+                               {d.totalLiveSessions || 0} Live
+                             </span>
+                          </div>
+                        </td>
+                        <td className="text-center text-text font-bold align-top pt-[18px] pb-[16px]">
+                          <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-slate-100 text-slate-700 text-sm font-bold">
+                            {d.totalActiveCreators || 0}
+                          </span>
+                        </td>
+                        <td className="text-center align-top pt-[16px] pb-[16px]">
+                          <div className="flex flex-col items-center gap-1 text-[12px] font-semibold text-slate-600">
+                             <span className="px-2 py-0.5 bg-slate-100 rounded text-slate-700">{d.ordersVT || 0} VT</span>
+                             <span className="px-2 py-0.5 bg-slate-100 rounded text-slate-700">{d.ordersLive || 0} Live</span>
+                          </div>
+                        </td>
+                        <td className="text-right align-top pt-[16px] pb-[16px]">
+                          <div className="flex flex-col items-end gap-1 text-[13px]">
+                             <span className="font-bold text-emerald-600">VT: Rp {(d.gmvVT || 0).toLocaleString()}</span>
+                             <span className="font-bold text-rose-600">Live: Rp {(d.gmvLive || 0).toLocaleString()}</span>
+                             <span className="text-[11px] text-slate-500 mt-1 border-t border-slate-200/60 pt-1 font-semibold">
+                               Total: Rp {(d.gmvOrganic || 0).toLocaleString()}
+                             </span>
+                          </div>
+                        </td>
+                        <td className="text-right font-bold text-blue-600 align-top pt-[18px] pb-[16px]">
+                          Rp {(d.gmvAds || 0).toLocaleString()}
+                        </td>
+                        <td className="text-center align-top pt-[18px] pb-[16px] pr-4">
+                          <button 
+                            type="button"
+                            className={`px-2.5 py-1 text-[11px] font-bold rounded-lg border transition-all ${
+                              isExpanded 
+                                ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' 
+                                : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:text-indigo-600'
+                            }`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleExpand(d.date);
+                            }}
+                          >
+                            {isExpanded ? 'Tutup' : 'Lihat'}
+                          </button>
+                        </td>
+                      </tr>
+
+                      {/* Accordion Drilldown Panel */}
+                      {isExpanded && (
+                        <tr className="bg-slate-50/70 border-b-2 border-indigo-200/80">
+                          <td colSpan={7} className="p-0">
+                            <div className="p-4 sm:p-5 space-y-4 animate-in fade-in duration-200">
+                              
+                              {/* Tab Selector & Quick Search */}
+                              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-white p-2.5 rounded-xl border border-slate-200 shadow-sm">
+                                <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto">
+                                  <button
+                                    type="button"
+                                    onClick={() => setActiveTabPerDate(prev => ({ ...prev, [d.date]: 'videos' }))}
+                                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
+                                      currentTab === 'videos'
+                                        ? 'bg-indigo-600 text-white shadow-sm'
+                                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                    }`}
+                                  >
+                                    <Video className="w-3.5 h-3.5" />
+                                    <span>Video & Sesi Live</span>
+                                    <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${currentTab === 'videos' ? 'bg-indigo-800 text-indigo-100' : 'bg-slate-200 text-slate-700'}`}>
+                                      {(d.videoList?.length || 0) + (d.liveList?.length || 0)}
+                                    </span>
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => setActiveTabPerDate(prev => ({ ...prev, [d.date]: 'orders_vt' }))}
+                                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
+                                      currentTab === 'orders_vt'
+                                        ? 'bg-emerald-600 text-white shadow-sm'
+                                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                    }`}
+                                  >
+                                    <ShoppingBag className="w-3.5 h-3.5" />
+                                    <span>Orders by VT</span>
+                                    <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${currentTab === 'orders_vt' ? 'bg-emerald-800 text-emerald-100' : 'bg-slate-200 text-slate-700'}`}>
+                                      {d.ordersVTList?.length || 0}
+                                    </span>
+                                    <span className="text-[11px] opacity-90 font-normal ml-0.5">
+                                      (Rp {(d.gmvVT || 0).toLocaleString()})
+                                    </span>
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => setActiveTabPerDate(prev => ({ ...prev, [d.date]: 'orders_live' }))}
+                                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
+                                      currentTab === 'orders_live'
+                                        ? 'bg-rose-600 text-white shadow-sm'
+                                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                    }`}
+                                  >
+                                    <Radio className="w-3.5 h-3.5" />
+                                    <span>Orders by Live</span>
+                                    <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${currentTab === 'orders_live' ? 'bg-rose-800 text-rose-100' : 'bg-slate-200 text-slate-700'}`}>
+                                      {d.ordersLiveList?.length || 0}
+                                    </span>
+                                    <span className="text-[11px] opacity-90 font-normal ml-0.5">
+                                      (Rp {(d.gmvLive || 0).toLocaleString()})
+                                    </span>
+                                  </button>
+                                </div>
+
+                                {/* Quick Search Box */}
+                                <div className="relative w-full sm:w-64">
+                                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                                  <input
+                                    type="text"
+                                    placeholder="Cari kreator / ID..."
+                                    value={searchPerDate[d.date] || ''}
+                                    onChange={(e) => setSearchPerDate(prev => ({ ...prev, [d.date]: e.target.value }))}
+                                    className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                  />
+                                </div>
+                              </div>
+
+                              {/* TAB 1: VIDEO & SESI LIVE */}
+                              {currentTab === 'videos' && (
+                                <div className="space-y-4">
+                                  {/* Sub-Section VT */}
+                                  <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                                    <div className="px-4 py-2.5 bg-indigo-50/50 border-b border-indigo-100/60 flex items-center justify-between">
+                                      <div className="flex items-center gap-2">
+                                        <Video className="w-4 h-4 text-indigo-600" />
+                                        <span className="font-bold text-xs text-indigo-900">Daftar Konten Video VT</span>
+                                      </div>
+                                      <span className="text-[11px] text-indigo-700 font-semibold bg-indigo-100/80 px-2 py-0.5 rounded-full">
+                                        {filteredVideos.length} Video Terdeteksi
+                                      </span>
+                                    </div>
+                                    <div className="overflow-x-auto max-h-72 overflow-y-auto">
+                                      <table className="w-full text-xs">
+                                        <thead className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-200 text-left sticky top-0">
+                                          <tr>
+                                            <th className="py-2 px-3 w-10 text-center">#</th>
+                                            <th className="py-2 px-3">Kreator</th>
+                                            <th className="py-2 px-3">Video ID & Tautan</th>
+                                            <th className="py-2 px-3 text-right">Views</th>
+                                            <th className="py-2 px-3 text-right">Likes</th>
+                                            <th className="py-2 px-3">Produk Terkait</th>
+                                            <th className="py-2 px-3">Sumber Data</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100 text-slate-700">
+                                          {filteredVideos.length === 0 ? (
+                                            <tr>
+                                              <td colSpan={7} className="text-center py-6 text-slate-400 italic">
+                                                {searchTerm ? 'Tidak ada video yang cocok dengan pencarian.' : 'Tidak ada konten video VT yang tercatat pada tanggal ini.'}
+                                              </td>
+                                            </tr>
+                                          ) : (
+                                            filteredVideos.map((v: VideoDetailItem, vIdx: number) => {
+                                              const isTikTokId = /^\d{15,22}$/.test(v.videoId);
+                                              const tiktokUrl = v.linkVideo || (isTikTokId ? `https://www.tiktok.com/@${v.creator}/video/${v.videoId}` : null);
+
+                                              return (
+                                                <tr key={v.videoId || vIdx} className="hover:bg-slate-50">
+                                                  <td className="py-2 px-3 text-center text-slate-400 font-mono">{vIdx + 1}</td>
+                                                  <td className="py-2 px-3 font-semibold text-indigo-600">
+                                                    @{v.creator}
+                                                  </td>
+                                                  <td className="py-2 px-3 font-mono text-[11px]">
+                                                    {tiktokUrl ? (
+                                                      <a
+                                                        href={tiktokUrl}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="text-indigo-600 hover:text-indigo-800 hover:underline inline-flex items-center gap-1"
+                                                      >
+                                                        <span>{v.videoId}</span>
+                                                        <ExternalLink className="w-3 h-3" />
+                                                      </a>
+                                                    ) : (
+                                                      <span>{v.videoId}</span>
+                                                    )}
+                                                  </td>
+                                                  <td className="py-2 px-3 text-right font-medium">
+                                                    {(v.views || 0) > 0 ? (v.views || 0).toLocaleString() : '-'}
+                                                  </td>
+                                                  <td className="py-2 px-3 text-right font-medium">
+                                                    {(v.likes || 0) > 0 ? (v.likes || 0).toLocaleString() : '-'}
+                                                  </td>
+                                                  <td className="py-2 px-3 text-slate-600 truncate max-w-xs" title={v.productName}>
+                                                    {v.productName || '-'}
+                                                  </td>
+                                                  <td className="py-2 px-3">
+                                                    <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">
+                                                      {v.source || 'Auto-Sync'}
+                                                    </span>
+                                                  </td>
+                                                </tr>
+                                              );
+                                            })
+                                          )}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  </div>
+
+                                  {/* Sub-Section Live */}
+                                  <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                                    <div className="px-4 py-2.5 bg-rose-50/50 border-b border-rose-100/60 flex items-center justify-between">
+                                      <div className="flex items-center gap-2">
+                                        <Radio className="w-4 h-4 text-rose-600" />
+                                        <span className="font-bold text-xs text-rose-900">Daftar Sesi Livestream</span>
+                                      </div>
+                                      <span className="text-[11px] text-rose-700 font-semibold bg-rose-100/80 px-2 py-0.5 rounded-full">
+                                        {filteredLive.length} Sesi Terdeteksi
+                                      </span>
+                                    </div>
+                                    <div className="overflow-x-auto max-h-60 overflow-y-auto">
+                                      <table className="w-full text-xs">
+                                        <thead className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-200 text-left sticky top-0">
+                                          <tr>
+                                            <th className="py-2 px-3 w-10 text-center">#</th>
+                                            <th className="py-2 px-3">Kreator</th>
+                                            <th className="py-2 px-3">Livestream Room ID</th>
+                                            <th className="py-2 px-3 text-right">Views Live</th>
+                                            <th className="py-2 px-3 text-right">Likes Live</th>
+                                            <th className="py-2 px-3">Durasi</th>
+                                            <th className="py-2 px-3">Sumber Data</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100 text-slate-700">
+                                          {filteredLive.length === 0 ? (
+                                            <tr>
+                                              <td colSpan={7} className="text-center py-6 text-slate-400 italic">
+                                                {searchTerm ? 'Tidak ada sesi live yang cocok dengan pencarian.' : 'Tidak ada sesi Live yang tercatat pada tanggal ini.'}
+                                              </td>
+                                            </tr>
+                                          ) : (
+                                            filteredLive.map((l: LiveDetailItem, lIdx: number) => (
+                                              <tr key={l.roomId || lIdx} className="hover:bg-slate-50">
+                                                <td className="py-2 px-3 text-center text-slate-400 font-mono">{lIdx + 1}</td>
+                                                <td className="py-2 px-3 font-semibold text-rose-600">
+                                                  @{l.creator}
+                                                </td>
+                                                <td className="py-2 px-3 font-mono text-[11px]">
+                                                  {l.roomId}
+                                                </td>
+                                                <td className="py-2 px-3 text-right font-medium">
+                                                  {(l.views || 0) > 0 ? (l.views || 0).toLocaleString() : '-'}
+                                                </td>
+                                                <td className="py-2 px-3 text-right font-medium">
+                                                  {(l.likes || 0) > 0 ? (l.likes || 0).toLocaleString() : '-'}
+                                                </td>
+                                                <td className="py-2 px-3 text-slate-600">
+                                                  {l.duration || '-'}
+                                                </td>
+                                                <td className="py-2 px-3">
+                                                  <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">
+                                                    {l.source || 'Auto-Sync / Live'}
+                                                  </span>
+                                                </td>
+                                              </tr>
+                                            ))
+                                          )}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* TAB 2: ORDERS BY VT */}
+                              {currentTab === 'orders_vt' && (
+                                <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                                  <div className="px-4 py-2.5 bg-emerald-50/50 border-b border-emerald-100/60 flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                      <ShoppingBag className="w-4 h-4 text-emerald-600" />
+                                      <span className="font-bold text-xs text-emerald-900">Rincian Order Attribution: Video (VT)</span>
+                                    </div>
+                                    <span className="text-[11px] text-emerald-800 font-bold bg-emerald-100 px-2.5 py-0.5 rounded-full">
+                                      {filteredOrdersVT.length} Pesanan · Total Rp {(d.gmvVT || 0).toLocaleString()}
+                                    </span>
+                                  </div>
+                                  <div className="overflow-x-auto max-h-80 overflow-y-auto">
+                                    <table className="w-full text-xs">
+                                      <thead className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-200 text-left sticky top-0">
+                                        <tr>
+                                          <th className="py-2 px-3 w-10 text-center">#</th>
+                                          <th className="py-2 px-3">Order ID</th>
+                                          <th className="py-2 px-3">Kreator</th>
+                                          <th className="py-2 px-3">Video ID Asal</th>
+                                          <th className="py-2 px-3">Produk / SKU</th>
+                                          <th className="py-2 px-3 text-center">Qty</th>
+                                          <th className="py-2 px-3 text-right">Harga Satuan</th>
+                                          <th className="py-2 px-3 text-right font-bold text-emerald-700">GMV (Rp)</th>
+                                          <th className="py-2 px-3 text-center">Status</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody className="divide-y divide-slate-100 text-slate-700">
+                                        {filteredOrdersVT.length === 0 ? (
+                                          <tr>
+                                            <td colSpan={9} className="text-center py-8 text-slate-400 italic">
+                                              {searchTerm ? 'Tidak ada order VT yang cocok dengan pencarian.' : 'Tidak ada transaksi order dari Video VT pada tanggal ini.'}
+                                            </td>
+                                          </tr>
+                                        ) : (
+                                          filteredOrdersVT.map((o: OrderDetailItem, oIdx: number) => {
+                                            const isTikTokVid = /^\d{15,22}$/.test(o.contentUid || '');
+                                            const vidUrl = isTikTokVid ? `https://www.tiktok.com/@${o.creator}/video/${o.contentUid}` : null;
+
+                                            return (
+                                              <tr key={o.orderId || oIdx} className="hover:bg-slate-50">
+                                                <td className="py-2 px-3 text-center text-slate-400 font-mono">{oIdx + 1}</td>
+                                                <td className="py-2 px-3 font-mono font-semibold text-slate-800 select-all">
+                                                  {o.orderId}
+                                                </td>
+                                                <td className="py-2 px-3 font-semibold text-indigo-600">
+                                                  @{o.creator}
+                                                </td>
+                                                <td className="py-2 px-3 font-mono text-[11px]">
+                                                  {vidUrl ? (
+                                                    <a 
+                                                      href={vidUrl} 
+                                                      target="_blank" 
+                                                      rel="noopener noreferrer"
+                                                      className="text-indigo-600 hover:underline inline-flex items-center gap-1"
+                                                    >
+                                                      <span>{o.contentUid}</span>
+                                                      <ExternalLink className="w-3 h-3" />
+                                                    </a>
+                                                  ) : (
+                                                    <span className="text-slate-500">{o.contentUid || '-'}</span>
+                                                  )}
+                                                </td>
+                                                <td className="py-2 px-3 text-slate-700 max-w-xs truncate" title={o.productName}>
+                                                  <span>{o.productName || '-'}</span>
+                                                  {o.productId && o.productId !== '-' && (
+                                                    <span className="block text-[10px] text-slate-400 font-mono">ID: {o.productId}</span>
+                                                  )}
+                                                </td>
+                                                <td className="py-2 px-3 text-center font-bold text-slate-800">
+                                                  {o.quantity}
+                                                </td>
+                                                <td className="py-2 px-3 text-right text-slate-600 font-medium">
+                                                  Rp {Math.round(o.price || 0).toLocaleString()}
+                                                </td>
+                                                <td className="py-2 px-3 text-right font-bold text-emerald-600">
+                                                  Rp {Math.round(o.gmv || 0).toLocaleString()}
+                                                </td>
+                                                <td className="py-2 px-3 text-center">
+                                                  {o.isRefund ? (
+                                                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                                                      Refund
+                                                    </span>
+                                                  ) : (
+                                                    <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                                      {o.status || 'Success'}
+                                                    </span>
+                                                  )}
+                                                </td>
+                                              </tr>
+                                            );
+                                          })
+                                        )}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* TAB 3: ORDERS BY LIVE */}
+                              {currentTab === 'orders_live' && (
+                                <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                                  <div className="px-4 py-2.5 bg-rose-50/50 border-b border-rose-100/60 flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                      <Radio className="w-4 h-4 text-rose-600" />
+                                      <span className="font-bold text-xs text-rose-900">Rincian Order Attribution: Livestream</span>
+                                    </div>
+                                    <span className="text-[11px] text-rose-800 font-bold bg-rose-100 px-2.5 py-0.5 rounded-full">
+                                      {filteredOrdersLive.length} Pesanan · Total Rp {(d.gmvLive || 0).toLocaleString()}
+                                    </span>
+                                  </div>
+                                  <div className="overflow-x-auto max-h-80 overflow-y-auto">
+                                    <table className="w-full text-xs">
+                                      <thead className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-200 text-left sticky top-0">
+                                        <tr>
+                                          <th className="py-2 px-3 w-10 text-center">#</th>
+                                          <th className="py-2 px-3">Order ID</th>
+                                          <th className="py-2 px-3">Kreator</th>
+                                          <th className="py-2 px-3">Livestream Room ID</th>
+                                          <th className="py-2 px-3">Produk / SKU</th>
+                                          <th className="py-2 px-3 text-center">Qty</th>
+                                          <th className="py-2 px-3 text-right">Harga Satuan</th>
+                                          <th className="py-2 px-3 text-right font-bold text-rose-700">GMV (Rp)</th>
+                                          <th className="py-2 px-3 text-center">Status</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody className="divide-y divide-slate-100 text-slate-700">
+                                        {filteredOrdersLive.length === 0 ? (
+                                          <tr>
+                                            <td colSpan={9} className="text-center py-8 text-slate-400 italic">
+                                              {searchTerm ? 'Tidak ada order Live yang cocok dengan pencarian.' : 'Tidak ada transaksi order dari Livestream pada tanggal ini.'}
+                                            </td>
+                                          </tr>
+                                        ) : (
+                                          filteredOrdersLive.map((o: OrderDetailItem, oIdx: number) => (
+                                            <tr key={o.orderId || oIdx} className="hover:bg-slate-50">
+                                              <td className="py-2 px-3 text-center text-slate-400 font-mono">{oIdx + 1}</td>
+                                              <td className="py-2 px-3 font-mono font-semibold text-slate-800 select-all">
+                                                {o.orderId}
+                                              </td>
+                                              <td className="py-2 px-3 font-semibold text-rose-600">
+                                                @{o.creator}
+                                              </td>
+                                              <td className="py-2 px-3 font-mono text-[11px] text-slate-500">
+                                                {o.contentUid || '-'}
+                                              </td>
+                                              <td className="py-2 px-3 text-slate-700 max-w-xs truncate" title={o.productName}>
+                                                <span>{o.productName || '-'}</span>
+                                                {o.productId && o.productId !== '-' && (
+                                                  <span className="block text-[10px] text-slate-400 font-mono">ID: {o.productId}</span>
+                                                )}
+                                              </td>
+                                              <td className="py-2 px-3 text-center font-bold text-slate-800">
+                                                {o.quantity}
+                                              </td>
+                                              <td className="py-2 px-3 text-right text-slate-600 font-medium">
+                                                Rp {Math.round(o.price || 0).toLocaleString()}
+                                              </td>
+                                              <td className="py-2 px-3 text-right font-bold text-rose-600">
+                                                Rp {Math.round(o.gmv || 0).toLocaleString()}
+                                              </td>
+                                              <td className="py-2 px-3 text-center">
+                                                {o.isRefund ? (
+                                                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                                                    Refund
+                                                  </span>
+                                                ) : (
+                                                  <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                                    {o.status || 'Success'}
+                                                  </span>
+                                                )}
+                                              </td>
+                                            </tr>
+                                          ))
+                                        )}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </div>
+                              )}
+
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  );
+                })
               )}
             </tbody>
           </table>
