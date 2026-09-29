@@ -688,6 +688,19 @@ export async function ensureVideoColumns() {
     await db.execute(sql`
       DO $$
       BEGIN
+        ALTER TABLE creators ADD COLUMN IF NOT EXISTS added_by text;
+
+        ALTER TABLE campaign_creators ADD COLUMN IF NOT EXISTS added_by text;
+        ALTER TABLE campaign_creators ADD COLUMN IF NOT EXISTS client_approval text DEFAULT 'not_required';
+        ALTER TABLE campaign_creators ADD COLUMN IF NOT EXISTS content_type text DEFAULT 'Video';
+        ALTER TABLE campaign_creators ADD COLUMN IF NOT EXISTS qty_live integer DEFAULT 0;
+        ALTER TABLE campaign_creators ADD COLUMN IF NOT EXISTS nominal_pelunasan bigint DEFAULT 0;
+        ALTER TABLE campaign_creators ADD COLUMN IF NOT EXISTS approved_by text;
+        ALTER TABLE campaign_creators ADD COLUMN IF NOT EXISTS approved_at timestamptz;
+        ALTER TABLE campaign_creators ADD COLUMN IF NOT EXISTS not_approved_by text;
+        ALTER TABLE campaign_creators ADD COLUMN IF NOT EXISTS not_approved_at timestamptz;
+        ALTER TABLE campaign_creators ADD COLUMN IF NOT EXISTS assigned_sku_ids jsonb;
+
         ALTER TABLE videos ADD COLUMN IF NOT EXISTS link_draft text;
         ALTER TABLE videos ADD COLUMN IF NOT EXISTS link_draft_updated_by text;
         ALTER TABLE videos ADD COLUMN IF NOT EXISTS link_draft_updated_at timestamptz;
@@ -1207,9 +1220,9 @@ export async function commitBulkImportVideosAction(
     // 1. Ensure all creators exist in `creators` table
     for (const u of usernames) {
       await db.execute(sql`
-        INSERT INTO creators (username, link_account, added_by, created_at, updated_at)
-        VALUES (${u}, ${'https://www.tiktok.com/@' + u}, ${addedById || null}, NOW(), NOW())
-        ON CONFLICT (username) DO UPDATE SET updated_at = NOW()
+        INSERT INTO creators (username, link_account, added_by)
+        VALUES (${u}, ${'https://www.tiktok.com/@' + u}, ${addedById || null})
+        ON CONFLICT (username) DO UPDATE SET link_account = EXCLUDED.link_account
       `);
     }
 
@@ -1237,19 +1250,19 @@ export async function commitBulkImportVideosAction(
             campaign_id, creator_id, tier, price, qty_vt, qty_live, content_type,
             approval, pic_assist, notes_manager, notes_pic, sample_progress,
             gmv_organic_legacy, gmv_ads_legacy, status_bayar, nominal_pelunasan,
-            client_approval, added_by, created_at, updated_at
+            client_approval, added_by
           ) VALUES (
             ${campaignId}, ${creatorId}, 'Nano', 0, ${vidsCount}, 0, 'Video',
             'approved', ${picName || '-'}, '', '', 'Belum',
             0, 0, 'belum', 0,
-            'not_required', ${addedById || null}, NOW(), NOW()
+            'not_required', ${addedById || null}
           )
         `);
 
         // Insert initial snapshot
         await db.execute(sql`
-          INSERT INTO creator_snapshots (creator_id, followers, gmv_30d, gmv_30d_video, gmv_30d_live, ratecard, tier, tanggal_update, updated_by)
-          VALUES (${creatorId}, 0, 0, 0, 0, 0, 'Nano', CURRENT_DATE, ${picName || 'Bulk Import'})
+          INSERT INTO creator_snapshots (creator_id, followers, gmv_30d, gmv_30d_organic, gmv_30d_live, tanggal_update, updated_by)
+          VALUES (${creatorId}, 0, 0, 0, 0, CURRENT_DATE, ${picName || 'Bulk Import'})
           ON CONFLICT DO NOTHING
         `);
       }
@@ -1269,7 +1282,6 @@ export async function commitBulkImportVideosAction(
 
     // 4. For each creator, get current MAX(urutan) and insert new video entries
     let insertedTotal = 0;
-    const nowIso = new Date().toISOString();
 
     for (const [u, creatorItems] of creatorGroup.entries()) {
       const ccId = ccIdMap.get(u);
@@ -1286,10 +1298,10 @@ export async function commitBulkImportVideosAction(
         await db.execute(sql`
           INSERT INTO videos (
             campaign_creator_id, urutan, concept, link_video, content_uid, sku_id,
-            vt_approval, added_by, created_at, updated_at
+            vt_approval, added_by
           ) VALUES (
             ${ccId}, ${currentUrutan}, '', ${finalUrl}, ${item.videoId}, ${item.skuId || null},
-            'pending', ${picName || 'PIC'}, ${nowIso}, ${nowIso}
+            'pending', ${picName || 'PIC'}
           )
         `);
         insertedTotal++;
@@ -1299,8 +1311,7 @@ export async function commitBulkImportVideosAction(
       await db.execute(sql`
         UPDATE campaign_creators
         SET qty_vt = GREATEST(qty_vt, ${currentUrutan}),
-            approval = 'approved',
-            updated_at = NOW()
+            approval = 'approved'
         WHERE id = ${ccId}
       `);
     }
