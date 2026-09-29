@@ -163,20 +163,26 @@ export default function CampaignPerformaClient({ campaignId }: { campaignId: num
       let calcUniqueVideos = 0;
       let calcUniqueLivestreams = 0;
 
-      if (currentHasSkus && orgVidsData.length > 0) {
+      // Deduplication sets across TikTok reports and manual PIC inputs
+      const allApprovedVideoIds = new Set<string>();
+      const allPendingVideoIds = new Set<string>();
+      const allUniqueLiveIds = new Set<string>();
+
+      if (currentHasSkus) {
         for (const perf of perfMap.values()) {
           perf.video_views = 0;
           perf.video_likes = 0;
         }
 
+        // 1. Process organic_videos from TikTok reports
         for (const [uid, v] of orgUidMap.entries()) {
           const isLive = v.contentType === 'livestream' || v.contentType === 'live';
           if (!isLive) {
-            calcUniqueVideos++;
+            allApprovedVideoIds.add(uid);
             calcTotalViews += v.views;
             calcTotalLikes += v.likes;
           } else {
-            calcUniqueLivestreams++;
+            allUniqueLiveIds.add(uid);
           }
 
           if (v.creator) {
@@ -191,10 +197,38 @@ export default function CampaignPerformaClient({ campaignId }: { campaignId: num
           }
         }
 
+        // 2. Process manual videos from DB (videos table) to include real-time PIC inputs
+        for (const cc of ccData) {
+          const u = cc.creators?.username?.toLowerCase();
+          const perf = u ? getOrCreatePerf(u) : null;
+          const isApproved = cc.approval === 'approved' || cc.approval === 'alternate';
+          const vids = cc.videos || [];
+
+          for (const v of vids) {
+            if (campaignSkuIds.size > 0 && v.sku_id && !campaignSkuIds.has(v.sku_id)) continue;
+            const id = v.content_uid || (v.link_video ? (v.link_video.match(/video\/(\d+)/)?.[1] || v.link_video) : null);
+            if (id) {
+              if (isApproved) {
+                allApprovedVideoIds.add(id);
+              } else {
+                if (!allApprovedVideoIds.has(id)) {
+                  allPendingVideoIds.add(id);
+                }
+              }
+              if (perf) {
+                perf.video_uids.add(id);
+              }
+            }
+          }
+        }
+
         for (const perf of perfMap.values()) {
           if (perf.video_uids.size > 0) perf.video_count = perf.video_uids.size;
           if (perf.live_uids.size > 0) perf.live_count = perf.live_uids.size;
         }
+
+        calcUniqueVideos = allApprovedVideoIds.size;
+        calcUniqueLivestreams = allUniqueLiveIds.size;
 
         setInitialTotalViews(calcTotalViews);
         setInitialTotalLikes(calcTotalLikes);
@@ -302,10 +336,20 @@ export default function CampaignPerformaClient({ campaignId }: { campaignId: num
 
         if (currentHasSkus) {
           dbVideos.forEach((v: any) => {
-            const id = v.content_uid;
+            const id = v.content_uid || (v.link_video ? (v.link_video.match(/video\/(\d+)/)?.[1] || v.link_video) : null);
             if (id) {
                 uniqueVideoIds.set(id, v.vt_approval || 'approved');
             }
+          });
+
+          // Also include tracked videos from TikTok reports & sales
+          perf.video_uids.forEach((vid: string) => {
+            if (!uniqueVideoIds.has(vid)) {
+              uniqueVideoIds.set(vid, 'approved');
+            }
+          });
+          perf.live_uids.forEach((lid: string) => {
+            uniqueLiveIds.add(lid);
           });
 
           autoSalesVideos.forEach((s: any) => {
@@ -333,9 +377,10 @@ export default function CampaignPerformaClient({ campaignId }: { campaignId: num
         
         if (currentHasSkus) {
           if (cc.approval === 'pending') {
-              pendingVtCount = Math.max(trackedVideos || 0, uniqueVideoIds.size);
+              pendingVtCount = uniqueVideoIds.size;
+              approvedVtCount = 0;
           } else {
-              approvedVtCount = Math.max(trackedVideos || 0, uniqueVideoIds.size);
+              approvedVtCount = uniqueVideoIds.size;
               pendingVtCount = 0;
           }
         }
