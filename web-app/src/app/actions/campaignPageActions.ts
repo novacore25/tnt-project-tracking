@@ -703,6 +703,7 @@ export async function ensureVideoColumns() {
         ALTER TABLE videos ADD COLUMN IF NOT EXISTS link_video text;
         ALTER TABLE videos ADD COLUMN IF NOT EXISTS content_uid text;
         ALTER TABLE videos ADD COLUMN IF NOT EXISTS sku_id integer;
+        ALTER TABLE videos ADD COLUMN IF NOT EXISTS added_by text;
       EXCEPTION
         WHEN OTHERS THEN NULL;
       END $$;
@@ -756,6 +757,7 @@ export async function upsertVideoAction(params: {
   revision_notes?: string;
   revision_notes_updated_by?: string;
   revision_notes_updated_at?: string;
+  added_by?: string;
 }) {
   try {
     await ensureVideoColumns();
@@ -777,6 +779,7 @@ export async function upsertVideoAction(params: {
       if (params.revision_notes !== undefined) sets.push(sql`revision_notes = ${params.revision_notes}`);
       if (params.revision_notes_updated_by !== undefined) sets.push(sql`revision_notes_updated_by = ${params.revision_notes_updated_by}`);
       if (params.revision_notes_updated_at !== undefined) sets.push(sql`revision_notes_updated_at = ${safeDate(params.revision_notes_updated_at)}`);
+      if (params.added_by !== undefined) sets.push(sql`added_by = ${params.added_by}`);
 
       if (sets.length === 0) return { success: true, data: null };
       const rows = await db.execute(sql`
@@ -798,7 +801,7 @@ export async function upsertVideoAction(params: {
           campaign_creator_id, urutan, concept, concept_updated_at, concept_updated_by,
           link_draft, link_draft_updated_by, link_draft_updated_at,
           link_video, content_uid, sku_id, vt_approval, vt_approved_by, vt_approved_at,
-          revision_notes, revision_notes_updated_by, revision_notes_updated_at
+          revision_notes, revision_notes_updated_by, revision_notes_updated_at, added_by
         ) VALUES (
           ${params.campaign_creator_id}, ${params.urutan}, ${params.concept || ''},
           ${safeDate(params.concept_updated_at)},
@@ -814,7 +817,8 @@ export async function upsertVideoAction(params: {
           ${safeDate(params.vt_approved_at)},
           ${params.revision_notes || null},
           ${params.revision_notes_updated_by || null},
-          ${safeDate(params.revision_notes_updated_at)}
+          ${safeDate(params.revision_notes_updated_at)},
+          ${params.added_by || null}
         ) RETURNING *
       `) as any[];
       return { success: true, data: rows[0] || null };
@@ -832,12 +836,13 @@ export async function insertVideoAction(params: {
   content_uid?: string;
   sku_id?: number | null;
   vt_approval?: string;
+  added_by?: string;
 }) {
   try {
     await ensureVideoColumns();
     const rows = await db.execute(sql`
-      INSERT INTO videos (campaign_creator_id, urutan, concept, link_video, content_uid, sku_id, vt_approval)
-      VALUES (${params.campaign_creator_id}, ${params.urutan}, ${params.concept || ''}, ${params.link_video || ''}, ${params.content_uid || null}, ${params.sku_id || null}, ${params.vt_approval || 'pending'})
+      INSERT INTO videos (campaign_creator_id, urutan, concept, link_video, content_uid, sku_id, vt_approval, added_by)
+      VALUES (${params.campaign_creator_id}, ${params.urutan}, ${params.concept || ''}, ${params.link_video || ''}, ${params.content_uid || null}, ${params.sku_id || null}, ${params.vt_approval || 'pending'}, ${params.added_by || null})
       RETURNING *
     `) as any[];
     return { success: true, data: rows[0] || null };
@@ -848,6 +853,30 @@ export async function insertVideoAction(params: {
 
 export async function deleteVideoAction(videoId: number) {
   try {
+    // Backend Safeguard: Cek apakah video sudah terhubung ke data TikTok (organic_videos atau sales)
+    const connected = (await db.execute(sql`
+      SELECT v.id FROM videos v
+      WHERE v.id = ${videoId}
+        AND v.content_uid IS NOT NULL
+        AND (
+          EXISTS (
+            SELECT 1 FROM organic_videos ov 
+            WHERE (ov.content_uid = v.content_uid OR ov.content_uid = REPLACE(v.content_uid, 'video_', ''))
+              AND (ov.video_views > 0 OR ov.video_likes > 0)
+          )
+          OR EXISTS (
+            SELECT 1 FROM sales s 
+            WHERE (s.content_uid = v.content_uid OR s.content_uid = REPLACE(v.content_uid, 'video_', ''))
+          )
+        )
+    `)) as any[];
+    if (connected && connected.length > 0) {
+      return { 
+        success: false, 
+        error: 'Video ini sudah terhubung dengan data TikTok (views/penjualan) dan tidak dapat dihapus demi integritas data.' 
+      };
+    }
+
     await db.execute(sql`DELETE FROM videos WHERE id = ${videoId}`);
     return { success: true };
   } catch (err: any) {
@@ -858,6 +887,33 @@ export async function deleteVideoAction(videoId: number) {
 export async function deleteVideosAction(videoIds: number[]) {
   if (!videoIds || videoIds.length === 0) return { success: true };
   try {
+    // Backend Safeguard: Cek apakah ada video yang sudah terhubung dengan data TikTok (organic_videos atau sales)
+    const connectedVideos = (await db.execute(sql`
+      SELECT v.id, v.content_uid 
+      FROM videos v
+      WHERE v.id IN ${sqlInList(videoIds)}
+        AND v.content_uid IS NOT NULL
+        AND (
+          EXISTS (
+            SELECT 1 FROM organic_videos ov 
+            WHERE (ov.content_uid = v.content_uid OR ov.content_uid = REPLACE(v.content_uid, 'video_', ''))
+              AND (ov.video_views > 0 OR ov.video_likes > 0)
+          )
+          OR EXISTS (
+            SELECT 1 FROM sales s 
+            WHERE (s.content_uid = v.content_uid OR s.content_uid = REPLACE(v.content_uid, 'video_', ''))
+          )
+        )
+    `)) as any[];
+
+    if (connectedVideos && connectedVideos.length > 0) {
+      const ids = connectedVideos.map((r: any) => r.id).join(', ');
+      return { 
+        success: false, 
+        error: `Tindakan dibatalkan: Ada ${connectedVideos.length} video (ID: ${ids}) yang sudah terhubung dengan data TikTok (views/penjualan). Video yang memiliki data TikTok tidak dapat dihapus.` 
+      };
+    }
+
     await db.execute(sql`DELETE FROM videos WHERE id IN ${sqlInList(videoIds)}`);
     return { success: true };
   } catch (err: any) {
@@ -872,14 +928,15 @@ export async function bulkInsertVideosAction(videoList: Array<{
   link_video?: string;
   content_uid?: string;
   vt_approval?: string;
+  added_by?: string;
 }>) {
   if (!videoList || videoList.length === 0) return { success: true };
   try {
     await ensureVideoColumns();
     for (const v of videoList) {
       await db.execute(sql`
-        INSERT INTO videos (campaign_creator_id, urutan, concept, link_video, content_uid, vt_approval)
-        VALUES (${v.campaign_creator_id}, ${v.urutan}, ${v.concept || ''}, ${v.link_video || null}, ${v.content_uid || null}, ${v.vt_approval || 'pending'})
+        INSERT INTO videos (campaign_creator_id, urutan, concept, link_video, content_uid, vt_approval, added_by)
+        VALUES (${v.campaign_creator_id}, ${v.urutan}, ${v.concept || ''}, ${v.link_video || null}, ${v.content_uid || null}, ${v.vt_approval || 'pending'}, ${v.added_by || null})
       `);
     }
     return { success: true };
@@ -1229,10 +1286,10 @@ export async function commitBulkImportVideosAction(
         await db.execute(sql`
           INSERT INTO videos (
             campaign_creator_id, urutan, concept, link_video, content_uid, sku_id,
-            vt_approval, created_at, updated_at
+            vt_approval, added_by, created_at, updated_at
           ) VALUES (
             ${ccId}, ${currentUrutan}, '', ${finalUrl}, ${item.videoId}, ${item.skuId || null},
-            'pending', ${nowIso}, ${nowIso}
+            'pending', ${picName || 'PIC'}, ${nowIso}, ${nowIso}
           )
         `);
         insertedTotal++;

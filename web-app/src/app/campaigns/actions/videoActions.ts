@@ -87,6 +87,7 @@ export async function getInternalVideoData(campaignId: number, searchKeyword: st
               'revision_notes_updated_at', v.revision_notes_updated_at,
               'content_uid', v.content_uid,
               'sku_id', v.sku_id,
+              'added_by', v.added_by,
               'created_at', v.created_at
             ) ORDER BY v.urutan ASC)
             FROM videos v WHERE v.campaign_creator_id = cc.id

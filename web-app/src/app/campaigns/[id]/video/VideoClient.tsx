@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useState, useEffect } from "react";
 import { useDatabaseStore } from "@/store/useDatabaseStore";
@@ -7,7 +7,7 @@ import { getCreatorType } from "@/utils/computed";
 import { formatDateTime, formatDateTimeShort, formatDate } from "@/utils/formatters";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { AlertCircle, Link as LinkIcon, Save, Edit2, Loader2, ChevronDown, ChevronRight, Plus, PlayCircle, X, Download, ExternalLink, CheckCircle2, Clock, Film, FileVideo, RotateCw, Calendar, Info } from "lucide-react";
+import { AlertCircle, Link as LinkIcon, Save, Edit2, Loader2, ChevronDown, ChevronRight, Plus, PlayCircle, X, Download, ExternalLink, CheckCircle2, Clock, Film, FileVideo, RotateCw, Calendar, Info, History, Lock, Trash2, Check, Copy, Search, AlertTriangle, ShieldCheck } from "lucide-react";
 import { Dialog, DialogContent } from "@/components/ui/Dialog";
 import { useAuth } from "@/providers/AuthProvider";
 import { useCampaignFilter } from "@/providers/CampaignFilterProvider";
@@ -167,8 +167,10 @@ export default function CampaignVideoPage({
   const [filterConcept, setFilterConcept] = useState('');
   const [sortBy, setSortBy] = useState('latest_post');
   const [expandedGroups, setExpandedGroups] = useState<Set<number>>(new Set());
-  const [clientPage, setClientPage] = useState(1);
-  const [viewMode, setViewMode] = useState<'creator' | 'video' | 'draft' | 'date'>('creator');
+  const [viewMode, setViewMode] = useState<'creator' | 'video' | 'draft' | 'date' | 'audit'>('creator');
+  const [auditFilterStatus, setAuditFilterStatus] = useState<'all' | 'connected' | 'unconnected' | 'pending'>('all');
+  const [auditSearch, setAuditSearch] = useState('');
+  const [copiedId, setCopiedId] = useState<number | null>(null);
   const [isFiltering, setIsFiltering] = useState(false);
 
   // Draft Video specific states
@@ -630,7 +632,8 @@ export default function CampaignVideoPage({
             vt_approved_by: v.vt_approved_by || null,
             vt_approved_at: v.vt_approved_at || null,
             content_uid: finalContentUid,
-            sku_id: v.sku_id ? Number(v.sku_id) : null
+            sku_id: v.sku_id ? Number(v.sku_id) : null,
+            added_by: v.link_video ? (profile?.nama || profile?.username || 'PIC') : undefined
           });
         } else {
           await upsertVideoAction({
@@ -645,7 +648,8 @@ export default function CampaignVideoPage({
             sku_id: v.sku_id ? Number(v.sku_id) : null,
             vt_approval: v.vt_approval || 'approved',
             vt_approved_by: v.vt_approved_by || null,
-            vt_approved_at: v.vt_approved_at || null
+            vt_approved_at: v.vt_approved_at || null,
+            added_by: v.link_video ? (profile?.nama || profile?.username || 'PIC') : undefined
           });
         }
       }
@@ -713,12 +717,16 @@ export default function CampaignVideoPage({
         'link_draft', 'link_draft_updated_by', 'link_draft_updated_at',
         'link_video', 'content_uid', 'sku_id',
         'vt_approval', 'vt_approved_by', 'vt_approved_at',
-        'revision_notes', 'revision_notes_updated_by', 'revision_notes_updated_at'
+        'revision_notes', 'revision_notes_updated_by', 'revision_notes_updated_at',
+        'added_by'
       ];
       for (const k of allowedKeys) {
         if (k in fields && fields[k] !== undefined) {
           cleanFields[k] = fields[k];
         }
+      }
+      if (fields.link_video && !cleanFields.added_by) {
+        cleanFields.added_by = profile?.nama || profile?.username || 'PIC';
       }
 
       const res = await upsertVideoAction({
@@ -1062,7 +1070,8 @@ export default function CampaignVideoPage({
             concept: '',
             link_video: r.expanded,
             content_uid: r.videoId,
-            vt_approval: r.status === 'valid_new_creator' ? 'pending' : 'approved'
+            vt_approval: r.status === 'valid_new_creator' ? 'pending' : 'approved',
+            added_by: profile?.nama || profile?.username || 'PIC'
           });
           nextUrutan++;
        }
@@ -1118,6 +1127,34 @@ export default function CampaignVideoPage({
 
       setSelectedHistoryIds(new Set());
       alert(`Berhasil menghapus ${idsToDelete.length} video.`);
+    } catch (err: any) {
+      alert('Gagal menghapus video: ' + err.message);
+    } finally {
+      setDeletingHistory(false);
+    }
+  };
+
+  const handleDeleteSingleVideo = async (vidId: number) => {
+    if (!confirm('Yakin ingin menghapus video ini dari database? Tindakan ini tidak dapat dibatalkan.')) return;
+
+    setDeletingHistory(true);
+    try {
+      const res = await deleteVideosAction([vidId]);
+      if (!res.success) throw new Error(res.error);
+
+      setLocalVideos(prev => prev.filter(v => v.id !== vidId));
+      setListingData(prev => prev.map(cc => ({
+        ...cc,
+        videos: (cc.videos || []).filter((v: any) => v.id !== vidId)
+      })));
+      await fetchData();
+
+      setSelectedHistoryIds(prev => {
+        const next = new Set(prev);
+        next.delete(vidId);
+        return next;
+      });
+      alert('Video berhasil dihapus.');
     } catch (err: any) {
       alert('Gagal menghapus video: ' + err.message);
     } finally {
@@ -1664,7 +1701,6 @@ export default function CampaignVideoPage({
   const hasMoreDrafts = processedDraftsData.length > visibleDraftsData.length;
 
   const historyVideos = React.useMemo(() => {
-    if (!historyOpen) return [];
     const sourceVids = localVideos.length > 0 ? localVideos : (initialVideos && initialVideos.length > 0 ? initialVideos : listingData.flatMap(c => c.videos || []));
     
     // Hanya video yang memiliki ID, created_at, dan link_video terisi (bukan slot draft kosong)
@@ -1676,6 +1712,8 @@ export default function CampaignVideoPage({
       let cc = listingData.find(c => c.id === v.campaign_creator_id);
       let username = cc?.creators?.username;
       let namaAsli = cc?.creators?.nama_asli;
+      let approval = cc?.approval || 'pending';
+      let picAssist = cc?.pic_assist || '-';
 
       // 2. Fallback: Cari dari initialListingData jika ada
       if (!username && Array.isArray(initialListingData)) {
@@ -1683,6 +1721,8 @@ export default function CampaignVideoPage({
         if (initCc) {
           username = initCc.creators?.username;
           namaAsli = initCc.creators?.nama_asli;
+          approval = initCc.approval || approval;
+          picAssist = initCc.pic_assist || picAssist;
         }
       }
 
@@ -1694,20 +1734,104 @@ export default function CampaignVideoPage({
           if (storeCreator) {
             username = storeCreator.username;
             namaAsli = storeCreator.nama_asli;
+            approval = storeCc.approval || approval;
+            picAssist = storeCc.pic_assist || picAssist;
           }
+        }
+      }
+
+      // 4. Cari performa TikTok dari cc._videoStats
+      const vStats = cc?._videoStats || [];
+      const cUid = v.content_uid ? String(v.content_uid).trim() : '';
+      const cUidClean = cUid.replace(/^video_/, '');
+      const linkMatch = v.link_video ? v.link_video.match(/video\/(\d+)/) : null;
+      const parsedUid = linkMatch ? linkMatch[1] : '';
+
+      const matchedStat = vStats.find((s: any) => {
+        const sUid = String(s.content_uid || '').trim();
+        const sClean = sUid.replace(/^video_/, '');
+        return (cUid && (sUid === cUid || sClean === cUidClean)) ||
+               (parsedUid && (sUid === parsedUid || sClean === parsedUid));
+      });
+
+      const views = Number(matchedStat?.views) || 0;
+      const likes = Number(matchedStat?.likes) || 0;
+      const gmv = Number(matchedStat?.gmv) || 0;
+      const isConnected = Boolean(matchedStat && (views > 0 || likes > 0 || gmv > 0));
+
+      // Diagnosa status koneksi TikTok
+      let diagnosa = '';
+      let diagnosaType: 'success' | 'warning' | 'error' | 'info' = 'info';
+
+      if (isConnected) {
+        diagnosa = 'Terkoneksi dengan data TikTok (Views / Sales aktif)';
+        diagnosaType = 'success';
+      } else {
+        if (approval.toLowerCase() !== 'approved') {
+          diagnosa = `Kreator masih '${approval}' di listingan (belum di-approve)`;
+          diagnosaType = 'warning';
+        } else if (!cUid && !parsedUid) {
+          diagnosa = 'Format Link tidak valid (ID Video TikTok tidak terbaca)';
+          diagnosaType = 'error';
+        } else {
+          diagnosa = 'Belum ada data di laporan TikTok (tunggu sync Excel / AutoSync atau belum ada views/penjualan)';
+          diagnosaType = 'info';
         }
       }
 
       return {
         ...v,
         creatorUsername: username || '-',
-        creatorName: namaAsli || '-'
+        creatorName: namaAsli || '-',
+        approval,
+        picAssist: v.added_by || picAssist,
+        views,
+        likes,
+        gmv,
+        isConnected,
+        diagnosa,
+        diagnosaType,
+        extractedUid: cUid || parsedUid || '-'
       };
     });
-  }, [localVideos, initialVideos, listingData, initialListingData, campaign_creators, creators, historyOpen]);
-  const HISTORY_PAGE_SIZE = 15;
-  const paginatedHistoryVideos = historyVideos.slice(historyPage * HISTORY_PAGE_SIZE, (historyPage + 1) * HISTORY_PAGE_SIZE);
-  const totalHistoryPages = Math.ceil(historyVideos.length / HISTORY_PAGE_SIZE);
+  }, [localVideos, initialVideos, listingData, initialListingData, campaign_creators, creators]);
+
+  const filteredAuditVideos = React.useMemo(() => {
+    let list = historyVideos;
+
+    if (auditFilterStatus === 'connected') {
+      list = list.filter(v => v.isConnected);
+    } else if (auditFilterStatus === 'unconnected') {
+      list = list.filter(v => !v.isConnected);
+    } else if (auditFilterStatus === 'pending') {
+      list = list.filter(v => v.approval.toLowerCase() !== 'approved');
+    }
+
+    if (auditSearch.trim()) {
+      const q = auditSearch.toLowerCase().trim();
+      list = list.filter(v => 
+        v.creatorUsername?.toLowerCase().includes(q) ||
+        v.creatorName?.toLowerCase().includes(q) ||
+        v.link_video?.toLowerCase().includes(q) ||
+        String(v.extractedUid).includes(q) ||
+        String(v.picAssist).toLowerCase().includes(q)
+      );
+    }
+
+    return list;
+  }, [historyVideos, auditFilterStatus, auditSearch]);
+
+  const auditSummaryStats = React.useMemo(() => {
+    const total = historyVideos.length;
+    const connected = historyVideos.filter(v => v.isConnected).length;
+    const unconnected = total - connected;
+    const pending = historyVideos.filter(v => v.approval.toLowerCase() !== 'approved').length;
+    return { total, connected, unconnected, pending };
+  }, [historyVideos]);
+
+  const AUDIT_PAGE_SIZE = 20;
+  const paginatedAuditVideos = filteredAuditVideos.slice(auditPage * AUDIT_PAGE_SIZE, (auditPage + 1) * AUDIT_PAGE_SIZE);
+  const totalAuditPages = Math.max(1, Math.ceil(filteredAuditVideos.length / AUDIT_PAGE_SIZE));
 
   return (
     <>
@@ -1772,7 +1896,23 @@ export default function CampaignVideoPage({
                        </span>
                      )}
                    </button>
-                </div>
+                    <div className="w-[1px] bg-slate-200"></div>
+                    <button 
+                      onClick={() => {
+                        setViewMode('audit');
+                        setSelectedHistoryIds(new Set());
+                      }}
+                      className={`px-4 py-2 text-sm font-semibold transition-colors flex items-center gap-1.5 ${viewMode === 'audit' ? 'bg-indigo-50 text-indigo-700' : 'text-slate-600 hover:bg-slate-50'}`}
+                    >
+                      <History className="w-4 h-4" />
+                      Riwayat & Audit Import
+                      {auditSummaryStats.unconnected > 0 && (
+                        <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 ml-1" title={`${auditSummaryStats.unconnected} video belum terkoneksi data TikTok`}>
+                          {auditSummaryStats.unconnected}
+                        </span>
+                      )}
+                    </button>
+                 </div>
                 <div className="flex items-center gap-2">
                   <button 
                     onClick={handleManualRefresh} 
@@ -1787,18 +1927,9 @@ export default function CampaignVideoPage({
                      {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />} Export
                   </button>
                   {hasAccess && (
-                    <>
-                      <button onClick={() => {
-                        setHistoryOpen(true);
-                        setHistoryPage(0);
-                        setSelectedHistoryIds(new Set());
-                      }} className="btn bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 flex items-center gap-2 whitespace-nowrap h-fit">
-                         Aktivitas Import Terakhir
-                      </button>
-                      <Link href={`/campaigns/${campaignId}/video/import`} className="btn btn-primary flex items-center gap-2 whitespace-nowrap h-fit">
-                         <Plus className="w-4 h-4" /> Bulk Import Link
-                      </Link>
-                    </>
+                    <Link href={`/campaigns/${campaignId}/video/import`} className="btn btn-primary flex items-center gap-2 whitespace-nowrap h-fit">
+                       <Plus className="w-4 h-4" /> Bulk Import Link
+                    </Link>
                   )}
                 </div>
               </div>
@@ -2709,6 +2840,347 @@ export default function CampaignVideoPage({
               </div>
             )}
           </div>
+        ) : viewMode === 'audit' ? (
+          <div className="space-y-6 pb-[24px]">
+            {/* Summary Stat Cards */}
+            <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              <button 
+                onClick={() => { setAuditFilterStatus('all'); setAuditPage(0); }} 
+                className={`p-4 rounded-xl border text-left transition-all ${auditFilterStatus === 'all' ? 'bg-indigo-50/80 border-indigo-300 ring-2 ring-indigo-200' : 'bg-white border-slate-200 hover:bg-slate-50'}`}
+              >
+                <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Total Video Diimport</div>
+                <div className="text-2xl font-bold text-slate-800 mt-1">{auditSummaryStats.total}</div>
+                <div className="text-[11px] text-slate-400 mt-0.5">Semua link video yang terdaftar</div>
+              </button>
+
+              <button 
+                onClick={() => { setAuditFilterStatus('connected'); setAuditPage(0); }} 
+                className={`p-4 rounded-xl border text-left transition-all ${auditFilterStatus === 'connected' ? 'bg-emerald-50 border-emerald-300 ring-2 ring-emerald-200' : 'bg-white border-slate-200 hover:bg-slate-50'}`}
+              >
+                <div className="flex items-center gap-1.5 text-[11px] font-bold text-emerald-700 uppercase tracking-wider">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                  Terkoneksi TikTok
+                </div>
+                <div className="text-2xl font-bold text-emerald-800 mt-1">{auditSummaryStats.connected}</div>
+                <div className="text-[11px] text-emerald-600 mt-0.5">Sudah ada views/sales di TikTok</div>
+              </button>
+
+              <button 
+                onClick={() => { setAuditFilterStatus('unconnected'); setAuditPage(0); }} 
+                className={`p-4 rounded-xl border text-left transition-all ${auditFilterStatus === 'unconnected' ? 'bg-amber-50 border-amber-300 ring-2 ring-amber-200' : 'bg-white border-slate-200 hover:bg-slate-50'}`}
+              >
+                <div className="flex items-center gap-1.5 text-[11px] font-bold text-amber-700 uppercase tracking-wider">
+                  <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+                  Belum Terkoneksi
+                </div>
+                <div className="text-2xl font-bold text-amber-800 mt-1">{auditSummaryStats.unconnected}</div>
+                <div className="text-[11px] text-amber-600 mt-0.5">Belum ada metrik / bisa dihapus</div>
+              </button>
+
+              <button 
+                onClick={() => { setAuditFilterStatus('pending'); setAuditPage(0); }} 
+                className={`p-4 rounded-xl border text-left transition-all ${auditFilterStatus === 'pending' ? 'bg-rose-50 border-rose-300 ring-2 ring-rose-200' : 'bg-white border-slate-200 hover:bg-slate-50'}`}
+              >
+                <div className="flex items-center gap-1.5 text-[11px] font-bold text-rose-700 uppercase tracking-wider">
+                  <Clock className="w-3.5 h-3.5 text-rose-600" />
+                  Kreator Pending
+                </div>
+                <div className="text-2xl font-bold text-rose-800 mt-1">{auditSummaryStats.pending}</div>
+                <div className="text-[11px] text-rose-600 mt-0.5">Belum di-approve di listingan</div>
+              </button>
+            </div>
+
+            {/* Toolbar Filter & Batch Action */}
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-4">
+              <div className="flex items-center gap-3 flex-1 min-w-[280px]">
+                <div className="relative flex-1 max-w-md">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={auditSearch}
+                    onChange={(e) => { setAuditSearch(e.target.value); setAuditPage(0); }}
+                    placeholder="Cari username, nama kreator, PIC, atau ID video..."
+                    className="input w-full pl-9 text-xs"
+                  />
+                  {auditSearch && (
+                    <button onClick={() => setAuditSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg text-xs font-medium">
+                  <button 
+                    onClick={() => { setAuditFilterStatus('all'); setAuditPage(0); }} 
+                    className={`px-2.5 py-1 rounded-md transition-colors ${auditFilterStatus === 'all' ? 'bg-white text-slate-800 shadow-xs font-semibold' : 'text-slate-600 hover:text-slate-900'}`}
+                  >
+                    Semua ({auditSummaryStats.total})
+                  </button>
+                  <button 
+                    onClick={() => { setAuditFilterStatus('connected'); setAuditPage(0); }} 
+                    className={`px-2.5 py-1 rounded-md transition-colors ${auditFilterStatus === 'connected' ? 'bg-white text-emerald-700 shadow-xs font-semibold' : 'text-slate-600 hover:text-slate-900'}`}
+                  >
+                    Terkoneksi ({auditSummaryStats.connected})
+                  </button>
+                  <button 
+                    onClick={() => { setAuditFilterStatus('unconnected'); setAuditPage(0); }} 
+                    className={`px-2.5 py-1 rounded-md transition-colors ${auditFilterStatus === 'unconnected' ? 'bg-white text-amber-700 shadow-xs font-semibold' : 'text-slate-600 hover:text-slate-900'}`}
+                  >
+                    Belum Konek ({auditSummaryStats.unconnected})
+                  </button>
+                  <button 
+                    onClick={() => { setAuditFilterStatus('pending'); setAuditPage(0); }} 
+                    className={`px-2.5 py-1 rounded-md transition-colors ${auditFilterStatus === 'pending' ? 'bg-white text-rose-700 shadow-xs font-semibold' : 'text-slate-600 hover:text-slate-900'}`}
+                  >
+                    Pending ({auditSummaryStats.pending})
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                {selectedHistoryIds.size > 0 && (
+                  <button 
+                    onClick={handleDeleteHistoryBatch}
+                    disabled={deletingHistory}
+                    className="btn bg-rose-50 text-rose-600 hover:bg-rose-100 border border-rose-200 text-xs py-2 px-3 flex items-center gap-1.5 shadow-sm font-semibold"
+                  >
+                    {deletingHistory ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                    Hapus Terpilih ({selectedHistoryIds.size})
+                  </button>
+                )}
+                <Link href={`/campaigns/${campaignId}/video/import`} className="btn btn-primary text-xs flex items-center gap-1.5 py-2 px-3">
+                  <Plus className="w-3.5 h-3.5" /> Bulk Import Link
+                </Link>
+              </div>
+            </div>
+
+            {/* Audit Table */}
+            <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-xs">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm border-collapse min-w-[950px]">
+                  <thead className="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-500">
+                    <tr>
+                      <th className="p-3.5 w-12 text-center">
+                        <input 
+                          type="checkbox" 
+                          className="rounded border-slate-300 text-primary focus:ring-primary"
+                          title="Pilih semua video yang belum terkoneksi"
+                          checked={
+                            paginatedAuditVideos.filter(v => !v.isConnected).length > 0 &&
+                            paginatedAuditVideos.filter(v => !v.isConnected).every(v => selectedHistoryIds.has(v.id))
+                          }
+                          onChange={(e) => {
+                            const newSet = new Set(selectedHistoryIds);
+                            const unconn = paginatedAuditVideos.filter(v => !v.isConnected);
+                            if (e.target.checked) {
+                              unconn.forEach(v => newSet.add(v.id));
+                            } else {
+                              unconn.forEach(v => newSet.delete(v.id));
+                            }
+                            setSelectedHistoryIds(newSet);
+                          }}
+                        />
+                      </th>
+                      <th className="p-3.5">Waktu & Diimport Oleh</th>
+                      <th className="p-3.5">Kreator & Status Listing</th>
+                      <th className="p-3.5">Slot & Link Video TikTok</th>
+                      <th className="p-3.5">Status Koneksi TikTok</th>
+                      <th className="p-3.5">Diagnosa & Keterangan</th>
+                      <th className="p-3.5 text-right">Performa TikTok</th>
+                      <th className="p-3.5 w-16 text-center">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {paginatedAuditVideos.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} className="p-10 text-center text-slate-500 italic">
+                          Tidak ada data video yang sesuai dengan filter audit.
+                        </td>
+                      </tr>
+                    ) : (
+                      paginatedAuditVideos.map((v) => {
+                        const isSelectable = !v.isConnected;
+                        const isChecked = selectedHistoryIds.has(v.id);
+
+                        return (
+                          <tr key={v.id} className={`hover:bg-slate-50/70 transition-colors ${isChecked ? 'bg-indigo-50/30' : ''}`}>
+                            {/* Checkbox */}
+                            <td className="p-3.5 text-center align-top">
+                              {isSelectable ? (
+                                <input 
+                                  type="checkbox" 
+                                  className="rounded border-slate-300 text-primary focus:ring-primary mt-1"
+                                  checked={isChecked}
+                                  onChange={(e) => {
+                                    const next = new Set(selectedHistoryIds);
+                                    if (e.target.checked) next.add(v.id);
+                                    else next.delete(v.id);
+                                    setSelectedHistoryIds(next);
+                                  }}
+                                />
+                              ) : (
+                                <span title="Terkunci: Video sudah memiliki data performa TikTok (views/sales) dan tidak dapat dihapus." className="inline-flex mt-1 text-slate-300 cursor-not-allowed">
+                                  <Lock className="w-4 h-4 text-emerald-600" />
+                                </span>
+                              )}
+                            </td>
+
+                            {/* Waktu & PIC */}
+                            <td className="p-3.5 align-top">
+                              <div className="font-semibold text-slate-800 text-xs">
+                                {new Date(v.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
+                              </div>
+                              <div className="text-[11px] text-slate-400">
+                                {new Date(v.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} WIB
+                              </div>
+                              <div className="mt-1.5 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">
+                                PIC: {v.picAssist}
+                              </div>
+                            </td>
+
+                            {/* Kreator & Status Listing */}
+                            <td className="p-3.5 align-top">
+                              <div className="font-semibold text-slate-800 text-xs">{v.creatorName}</div>
+                              <div className="text-[11px] text-indigo-600 font-mono">@{v.creatorUsername}</div>
+                              <div className="mt-1">
+                                {v.approval.toLowerCase() === 'approved' ? (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                    <Check className="w-2.5 h-2.5" /> Approved
+                                  </span>
+                                ) : v.approval.toLowerCase() === 'pending' ? (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                                    <Clock className="w-2.5 h-2.5" /> Listing Pending
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                                    {v.approval}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+
+                            {/* Slot & Link Video */}
+                            <td className="p-3.5 align-top">
+                              <div className="text-[11px] font-bold text-slate-700">Slot VT #{v.urutan}</div>
+                              <div className="flex items-center gap-1.5 mt-1 max-w-[260px]">
+                                <a 
+                                  href={v.link_video} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer" 
+                                  className="font-mono text-[11px] text-blue-600 hover:underline break-all truncate"
+                                  title={v.link_video}
+                                >
+                                  {v.link_video}
+                                </a>
+                                <button 
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(v.link_video);
+                                    setCopiedId(v.id);
+                                    setTimeout(() => setCopiedId(null), 2000);
+                                  }}
+                                  className="text-slate-400 hover:text-slate-600 p-0.5 shrink-0"
+                                  title="Salin Link"
+                                >
+                                  {copiedId === v.id ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                                </button>
+                              </div>
+                              <div className="text-[10px] text-slate-400 font-mono mt-0.5">
+                                UID: {v.extractedUid}
+                              </div>
+                            </td>
+
+                            {/* Status Koneksi TikTok */}
+                            <td className="p-3.5 align-top">
+                              {v.isConnected ? (
+                                <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-xs">
+                                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                                  Terkoneksi ✅
+                                </div>
+                              ) : (
+                                <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200 shadow-xs">
+                                  <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+                                  Belum Terkoneksi ⚠️
+                                </div>
+                              )}
+                            </td>
+
+                            {/* Diagnosa */}
+                            <td className="p-3.5 align-top max-w-[240px]">
+                              <p className={`text-xs leading-relaxed ${v.diagnosaType === 'success' ? 'text-emerald-700 font-medium' : v.diagnosaType === 'warning' ? 'text-amber-800 font-medium' : v.diagnosaType === 'error' ? 'text-rose-700 font-medium' : 'text-slate-600'}`}>
+                                {v.diagnosa}
+                              </p>
+                            </td>
+
+                            {/* Performa TikTok */}
+                            <td className="p-3.5 align-top text-right">
+                              {v.isConnected ? (
+                                <div>
+                                  <div className="font-bold text-slate-800 text-xs">
+                                    {v.views.toLocaleString('id-ID')} <span className="font-normal text-[10px] text-slate-400">views</span>
+                                  </div>
+                                  <div className="text-[11px] text-slate-500">
+                                    {v.likes.toLocaleString('id-ID')} <span className="text-[10px]">likes</span>
+                                  </div>
+                                  {v.gmv > 0 && (
+                                    <div className="font-bold text-emerald-600 text-xs mt-0.5">
+                                      Rp {v.gmv.toLocaleString('id-ID')}
+                                    </div>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="text-slate-400 italic text-xs">0 views</span>
+                              )}
+                            </td>
+
+                            {/* Aksi Hapus */}
+                            <td className="p-3.5 text-center align-top">
+                              {isSelectable ? (
+                                <button
+                                  onClick={() => handleDeleteSingleVideo(v.id)}
+                                  disabled={deletingHistory}
+                                  title="Hapus video ini dari database"
+                                  className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              ) : (
+                                <div title="Terkunci: Video memiliki data performa TikTok" className="p-1.5 text-slate-300 flex justify-center cursor-not-allowed">
+                                  <Lock className="w-4 h-4 text-emerald-600/70" />
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Pagination */}
+              {totalAuditPages > 1 && (
+                <div className="p-3.5 border-t border-slate-200 flex justify-between items-center bg-slate-50 text-xs">
+                  <button 
+                    disabled={auditPage === 0}
+                    onClick={() => setAuditPage(p => p - 1)}
+                    className="btn btn-outline text-xs py-1.5 px-3"
+                  >
+                    Sebelumnya
+                  </button>
+                  <span className="text-slate-600 font-medium">
+                    Halaman {auditPage + 1} dari {totalAuditPages} ({filteredAuditVideos.length} total video)
+                  </span>
+                  <button 
+                    disabled={auditPage >= totalAuditPages - 1}
+                    onClick={() => setAuditPage(p => p + 1)}
+                    className="btn btn-outline text-xs py-1.5 px-3"
+                  >
+                    Selanjutnya
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
         ) : (
           <div className="space-y-6 pb-[24px]">
             {/* Summary Stat Cards */}
@@ -3365,121 +3837,7 @@ export default function CampaignVideoPage({
         </DialogContent>
       </Dialog>
 
-      <Dialog open={historyOpen} onOpenChange={setHistoryOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col p-0 overflow-hidden bg-white">
-          <div className="p-6 border-b border-line flex justify-between items-center bg-white shrink-0">
-            <h2 className="text-xl font-bold">Aktivitas Import Video Terbaru</h2>
-            <button onClick={() => setHistoryOpen(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
-              <X className="w-5 h-5 text-slate-500" />
-            </button>
-          </div>
-          
-          <div className="flex-1 overflow-auto bg-slate-50 p-6">
-            <div className="ccard !p-0 overflow-hidden bg-white border border-slate-200">
-              <div className="p-4 border-b border-line flex justify-between items-center bg-slate-100">
-                <div className="flex items-center gap-4">
-                  <h3 className="font-semibold text-sm">Riwayat Upload</h3>
-                  <span className="text-xs text-text-soft">Total: {historyVideos.length} video</span>
-                </div>
-                {selectedHistoryIds.size > 0 && (
-                  <button 
-                    onClick={handleDeleteHistoryBatch}
-                    disabled={deletingHistory}
-                    className="btn bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 text-xs py-1.5 px-3 flex items-center gap-1"
-                  >
-                    {deletingHistory ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
-                    Hapus Terpilih & Simpan ({selectedHistoryIds.size})
-                  </button>
-                )}
-              </div>
-              <table className="w-full text-left text-sm">
-                <thead className="bg-slate-50 border-b border-line">
-                  <tr>
-                    <th className="p-3 w-10 text-center">
-                      <input 
-                        type="checkbox" 
-                        className="rounded border-slate-300 text-primary focus:ring-primary"
-                        checked={paginatedHistoryVideos.length > 0 && paginatedHistoryVideos.every(v => selectedHistoryIds.has(v.id))}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            const newSet = new Set(selectedHistoryIds);
-                            paginatedHistoryVideos.forEach(v => newSet.add(v.id));
-                            setSelectedHistoryIds(newSet);
-                          } else {
-                            const newSet = new Set(selectedHistoryIds);
-                            paginatedHistoryVideos.forEach(v => newSet.delete(v.id));
-                            setSelectedHistoryIds(newSet);
-                          }
-                        }}
-                      />
-                    </th>
-                    <th className="p-3 font-semibold">Waktu Masuk</th>
-                    <th className="p-3 font-semibold">Kreator</th>
-                    <th className="p-3 font-semibold">Link Video</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-line">
-                  {paginatedHistoryVideos.length === 0 ? (
-                    <tr>
-                      <td colSpan={4} className="p-8 text-center text-slate-500 italic">Belum ada riwayat video.</td>
-                    </tr>
-                  ) : paginatedHistoryVideos.map((v, i) => (
-                    <tr key={v.id} className="hover:bg-slate-50/50">
-                      <td className="p-3 text-center">
-                        <input 
-                          type="checkbox" 
-                          className="rounded border-slate-300 text-primary focus:ring-primary"
-                          checked={selectedHistoryIds.has(v.id)}
-                          onChange={(e) => {
-                            const newSet = new Set(selectedHistoryIds);
-                            if (e.target.checked) newSet.add(v.id);
-                            else newSet.delete(v.id);
-                            setSelectedHistoryIds(newSet);
-                          }}
-                        />
-                      </td>
-                      <td className="p-3">
-                        <div className="font-medium text-slate-700">{new Date(v.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
-                        <div className="text-xs text-text-soft">{new Date(v.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} WIB</div>
-                      </td>
-                      <td className="p-3">
-                        <div className="font-medium text-slate-700">{v.creatorName}</div>
-                        <div className="text-xs text-text-soft">@{v.creatorUsername}</div>
-                      </td>
-                      <td className="p-3">
-                        <a href={v.link_video} target="_blank" rel="noopener noreferrer" className="font-mono text-[11px] text-blue-600 hover:underline break-all block max-w-[300px]">
-                          {v.link_video}
-                        </a>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {totalHistoryPages > 1 && (
-                <div className="p-3 border-t border-line flex justify-between items-center bg-slate-50">
-                  <button 
-                    disabled={historyPage === 0}
-                    onClick={() => setHistoryPage(p => p - 1)}
-                    className="btn btn-outline text-xs py-1 px-2"
-                  >
-                    Sebelumnya
-                  </button>
-                  <span className="text-xs text-slate-500">
-                    Halaman {historyPage + 1} dari {totalHistoryPages}
-                  </span>
-                  <button 
-                    disabled={historyPage >= totalHistoryPages - 1}
-                    onClick={() => setHistoryPage(p => p + 1)}
-                    className="btn btn-outline text-xs py-1 px-2"
-                  >
-                    Selanjutnya
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      {/* Dialog open={historyOpen} was converted to tab Riwayat & Audit Import */}
 
       {/* Modal Brief Konsep */}
       {selectedConcept && (
