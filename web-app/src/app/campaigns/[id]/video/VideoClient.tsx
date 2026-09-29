@@ -89,6 +89,7 @@ export default function CampaignVideoPage({
   
   const { 
     creators, 
+    campaign_creators,
     videos,
     sales,
     skus,
@@ -1103,7 +1104,18 @@ export default function CampaignVideoPage({
       
       if (!res.success) throw new Error(res.error);
       
+      // 1. Update localVideos
       setLocalVideos(prev => prev.filter(v => !selectedHistoryIds.has(v.id)));
+      
+      // 2. Update listingData agar tabel luar langsung bersih seketika
+      setListingData(prev => prev.map(cc => ({
+        ...cc,
+        videos: (cc.videos || []).filter((v: any) => !selectedHistoryIds.has(v.id))
+      })));
+
+      // 3. Fetch data segar dari DB
+      await fetchData();
+
       setSelectedHistoryIds(new Set());
       alert(`Berhasil menghapus ${idsToDelete.length} video.`);
     } catch (err: any) {
@@ -1654,18 +1666,45 @@ export default function CampaignVideoPage({
   const historyVideos = React.useMemo(() => {
     if (!historyOpen) return [];
     const sourceVids = localVideos.length > 0 ? localVideos : (initialVideos && initialVideos.length > 0 ? initialVideos : listingData.flatMap(c => c.videos || []));
-    const videos = sourceVids.filter(v => typeof v.id === 'number' && v.created_at);
+    
+    // Hanya video yang memiliki ID, created_at, dan link_video terisi (bukan slot draft kosong)
+    const videos = sourceVids.filter(v => typeof v.id === 'number' && v.created_at && Boolean(v.link_video));
     videos.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
     
     return videos.map(v => {
-      const cc = listingData.find(c => c.id === v.campaign_creator_id);
+      // 1. Cari dari listingData
+      let cc = listingData.find(c => c.id === v.campaign_creator_id);
+      let username = cc?.creators?.username;
+      let namaAsli = cc?.creators?.nama_asli;
+
+      // 2. Fallback: Cari dari initialListingData jika ada
+      if (!username && Array.isArray(initialListingData)) {
+        const initCc = initialListingData.find(c => c.id === v.campaign_creator_id);
+        if (initCc) {
+          username = initCc.creators?.username;
+          namaAsli = initCc.creators?.nama_asli;
+        }
+      }
+
+      // 3. Fallback: Cari dari store campaign_creators & creators
+      if (!username && Array.isArray(campaign_creators)) {
+        const storeCc = campaign_creators.find(c => c.id === v.campaign_creator_id);
+        if (storeCc && Array.isArray(creators)) {
+          const storeCreator = creators.find(cr => cr.id === storeCc.creator_id);
+          if (storeCreator) {
+            username = storeCreator.username;
+            namaAsli = storeCreator.nama_asli;
+          }
+        }
+      }
+
       return {
         ...v,
-        creatorUsername: cc?.creators?.username || '-',
-        creatorName: cc?.creators?.nama_asli || '-'
+        creatorUsername: username || '-',
+        creatorName: namaAsli || '-'
       };
     });
-  }, [localVideos, initialVideos, listingData, historyOpen]);
+  }, [localVideos, initialVideos, listingData, initialListingData, campaign_creators, creators, historyOpen]);
   const HISTORY_PAGE_SIZE = 15;
   const paginatedHistoryVideos = historyVideos.slice(historyPage * HISTORY_PAGE_SIZE, (historyPage + 1) * HISTORY_PAGE_SIZE);
   const totalHistoryPages = Math.ceil(historyVideos.length / HISTORY_PAGE_SIZE);
@@ -3360,7 +3399,7 @@ export default function CampaignVideoPage({
                       <input 
                         type="checkbox" 
                         className="rounded border-slate-300 text-primary focus:ring-primary"
-                        checked={paginatedHistoryVideos.length > 0 && selectedHistoryIds.size === paginatedHistoryVideos.length}
+                        checked={paginatedHistoryVideos.length > 0 && paginatedHistoryVideos.every(v => selectedHistoryIds.has(v.id))}
                         onChange={(e) => {
                           if (e.target.checked) {
                             const newSet = new Set(selectedHistoryIds);
