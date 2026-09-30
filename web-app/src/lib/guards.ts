@@ -144,3 +144,50 @@ export async function withGuard<T>(
     return { success: false, error: 'Terjadi kesalahan di server.', code: 403 };
   }
 }
+
+function asAuthError(err: unknown): AuthError {
+  if (err instanceof AuthError) return err;
+  console.error('[guard] error tak terduga:', err);
+  return new AuthError('Akses ditolak.', 403);
+}
+
+/**
+ * Untuk action yang harus login saja. Mengembalikan `null` kalau boleh.
+ *
+ * Pola pemakaian di dalam server action:
+ *
+ *   const denied = await requireUserOrError();
+ *   if (denied) return { success: false, error: denied.message };
+ *
+ * Sengaja mengembalikan objek error, bukan melempar: mayoritas action
+ * di project ini sudah mengembalikan `{ success, error }`, dan melempar
+ * akan mengubah bentuk respons sehingga call site di UI ikut error.
+ */
+export async function requireUserOrError(): Promise<AuthError | null> {
+  try {
+    await requireUser();
+    return null;
+  } catch (err) {
+    return asAuthError(err);
+  }
+}
+
+/** Sama seperti `requireUserOrError`, tapi wajib punya salah satu role. */
+export async function requireRoleOrError(...roles: string[]): Promise<AuthError | null> {
+  try {
+    await requireRole(...roles);
+    return null;
+  } catch (err) {
+    return asAuthError(err);
+  }
+}
+
+/** Sama seperti `requireUserOrError`, tapi wajib punya akses ke campaign. */
+export async function requireCampaignAccessOrError(campaignId: number): Promise<AuthError | null> {
+  try {
+    await requireCampaignAccess(campaignId);
+    return null;
+  } catch (err) {
+    return asAuthError(err);
+  }
+}

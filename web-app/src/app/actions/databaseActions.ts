@@ -4,7 +4,7 @@ import { db } from '@/db';
 import { sql } from 'drizzle-orm';
 import { auth } from '@/auth';
 import { revalidatePath } from 'next/cache';
-import { requireRole } from '@/lib/guards';
+import { requireRole, requireUserOrError, requireRoleOrError } from '@/lib/guards';
 
 // ============================================================
 // AUDIT LOG
@@ -60,6 +60,8 @@ export async function addCreatorFullAction(
   contact?: string,
   nicheIds?: number[]
 ) {
+  const denied = await requireUserOrError();
+  if (denied) return { success: false, error: denied.message } as any;
   try {
     // Insert Creator
     const namaAsli = creator.nama_asli || creator.nama_lengkap || null;
@@ -120,6 +122,8 @@ export async function addCreatorFullAction(
 }
 
 export async function updateCreatorAction(id: number, updates: any) {
+  const denied = await requireUserOrError();
+  if (denied) return { success: false, error: denied.message } as any;
   try {
     const sets: any[] = [];
     if (updates.username !== undefined) sets.push(sql`username = ${updates.username}`);
@@ -156,6 +160,8 @@ export async function updateCreatorAction(id: number, updates: any) {
 }
 
 export async function addCreatorSnapshotAction(snapshot: any) {
+  const denied = await requireUserOrError();
+  if (denied) return { success: false, error: denied.message } as any;
   try {
     // Check for same-date snapshot
     const snapshotDate = snapshot.tanggal_update ? new Date(snapshot.tanggal_update).toISOString().split('T')[0] : null;
@@ -208,6 +214,8 @@ export async function addCreatorSnapshotAction(snapshot: any) {
 }
 
 export async function updateCreatorContactAction(creatorId: number, newNomor: string) {
+  const denied = await requireUserOrError();
+  if (denied) return { success: false, error: denied.message } as any;
   try {
     const today = new Date().toISOString().split('T')[0];
 
@@ -254,6 +262,8 @@ export async function updateCreatorContactAction(creatorId: number, newNomor: st
 }
 
 export async function updateCreatorNichesAction(creatorId: number, nicheIds: number[]) {
+  const denied = await requireUserOrError();
+  if (denied) return { success: false, error: denied.message } as any;
   try {
     // Delete old niches
     await db.execute(sql`DELETE FROM creator_niches WHERE creator_id = ${creatorId}`);
@@ -278,6 +288,8 @@ export async function updateCreatorNichesAction(creatorId: number, nicheIds: num
 }
 
 export async function addCreatorNoteAction(note: any) {
+  const denied = await requireUserOrError();
+  if (denied) return { success: false, error: denied.message } as any;
   try {
     const [data] = await db.execute(sql`
       INSERT INTO creator_notes (creator_id, user_name, isi)
@@ -292,6 +304,8 @@ export async function addCreatorNoteAction(note: any) {
 }
 
 export async function fetchCreatorNotesAction(creatorId: number) {
+  const denied = await requireUserOrError();
+  if (denied) return { success: false, error: denied.message } as any;
   try {
     const data = await db.execute(sql`
       SELECT * FROM creator_notes WHERE creator_id = ${creatorId} ORDER BY created_at DESC
@@ -303,6 +317,8 @@ export async function fetchCreatorNotesAction(creatorId: number) {
 }
 
 export async function saveCreatorAddressBookAction(payload: any) {
+  const denied = await requireUserOrError();
+  if (denied) return { success: false, error: denied.message } as any;
   try {
     if (payload.id) {
       const [updated] = await db.execute(sql`
@@ -334,6 +350,8 @@ export async function saveCreatorAddressBookAction(payload: any) {
 }
 
 export async function deleteCreatorAddressBookAction(id: number, creatorId: number) {
+  const denied = await requireUserOrError();
+  if (denied) return { success: false, error: denied.message } as any;
   try {
     await db.execute(sql`DELETE FROM creator_address_book WHERE id = ${id}`);
     const data = await db.execute(sql`
@@ -369,6 +387,8 @@ async function ensureCampaignCreatorColumns() {
 }
 
 export async function addCampaignCreatorAction(cc: any) {
+  const denied = await requireUserOrError();
+  if (denied) return { success: false, error: denied.message } as any;
   try {
     await ensureCampaignCreatorColumns();
     const contentType = cc.content_type || cc.tipe_konten || 'Video';
@@ -398,6 +418,8 @@ export async function addCampaignCreatorAction(cc: any) {
 }
 
 export async function updateCampaignCreatorAction(id: number, updates: any) {
+  const denied = await requireUserOrError();
+  if (denied) return { success: false, error: denied.message } as any;
   try {
     await ensureCampaignCreatorColumns();
     const sets: any[] = [];
@@ -483,6 +505,8 @@ export async function updateCampaignCreatorAction(id: number, updates: any) {
 }
 
 export async function deleteCampaignCreatorAction(id: number) {
+  const denied = await requireRoleOrError('manager', 'executive', 'admin');
+  if (denied) return { success: false, error: denied.message } as any;
   try {
     await db.execute(sql`DELETE FROM campaign_creators WHERE id = ${id}`);
     return { success: true };
@@ -496,6 +520,8 @@ export async function deleteCampaignCreatorAction(id: number) {
 // VIDEOS
 // ============================================================
 export async function addVideoAction(video: any) {
+  const denied = await requireUserOrError();
+  if (denied) return { success: false, error: denied.message } as any;
   try {
     const [data] = await db.execute(sql`
       INSERT INTO videos (campaign_creator_id, link, vt_approval, jenis)
@@ -510,6 +536,8 @@ export async function addVideoAction(video: any) {
 }
 
 export async function updateVideoApprovalAction(id: number, approval: string) {
+  const denied = await requireUserOrError();
+  if (denied) return { success: false, error: denied.message } as any;
   try {
     await db.execute(sql`UPDATE videos SET vt_approval = ${approval} WHERE id = ${id}`);
     return { success: true };
@@ -523,6 +551,8 @@ export async function updateVideoApprovalAction(id: number, approval: string) {
 // CREATOR PAYMENTS
 // ============================================================
 export async function updateCreatorPaymentAction(id: number | null, payment: any) {
+  const denied = await requireRoleOrError('finance', 'manager', 'executive', 'admin');
+  if (denied) return { success: false, error: denied.message } as any;
   try {
     if (id) {
       const [data] = await db.execute(sql`
@@ -578,6 +608,8 @@ export async function updateCreatorPaymentAction(id: number | null, payment: any
 // ADS SPENDS
 // ============================================================
 export async function addAdsSpendAction(spend: any) {
+  const denied = await requireRoleOrError('finance', 'manager', 'executive', 'admin');
+  if (denied) return { success: false, error: denied.message } as any;
   try {
     const [data] = await db.execute(sql`
       INSERT INTO ads_spends (campaign_id, tanggal, amount, kurs, catatan)
@@ -591,6 +623,8 @@ export async function addAdsSpendAction(spend: any) {
 }
 
 export async function updateAdsSpendAction(id: number, spend: any) {
+  const denied = await requireRoleOrError('finance', 'manager', 'executive', 'admin');
+  if (denied) return { success: false, error: denied.message } as any;
   try {
     const [data] = await db.execute(sql`
       UPDATE ads_spends SET
@@ -611,6 +645,8 @@ export async function updateAdsSpendAction(id: number, spend: any) {
 // CREATOR ADDRESSES
 // ============================================================
 export async function fetchCreatorAddressesAction(campaignId: number) {
+  const denied = await requireUserOrError();
+  if (denied) return { success: false, error: denied.message } as any;
   try {
     const data = await db.execute(sql`
       SELECT ca.* FROM creator_addresses ca
@@ -624,6 +660,8 @@ export async function fetchCreatorAddressesAction(campaignId: number) {
 }
 
 export async function updateCreatorAddressAction(id: number | null, address: any) {
+  const denied = await requireUserOrError();
+  if (denied) return { success: false, error: denied.message } as any;
   try {
     const payload = { ...address };
     delete payload.campaign_creators;
@@ -664,6 +702,8 @@ export async function updateCreatorAddressAction(id: number | null, address: any
 // LIVE SCHEDULES
 // ============================================================
 export async function fetchLiveSchedulesAction(campaignId: number) {
+  const denied = await requireUserOrError();
+  if (denied) return { success: false, error: denied.message } as any;
   try {
     const data = await db.execute(sql`
       SELECT ls.* FROM live_schedules ls
@@ -678,6 +718,8 @@ export async function fetchLiveSchedulesAction(campaignId: number) {
 }
 
 export async function addLiveScheduleAction(schedule: any) {
+  const denied = await requireUserOrError();
+  if (denied) return { success: false, error: denied.message } as any;
   try {
     const [data] = await db.execute(sql`
       INSERT INTO live_schedules (campaign_creator_id, tanggal_live, jam_mulai, jam_selesai, platform, status, catatan)
@@ -693,6 +735,8 @@ export async function addLiveScheduleAction(schedule: any) {
 }
 
 export async function deleteLiveScheduleAction(id: number) {
+  const denied = await requireUserOrError();
+  if (denied) return { success: false, error: denied.message } as any;
   try {
     await db.execute(sql`DELETE FROM live_schedules WHERE id = ${id}`);
     return { success: true };
@@ -705,6 +749,8 @@ export async function deleteLiveScheduleAction(id: number) {
 // BRANDS & NICHES
 // ============================================================
 export async function updateBrandAction(id: number, updates: any) {
+  const denied = await requireRoleOrError('manager', 'executive', 'admin');
+  if (denied) return { success: false, error: denied.message } as any;
   try {
     await db.execute(sql`
       UPDATE brands SET
@@ -719,6 +765,8 @@ export async function updateBrandAction(id: number, updates: any) {
 }
 
 export async function addNicheAction(niche: any) {
+  const denied = await requireUserOrError();
+  if (denied) return { success: false, error: denied.message } as any;
   try {
     const [data] = await db.execute(sql`
       INSERT INTO niches (nama) VALUES (${niche.nama}) RETURNING *
@@ -730,6 +778,8 @@ export async function addNicheAction(niche: any) {
 }
 
 export async function updateNicheAction(id: number, updates: any) {
+  const denied = await requireUserOrError();
+  if (denied) return { success: false, error: denied.message } as any;
   try {
     await db.execute(sql`UPDATE niches SET nama = ${updates.nama} WHERE id = ${id}`);
     return { success: true };
@@ -742,6 +792,8 @@ export async function updateNicheAction(id: number, updates: any) {
 // DAILY PERFORMANCE
 // ============================================================
 export async function addDailyPerformanceAction(record: any) {
+  const denied = await requireRoleOrError('finance', 'manager', 'executive', 'admin');
+  if (denied) return { success: false, error: denied.message } as any;
   try {
     const [data] = await db.execute(sql`
       INSERT INTO daily_performance (campaign_creator_id, tanggal, gmv, unit_sold, views, likes, comments, shares, unique_viewers, new_followers)
@@ -759,6 +811,8 @@ export async function addDailyPerformanceAction(record: any) {
 }
 
 export async function updateDailyPerformanceAction(id: number, updates: any) {
+  const denied = await requireRoleOrError('finance', 'manager', 'executive', 'admin');
+  if (denied) return { success: false, error: denied.message } as any;
   try {
     const [data] = await db.execute(sql`
       UPDATE daily_performance SET
@@ -784,6 +838,8 @@ export async function updateDailyPerformanceAction(id: number, updates: any) {
 // SKU
 // ============================================================
 export async function updateSkuAction(id: number, updates: any) {
+  const denied = await requireUserOrError();
+  if (denied) return { success: false, error: denied.message } as any;
   try {
     const [data] = await db.execute(sql`
       UPDATE skus SET
@@ -804,6 +860,8 @@ export async function updateSkuAction(id: number, updates: any) {
 // SEARCH CREATORS (for SearchableSelect)
 // ============================================================
 export async function searchCreatorsAction(searchTerm: string) {
+  const denied = await requireUserOrError();
+  if (denied) return { success: false, error: denied.message } as any;
   try {
     const fuzzyPattern = '%' + searchTerm.split('').join('%') + '%';
     const data = await db.execute(sql`
@@ -819,6 +877,8 @@ export async function searchCreatorsAction(searchTerm: string) {
 // CAMPAIGN PAGE DATA FETCHERS
 // ============================================================
 export async function fetchCampaignCreatorsAction(campaignId: number) {
+  const denied = await requireUserOrError();
+  if (denied) return { success: false, error: denied.message } as any;
   try {
     const data = await db.execute(sql`
       SELECT cc.*, c.username, c.nama_lengkap, c.platform, c.tipe_konten AS creator_tipe_konten, c.status AS creator_status
@@ -834,6 +894,8 @@ export async function fetchCampaignCreatorsAction(campaignId: number) {
 }
 
 export async function fetchCampaignFullDataAction(campaignId: number) {
+  const denied = await requireUserOrError();
+  if (denied) return { success: false, error: denied.message } as any;
   try {
     const [ccData, videoData, snapshotData, contactData, noteData, nicheData, paymentData, creatorData] = await Promise.all([
       db.execute(sql`SELECT * FROM campaign_creators WHERE campaign_id = ${campaignId} ORDER BY id DESC`) as Promise<any[]>,
@@ -863,6 +925,8 @@ export async function fetchCampaignFullDataAction(campaignId: number) {
 }
 
 export async function fetchDailyPerformanceAction(campaignId: number) {
+  const denied = await requireUserOrError();
+  if (denied) return { success: false, error: denied.message } as any;
   try {
     const data = await db.execute(sql`
       SELECT dp.* FROM daily_performance dp
@@ -877,6 +941,8 @@ export async function fetchDailyPerformanceAction(campaignId: number) {
 }
 
 export async function fetchLiveSessionsAction(campaignId: number) {
+  const denied = await requireUserOrError();
+  if (denied) return { success: false, error: denied.message } as any;
   try {
     const [sessions, products] = await Promise.all([
       db.execute(sql`
@@ -899,6 +965,8 @@ export async function fetchLiveSessionsAction(campaignId: number) {
 }
 
 export async function fetchPerformaDataAction(campaignId: number) {
+  const denied = await requireUserOrError();
+  if (denied) return { success: false, error: denied.message } as any;
   try {
     const [sales, organicVideos] = await Promise.all([
       db.execute(sql`
@@ -922,6 +990,8 @@ export async function fetchPerformaDataAction(campaignId: number) {
 // REPORTING
 // ============================================================
 export async function fetchReportingDataAction(campaignId: number) {
+  const denied = await requireUserOrError();
+  if (denied) return { success: false, error: denied.message } as any;
   try {
     const data = await db.execute(sql`
       SELECT 
@@ -947,6 +1017,8 @@ export async function fetchReportingDataAction(campaignId: number) {
 // CAMPAIGN SYNC (for CampaignSyncModal)
 // ============================================================
 export async function fetchCampaignSyncListingDbAction(campaignId: number) {
+  const denied = await requireUserOrError();
+  if (denied) return { success: false, error: denied.message } as any;
   try {
     const data = await db.execute(sql`
       SELECT 
@@ -1000,6 +1072,8 @@ export async function executeFullCampaignSyncAction(payload: {
   const { campaignId, syncMode, previewRows } = payload;
   const localErrorLog: Array<{ username: string; pesan_error: string; data_mentah?: any }> = [];
 
+  const denied = await requireRoleOrError('manager', 'executive', 'admin');
+  if (denied) return { success: false, error: denied.message } as any;
   try {
     const usernamesArray = Array.from(new Set(previewRows.map(p => p.username.trim().replace(/^@/, ''))));
     
@@ -1169,6 +1243,8 @@ export async function executeLiveSyncAction(
   campaignId: number,
   sessions: Array<any>
 ) {
+  const denied = await requireRoleOrError('manager', 'executive', 'admin');
+  if (denied) return { success: false, error: denied.message } as any;
   try {
     let insertedCount = 0;
 
@@ -1214,6 +1290,8 @@ export async function executeLiveSyncAction(
 // PORTAL & ACCOUNT MANAGEMENT
 // ============================================================
 export async function fetchPortalDataAction(campaignId: number) {
+  const denied = await requireUserOrError();
+  if (denied) return { success: false, error: denied.message } as any;
   try {
     const [campaign, ccData, creators, skusData, salesData, videosData] = await Promise.all([
       db.execute(sql`SELECT c.*, b.nama as brand_nama FROM campaigns c LEFT JOIN brands b ON c.brand_id = b.id WHERE c.id = ${campaignId} LIMIT 1`) as Promise<any[]>,
@@ -1238,6 +1316,8 @@ export async function fetchPortalDataAction(campaignId: number) {
 }
 
 export async function fetchAllProfilesAction() {
+  const denied = await requireUserOrError();
+  if (denied) return { success: false, error: denied.message } as any;
   try {
     const data = await db.execute(sql`SELECT * FROM profiles ORDER BY id`) as any[];
     return { success: true, data: data || [] };
@@ -1310,6 +1390,8 @@ export async function updateProfileAction(id: string, updates: any) {
 }
 
 export async function fetchUserCampaignsAction(userId: string) {
+  const denied = await requireUserOrError();
+  if (denied) return { success: false, error: denied.message } as any;
   try {
     const data = await db.execute(sql`SELECT * FROM user_campaigns WHERE user_id = ${userId}::uuid`) as any[];
     return { success: true, data: data || [] };
@@ -1319,6 +1401,8 @@ export async function fetchUserCampaignsAction(userId: string) {
 }
 
 export async function updateUserCampaignsAction(userId: string, campaignIds: number[], allCampaigns: boolean) {
+  const denied = await requireRoleOrError('manager', 'executive', 'admin');
+  if (denied) return { success: false, error: denied.message } as any;
   try {
     // Delete existing
     await db.execute(sql`DELETE FROM user_campaigns WHERE user_id = ${userId}::uuid`);
@@ -1344,6 +1428,8 @@ export async function updateUserCampaignsAction(userId: string, campaignIds: num
 // CREATOR POOL DETAIL
 // ============================================================
 export async function fetchCreatorDetailAction(creatorId: number) {
+  const denied = await requireUserOrError();
+  if (denied) return { success: false, error: denied.message } as any;
   try {
     const [creator, snapshots, contacts, notes, niches, campaignCreators] = await Promise.all([
       db.execute(sql`SELECT * FROM creators WHERE id = ${creatorId} LIMIT 1`) as Promise<any[]>,
