@@ -102,11 +102,11 @@ BEGIN
 
   SELECT count(*), COALESCE(sum(quantity),0), count(DISTINCT creator_username),
          count(DISTINCT product_id), count(*) FILTER (WHERE is_refund),
-         COALESCE(sum(gmv),0) FILTER (WHERE NOT is_refund)
+         COALESCE(sum(gmv) FILTER (WHERE NOT is_refund), 0)
   INTO v_baris, v_qty, v_kreator, v_produk, v_flagged, v_gmv_dash
   FROM sales;
 
-  SELECT row_to_json(_s) INTO v_before FROM _s;
+  SELECT row_to_json(t) INTO v_before FROM _s t;
 
   RAISE NOTICE 'DUPLIKAT dihapus=%  ORAKAN dilepas=%', v_dup, v_ora;
   RAISE NOTICE 'GMV DASHBOARD  sebelum=%  sesudah=%', (v_before->>'gmv_dashboard')::numeric, v_gmv_dash;
