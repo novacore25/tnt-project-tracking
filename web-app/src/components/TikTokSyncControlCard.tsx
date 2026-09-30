@@ -161,7 +161,12 @@ export function TikTokSyncControlCard() {
               } else if (payload.type === 'complete') {
                 setSyncResult(payload.result);
                 setProgressPercent(100);
-                setProgressMessage('Sinkronisasi selesai!');
+                // Jangan bilang "selesai" kalau sebagian data gagal diambil.
+                setProgressMessage(
+                  payload.result?.partial
+                    ? `Selesai SEBAGIAN - ${(payload.result?.errors || []).length} bagian gagal, data belum lengkap`
+                    : 'Sinkronisasi selesai!'
+                );
               } else if (payload.type === 'error') {
                 setSyncResult({ success: false, message: payload.message || 'Terjadi kesalahan' });
               }
@@ -246,6 +251,32 @@ export function TikTokSyncControlCard() {
                   {history[0]?.sales_count || 0} orders • {history[0]?.videos_count || 0} konten ({((history[0]?.duration_ms || 0) / 1000).toFixed(1)}s)
                 </span>
               )}
+              {history[0]?.status === 'partial' && (
+                <span
+                  className="px-2 py-0.5 rounded text-[11px] font-semibold border bg-amber-500/20 text-amber-300 border-amber-500/40"
+                  title={history[0]?.message || 'Sebagian data gagal diambil'}
+                >
+                  ⚠️ Sebagian Gagal - data belum lengkap
+                </span>
+              )}
+            </div>
+          )}
+
+          {/* Rincian bagian yang gagal pada sinkronisasi terakhir */}
+          {history[0]?.status === 'partial' && history[0]?.message && (
+            <div className="mt-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs">
+              <p className="font-semibold mb-1">Sinkronisasi terakhir tidak selesai penuh.</p>
+              <p>{history[0].message}</p>
+              <details className="mt-1">
+                <summary className="cursor-pointer text-amber-300/80 hover:text-amber-200">
+                  Lihat rincian {(history[0]?.details?.syncErrors || []).length} kegagalan
+                </summary>
+                <ul className="mt-1 space-y-0.5 list-disc list-inside text-amber-100/80">
+                  {(history[0]?.details?.syncErrors || []).map((e: string, i: number) => (
+                    <li key={i}>{e}</li>
+                  ))}
+                </ul>
+              </details>
             </div>
           )}
 

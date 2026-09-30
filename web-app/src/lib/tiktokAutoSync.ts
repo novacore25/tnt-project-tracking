@@ -17,6 +17,12 @@ export interface SyncProgressUpdate {
 
 export interface TikTokSyncResult {
   success: boolean;
+  /** true = ada bagian yang gagal diambil, jadi angka belum utuh. */
+  partial?: boolean;
+  /** Bagian yang benar-benar gagal (membuat status 'partial'). */
+  errors?: string[];
+  /** Peringatan tidak membatalkan sync, hanya dicatat di log. */
+  warnings?: string[];
   message: string;
   triggerType: 'cron' | 'manual';
   durationMs: number;
@@ -226,6 +232,10 @@ export async function runTikTokAutoSync(options?: TikTokAutoSyncOptions): Promis
     const salesRowsToInsert: any[] = [];
     const videoRowsToInsert: any[] = [];
     const syncErrors: string[] = [];
+    // Peringatan tidak mengubah status jadi 'partial'. Dipakai untuk endpoint
+    // yang memang belum tersedia di semua versi API - kalau ikut di syncErrors,
+    // setiap cron akan kena error 500 padahal data sales tetap lengkap.
+    const syncWarnings: string[] = [];
 
     // 4. SYNC TAP ORDERS ACROSS DYNAMIC TIME WINDOWS VIA 202603 OPENAPI
 
@@ -340,7 +350,10 @@ export async function runTikTokAutoSync(options?: TikTokAutoSyncOptions): Promis
           });
 
           if (!tapOrdersRes.success) {
-            console.warn(`[TikTok AutoSync] TAP orders fetch (${orderEndpoint}, ${tw.label}) notice:`, tapOrdersRes.data?.message || 'Failed');
+            const failMsg = tapOrdersRes.data?.message || 'Gagal mengambil order';
+            console.warn(`[TikTok AutoSync] TAP orders fetch (${orderEndpoint}, ${tw.label}) notice:`, failMsg);
+            // Dicatat supaya sinkronisasi berstatus 'partial', bukan 'success'.
+            syncErrors.push(`Order ${tw.label} gagal: ${failMsg}`);
             break;
           }
 
@@ -505,6 +518,7 @@ export async function runTikTokAutoSync(options?: TikTokAutoSyncOptions): Promis
           prodNextPageToken = prodRes.data?.data?.next_page_token || '';
         } catch (e) {
           console.warn(`[TikTok AutoSync] Failed to fetch products for campaign ${tapId}:`, e);
+          syncErrors.push(`Produk campaign ${tapId} gagal: ${(e as any)?.message || e}`);
           break;
         }
       } while (prodNextPageToken && prodPage < 10);
@@ -560,6 +574,13 @@ export async function runTikTokAutoSync(options?: TikTokAutoSyncOptions): Promis
                 accessToken,
                 perfParams
               );
+              // Kedua endpoint gagal -> 0 kreato untuk produk ini, harus dicatat
+              // supaya sinkronisasi tidak dilaporkan sukses padahal data kurang.
+              if (!perfRes.success) {
+                syncErrors.push(
+                  `Performance campaign ${tapId} produk ${pId} gagal di kedua endpoint: ${perfRes.data?.message || 'tidak diketahui'}`
+                );
+              }
             }
 
             const pageCreators = perfRes.data?.data?.promotion_creators || [];
@@ -580,6 +601,7 @@ export async function runTikTokAutoSync(options?: TikTokAutoSyncOptions): Promis
             }
           } catch (perfErr: any) {
             console.warn(`[TikTok AutoSync] Performance fetch error:`, perfErr.message);
+            syncErrors.push(`Performance konten gagal: ${perfErr.message}`);
             break;
           }
         } while (perfNextPageToken && perfPage < 20);
@@ -620,8 +642,10 @@ export async function runTikTokAutoSync(options?: TikTokAutoSyncOptions): Promis
               creatorListPageToken = creatorListRes.data?.data?.next_page_token || '';
             } while (creatorListPageToken && creatorListPage < 5);
           } catch (creatorListErr: any) {
-            // Fallback endpoint may not exist for all API versions, silently ignore
+            // Endpoint fallback belum tersedia di semua versi API, jadi dicatat
+            // sebagai warning (tidak membatalkan sync) tapi tetap terlihat di log.
             console.warn(`[TikTok AutoSync] Creator list fallback error (${tapName}/${pId}):`, creatorListErr.message);
+            syncWarnings.push(`Daftar kreator fallback gagal (${tapName}/${pId}): ${creatorListErr.message}`);
           }
         }
 
@@ -761,10 +785,21 @@ export async function runTikTokAutoSync(options?: TikTokAutoSyncOptions): Promis
     const mappingText = (unmappedRes.totalSales || 0) > 0
       ? `${unmappedRes.totalSales} order re-mapped`
       : 'semua order langsung terpetakan';
-    const summaryMsg = `Sukses sinkronisasi ${campaignsProcessed} kampanye (${totalSalesCount} order sales, ${totalVideosCount} video/live konten, ${mappingText}).`;
+
+    // Ada bagian yang gagal? Sync TIDAK boleh dilaporkan 'success', karena
+    // angkanya terlihat utuh padahal ada order/konten yang tidak ikut terambil.
+    const hasPartial = syncErrors.length > 0;
+    const finalStatus = hasPartial ? 'partial' : 'success';
+
+    const summaryMsg = hasPartial
+      ? `Sinkronisasi SEBAGIAN (${syncErrors.length} bagian gagal): ${campaignsProcessed} kampanye, ${totalSalesCount} order sales, ${totalVideosCount} video/live konten. Data belum lengkap - jalankan ulang atau cek log.`
+      : `Sukses sinkronisasi ${campaignsProcessed} kampanye (${totalSalesCount} order sales, ${totalVideosCount} video/live konten, ${mappingText}).`;
 
     const fullDiagnostics = {
       ...diagnosticData,
+      syncErrors,
+      syncWarnings,
+      hasPartial,
       syncDetails,
       unmappedRes,
       totalSalesCount,
@@ -783,7 +818,11 @@ export async function runTikTokAutoSync(options?: TikTokAutoSyncOptions): Promis
       WHERE status = 'active'
     `);
 
-    await logSyncExecution(triggerType, 'success', totalSalesCount, totalVideosCount, campaignsProcessed, summaryMsg, fullDiagnostics, durationMs);
+    await logSyncExecution(triggerType, finalStatus, totalSalesCount, totalVideosCount, campaignsProcessed, summaryMsg, fullDiagnostics, durationMs);
+
+    if (hasPartial) {
+      console.warn(`[TikTok AutoSync] Finished with ${syncErrors.length} partial failure(s):`, syncErrors);
+    }
 
     emitProgress({
       stage: 'done',
@@ -793,11 +832,14 @@ export async function runTikTokAutoSync(options?: TikTokAutoSyncOptions): Promis
       videosCount: totalVideosCount
     });
 
-    console.log(`[TikTok AutoSync] Finished successfully in ${durationMs}ms.`);
+    console.log(`[TikTok AutoSync] Finished in ${durationMs}ms (status: ${finalStatus}).`);
 
     return {
-      success: true,
+      success: !hasPartial,
+      partial: hasPartial,
       message: summaryMsg,
+      errors: syncErrors,
+      warnings: syncWarnings,
       triggerType,
       durationMs,
       campaignsProcessed,
