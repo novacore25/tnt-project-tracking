@@ -34,6 +34,8 @@ export interface StagingVideoItem {
   expandedUrl: string;
   username: string;
   videoId: string;
+  /** Alasan konversi link pendek gagal. Kalau ada, item pasti ditolak. */
+  expandError?: string;
   skuId: number | null;
   status: 'ready_existing' | 'ready_global' | 'ready_new' | 'duplicate_db' | 'duplicate_batch' | 'error';
   statusText: string;
@@ -134,6 +136,26 @@ export default function ImportVideoClient({
     return { total, readyExisting, readyGlobal, readyNew, duplicate, error, readyToImport };
   }, [stagedItems]);
 
+  // Salin link yang gagal ke clipboard, supaya PIC bisa paste ulang nanti.
+  // Cocok buat kasus: TikTok timeout, atau link yang ditolak karena kode mati.
+  const [copiedFailed, setCopiedFailed] = useState(false);
+
+  const handleCopyFailed = async () => {
+    const failed = stagedItems.filter(i => i.status === 'error');
+    if (failed.length === 0) return;
+
+    const text = failed.map(i => i.originalUrl).join('\n');
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedFailed(true);
+      setTimeout(() => setCopiedFailed(false), 2500);
+    } catch {
+      // Clipboard API butuh konteks secure (HTTPS). Kalau gagal, tampilkan
+      // teksnya supaya PIC masih bisa select manual.
+      prompt(`${failed.length} link gagal. Copy manual di bawah:`, text);
+    }
+  };
+
   // Filtered rows for the staging table
   const filteredItems = useMemo(() => {
     return stagedItems.filter(item => {
@@ -192,6 +214,7 @@ export default function ImportVideoClient({
       expandedUrl: string;
       username: string;
       videoId: string;
+      expandError?: string;
       skuId: number | null;
       status: any;
       statusText: string;
@@ -199,7 +222,14 @@ export default function ImportVideoClient({
       addedAt: string;
     }> = [];
 
-    const BATCH_SIZE = 3; // 3 link per request chunk to prevent rate limits
+    // 3 link per chunk, jeda 2 detik. 50 link = ~40 detik, 500 link = ~7 menit.
+    // Jeda adaptif: kalau ada chunk yang gagal, jeda dikalikan 2 (maks 10 detik)
+    // sampai 3 chunk berturut-turut sukses. Ini reacted to TikTok yang menahan.
+    const BATCH_SIZE = 3;
+    const BASE_DELAY_MS = 2000;
+    const MAX_DELAY_MS = 10000;
+    let currentDelay = BASE_DELAY_MS;
+    let cleanChunks = 0;
 
     for (let i = 0; i < newLines.length; i += BATCH_SIZE) {
       const chunk = newLines.slice(i, i + BATCH_SIZE);
@@ -207,6 +237,7 @@ export default function ImportVideoClient({
       const chunkPromises = chunk.map(async (link) => {
         let finalLink = link;
         let isShort = isShortLink(link);
+        let expandError: string | undefined;
 
         if (isShort) {
           try {
@@ -218,9 +249,14 @@ export default function ImportVideoClient({
             const data = await res.json();
             if (res.ok && data.expandedUrl) {
               finalLink = data.expandedUrl;
+            } else {
+              // Simpan alasannya. Tanpa ini item akan ditolak dengan pesan
+              // "Format URL tidak valid" padahal linknya sebenarnya valid.
+              expandError = data?.error || `Gagal mengonversi link pendek (HTTP ${res.status})`;
             }
           } catch (err) {
             console.error("Gagal expand link:", link, err);
+            expandError = "Gagal menghubungi server saat mengonversi link pendek";
           }
         }
 
@@ -237,6 +273,7 @@ export default function ImportVideoClient({
           expandedUrl: finalLink,
           username,
           videoId,
+          expandError,
           skuId: defaultSkuId,
           status: 'ready_new' as const,
           statusText: 'Sedang diverifikasi...',
@@ -248,15 +285,31 @@ export default function ImportVideoClient({
       const processedChunk = await Promise.all(chunkPromises);
       resolvedBatchItems.push(...processedChunk);
 
+      // Jeda adaptif: kalau ada link di chunk ini yang gagal (timeout / 429),
+      // TikTok sedang menahan -> perlambat. Kalau 3 chunk berturut-turut bersih,
+      // kembali ke jeda normal.
+      const chunkHadError = processedChunk.some(it => Boolean(it.expandError));
+      if (chunkHadError) {
+        cleanChunks = 0;
+        currentDelay = Math.min(currentDelay * 2, MAX_DELAY_MS);
+      } else {
+        cleanChunks++;
+        if (cleanChunks >= 3 && currentDelay > BASE_DELAY_MS) {
+          currentDelay = BASE_DELAY_MS;
+          cleanChunks = 0;
+        }
+      }
+
       setProcessProgress({
         current: Math.min(i + BATCH_SIZE, newLines.length),
         total: newLines.length,
-        currentUrl: chunk[0] || ""
+        currentUrl: currentDelay > BASE_DELAY_MS
+          ? `TikTok menahan, jeda dinaikkan ke ${Math.round(currentDelay / 1000)} detik...`
+          : (chunk[0] || "")
       });
 
-      // 1-second pause between chunks for TikTok rate limit safety
       if (i + BATCH_SIZE < newLines.length) {
-        await delay(1000);
+        await delay(currentDelay);
       }
     }
 
@@ -925,12 +978,33 @@ export default function ImportVideoClient({
                 </div>
                 <div className="text-[11px] text-slate-500">
                   {metrics.duplicate > 0 && `${metrics.duplicate} duplikat akan dilewati otomatis. `}
+                  {metrics.error > 0 && `${metrics.error} link gagal — bisa disalin untuk dicoba lagi. `}
                   Semua link akan terkoneksi langsung dengan video listing & performa realtime.
                 </div>
               </div>
             </div>
 
             <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
+              {metrics.error > 0 && (
+                <button
+                  onClick={handleCopyFailed}
+                  title="Salin semua link yang gagal ke clipboard, untuk dicoba lagi nanti"
+                  className="inline-flex items-center justify-center gap-2 px-3 py-2.5 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-colors"
+                >
+                  {copiedFailed ? (
+                    <>
+                      <Check className="w-4 h-4" />
+                      <span>Tersalin</span>
+                    </>
+                  ) : (
+                    <>
+                      <XCircle className="w-4 h-4" />
+                      <span>Salin {metrics.error} Link Gagal</span>
+                    </>
+                  )}
+                </button>
+              )}
+
               <Link
                 href={`/campaigns/${campaignId}/video`}
                 className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors text-center"

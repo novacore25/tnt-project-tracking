@@ -345,8 +345,8 @@ export async function runTikTokAutoSync(options?: TikTokAutoSyncOptions): Promis
           }
 
           for (const ord of tapOrders) {
-            const orderId = String(ord.id || ord.order_id || '').trim();
-            if (!orderId) continue;
+            const rawOrderId = String(ord.id || ord.order_id || '').trim();
+            if (!rawOrderId) continue;
 
             const orderDate = (ord.create_time || ord.delivery_time)
               ? new Date(Number(ord.create_time || ord.delivery_time) * 1000).toISOString()
@@ -361,6 +361,12 @@ export async function runTikTokAutoSync(options?: TikTokAutoSyncOptions): Promis
             for (const sku of skuList) {
               const pId = sku.product_id ? String(sku.product_id).trim() : (ord.product_id ? String(ord.product_id).trim() : null);
               const skuId = sku.sku_id ? String(sku.sku_id).trim() : (ord.sku_id ? String(ord.sku_id).trim() : null);
+              // order_id = OrderID + ProductID, sama persis dengan import Excel
+              // (OrganicImport.tsx). Supaya keduanya saling dedup dan tidak
+              // menghasilkan GMV dobel untuk order yang sama.
+              // Kalau product_id kosong, suffix-nya kosong — tidak akan collide
+              // dengan baris yang punya product_id.
+              const orderId = pId ? `${rawOrderId}_${pId}` : rawOrderId;
               const uname = (sku.creator_username || ord.creator_username || ord.creator_name || '').toLowerCase().trim();
               const cUid = sku.content_id ? String(sku.content_id).trim() : (ord.content_id ? String(ord.content_id).trim() : null);
               const rawCType = (sku.content_type || ord.content_type || '').toUpperCase();
@@ -379,8 +385,19 @@ export async function runTikTokAutoSync(options?: TikTokAutoSyncOptions): Promis
               );
               const qty = Number(sku.quantity || ord.quantity || 1);
               const price = Number(sku.price?.amount || ord.price?.amount || (qty > 0 ? (gmv / qty) : gmv));
-              const status = sku.settle_status || ord.settle_status || sku.status || ord.status || 'COMPLETED';
-              const isRefund = sku.fully_return || ord.fully_return || status === 'CANCELLED' || status === 'REFUND' || Number(sku.refunded_quantity || 0) > 0;
+              const status = String(sku.settle_status || ord.settle_status || sku.status || ord.status || 'COMPLETED').toUpperCase();
+              // PENTING: API TikTok mengirim flag boolean sebagai STRING ("false"/"true").
+              // String "false" itu TRUTHY di JavaScript, jadi `sku.fully_return || ...`
+              // lama-lama selalu bernilai true -> semua order ditandai refund.
+              // Verified di produksi: 7.039/7.039 baris auto-sync is_refund = true,
+              // padahal 0 baris ber-status CANCELLED atau REFUND.
+              const isFlagTrue = (v: any): boolean =>
+                v === true || v === 1 || v === '1' || v === 'true' || v === 'TRUE';
+              const isRefund = isFlagTrue(sku.fully_return)
+                || isFlagTrue(ord.fully_return)
+                || status === 'CANCELLED'
+                || status === 'REFUND'
+                || Number(sku.refunded_quantity || 0) > 0;
               const commRate = sku.partner_standard_commission_rate || 
                                sku.partner_tap_bonus_commission_rate || 
                                sku.tap_commission_rate || 
@@ -741,8 +758,8 @@ export async function runTikTokAutoSync(options?: TikTokAutoSyncOptions): Promis
 
     // 8. UPDATE LAST_SYNCED_AT & LOG
     const durationMs = Date.now() - startTime;
-    const mappingText = (unmappedRes.totalSalesUpdated || 0) > 0
-      ? `${unmappedRes.totalSalesUpdated} order re-mapped`
+    const mappingText = (unmappedRes.totalSales || 0) > 0
+      ? `${unmappedRes.totalSales} order re-mapped`
       : 'semua order langsung terpetakan';
     const summaryMsg = `Sukses sinkronisasi ${campaignsProcessed} kampanye (${totalSalesCount} order sales, ${totalVideosCount} video/live konten, ${mappingText}).`;
 

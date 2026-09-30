@@ -976,6 +976,7 @@ export async function bulkVerifyVideoLinksAction(
     expandedUrl: string;
     username?: string;
     videoId?: string;
+    expandError?: string;
   }>
 ) {
   try {
@@ -1057,7 +1058,10 @@ export async function bulkVerifyVideoLinksAction(
           username: item.username || '',
           videoId: item.videoId || '',
           status: 'error',
-          statusText: 'Format URL TikTok tidak valid (username / Video ID tidak ditemukan)',
+          // Kalau linknya pendek tapi gagal dikonversi, tampilkan alasan aslinya
+          // supaya PIC tidak mengira link-nya yang salah.
+          statusText: item.expandError
+            || 'Format URL TikTok tidak valid (username / Video ID tidak ditemukan)',
           canImport: false,
         };
       }

@@ -421,8 +421,13 @@ export default function OrganicImport({ mode = 'sales' }: { mode?: 'sales' | 'vi
         
         tanggal = parseTikTokDate(row[columnMapping['time_created']]?.toString().trim() || '');
         const orderIdRaw = row[columnMapping['order_id']]?.toString().trim() || '';
-        const skuIdStr = row[columnMapping['sku_id']]?.toString().trim() || '';
-        orderId = `${orderIdRaw}_${skuIdStr}_${rawProductId}_${tiktokCampaignId}`;
+        // order_id = OrderID + ProductID.
+        // SKU ID sengaja TIDAK dipakai: Partner Center kadang men-list 1 order
+        // jadi beberapa baris dengan SKU ID berbeda tapi Product ID sama
+        // (duplikat listing). Dengan SKU ID di kunci, 1 order terpecah N baris
+        // dan GMV-nya dihitung N kali.
+        // Product ID tetap membedakan multi-item asli (1 order, 2 produk beda).
+        orderId = `${orderIdRaw}_${rawProductId}`;
         orderStatus = row[columnMapping['order_status']]?.toString().trim() || '';
         
         commissionRate = row[columnMapping['commission_rate']]?.toString().trim() || '';
