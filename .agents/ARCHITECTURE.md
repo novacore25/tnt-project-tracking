@@ -1,4 +1,4 @@
-﻿# Dokumentasi Arsitektur & Rekayasa Sistem TNT Project Tracking System
+# Dokumentasi Arsitektur & Rekayasa Sistem TNT Project Tracking System
 
 > **Versi Dokumentasi**: 2.0 (Post-Supabase Migration)  
 > **Status Sistem**: Production Ready on VPS Coolify  
@@ -170,7 +170,8 @@ npm run start
 ```
 
 ### Aturan Git Push:
-Selalu gunakan kredensial Personal Access Token (PAT) resmi untuk remote repository:
+Gunakan URL HTTPS polos dan biarkan Git Credential Manager melakukan login lewat browser.
+JANGAN menuliskan token di dalam URL remote, di `.git/config`, atau di file mana pun.
 ```bash
-git push https://banzilla25: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@github.com/banzilla25/tnt-project-system.git main
+git push coolify main
 ```
