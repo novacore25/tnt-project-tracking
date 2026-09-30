@@ -317,9 +317,19 @@ export async function executeSalesImportChunkAction(salesRows: any[], videoRows:
                 SELECT COALESCE(MAX(urutan), 0) as max_u FROM videos WHERE campaign_creator_id = ${ccId}
               `);
               const nextUrutan = Number((maxUrutanRes as unknown as any[])[0]?.max_u || 0) + 1;
+              // WAJIB ISO string, bukan objek Date.
+              // postgres.js 3.4.9 punya bug di serializer timestamptz:
+              //   serialize: x => (x instanceof Date ? x : new Date(x)).toISOString()
+              // Kalau nilainya sudah Date, dia dikembalikan UTUH tanpa
+              // .toISOString(), lalu Buffer.byteLength(Date) meledak dengan
+              // ERR_INVALID_ARG_TYPE. Gejalanya import Awareness Video gagal
+              // 100% sementara Awareness Live sukses, karena blok ini hanya
+              // jalan saat isVideoMode = true.
+              // Bagian organic_videos di atas sudah pakai .toISOString()
+              // sejak awal, itu sebabnya jalur itu tidak terpengaruh.
               const vidDate = (firstRow.tanggal && !isNaN(new Date(firstRow.tanggal).getTime()))
-                ? new Date(firstRow.tanggal)
-                : new Date();
+                ? new Date(firstRow.tanggal).toISOString()
+                : new Date().toISOString();
 
               await tx.execute(sql`
                 INSERT INTO videos (
