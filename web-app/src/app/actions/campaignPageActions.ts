@@ -2014,7 +2014,12 @@ export async function saveCreatorImportBatchAction(params: {
     try {
       let cid = row.creatorId;
       const cleanUsername = (row.username || '').toLowerCase().trim();
-      if (!cleanUsername) continue;
+      // Jangan `continue` diam-diam: baris yang dilewati harus dilaporkan,
+      // kalau tidak jumlah "berhasil" jadi tidak jujur dengan yang tersimpan.
+      if (!cleanUsername) {
+        errors.push({ username: row.username, error: 'Username kosong' });
+        continue;
+      }
       
       if (!cid) {
         // Try to find by username (case-insensitive)
@@ -2033,7 +2038,10 @@ export async function saveCreatorImportBatchAction(params: {
         }
       }
       
-      if (!cid) continue;
+      if (!cid) {
+        errors.push({ username: row.username, error: 'Kreator gagal dibuat/ditemukan di database' });
+        continue;
+      }
       
       if (row.status === 'duplicate_campaign' && row.action === 'skip') {
         successCount++;

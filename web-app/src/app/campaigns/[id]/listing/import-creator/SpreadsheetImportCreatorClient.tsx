@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -29,7 +29,8 @@ type SpreadsheetRow = {
   no_wa: string;
   level: string;
   
-  status?: 'baru' | 'update' | 'error' | 'duplicate_campaign' | 'incomplete';
+  // 'berhasil' dipakai setelah baris tersimpan di server (lihat executeSaveToDatabase).
+  status?: 'baru' | 'update' | 'error' | 'duplicate_campaign' | 'incomplete' | 'berhasil';
   errorMsg?: string;
   creatorId?: number;
   existingData?: any; 
@@ -93,6 +94,77 @@ const parseSmartNumber = (val: string): string => {
   // Fallback: strip everything except digits
   const fallback = str.replace(/\D/g, '');
   return fallback;
+};
+
+/** Syarat kolom wajib satu baris kreator. Satu sumber kebenaran untuk cek & merah. */
+const hasWa = (r: SpreadsheetRow) => Boolean(r.no_wa && r.no_wa.trim() && r.no_wa.trim() !== '-');
+const hasFollowers = (r: SpreadsheetRow) => Number(r.followers) > 0;
+const hasGmv = (r: SpreadsheetRow) =>
+  Number(r.gmv_30_days) > 0 || Number(r.gmv_30_days_video) > 0 || Number(r.gmv_30_days_live) > 0;
+const hasQty = (r: SpreadsheetRow) => Number(r.qty_vt) > 0 || Number(r.qty_live) > 0;
+
+/** Nama kolom yang masih kurang, untuk ditampilkan di kolom Keterangan. */
+const missingColumns = (r: SpreadsheetRow): string[] => {
+  const m: string[] = [];
+  if (!hasWa(r)) m.push('No WA');
+  if (!hasFollowers(r)) m.push('Followers');
+  if (!hasGmv(r)) m.push('Minimal 1 GMV');
+  if (!hasQty(r)) m.push('Qty VT / Qty Live');
+  return m;
+};
+
+/**
+ * Hitung ulang status setiap baris dari isi kolomnya.
+ *
+ * Dipakai setiap kali sel diedit atau data di-paste, supaya penanda merah
+ * hilang HANYA pada kolom yang sudah benar - tidak ikut hilang saat kolom
+ * lain masih kosong.
+ *
+ * Baris yang sudah ada di campaign (duplicate_campaign) tetap bebas syarat
+ * sesuai aturan sebelumnya: cukup diubah, tidak perlu data lengkap.
+ */
+const rederiveRows = (list: SpreadsheetRow[]): SpreadsheetRow[] => {
+  const seen = new Set<string>();
+  return list.map(row => {
+    if (!row) return row;
+    const next: SpreadsheetRow = { ...row };
+
+    const uname = (next.username || '').trim();
+
+    // Baris kosong = baris cadangan, bukan data. Jangan tandai merah.
+    if (!uname) {
+      next.status = undefined;
+      next.errorMsg = undefined;
+      return next;
+    }
+
+    const unameLower = uname.toLowerCase();
+    const isDuplicateInSheet = seen.has(unameLower);
+    seen.add(unameLower);
+
+    // Sudah terdaftar di campaign ini: exempt dari syarat kelengkapan.
+    if (next.status === 'duplicate_campaign') {
+      if (next.action !== 'skip') next.errorMsg = undefined;
+      return next;
+    }
+
+    if (isDuplicateInSheet) {
+      next.status = 'error';
+      next.errorMsg = 'Username duplikat di spreadsheet (sudah ada di baris sebelumnya)';
+      return next;
+    }
+
+    const missing = missingColumns(next);
+    if (missing.length > 0) {
+      next.status = 'incomplete';
+      next.errorMsg = `${missing.join(', ')} wajib diisi`;
+    } else {
+      // Pertahankan label 'update' untuk baris hasil muat "Kreator Belum Lengkap".
+      next.status = next.status === 'update' ? 'update' : 'baru';
+      next.errorMsg = undefined;
+    }
+    return next;
+  });
 };
 
 export default function SpreadsheetImportCreatorClient() {
@@ -335,11 +407,15 @@ export default function SpreadsheetImportCreatorClient() {
         const live = Number(newRows[targetRowIndex].qty_live) || 0;
         newRows[targetRowIndex].content_type = determineContentType(vt, live);
         
+        // Data hasil paste belum pernah dicek ke database.
+        newRows[targetRowIndex].creatorId = undefined;
+        newRows[targetRowIndex].existingData = undefined;
+        newRows[targetRowIndex].action = undefined;
         newRows[targetRowIndex].status = undefined;
         newRows[targetRowIndex].errorMsg = undefined;
       }
       
-      setRows(newRows);
+      setRows(rederiveRows(newRows));
       
       // Auto-fill historical data for pasted usernames
       const pastedUsernames = parsedRows.map((r, i) => {
@@ -421,13 +497,17 @@ export default function SpreadsheetImportCreatorClient() {
                 }
               }
               
-              return hasChanges ? updatedRows : prev;
+              return hasChanges ? rederiveRows(updatedRows) : prev;
             });
           }
         } catch (e) {
           console.error("Auto-fill on paste error:", e);
         }
       }
+
+      // Past selesai: cek ke database diam-diam supaya status duplicate /
+      // kelengkapan akurat dan sel yang bermasalah langsung merah.
+      scheduleVerify();
     }
   };
 
@@ -502,6 +582,16 @@ export default function SpreadsheetImportCreatorClient() {
     }
   };
 
+  // Auto-verify: begitu data di-paste atau username diubah, data dicek diam-diam
+  // supaya sel yang bermasalah langsung merah tanpa PIC harus klik "Cek Data".
+  const autoVerifyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const verifyDataRef = useRef<(() => Promise<boolean>) | null>(null);
+  const scheduleVerify = () => {
+    if (autoVerifyTimer.current) clearTimeout(autoVerifyTimer.current);
+    autoVerifyTimer.current = setTimeout(() => { verifyDataRef.current?.(); }, 700);
+  };
+  useEffect(() => () => { if (autoVerifyTimer.current) clearTimeout(autoVerifyTimer.current); }, []);
+
   const updateCell = (idx: number, field: keyof SpreadsheetRow, value: string) => {
     const newRows = [...rows];
     let cleaned = value;
@@ -511,7 +601,7 @@ export default function SpreadsheetImportCreatorClient() {
       cleaned = parseSmartNumber(cleaned);
     }
     
-    newRows[idx] = { ...newRows[idx], [field]: cleaned, status: undefined, errorMsg: undefined };
+    newRows[idx] = { ...newRows[idx], [field]: cleaned };
     
     if (field === 'qty_vt' || field === 'qty_live') {
       const vt = Number(newRows[idx].qty_vt) || 0;
@@ -519,7 +609,17 @@ export default function SpreadsheetImportCreatorClient() {
       newRows[idx].content_type = determineContentType(vt, live);
     }
     
-    setRows(newRows);
+    // Username diubah -> hasil pengecekan database tidak berlaku lagi, force re-check.
+    if (field === 'username') {
+      newRows[idx] = { ...newRows[idx], status: undefined, errorMsg: undefined, creatorId: undefined, existingData: undefined, action: undefined };
+      setRows(newRows);
+      scheduleVerify();
+      return;
+    }
+    
+    // Status dihitung ulang dari isi baris, bukan dihapus: merah hanya hilang
+    // pada kolom yang sudah diperbaiki.
+    setRows(rederiveRows(newRows));
   };
 
   const handleAutofillRatecard = async () => {
@@ -736,7 +836,12 @@ export default function SpreadsheetImportCreatorClient() {
     return '';
   };
 
-  const verifyData = async () => {
+  /**
+   * Cek kelengkapan baris terhadap database.
+   * @param silent kalau true, tidak memunculkan popup konfirmasi - dipakai
+   *   untuk auto-verify setelah paste supaya tidak mengganggu.
+   */
+  const verifyData = async (silent = false) => {
     setIsVerifying(true);
     setSelectedDuplicateIds(new Set());
     
@@ -886,12 +991,16 @@ export default function SpreadsheetImportCreatorClient() {
     if (hasDuplicates || hasIncompletes) {
       setDuplicateRows(validated.filter(r => r.status === 'duplicate_campaign'));
       setIncompleteRows(validated.filter(r => r.status === 'incomplete'));
+      if (silent) return false;
       setShowConfirmPopup(true);
       return false;
     } else {
       return true;
     }
   };
+
+  // Simpan referensi fungsi terbaru agar auto-verify memanggil versi terkini.
+  useEffect(() => { verifyDataRef.current = verifyData; });
 
   const handleSimpan = async () => {
     const isReady = await verifyData();
@@ -977,6 +1086,7 @@ export default function SpreadsheetImportCreatorClient() {
 
     const BATCH_SIZE = 25;
     let successCount = 0;
+    const failedRows: Array<{ username: string; error: string }> = [];
     
     const calculateTier = (followers: number): string => {
       if (followers < 10000) return 'Nano';
@@ -1017,6 +1127,9 @@ export default function SpreadsheetImportCreatorClient() {
 
         if (res.success) {
           successCount += res.successCount || 0;
+          for (const e of (res.errors || [])) {
+            failedRows.push({ username: e.username, error: e.error });
+          }
           const errorMap = new Map((res.errors || []).map((e: any) => [e.username.toLowerCase(), e.error]));
           
           setRows(prev => prev.map(r => {
@@ -1029,6 +1142,7 @@ export default function SpreadsheetImportCreatorClient() {
         }
       } catch (err: any) {
         console.error('Batch import error:', err);
+        for (const r of batch) failedRows.push({ username: r.username, error: err?.message || 'Gagal menyimpan' });
       }
 
       setSaveProgress(prev => ({ ...prev, current: Math.min(prev.current + BATCH_SIZE, prev.total) }));
@@ -1036,7 +1150,16 @@ export default function SpreadsheetImportCreatorClient() {
 
     setIsImporting(false);
     setSaveProgress({ current: 0, total: 0 });
-    alert(`Import selesai!\nBerhasil memproses ${successCount} kreator.`);
+
+    if (failedRows.length > 0) {
+      alert(
+        `Import selesai, tapi ${failedRows.length} baris GAGAL:\n\n` +
+        failedRows.map(f => `- ${f.username || '(tanpa username)'}: ${f.error}`).join('\n') +
+        `\n\nBaris yang berhasil: ${successCount}.`
+      );
+    } else {
+      alert(`Import selesai!\nBerhasil memproses ${successCount} kreator.`);
+    }
   };
 
   const TableHeader = ({ title, width }: { title: string, width?: string }) => (
@@ -1044,6 +1167,22 @@ export default function SpreadsheetImportCreatorClient() {
       {title}
     </th>
   );
+
+  /** Ringkasan kondisi baris: berapa yang sudah layak, berapa yang belum, dan
+   * kolom apa yang paling sering kurang - supaya PIC tahu harus isi apa. */
+  const issueSummary = useMemo(() => {
+    const filled = rows.filter(r => r && (r.username || '').trim());
+    const bad = filled.filter(r => r.status === 'incomplete' || r.status === 'error');
+    const counts: Record<string, number> = {};
+    for (const r of bad) {
+      const parts = (r.errorMsg || '').replace(' wajib diisi', '').split(',');
+      for (const p of parts) {
+        const k = p.trim();
+        if (k) counts[k] = (counts[k] || 0) + 1;
+      }
+    }
+    return { total: filled.length, bad: bad.length, ready: filled.length - bad.length, counts };
+  }, [rows]);
 
   return (
     <div className="flex flex-col h-[calc(100vh-64px)] bg-slate-50">
@@ -1122,7 +1261,7 @@ export default function SpreadsheetImportCreatorClient() {
               </div>
             )}
           </div>
-          <Button onClick={verifyData} disabled={isVerifying || isAutoDetecting || isLoadingAuto} className="bg-slate-800 hover:bg-slate-900 text-white shadow-sm min-w-[120px]">
+          <Button onClick={() => verifyData(false)} disabled={isVerifying || isAutoDetecting || isLoadingAuto} className="bg-slate-800 hover:bg-slate-900 text-white shadow-sm min-w-[120px]">
             {isVerifying ? 'Memeriksa...' : 'Cek Data'}
           </Button>
           <Button onClick={handleSimpan} disabled={isImporting} className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm min-w-[140px]">
@@ -1134,6 +1273,40 @@ export default function SpreadsheetImportCreatorClient() {
       </div>
 
       <div className="flex-1 overflow-auto p-6 bg-slate-50/50">
+        {issueSummary.total > 0 && (
+          <div
+            className={`mb-4 flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 rounded-lg border text-sm shadow-sm ${
+              issueSummary.bad > 0
+                ? 'bg-rose-50 border-rose-200 text-rose-900'
+                : 'bg-emerald-50 border-emerald-200 text-emerald-900'
+            }`}
+          >
+            {issueSummary.bad > 0 ? (
+              <AlertCircle className="w-5 h-5 flex-shrink-0 text-rose-600" />
+            ) : (
+              <CheckCircle2 className="w-5 h-5 flex-shrink-0 text-emerald-600" />
+            )}
+            <span className="font-semibold">
+              {issueSummary.bad > 0
+                ? `${issueSummary.bad} dari ${issueSummary.total} baris belum layak disimpan`
+                : `Siap: seluruh ${issueSummary.total} baris sudah lengkap`}
+            </span>
+            {issueSummary.bad > 0 && (
+              <>
+                <span className="text-rose-300">|</span>
+                <span className="text-rose-800">
+                  {Object.entries(issueSummary.counts)
+                    .sort((a, b) => b[1] - a[1])
+                    .map(([k, v]) => `${v} kurang ${k}`)
+                    .join(' · ')}
+                </span>
+                <span className="text-rose-700 text-xs w-full sm:w-auto">
+                  Sel merah belum terisi. Semua data harus lengkap sebelum bisa disimpan.
+                </span>
+              </>
+            )}
+          </div>
+        )}
         <Card className="shadow-xl bg-white border border-slate-200 rounded-lg overflow-hidden flex flex-col h-full">
           <div className="flex-1 overflow-auto">
             <table className="w-full border-collapse" style={{ tableLayout: 'fixed' }}>
@@ -1148,8 +1321,8 @@ export default function SpreadsheetImportCreatorClient() {
                   <TableHeader title="GMV 30D (Video)" width="w-32" />
                   <TableHeader title="GMV 30D (Live)" width="w-32" />
                   <TableHeader title="Rate Card (Rp)" width="w-40" />
-                  <TableHeader title="Qty VT" width="w-24" />
-                  <TableHeader title="Qty Live" width="w-24" />
+                  <TableHeader title="Qty VT *" width="w-24" />
+                  <TableHeader title="Qty Live *" width="w-24" />
                   <TableHeader title="Tipe Konten" width="w-32" />
                   <TableHeader title="Keterangan" width="w-64" />
                 </tr>
@@ -1164,7 +1337,20 @@ export default function SpreadsheetImportCreatorClient() {
                       </td>
                       
                       <td className="relative p-0 border-b border-r border-slate-300 group">
-                        <input type="text" value={row.username || ''} onChange={(e) => updateCell(idx, 'username', e.target.value)} onBlur={(e) => handleUsernameBlur(idx, e.target.value)} onPaste={(e) => handlePaste(e, idx, 'username')} className={`w-full h-full min-h-[36px] px-3 py-1 outline-none text-sm transition-colors focus:bg-blue-50 w-48`} />
+                        {(() => {
+                          const isDup = row.status === 'error' && Boolean(row.errorMsg?.includes('duplikat'));
+                          return (
+                            <input
+                              type="text"
+                              value={row.username || ''}
+                              onChange={(e) => updateCell(idx, 'username', e.target.value)}
+                              onBlur={(e) => handleUsernameBlur(idx, e.target.value)}
+                              onPaste={(e) => handlePaste(e, idx, 'username')}
+                              placeholder={isDup ? 'Sudah dipakai baris lain' : ''}
+                              className={`w-full h-full min-h-[36px] px-3 py-1 outline-none text-sm transition-colors w-48 ${isDup ? 'bg-rose-50/80 text-rose-900 border-2 border-rose-400 placeholder-rose-400 font-medium' : 'focus:bg-blue-50'}`}
+                            />
+                          );
+                        })()}
                       </td>
                       
                       <td className="relative p-0 border-b border-r border-slate-300 group">
@@ -1262,13 +1448,37 @@ export default function SpreadsheetImportCreatorClient() {
                       
                       {/* QTY VT */}
                       <td className="relative p-0 border-b border-r border-slate-300 group" onMouseEnter={() => handleDragFillEnter(idx)}>
-                        <input type="text" value={row.qty_vt || ''} onChange={(e) => updateCell(idx, 'qty_vt', e.target.value)} onPaste={(e) => handlePaste(e, idx, 'qty_vt')} className={`w-full h-full min-h-[36px] px-3 py-1 outline-none text-sm transition-colors focus:bg-blue-50 w-24`} />
+                        {(() => {
+                          const bad = (row.status === 'incomplete' || row.status === 'error') && !hasQty(row);
+                          return (
+                            <input
+                              type="text"
+                              value={row.qty_vt || ''}
+                              onChange={(e) => updateCell(idx, 'qty_vt', e.target.value)}
+                              onPaste={(e) => handlePaste(e, idx, 'qty_vt')}
+                              placeholder={bad ? 'Isi salah satu' : ''}
+                              className={`w-full h-full min-h-[36px] px-3 py-1 outline-none text-sm transition-colors w-24 ${bad ? 'bg-rose-50/80 text-rose-900 border-2 border-rose-400 placeholder-rose-400 font-medium' : 'focus:bg-blue-50'}`}
+                            />
+                          );
+                        })()}
                         <div className="absolute right-0 bottom-0 w-2 h-2 bg-blue-500 cursor-crosshair opacity-0 group-hover:opacity-100 transition-opacity z-10" onMouseDown={(e) => { e.preventDefault(); handleDragFillStart(idx, 'qty_vt', row.qty_vt || ''); }} />
                       </td>
                       
                       {/* QTY LIVE */}
                       <td className="relative p-0 border-b border-r border-slate-300 group" onMouseEnter={() => handleDragFillEnter(idx)}>
-                        <input type="text" value={row.qty_live || ''} onChange={(e) => updateCell(idx, 'qty_live', e.target.value)} onPaste={(e) => handlePaste(e, idx, 'qty_live')} className={`w-full h-full min-h-[36px] px-3 py-1 outline-none text-sm transition-colors focus:bg-blue-50 w-24`} />
+                        {(() => {
+                          const bad = (row.status === 'incomplete' || row.status === 'error') && !hasQty(row);
+                          return (
+                            <input
+                              type="text"
+                              value={row.qty_live || ''}
+                              onChange={(e) => updateCell(idx, 'qty_live', e.target.value)}
+                              onPaste={(e) => handlePaste(e, idx, 'qty_live')}
+                              placeholder={bad ? 'Isi salah satu' : ''}
+                              className={`w-full h-full min-h-[36px] px-3 py-1 outline-none text-sm transition-colors w-24 ${bad ? 'bg-rose-50/80 text-rose-900 border-2 border-rose-400 placeholder-rose-400 font-medium' : 'focus:bg-blue-50'}`}
+                            />
+                          );
+                        })()}
                         <div className="absolute right-0 bottom-0 w-2 h-2 bg-blue-500 cursor-crosshair opacity-0 group-hover:opacity-100 transition-opacity z-10" onMouseDown={(e) => { e.preventDefault(); handleDragFillStart(idx, 'qty_live', row.qty_live || ''); }} />
                       </td>
                       
