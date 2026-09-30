@@ -15,6 +15,15 @@ export interface SyncProgressUpdate {
   videosCount?: number;
 }
 
+/**
+ * Rentang default ketika pemanggil tidak menentukan sendiri.
+ *
+ * Dipakai sink manual (backfill). Cron terjadwal mengoper nilai hari ini
+ * sendiri karena dipanggil 4x sehari - menarik 90 hari tiap 4 jam berarti
+ * sekitar 47.600 upsert per hari untuk data yang baru hanya 1 hari.
+ */
+export const DEFAULT_SYNC_DAYS_BACK = 90;
+
 export interface TikTokSyncResult {
   success: boolean;
   /** true = ada bagian yang gagal diambil, jadi angka belum utuh. */
@@ -258,7 +267,7 @@ export async function runTikTokAutoSync(options?: TikTokAutoSyncOptions): Promis
       overallEndSec = Math.floor(new Date(`${options.endDate}T23:59:59+07:00`).getTime() / 1000);
       rangeDescription = `${options.startDate} s/d ${options.endDate}`;
     } else {
-      const days = options?.daysBack || 90;
+      const days = options?.daysBack || DEFAULT_SYNC_DAYS_BACK;
       const nowSec = Math.floor(Date.now() / 1000);
       overallEndSec = nowSec;
       overallStartSec = nowSec - (days * 24 * 3600);
