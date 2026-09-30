@@ -348,10 +348,23 @@ export async function executeSalesImportChunkAction(salesRows: any[], videoRows:
   } catch (err: any) {
     console.error("[import] FATAL executeSalesImportChunkAction:", err);
     if (err?.stack) console.error("[import] stack:", err.stack);
+
+    // Diagnosis: error ini muncul di UI tanpa jejak di server log, jadi
+    // informasinya dititipkan di pesan yang tampil. Nama error, kode, dan
+    // 2 baris pertama stack cukup untuk menemukan penyebabnya.
+    const hint = [err?.name, err?.code ? `code=${err.code}` : null]
+      .filter(Boolean)
+      .join(' ');
+    const topStack = String(err?.stack || '')
+      .split('\n')
+      .slice(1, 3)
+      .map(s => s.trim().replace(/^at\s+/, ''))
+      .filter(Boolean)
+      .join(' <- ');
+
     const detailMsg = err?.detail || err?.cause?.message || err?.message || String(err);
-    const cleanError = detailMsg.length > 500
-      ? (detailMsg.substring(0, 300) + '... [Code: ' + (err?.code || 'ERR') + ']')
-      : detailMsg;
+    const cleanError =
+      `${detailMsg} [${hint || 'no-name'}${topStack ? ' | ' + topStack : ''}]`.slice(0, 600);
     return {
       success: false,
       salesInserted: 0,
