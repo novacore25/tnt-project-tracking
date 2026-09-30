@@ -3,6 +3,7 @@
 import { db } from '@/db';
 import { sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
+import { requireCampaignAccess } from '@/lib/guards';
 
 function sqlInList(items: any[]) {
   if (!items || items.length === 0) return sql`(NULL)`;
@@ -980,6 +981,15 @@ export async function bulkVerifyVideoLinksAction(
   }>
 ) {
   try {
+    // SEBELUMNYA tanpa cek auth: campaignId datang dari argumen, jadi
+    // siapa pun yang punya session bisa memverifikasi link milik campaign
+    // mana pun. Ditutup 30 Sep 2026.
+    try {
+      await requireCampaignAccess(campaignId);
+    } catch (err: any) {
+      return { success: false, results: [], error: err?.message ?? 'Akses ditolak.' };
+    }
+
     if (!items || items.length === 0) {
       return { success: true, results: [] };
     }
@@ -1175,6 +1185,16 @@ export async function commitBulkImportVideosAction(
   picName?: string
 ) {
   try {
+    // SEBELUMNYA tanpa cek auth. Fungsi ini menulis ke `creators`,
+    // `campaign_creators`, `creator_snapshots`, dan `videos` — hanya
+    // berdasarkan campaignId dari argumen, tanpa verifikasi pemilik.
+    // Ditutup 30 Sep 2026.
+    try {
+      await requireCampaignAccess(campaignId);
+    } catch (err: any) {
+      return { success: false, error: err?.message ?? 'Akses ditolak.' };
+    }
+
     await ensureVideoColumns();
     await ensureNotesTable();
 

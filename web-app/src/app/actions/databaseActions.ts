@@ -4,6 +4,7 @@ import { db } from '@/db';
 import { sql } from 'drizzle-orm';
 import { auth } from '@/auth';
 import { revalidatePath } from 'next/cache';
+import { requireRole } from '@/lib/guards';
 
 // ============================================================
 // AUDIT LOG
@@ -1245,12 +1246,60 @@ export async function fetchAllProfilesAction() {
   }
 }
 
+/**
+ * Ubah profil user lain (role / nama / status).
+ *
+ * SEBELUMNYA: fungsi ini tanpa cek auth sama sekali. Siapa pun yang punya
+ * session bisa memanggilnya dan membuat dirinya sendiri jadi admin.
+ * Ditutup 30 Sep 2026.
+ *
+ * Hanya manager / executive / admin yang boleh. Mengubah `role` adalah
+ * operasi yang mengunci fitur untuk orang lain, jadi tidak boleh tersedia
+ * untuk staff.
+ *
+ * Catatan: nama kolomnya `nama`, bukan `full_name`. Versi lama memakai
+ * `full_name` yang tidak ada di tabel — jadi selalu gagal diam-diam
+ * karena tidak ada UI yang memanggil fungsi ini.
+ */
 export async function updateProfileAction(id: string, updates: any) {
   try {
+    await requireRole('manager', 'executive', 'admin');
+  } catch (err: any) {
+    return { success: false, error: err?.message ?? 'Akses ditolak.' };
+  }
+
+  try {
+    // Cegah admin mengunci dirinya sendiri keluar dengan mencabut role-nya,
+    // kalau dia orang terakhir yang punya role tersebut.
+    const roleChanges = Boolean(updates?.role);
+    if (roleChanges) {
+      const current = (await db.execute(sql`
+        SELECT role FROM profiles WHERE id = ${id} LIMIT 1
+      `)) as unknown as Array<{ role: string }>;
+
+      if (current.length === 0) {
+        return { success: false, error: 'Profil tidak ditemukan.' };
+      }
+
+      const oldRole = current[0].role;
+      if (oldRole !== updates.role) {
+        const remaining = (await db.execute(sql`
+          SELECT count(*)::int AS c FROM profiles WHERE role = ${oldRole} AND status IS DISTINCT FROM 'disabled'
+        `)) as unknown as Array<{ c: number }>;
+
+        if ((remaining[0]?.c ?? 0) <= 1) {
+          return {
+            success: false,
+            error: `Tidak bisa diubah: ini satu-satunya user dengan role "${oldRole}".`,
+          };
+        }
+      }
+    }
+
     await db.execute(sql`
       UPDATE profiles SET
         role = COALESCE(${updates.role ?? null}, role),
-        full_name = COALESCE(${updates.full_name ?? null}, full_name),
+        nama = COALESCE(${updates.full_name ?? updates.nama ?? null}, nama),
         status = COALESCE(${updates.status ?? null}, status)
       WHERE id = ${id}
     `);
