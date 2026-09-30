@@ -765,8 +765,26 @@ export default function SpreadsheetImportCreatorClient() {
       // 3. Urutkan dari yang paling tidak lengkap ke yang lumayan lengkap
       evaluatedRows.sort((a, b) => b.missingScore - a.missingScore);
 
-      // 4. Bersihkan property missingScore dan masukkan ke tabel rows
+      // Bersihkan property missingScore (dipakai untuk pesan konfirmasi).
       const cleanRows: SpreadsheetRow[] = evaluatedRows.map(({ missingScore, ...rest }) => rest);
+
+      // 4. Tabel akan diganti total. Beri tahu PIC dulu supaya data yang
+      //    sedang diketik tidak hilang tanpa sadar.
+      const filledNow = rows.filter(r => r && (r.username || '').trim());
+      if (filledNow.length > 0) {
+        const ok = window.confirm(
+          `Muat kreator dari database?\n\n` +
+          `Tabel akan diganti dengan ${cleanRows.length} kreator yang datanya belum lengkap.\n` +
+          `${filledNow.length} baris yang sedang Anda kerjakan akan hilang.\n\n` +
+          `Lanjutkan?`
+        );
+        if (!ok) {
+          setIsLoadingAuto(false);
+          return;
+        }
+      }
+
+      // 5. Masukkan ke tabel
       setRows(cleanRows);
 
       alert(`Ditemukan ${cleanRows.length} kreator (${filterLabel[approvalFilter]}) yang datanya belum lengkap.\nData berhasil dimuat dan diurutkan dari yang paling belum lengkap ke yang lumayan lengkap.`);
@@ -1016,27 +1034,23 @@ export default function SpreadsheetImportCreatorClient() {
     }
   };
 
-  const handleUpdateIncomplete = (idx: number, field: 'no_wa' | 'followers' | 'gmv_30_days' | 'gmv_30_days_video' | 'gmv_30_days_live', val: string) => {
+  const handleUpdateIncomplete = (idx: number, field: 'no_wa' | 'followers' | 'gmv_30_days' | 'gmv_30_days_video' | 'gmv_30_days_live' | 'qty_vt' | 'qty_live', val: string) => {
     const cleaned = field === 'no_wa' ? val.trim() : parseSmartNumber(val);
     const newInc = [...incompleteRows];
     newInc[idx][field] = cleaned;
     
     const rowItem = newInc[idx];
-    const hasNoWa = Boolean(rowItem.no_wa && rowItem.no_wa.trim() && rowItem.no_wa.trim() !== '-');
-    const hasFollowers = Boolean(rowItem.followers && Number(rowItem.followers) > 0);
-    const hasGmv = Boolean((rowItem.gmv_30_days && Number(rowItem.gmv_30_days) > 0) || 
-                           (rowItem.gmv_30_days_video && Number(rowItem.gmv_30_days_video) > 0) || 
-                           (rowItem.gmv_30_days_live && Number(rowItem.gmv_30_days_live) > 0));
 
-    if (hasNoWa && hasFollowers && hasGmv) {
+    if (field === 'qty_vt' || field === 'qty_live') {
+      rowItem.content_type = determineContentType(Number(rowItem.qty_vt) || 0, Number(rowItem.qty_live) || 0);
+    }
+    
+    const missing = missingColumns(rowItem);
+    if (missing.length === 0) {
       rowItem.status = 'baru';
       rowItem.errorMsg = undefined;
     } else {
       rowItem.status = 'incomplete';
-      const missing: string[] = [];
-      if (!hasNoWa) missing.push('No WA');
-      if (!hasFollowers) missing.push('Followers');
-      if (!hasGmv) missing.push('Minimal 1 GMV');
       rowItem.errorMsg = `${missing.join(', ')} wajib diisi`;
     }
     
@@ -1044,7 +1058,8 @@ export default function SpreadsheetImportCreatorClient() {
     
     // Also sync back to main rows
     const rowId = newInc[idx].id;
-    setRows(prev => prev.map(r => r.id === rowId ? { ...r, [field]: cleaned, status: newInc[idx].status, errorMsg: newInc[idx].errorMsg } : r));
+    const contentType = newInc[idx].content_type;
+    setRows(prev => prev.map(r => r.id === rowId ? { ...r, [field]: cleaned, content_type: contentType, status: newInc[idx].status, errorMsg: newInc[idx].errorMsg } : r));
   };
 
   const handleUpdateAction = (id: string, action: 'update' | 'skip') => {
@@ -1215,12 +1230,12 @@ export default function SpreadsheetImportCreatorClient() {
               onClick={() => handleLoadIncompleteAuto(autoApprovalFilter)}
               disabled={isLoadingAuto || isImporting || isVerifying || isAutoDetecting}
               className="rounded-r-none border-r-0 text-amber-700 bg-amber-50 border-amber-300 hover:bg-amber-100 shadow-sm flex items-center gap-1.5"
-              title="Tampilkan kreator yang datanya belum lengkap"
+              title="Muat kreator yang sudah ada di campaign ini untuk dilengkapi datanya. Tabel akan diganti."
             >
               {isLoadingAuto ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
               {isLoadingAuto
                 ? 'Memuat...'
-                : `Kreator Belum Lengkap${autoApprovalFilter !== 'all' ? ` (${autoApprovalFilter === 'approve' ? 'Approve' : autoApprovalFilter === 'not_approve' ? 'Not Approve' : autoApprovalFilter === 'pending' ? 'Pending' : autoApprovalFilter === 'alternate' ? 'Alternate' : 'Auto-Detect'})` : ''}`
+                : `Muat Kreator dari Database${autoApprovalFilter !== 'all' ? ` (${autoApprovalFilter === 'approve' ? 'Approve' : autoApprovalFilter === 'not_approve' ? 'Not Approve' : autoApprovalFilter === 'pending' ? 'Pending' : autoApprovalFilter === 'alternate' ? 'Alternate' : 'Auto-Detect'})` : ''}`
               }
             </Button>
             {/* Dropdown toggle */}
@@ -1236,7 +1251,7 @@ export default function SpreadsheetImportCreatorClient() {
             {/* Dropdown menu */}
             {showAutoFilterMenu && (
               <div className="absolute top-full right-0 mt-1 w-56 bg-white border border-slate-200 rounded-lg shadow-lg z-50 py-1 text-sm">
-                <div className="px-3 py-1.5 text-xs font-semibold text-slate-400 uppercase tracking-wide border-b border-slate-100">Filter Kreator Belum Lengkap</div>
+                <div className="px-3 py-1.5 text-xs font-semibold text-slate-400 uppercase tracking-wide border-b border-slate-100">Filter Sumber Data</div>
                 {([
                   { value: 'all', label: '✦ Semua Kreator', desc: 'Tanpa filter status/tier' },
                   { value: 'auto_detect', label: '⚡ Auto-Detect', desc: 'Hanya tier Auto-Detect' },
@@ -1671,6 +1686,8 @@ export default function SpreadsheetImportCreatorClient() {
                           <th className="px-4 py-3 font-medium w-40">GMV 30 Days</th>
                           <th className="px-4 py-3 font-medium w-32">GMV (Video)</th>
                           <th className="px-4 py-3 font-medium w-32">GMV (Live)</th>
+                          <th className="px-4 py-3 font-medium w-24">Qty VT</th>
+                          <th className="px-4 py-3 font-medium w-24">Qty Live</th>
                           <th className="px-4 py-3 font-medium">Status</th>
                         </tr>
                       </thead>
@@ -1679,6 +1696,7 @@ export default function SpreadsheetImportCreatorClient() {
                           const missWa = !r.no_wa || !r.no_wa.trim() || r.no_wa.trim() === '-';
                           const missF = !r.followers || Number(r.followers) <= 0;
                           const missG = (!r.gmv_30_days || Number(r.gmv_30_days) <= 0) && (!r.gmv_30_days_video || Number(r.gmv_30_days_video) <= 0) && (!r.gmv_30_days_live || Number(r.gmv_30_days_live) <= 0);
+                          const missQ = Number(r.qty_vt) <= 0 && Number(r.qty_live) <= 0;
                           return (
                             <tr key={`inc_${r.id}`} className={r.status === 'baru' ? 'bg-emerald-50/30' : 'bg-white'}>
                               <td className="px-4 py-3 font-medium text-slate-700">@{r.username}</td>
@@ -1696,6 +1714,12 @@ export default function SpreadsheetImportCreatorClient() {
                               </td>
                               <td className="px-4 py-3">
                                 <input type="text" value={r.gmv_30_days_live || ''} onChange={e => handleUpdateIncomplete(idx, 'gmv_30_days_live', e.target.value)} placeholder="0" className="w-full px-3 py-1.5 text-sm border border-slate-200 rounded" />
+                              </td>
+                              <td className="px-4 py-3">
+                                <input type="text" value={r.qty_vt || ''} onChange={e => handleUpdateIncomplete(idx, 'qty_vt', e.target.value)} placeholder="0" className={`w-full px-3 py-1.5 text-sm border rounded ${missQ ? 'border-red-300 focus:border-red-500 outline-none focus:ring-1 ring-red-500 bg-rose-50/50' : 'border-slate-200'}`} />
+                              </td>
+                              <td className="px-4 py-3">
+                                <input type="text" value={r.qty_live || ''} onChange={e => handleUpdateIncomplete(idx, 'qty_live', e.target.value)} placeholder="0" className={`w-full px-3 py-1.5 text-sm border rounded ${missQ ? 'border-red-300 focus:border-red-500 outline-none focus:ring-1 ring-red-500 bg-rose-50/50' : 'border-slate-200'}`} />
                               </td>
                               <td className="px-4 py-3">
                                 {r.status === 'baru' ? (
