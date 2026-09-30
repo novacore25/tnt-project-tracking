@@ -1,5 +1,6 @@
 "use server";
 
+import { requireUserOrError, requireRoleOrError } from '@/lib/guards';
 import { db, sqlInList } from '@/db';
 import { sql } from 'drizzle-orm';
 import { auth } from '@/auth';
@@ -441,6 +442,9 @@ export async function createPaymentBatch(campaignId: number, batchLabel: string)
 }
 
 export async function addPaymentItem(batchId: number, itemData: any) {
+  const denied = await requireUserOrError();
+  if (denied) return { success: false, error: denied.message } as any;
+
   let bankAccountId = itemData.bank_account_id ? Number(itemData.bank_account_id) : null;
   let bankName = itemData.metode_pembayaran ? String(itemData.metode_pembayaran).trim() : null;
   let bankNumber = itemData.nomor_rekening ? String(itemData.nomor_rekening).trim() : null;
@@ -577,6 +581,9 @@ export async function addPaymentItem(batchId: number, itemData: any) {
 }
 
 export async function updatePaymentItem(itemId: number, itemData: any) {
+  const denied = await requireUserOrError();
+  if (denied) return { success: false, error: denied.message } as any;
+
   const itemRows = await db.execute(sql`SELECT campaign_creator_id, batch_id FROM payment_items WHERE id = ${itemId}`);
   const item = (itemRows as any[])[0];
 
@@ -652,6 +659,9 @@ export async function updatePaymentItem(itemId: number, itemData: any) {
 }
 
 export async function deletePaymentItem(itemId: number) {
+  const denied = await requireUserOrError();
+  if (denied) return { success: false, error: denied.message } as any;
+
   await db.execute(sql`DELETE FROM payment_items WHERE id = ${itemId}`);
 }
 
@@ -682,6 +692,9 @@ export async function deletePaymentBatch(batchId: number) {
 }
 
 export async function submitBatchToManager(batchId: number) {
+  const denied = await requireUserOrError();
+  if (denied) return { success: false, error: denied.message } as any;
+
   await db.execute(sql`
     UPDATE payment_batches
     SET status = 'pending_manager', submitted_at = NOW()
@@ -691,6 +704,9 @@ export async function submitBatchToManager(batchId: number) {
 }
 
 export async function revertBatchStatus(batchId: number) {
+  const denied = await requireRoleOrError('executive');
+  if (denied) return { success: false, error: denied.message } as any;
+
   const rows = await db.execute(sql`SELECT status FROM payment_batches WHERE id = ${batchId}`);
   const batch = (rows as any[])[0];
   if (!batch) throw new Error('Batch tidak ditemukan');
@@ -711,6 +727,9 @@ export async function revertBatchStatus(batchId: number) {
 // ==========================================
 
 export async function resolveCreatorForMigration(username: string, campaignId: number, uploaderId: string, rowData: any) {
+  const denied = await requireUserOrError();
+  if (denied) return { success: false, error: denied.message } as any;
+
   let creatorId: number;
   let campaignCreatorId: number;
   let picId = uploaderId;
@@ -890,6 +909,9 @@ export async function executiveFinalizeReview1(batchId: number) {
 // ==========================================
 
 export async function financeToggleItem(itemId: number, selected: boolean) {
+  const denied = await requireUserOrError();
+  if (denied) return { success: false, error: denied.message } as any;
+
   const finalStatus = selected ? 'finance_selected' : 'executive_1_approved';
   await db.execute(sql`
     UPDATE payment_items
@@ -948,6 +970,9 @@ async function syncPaidItemsToCampaignCreators(paymentItemIds: number[], actualP
 }
 
 export async function autoSplitUnpaidBatchItems(batchId: number) {
+  const denied = await requireUserOrError();
+  if (denied) return { success: false, error: denied.message } as any;
+
   const batchRows = await db.execute(sql`SELECT * FROM payment_batches WHERE id = ${batchId}`);
   const batch = (batchRows as any[])[0];
   if (!batch) return;
@@ -1139,6 +1164,9 @@ export async function getBudgetSummary() {
 }
 
 export async function financeUpdateAmounts(itemId: number, actualTransfer: number | null, biayaTransfer: number) {
+  const denied = await requireUserOrError();
+  if (denied) return { success: false, error: denied.message } as any;
+
   await db.execute(sql`
     UPDATE payment_items
     SET actual_transfer = ${actualTransfer}, biaya_transfer = ${biayaTransfer}
@@ -1148,6 +1176,9 @@ export async function financeUpdateAmounts(itemId: number, actualTransfer: numbe
 }
 
 export async function updateCampaignBudget(campaignId: number, field: 'budget_creator_plafon' | 'budget_ads_plafon', newValue: number) {
+  const denied = await requireUserOrError();
+  if (denied) return { success: false, error: denied.message } as any;
+
   if (field === 'budget_creator_plafon') {
     await db.execute(sql`UPDATE campaigns SET budget_creator_plafon = ${newValue} WHERE id = ${campaignId}`);
   } else {
@@ -1157,6 +1188,9 @@ export async function updateCampaignBudget(campaignId: number, field: 'budget_cr
 }
 
 export async function updateItemBuktiTransfer(itemId: number, buktiUrl: string) {
+  const denied = await requireUserOrError();
+  if (denied) return { success: false, error: denied.message } as any;
+
   await db.execute(sql`
     UPDATE payment_items
     SET bukti_transfer_url = ${buktiUrl}
@@ -1166,18 +1200,28 @@ export async function updateItemBuktiTransfer(itemId: number, buktiUrl: string) 
 }
 
 export async function bulkSyncBudgetRows(rows: Array<{ id: number, price?: number | null, nominal_pelunasan?: number | null, status_bayar?: string | null, tgl_pembayaran?: string | null }>) {
-  for (const row of rows) {
-    await db.execute(sql`
-      UPDATE campaign_creators
-      SET 
-        price = COALESCE(${row.price ?? null}, price),
-        nominal_pelunasan = COALESCE(${row.nominal_pelunasan ?? null}, nominal_pelunasan),
-        status_bayar = COALESCE(${row.status_bayar ?? null}, status_bayar),
-        tgl_pembayaran = COALESCE(${row.tgl_pembayaran ?? null}, tgl_pembayaran)
-      WHERE id = ${row.id}
-    `);
-  }
-  return { success: true, count: rows.length };
+  const denied = await requireUserOrError();
+  if (denied) return { success: false, error: denied.message } as any;
+
+  // Tanpa transaksi, gagal di baris ke-300 dari 500 akan meninggalkan
+  // 300 baris pertama sudah tersimpan tanpa ada yang tahu. Satu transaksi
+  // membuat semuanya batal atau semuanya tersimpan.
+  const result = await db.transaction(async (tx) => {
+    for (const row of rows) {
+      await tx.execute(sql`
+        UPDATE campaign_creators
+        SET 
+          price = COALESCE(${row.price ?? null}, price),
+          nominal_pelunasan = COALESCE(${row.nominal_pelunasan ?? null}, nominal_pelunasan),
+          status_bayar = COALESCE(${row.status_bayar ?? null}, status_bayar),
+          tgl_pembayaran = COALESCE(${row.tgl_pembayaran ?? null}, tgl_pembayaran)
+        WHERE id = ${row.id}
+      `);
+    }
+      return { success: true, count: rows.length };
+  });
+
+  return result;
 }
 
 // ==========================================
