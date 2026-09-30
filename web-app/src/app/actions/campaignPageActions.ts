@@ -1186,7 +1186,7 @@ export async function commitBulkImportVideosAction(
 ) {
   try {
     // SEBELUMNYA tanpa cek auth. Fungsi ini menulis ke `creators`,
-    // `campaign_creators`, `creator_snapshots`, dan `videos` — hanya
+    // `campaign_creators`, `creator_snapshots`, dan `videos` â€” hanya
     // berdasarkan campaignId dari argumen, tanpa verifikasi pemilik.
     // Ditutup 30 Sep 2026.
     try {
@@ -1241,9 +1241,22 @@ export async function commitBulkImportVideosAction(
 
     const usernames = Array.from(creatorGroup.keys());
 
-    // 1. Ensure all creators exist in `creators` table
-    for (const u of usernames) {
-      await db.execute(sql`
+    // Semua penulisan DB dibungkus SATU transaksi: creators,
+    // campaign_creators, creator_snapshots, dan videos.
+    //
+    // Sebelumnya kalau gagal di tengah (misal timeout di video ke-400 dari 500),
+    // video 1-400 tetap tersimpan sementara layar menampilkan "gagal". Tidak ada
+    // transaksi, jadi tidak ada yang membatalkan.
+    //
+    // ensureVideoColumns dan ensureNotesTable sengaja DI LUAR transaksi:
+    // ALTER TABLE menahan lock, dan lock itu tidak boleh ditahan selama
+    // seluruh transaksi berjalan.
+    const result = await db.transaction(async (tx) => {
+      let insertedTotal = 0;
+
+      // 1. Ensure all creators exist in `creators` table
+      for (const u of usernames) {
+      await tx.execute(sql`
         INSERT INTO creators (username, link_account, added_by)
         VALUES (${u}, ${'https://www.tiktok.com/@' + u}, ${addedById || null})
         ON CONFLICT (username) DO UPDATE SET link_account = EXCLUDED.link_account
@@ -1252,7 +1265,7 @@ export async function commitBulkImportVideosAction(
 
     let creatorRows: any[] = [];
     if (usernames.length > 0) {
-      creatorRows = (await db.execute(sql`
+      creatorRows = (await tx.execute(sql`
         SELECT id, LOWER(username) as username FROM creators WHERE LOWER(username) IN ${sqlInList(usernames)}
       `)) as any[];
     }
@@ -1264,12 +1277,12 @@ export async function commitBulkImportVideosAction(
       if (!creatorId) continue;
       const vidsCount = creatorGroup.get(u)!.length;
 
-      const existingCc = (await db.execute(sql`
+      const existingCc = (await tx.execute(sql`
         SELECT id, qty_vt FROM campaign_creators WHERE campaign_id = ${campaignId} AND creator_id = ${creatorId} LIMIT 1
       `)) as any[];
 
       if (existingCc.length === 0) {
-        await db.execute(sql`
+        await tx.execute(sql`
           INSERT INTO campaign_creators (
             campaign_id, creator_id, tier, price, qty_vt, qty_live, content_type,
             approval, pic_assist, notes_manager, notes_pic, sample_progress,
@@ -1284,7 +1297,7 @@ export async function commitBulkImportVideosAction(
         `);
 
         // Insert initial snapshot
-        await db.execute(sql`
+        await tx.execute(sql`
           INSERT INTO creator_snapshots (creator_id, followers, gmv_30d, gmv_30d_organic, gmv_30d_live, tanggal_update, updated_by)
           VALUES (${creatorId}, 0, 0, 0, 0, CURRENT_DATE, ${picName || 'Bulk Import'})
           ON CONFLICT DO NOTHING
@@ -1295,7 +1308,7 @@ export async function commitBulkImportVideosAction(
     // 3. Fetch final `campaign_creators` IDs for this campaign
     let ccRows: any[] = [];
     if (usernames.length > 0) {
-      ccRows = (await db.execute(sql`
+      ccRows = (await tx.execute(sql`
         SELECT cc.id as cc_id, LOWER(c.username) as username
         FROM campaign_creators cc
         JOIN creators c ON cc.creator_id = c.id
@@ -1305,13 +1318,11 @@ export async function commitBulkImportVideosAction(
     const ccIdMap = new Map<string, number>(ccRows.map((r: any) => [r.username, r.cc_id]));
 
     // 4. For each creator, get current MAX(urutan) and insert new video entries
-    let insertedTotal = 0;
-
     for (const [u, creatorItems] of creatorGroup.entries()) {
       const ccId = ccIdMap.get(u);
       if (!ccId) continue;
 
-      const maxUrutanRes = (await db.execute(sql`
+      const maxUrutanRes = (await tx.execute(sql`
         SELECT COALESCE(MAX(urutan), 0) as max_urutan FROM videos WHERE campaign_creator_id = ${ccId}
       `)) as any[];
       let currentUrutan = Number(maxUrutanRes[0]?.max_urutan || 0);
@@ -1319,7 +1330,7 @@ export async function commitBulkImportVideosAction(
       for (const item of creatorItems) {
         currentUrutan++;
         const finalUrl = item.expandedUrl || item.originalUrl;
-        await db.execute(sql`
+        await tx.execute(sql`
           INSERT INTO videos (
             campaign_creator_id, urutan, concept, link_video, content_uid, sku_id,
             vt_approval, added_by
@@ -1332,7 +1343,7 @@ export async function commitBulkImportVideosAction(
       }
 
       // Update qty_vt on campaign_creators if current total videos exceeds qty_vt
-      await db.execute(sql`
+      await tx.execute(sql`
         UPDATE campaign_creators
         SET qty_vt = GREATEST(qty_vt, ${currentUrutan}),
             approval = 'approved'
@@ -1340,15 +1351,18 @@ export async function commitBulkImportVideosAction(
       `);
     }
 
+      return {
+        success: true,
+        insertedCount: insertedTotal,
+        skippedCount: cleanItems.length - validItems.length,
+        message: `Berhasil mengimport ${insertedTotal} video ke database!`
+      };
+    });
+
     revalidatePath(`/campaigns/${campaignId}/video`);
     revalidatePath(`/campaigns/${campaignId}/listing`);
 
-    return {
-      success: true,
-      insertedCount: insertedTotal,
-      skippedCount: cleanItems.length - validItems.length,
-      message: `Berhasil mengimport ${insertedTotal} video ke database!`
-    };
+    return result;
   } catch (err: any) {
     console.error('commitBulkImportVideosAction error:', err);
     return { success: false, error: err.message };
