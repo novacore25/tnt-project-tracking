@@ -69,7 +69,7 @@ UI ke Server Component sekarang = rewrite besar.
 - `revalidatePath()` dipanggil **101×** di server action, tapi **tidak ada efeknya** untuk
   render client. Ini bukan bug — ini sisa era Supabase Realtime. Menghapus 101 panggilan
   itu *bolt-bolt* dan berisiko. **Biarkan.**
-- Setelah mutasi, halaman **tidak auto-refresh**. Ini perilaku yang sudah.users习惯了.
+- Setelah mutasi, halaman **tidak auto-refresh**. Ini perilaku yang sudah diterima pengguna.
   **Jangan tambahkan `router.refresh()`** — tidak akan memperbaiki apa pun dan menambah bingka.
 - Store melakukan `setState` lokal setelah setiap mutasi (32 action). Somewhat manual
   tapi konsisten.

@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import type { Session } from 'next-auth';
+import { sql } from 'drizzle-orm';
 import { auth } from '@/auth';
+import { db } from '@/db';
 
 export const dynamic = 'force-dynamic';
 
@@ -60,6 +62,70 @@ function checkRateLimit(key: string): { allowed: boolean; retryAfter: number } {
   }
 
   return { allowed: true, retryAfter: 0 };
+}
+
+// ============================================================
+// CACHE: short_url -> final_url
+// ============================================================
+// Redirect TikTok bersifat permanen, jadi sekali berhasil SELALU berhasil.
+// Disimpan di tabel `tiktok_link_cache` (lihat migration
+// 20260930090000_create_tiktok_link_cache.sql).
+//
+// Graceful degradation: kalau tabelnya belum ada (migration belum
+// dijalankan), route ini tetap harus bisa dipakai. Semua akses cache
+// dibungkus try/catch dan failure-nya diabaikan — fitur kembali ke
+// resolusi langsung, hanya tanpa penghematan request.
+//
+// PENTING: hanya hasil BERHASIL yang disimpan. Kalau link yang gagal
+// konversi ikut ter-cache, link itu tidak akan pernah dicoba lagi
+// walau TikTok sudah bisaaccessed.
+// ============================================================
+
+type CachedLink = { final_url: string; video_id: string | null; creator_username: string | null };
+
+async function readCache(shortUrl: string): Promise<CachedLink | null> {
+  try {
+    const rows = await db.execute(sql`
+      SELECT final_url, video_id, creator_username
+      FROM tiktok_link_cache
+      WHERE short_url = ${shortUrl}
+      LIMIT 1
+    `);
+    return (rows as unknown as CachedLink[])[0] ?? null;
+  } catch (err) {
+    // Belum ada di DB, atau DB sedang tidak terjangkau. Fallback ke resolusi langsung.
+    return null;
+  }
+}
+
+async function writeCache(shortUrl: string, finalUrl: string) {
+  try {
+    const videoId = finalUrl.match(/video\/(\d+)/)?.[1] ?? null;
+    const username = finalUrl.match(/tiktok\.com\/@([a-zA-Z0-9_.-]+)\//)?.[1]?.toLowerCase() ?? null;
+
+    await db.execute(sql`
+      INSERT INTO tiktok_link_cache (short_url, final_url, video_id, creator_username)
+      VALUES (${shortUrl}, ${finalUrl}, ${videoId}, ${username})
+      ON CONFLICT (short_url) DO UPDATE
+        SET final_url = EXCLUDED.final_url,
+            video_id = EXCLUDED.video_id,
+            creator_username = EXCLUDED.creator_username
+    `);
+  } catch (err) {
+    // Gagal menyimpan cache bukan error fatal — hasil resolusinya tetap dikembalikan.
+  }
+}
+
+async function touchCache(shortUrl: string) {
+  try {
+    await db.execute(sql`
+      UPDATE tiktok_link_cache
+      SET hit_count = hit_count + 1, last_used_at = NOW()
+      WHERE short_url = ${shortUrl}
+    `);
+  } catch (err) {
+    // bukan error fatal
+  }
 }
 
 function isValidShortUrl(url: string): boolean {
@@ -161,6 +227,18 @@ export async function POST(request: Request) {
       );
     }
 
+    // --- Cache read: 1 query, 0 request ke TikTok --------------------
+    const cached = await readCache(shortUrl);
+    if (cached?.final_url) {
+      void touchCache(shortUrl);
+      return NextResponse.json({
+        originalUrl: shortUrl,
+        expandedUrl: cached.final_url,
+        cached: true,
+      });
+    }
+    // -----------------------------------------------------------------
+
     let finalUrl = await resolveShortUrl(shortUrl);
 
     // Kode short tidak dikenal -> TikTok arahkan ke homepage. Bukan link video.
@@ -170,6 +248,8 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
+
+    // oEmbed hanya dipanggil kalau username hilang (format /@/video/ID).
 
     // oEmbed hanya dipanggil kalau username hilang (format /@/video/ID).
     // Kalau redirect sudah membawa username, tidak perlu request tambahan.
@@ -194,12 +274,20 @@ export async function POST(request: Request) {
         }
       } catch (err) {
         // Bukan error fatal: tanpa username, guard di bulkVerifyVideoLinksAction
-        // akan menolak item dengan pesan yang jelas.
+        // akan menolak item dengan pesan yang jelas. Kalau username tetap
+        // tidak ketemu, JANGAN simpan ke cache — biar linknya bisa dicoba lagi.
         console.error('Failed to fetch oEmbed for username:', err);
       }
     }
 
-    return NextResponse.json({ originalUrl: shortUrl, expandedUrl: finalUrl });
+    // Cache baru ditulis di sini, SETELAH oEmbed selesai — dan hanya kalau
+    // username + video ID benar-benar sudah lengkap. Kalau oEmbed gagal,
+    // hasil setengah jadi tidak boleh tersimpan permanen.
+    if (hasUsername(finalUrl) && hasVideoId(finalUrl)) {
+      void writeCache(shortUrl, finalUrl);
+    }
+
+    return NextResponse.json({ originalUrl: shortUrl, expandedUrl: finalUrl, cached: false });
   } catch (error: any) {
     // Timeout TikTok = dia menahan. Balas 504 supaya client tahu ini rate limit,
     // bukan link rusak. Client juga akan memperlambat otomatis (adaptive delay).

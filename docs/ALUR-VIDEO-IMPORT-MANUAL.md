@@ -362,12 +362,51 @@ Hanya muncul kalau `metrics.error > 0`. Menyalin `originalUrl` (bukan
 ke textarea. Kalau Clipboard API gagal (butuh HTTPS), muncul `prompt()`
 sebagai fallback supaya link tetap bisa disalin manual.
 
-### 7c. Yang MASIH belum dikerjakan
+### 7c. Cache `short_url → final_url` (migration wajib)
+
+Migration: `20260930090000_create_tiktok_link_cache.sql` — **harus dijalankan manual**
+(bontoh via `drizzle-kit`, sesuai AGENTS.md aturan #1).
+
+Tabel `tiktok_link_cache`:
+```
+short_url (PK) | final_url | video_id | creator_username | hit_count | created_at | last_used_at
+```
+
+Tidak ada TTL — redirect TikTok permanen, jadi tidak pernah basi.
+
+**Graceful degradation:** `readCache` / `writeCache` dibungkus `try/catch`.
+Kalau tabel belum ada, route tetap berfungsi normal, hanya tanpa penghematan
+request. Jadi **kode boleh deploy sebelum migration dijalankan.**
+
+**Dua aturan yang tidak boleh dilanggar:**
+
+1. **Hanya hasil BERHASIL yang di-cache.** Kalau link yang gagal ikut tersimpan,
+   link itu tidak akan pernah dicoba lagi walau TikTok sudah bisa diakses.
+   -> Diimplementasikan dengan menulis cache *setelah* oEmbed selesai, dan hanya
+   kalau `hasUsername(finalUrl) && hasVideoId(finalUrl)`.
+2. **`hit_count` selalu incremented** setiap kali cache dipakai, jadi bisa diukur.
+   Kalau setelah 2 minggu `SUM(hit_count)` masih 0, cache ini tidak berguna
+   dan boleh di-drop.
+
+#### Mengukur apakah cache benar-benar dipakai
+
+```sql
+SELECT count(*) AS total_link,
+       sum(hit_count) AS total_pakai_cache,
+       count(*) FILTER (WHERE hit_count > 1) AS link_yang_diulang
+FROM tiktok_link_cache;
+```
+
+Kalau `link_yang_diulang` = 0 setelah beberapa minggu, artinya PIC hampir tidak
+pernah mengulang link yang sama — dan cache **tidak** menghemat apa pun.
+Itu yang membuat fitur **batch expand di server** jadi lebih berharga
+daripada cache.
+
+### 7d. Yang MASIH belum dikerjakan
 
 | # | Perbaikan | Kenapa | Perlu migration? |
 |---|---|---|---|
-| 4 | Cache `short_link → final_url` | Konversi bersifat permanen. Penghematan request **terbesar** untuk link yang sering diulang | **Ya** |
-| 6 | Batch expand di server | 500 request browser → 1 request | Tidak |
+| 6 | Batch expand di server | 500 request browser → 1 request. **Kemungkinan lebih bernilai daripada cache** — lihat query ukur di atas | Tidak |
 | 10 | Bungkus commit dalam transaksi | Import 500 link tanpa transaksi = kalau gagal di tengah, data parsial tersimpan tanpa error jelas | Tidak |
 | 11 | Placeholder `sqlInList` | `IN ($1,$2,...)` sebagai gantinya ribuan `?` — juga menutup risiko SQL injection | Tidak |
 

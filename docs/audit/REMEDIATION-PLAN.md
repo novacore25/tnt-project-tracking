@@ -109,10 +109,10 @@ Perubahan minimal (tidak mengubah alur approval yang sudah ada):
 | Finance | `financeToggleItem:892`, `financeSubmitToExecutive:901`, `financeMarkPaid:1009`, `financeBulkMarkPaidItems:1053`, `financeUpdateAmounts:1141`, `bulkProcessFinanceReview:1272`, `bulkMarkPaidFinance:1322` | `finance`, `admin`, `executive` |
 | Executive final | `executiveApproveItem:1094`, `executiveRejectItem:1104`, `executiveFinalizeReview:1114`, `bulkApproveExecutiveFinal:1252`, `processBulkExecutive:1358` | `executive`, `admin` |
 
-> ⚠️ **Cek dulu siapa yang实际操作 approve di produksi** sebelum mengunci. Kalau ada staff yang
-> selama ini ikut审批 (karena tidak ada gate), mengunci tiba-tiba bisa menghentikan alur.
+> ⚠️ **Cek dulu siapa yang boleh approve di produksi** sebelum mengunci. Kalau ada staff yang
+> selama ini ikut menyetujui (karena tidak ada gate), mengunci tiba-tiba bisa menghentikan alur.
 > **Solusi aman: jalankan guard dalam mode "log-only" 1 minggu** — catat role yang mencoba,
-> tidak tolak. Setelah yakin名单 benar, aktifkan penolakan.
+> tidak tolak. Setelah yakin aturan ini benar, aktifkan penolakan.
 
 ### 1.4 Guard API route (2 jam)
 
@@ -153,7 +153,7 @@ if (!whitelist && !existingProfile) {
 }
 ```
 
-> **T脂肪:** kalau ada user yang selama ini masuk tanpa daftar whitelist, mereka akan kehilangan
+> **Trade-off:** kalau ada user yang selama ini masuk tanpa daftar whitelist, mereka akan kehilangan
 > akses. **Seed `whitelisted_emails` dulu** dengan semua `profiles.email` yang ada + role-nya.
 > Query untuk membuat backup daftar ini:
 > ```sql
@@ -226,7 +226,7 @@ WHERE a.content_uid = b.content_uid
   AND a.product_id IS NULL AND b.product_id IS NOT NULL
   AND a.id < b.id;
 ```
-Lalu migration untuk mencegah复发:
+Lalu migration untuk mencegah ini:
 ```sql
 -- supabase/migrations/<timestamp>_fix_organic_videos_unique.sql
 CREATE UNIQUE INDEX CONCURRENTLY idx_organic_videos_uid_product
@@ -295,7 +295,7 @@ jalur utama di `paymentActions.ts`). Lalu:
 Untuk role: `whitelisted_emails` jadi **authoritative** (sudah jadi begitu setelah 1.6).
 `profiles.role` = cache, di-refresh saat signIn. `users.role` → hapus.
 
-Untuk GMV: **tulis definisi单一 di `docs/DOMAIN-CHEATSHEET.md`** danVjerntukan
+Untuk GMV: **tulis definisi resmi di `docs/DOMAIN-CHEATSHEET.md`** danVjerntukan
 `vw_campaign_summary` mana yang benar sebelum menentukan view mana yang dipakai.
 
 ---
@@ -509,7 +509,7 @@ untuk `assigned_sku_ids`. Hapus juga `revalidatePath` × 8 per SKU (jadi 1 kali 
 | `app/campaigns/actions/campaignPageActions.ts` | 2028 baris | Pisahkan per domain: concepts, listing, daily, video, addresses |
 | `app/campaigns/actions/paymentActions.ts` | 1281 baris | Pisahkan: reads, approval chain, finance, bulk ops |
 
-**Aturan:** extract的时候不要改变 markup atau state ownership — pindahkan kode apa adanya
+**Aturan:** extract, parsing, markup atau state ownership — pindahkan kode apa adanya
 ke file baru, lalu verify tampilan identik. Refactor behaviour (misal ubah fetch jadi
 server component) = proyek terpisah.
 
@@ -659,7 +659,7 @@ Setelah semua fase selesai:
 ### Sebelum mulai
 - [ ] `pg_dump` penuh + verifikasi bisa restore
 - [ ] Catat daftar user yang benar-benar punya akses (untuk seed whitelist & validasi role approval)
-- [ ] Cek `SELECT email, role FROM profiles ORDER BY email;` — ini daftar/user名单 Anda
+- [ ] Cek `SELECT email, role FROM profiles ORDER BY email;` — ini daftar user yang sudah Anda
 - [ ] Jadwalkan window untuk rotasi `AUTH_SECRET` (logout semua user)
 - [ ] Koordinasi dengan pemilik akun TikTok Partner Center untuk rotasi app
 

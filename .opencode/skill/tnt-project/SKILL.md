@@ -87,7 +87,7 @@ whitelisted_emails ──> allowlist login (saat ini DILEWATI, lihat §4)
 |---|---|---|
 | **VT** | Video TikTok (UGC creator) | `videos` |
 | **VT / Live** | Dua konten berbeda,Diifferentiate via `content_type` / `is_livestream` | `organic_videos` |
-| **Organic** | GMV dari短视频/affiliate link tanpa Ads | `sales` |
+| **Organic** | GMV dari link organic/affiliate tanpa Ads | `sales` |
 | **Ads / VSA** | GMV dari iklan TikTok Ads | `ads_performance` |
 | **GMV** | Gross Merchandise Value, dalam IDR | `sales.gmv` (bigint) |
 | **Komisi** | Fee creator, `%` | `skus.komisi` |
@@ -96,7 +96,7 @@ whitelisted_emails ──> allowlist login (saat ini DILEWATI, lihat §4)
 | **Plafon** | Budget cap | `campaigns.budget_creator_plafon` / `budget_ads_plafon` |
 | **Tier** |nano/micro/macro/mega + live | `campaign_creators.tier` |
 | **Unmapped** | Order/video TikTok yang tidak bisa dipetakan ke campaign/SKU/creator | `syncUnmapped.ts` |
-| **Batch** | Header pengajuan pembayaran批量 | `payment_batches` |
+| **Batch** | Header pengajuan pembayaran massal`payment_batches` |
 | **Kurs** | Nilai tukar USD→IDR (default 16000) | `ads_performance.kurs` |
 | **Split payment** | Pembayaran pecah: ratecard + biaya transfer | `payment_items.actual_transfer` / `biaya_transfer` |
 
@@ -133,7 +133,7 @@ Component → setState lokal (manual) atau pakai data balik
 ```
 - Store zustand punya 32 pemanggilan action, **0calling `fetchData()` ulang** setelah mutasi.
 - `revalidatePath()` dipanggil 101× di server action, tapi **hampir semua route adalah
-  `'use client'`** → revalidate tidak berguna untuk render client. Ini、民 bukan bug,
+  `'use client'`** → revalidate tidak berguna untuk render client. Ini bukan bug,,
   ini sisa migrasi dari era Supabase Realtime.
 - Setelah mutasi, halaman **tidak auto-refresh**. User harus refresh manual atau
   komponen memanggil fetch sendiri. **Jangan "perbaiki" ini dengan menambahkan
@@ -160,7 +160,7 @@ Total **6 halaman** tersedia tanpa akun Google. **Ini superficie anonim.**
 
 ## 3. Jebakan yang SUDAH DIKETAHUI (bukan opinion — terverifikasi)
 
-Read these before touching anything. Mengabaikannya = regresi data atau安全问题.
+Read these before touching anything. Mengabaikannya = regresi data atau fatal.
 
 ### 3.1 `src/db/schema.ts` TIDAK cocok dengan database nyata — JANGAN `drizzle-kit push`
 Skema Drizzle adalah **generasi lama** yang ditinggalkan. Contoh bobot:
@@ -242,7 +242,7 @@ policy `USING (true) WITH CHECK (true) TO authenticated`. Tapi aplikasi **tidak 
 pakai Supabase client** — dia konek langsung ke Postgres via `postgres-js`
 (`db/index.ts:14`). Sehingah RLS: (a) tidak pernah melihat context `authenticated`,
 (b) di-bypass karena koneksi pakai user pemilik/bypassrls. **Semua scoping 100% di level aplikasi.**
-Jangan撰tulis query yang "menganggap" RLS protecting-nya.
+Jangan tulis query yang "menganggap" RLS protecting-nya.
 
 ### 3.12 Secret yang ter-hardcode di dalam source (SUDAH di git history)
 | File:line | Secret |
