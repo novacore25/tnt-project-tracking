@@ -703,6 +703,9 @@ export default function OrganicImport({ mode = 'sales' }: { mode?: 'sales' | 'vi
           errors.push(`Gagal import batch awareness (${i + 1}-${i + chunk.length}): ${(res as any)?.error || 'Gagal menyimpan ke database'}`);
         }
       } catch (err: any) {
+        // Log ke console browser supaya error yang terjadi SEBELUM badan
+        // server action jalan (misal saat argumen dide-serialize) punya jejak.
+        console.error('[import] gagal batch awareness', err);
         errors.push(`Gagal import batch awareness (${i + 1}-${i + chunk.length}): ${err.message || err}`);
       }
       processed += chunk.length;

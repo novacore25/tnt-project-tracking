@@ -346,7 +346,8 @@ export async function executeSalesImportChunkAction(salesRows: any[], videoRows:
 
     return result;
   } catch (err: any) {
-    console.error("FATAL ERROR in executeSalesImportChunkAction:", err);
+    console.error("[import] FATAL executeSalesImportChunkAction:", err);
+    if (err?.stack) console.error("[import] stack:", err.stack);
     const detailMsg = err?.detail || err?.cause?.message || err?.message || String(err);
     const cleanError = detailMsg.length > 500
       ? (detailMsg.substring(0, 300) + '... [Code: ' + (err?.code || 'ERR') + ']')
