@@ -112,7 +112,13 @@ async function writeCache(shortUrl: string, finalUrl: string) {
             creator_username = EXCLUDED.creator_username
     `);
   } catch (err) {
-    // Gagal menyimpan cache bukan error fatal — hasil resolusinya tetap dikembalikan.
+    // Gagal menyimpan cache bukan error fatal — hasil resolusinya tetap
+    // dikembalikan ke PIC. TAPI harus terlihat di log, kalau tidak kita
+    // tidak akan pernah tahu cache-nya diam-diam kosong.
+    console.error('[expand-tiktok] GAGAL simpan cache:', {
+      shortUrl,
+      pesan: (err as Error)?.message,
+    });
   }
 }
 
@@ -124,7 +130,10 @@ async function touchCache(shortUrl: string) {
       WHERE short_url = ${shortUrl}
     `);
   } catch (err) {
-    // bukan error fatal
+    console.error('[expand-tiktok] GAGAL update hit_count:', {
+      shortUrl,
+      pesan: (err as Error)?.message,
+    });
   }
 }
 
@@ -284,11 +293,19 @@ export async function POST(request: Request) {
     // username + video ID benar-benar sudah lengkap. Kalau oEmbed gagal,
     // hasil setengah jadi tidak boleh tersimpan permanen.
     if (hasUsername(finalUrl) && hasVideoId(finalUrl)) {
-      // WAJIB await, jangan `void`. Kalau fire-and-forget, response terkirim
-      // duluan dan proses bisa selesai sebelum INSERT benar-benar jalan —
-      // cache lalu diam-diam tidak pernah terisi, dan kita salah menyimpulkan
-      // "cache tidak berguna". Beberapa milidetik itu sepadan.
+      // WAJIB await, jangan fire-and-forget. Kalau response terkirim duluan,
+      // proses bisa selesai sebelum INSERT benar-benar jalan — cache lalu
+      // diam-diam tidak pernah terisi.
       await writeCache(shortUrl, finalUrl);
+    } else {
+      // Reach ini = kondisi tak terduga. Kalau muncul, jangan simpan apa pun
+      // dan jangan diam: ini yang akan jelas terlihat di log Coolify.
+      console.warn('[expand-tiktok] Resolusi ok tapi URL tidak lengkap, TIDAK di-cache:', {
+        shortUrl,
+        finalUrl,
+        adaUsername: hasUsername(finalUrl),
+        adaVideoId: hasVideoId(finalUrl),
+      });
     }
 
     return NextResponse.json({ originalUrl: shortUrl, expandedUrl: finalUrl, cached: false });
