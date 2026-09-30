@@ -69,7 +69,7 @@ ORDER BY cc.campaign_id, cc.creator_id, cc.id
 LIMIT 200;
 
 \echo ''
-\echo '=== 4. KreATOR yang listing-nya dobel (ringkas per kreator) ==='
+\echo '=== 4. Kreator yang listing-nya dobel (ringkas per kreator) ==='
 
 SELECT cr.username AS kreator,
        count(DISTINCT cc.campaign_id) AS jumlah_campaign,
@@ -83,7 +83,7 @@ WHERE (cc.campaign_id, cc.creator_id) IN (
   HAVING count(*) > 1
 )
 GROUP BY cr.username
-ORDER BY jumlah_baris DESC, cr.username
+ORDER BY total_baris DESC, cr.username
 LIMIT 50;
 
 \echo ''
