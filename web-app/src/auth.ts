@@ -11,22 +11,46 @@ if (process.env.AUTH_URL && process.env.AUTH_URL.includes('sslip.io')) {
   delete process.env.AUTH_URL;
 }
 
+/**
+ * Ambil kredensial dari environment, dan GAGAL KERAS kalau tidak ada.
+ *
+ * SEBELUMNYA file ini punya nilai cadangan literal, misalnya:
+ *   secret: process.env.AUTH_SECRET || 'b864a7f0...'
+ *
+ * Itu berbahaya karena repo ini sudah public. Kode yang bisa dibaca siapa
+ * pun bukan lagi secret: siapa pun yang membacanya bisa membuat cookie
+ * session palsu dan menyamar sebagai user tanpa password.
+ *
+ * Yang lebih buruk, pola `||` itu fail-open: kalau environment variable
+ * lupa diset, aplikasi tidak error - diam-diam memakai secret yang
+ * sudah terekspos. Tidak ada yang ingat, tidak ada yang menyadari.
+ *
+ * Sekarang kalau kredensial hilang, aplikasi berhenti dengan pesan yang
+ * jelas. Lebih baik tidak jalan daripada jalan dengan kunci yang publik.
+ */
+function requiredEnv(primary: string, ...alternatives: string[]): string {
+  const names = [primary, ...alternatives];
+  const value = names.map((n) => process.env[n]).find(Boolean);
+
+  if (!value) {
+    throw new Error(
+      `[auth] ${primary} belum diset di environment.\n` +
+        `Set di Coolify -> Application -> Environment Variables, lalu redeploy.\n` +
+        `Alternatif yang diterima: ${names.join(', ')}\n` +
+        `Jangan pernah menuliskan nilai cadangan di kode ini - repository ini public.`
+    );
+  }
+
+  return value;
+}
+
 export const { handlers, signIn, signOut, auth } = NextAuth({
-  secret:
-    process.env.AUTH_SECRET ||
-    process.env.NEXTAUTH_SECRET ||
-    'b864a7f051e793e2b2fbcd76c382f7e2d93e2a0b1f3c8e4d6a5c7e9b0d2f4a6c',
+  secret: requiredEnv('AUTH_SECRET', 'NEXTAUTH_SECRET'),
   trustHost: true,
   providers: [
     Google({
-      clientId:
-        process.env.AUTH_GOOGLE_ID ||
-        process.env.GOOGLE_CLIENT_ID ||
-        '400463190439-5vtqank19facea6skccetajcf8nkvtgo.apps.googleusercontent.com',
-      clientSecret:
-        process.env.AUTH_GOOGLE_SECRET ||
-        process.env.GOOGLE_CLIENT_SECRET ||
-        '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',
+      clientId: requiredEnv('AUTH_GOOGLE_ID', 'GOOGLE_CLIENT_ID'),
+      clientSecret: requiredEnv('AUTH_GOOGLE_SECRET', 'GOOGLE_CLIENT_SECRET'),
     }),
   ],
   callbacks: {
