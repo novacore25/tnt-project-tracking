@@ -1016,17 +1016,30 @@ export async function autoSplitUnpaidBatchItems(batchId: number) {
   if (!newBatchId) return;
 
   const unpaidItemIds = unpaidItems.map(i => i.id);
-  
+
   // Move items to new batch. If returning to pending_finance, reset items to executive_1_approved
   // and finance_selected = false so Finance can toggle which ones are payable in this new Termin!
+  //
+  // CATATAN: kolom executive_* ikut dikosongkan kalau approval executive akhir
+  // dibatalkan oleh pemecahan ini. Kalau tidak, final_status sudah kembali ke
+  // executive_1_approved (artinya "belum disetujui executive akhir") tapi
+  // executive_acted_by masih menunjuk nama executive dari Termin sebelumnya.
+  // Itu menyesatkan kalau nanti ada sengketa "saya tidak pernah menyetujui ini".
+  //
+  // executive_1_* sengaja TIDAK disentuh: approval executive tahap 1 tetap sah,
+  // itu sebabnya statusnya kembali ke executive_1_approved dan bukan ke pending.
   await db.execute(sql`
     UPDATE payment_items
     SET batch_id = ${newBatchId},
         finance_selected = false,
-        final_status = CASE 
+        final_status = CASE
           WHEN final_status IN ('ready_to_pay', 'executive_approved', 'finance_selected', 'pending_finance_outstanding') THEN 'executive_1_approved'
-          ELSE final_status 
-        END
+          ELSE final_status
+        END,
+        executive_status    = CASE WHEN final_status IN ('ready_to_pay', 'executive_approved', 'finance_selected', 'pending_finance_outstanding') THEN NULL ELSE executive_status    END,
+        executive_acted_by  = CASE WHEN final_status IN ('ready_to_pay', 'executive_approved', 'finance_selected', 'pending_finance_outstanding') THEN NULL ELSE executive_acted_by  END,
+        executive_acted_at  = CASE WHEN final_status IN ('ready_to_pay', 'executive_approved', 'finance_selected', 'pending_finance_outstanding') THEN NULL ELSE executive_acted_at  END,
+        executive_note      = CASE WHEN final_status IN ('ready_to_pay', 'executive_approved', 'finance_selected', 'pending_finance_outstanding') THEN NULL ELSE executive_note      END
     WHERE id IN ${sqlInList(unpaidItemIds)}
   `);
 }
