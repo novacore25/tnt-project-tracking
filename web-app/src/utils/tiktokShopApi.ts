@@ -1,10 +1,32 @@
 import crypto from 'crypto';
 
+/**
+ * Ambil kredensial wajib dari environment. Tidak ada nilai cadangan di kode ini:
+ * repository ini public, jadi nilai cadangan berarti kredensial bocor ke semua orang.
+ *
+ * Dipakai lewat getter supaya aplikasi tidak gagal total saat modul ini di-import -
+ * error baru muncul kalau fitur TikTok benar-benar dipakai.
+ */
+function requiredEnv(name: string): string {
+  const value = process.env[name];
+  if (!value) {
+    throw new Error(
+      `[tiktok] ${name} belum diset di environment.\n` +
+      `Set di Coolify -> Application -> Environment Variables, lalu redeploy.\n` +
+      `Jangan pernah menuliskan nilai cadangan di kode ini - repository ini public.`
+    );
+  }
+  return value;
+}
+
 export const TIKTOK_CONFIG = {
-  appKey: process.env.TIKTOK_APP_KEY || '6lcrat92ht0kd',
-  appSecret: process.env.TIKTOK_APP_SECRET || '4ca2f8f3508673ad241d3208a3a06cf303e219fb',
+  // app_key bukan rahasia - nilainya terlihat publik di Partner Center.
+  get appKey() { return process.env.TIKTOK_APP_KEY || '6lcrat92ht0kd'; },
+  // app_secret WAJIB dari environment. Nilai lamanya sempat tertulis di repo
+  // public dan karena itu wajib dirotasi di TikTok Shop Developer Center.
+  get appSecret() { return requiredEnv('TIKTOK_APP_SECRET'); },
   serviceId: '7688709827098347271',
-  redirectUri: process.env.TIKTOK_REDIRECT_URI || 'https://campaign.tntkreatif.com/auth/tiktok-shop/callback',
+  get redirectUri() { return process.env.TIKTOK_REDIRECT_URI || 'https://campaign.tntkreatif.com/auth/tiktok-shop/callback'; },
   authBaseUrl: 'https://auth.tiktok-shops.com',
   partnerAuthBaseUrl: 'https://partner.tiktokshop.com/open/authorize',
   apiBaseUrl: 'https://open-api.tiktokglobalshop.com'
