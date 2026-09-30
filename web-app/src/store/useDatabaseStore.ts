@@ -36,7 +36,7 @@ type DatabaseState = DatabaseSchema & {
   deleteCampaign: (id: number) => Promise<void>;
   
   // Actions for Campaign Listing
-  addCampaignCreator: (cc: Omit<CampaignCreator, 'id' | 'created_at'>) => Promise<void>;
+  addCampaignCreator: (cc: Omit<CampaignCreator, 'id' | 'created_at'>) => Promise<{ success: boolean; error?: string; data?: any; missing?: string[] }>;
   updateCampaignCreator: (id: number, updates: Partial<CampaignCreator>, changedBy: string) => Promise<void>;
   deleteCampaignCreator: (id: number) => Promise<void>;
   addVideo: (video: Omit<Video, 'id' | 'created_at'>) => Promise<void>;
@@ -367,7 +367,23 @@ export const useDatabaseStore = create<DatabaseState>((set, get) => ({
     const res = await addCampaignCreatorAction(cc);
     if (res.success && res.data) {
       set({ campaign_creators: [...get().campaign_creators, res.data] });
+      // Catat siapa yang menarik kreator ke campaign.
+      get().addAuditLog({
+        user_id: null,
+        user_name: null,
+        action: 'CREATE',
+        table_name: 'campaign_creators',
+        record_id: String(res.data.id),
+        old_data: null,
+        new_data: res.data,
+        description: `Tambah kreator ke campaign #${cc.campaign_id}`
+      });
+    } else {
+      console.error('Add Campaign Creator Error:', res.error);
     }
+    // Kembalikan hasilnya ke pemanggil. Sebelumnya di sini hasil diabaikan,
+    // sehingga UI tetap menampilkan "Berhasil" walau INSERT gagal.
+    return res;
   },
 
   updateCampaignCreator: async (id, updates, changedBy) => {

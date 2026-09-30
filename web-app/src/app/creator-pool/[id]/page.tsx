@@ -8,12 +8,13 @@ import { formatAbbreviated } from "@/utils/formatters";
 
 
 
-import { ArrowLeft, UserPlus, Phone, CreditCard, Activity, ArrowUpDown, ChevronDown, ChevronRight, Edit, Save, Plus, X, Trash2, Check, Video, TrendingUp, DollarSign, Calendar, Users, Briefcase, ExternalLink, ArrowRight, TrendingDown } from "lucide-react";
+import { ArrowLeft, UserPlus, Phone, CreditCard, Activity, ArrowUpDown, ChevronDown, ChevronRight, Edit, Save, Plus, X, Trash2, Check, Video, TrendingUp, DollarSign, Calendar, Users, Briefcase, ExternalLink, ArrowRight, TrendingDown, AlertTriangle, CheckCircle2 } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState, ReactNode, useEffect, useRef, useCallback, useMemo } from "react";
 import React from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/Dialog";
+import { Button } from "@/components/ui/Button";
 import { Edit2 } from "lucide-react";
 import { fetchCreatorProfile } from "@/app/actions/creatorActions";
 import { saveCreatorAddressBookAction, deleteCreatorAddressBookAction, fetchCreatorNotesAction } from "@/app/actions/databaseActions";
@@ -314,6 +315,9 @@ export default function CreatorProfilePage() {
 
   const [campForm, setCampForm] = useState({ campaign_id: '', price: 0, qty_vt: 1 });
   const [campOpen, setCampOpen] = useState(false);
+  const [tarikBusy, setTarikBusy] = useState(false);
+  // Notice setelah tarik ke campaign: data mana yang masih perlu dilengkapi.
+  const [tarikNotice, setTarikNotice] = useState<{ campaignId: number; campaignName: string; missing: string[] } | null>(null);
 
   const [videoLink, setVideoLink] = useState('');
   const [activeCcId, setActiveCcId] = useState<number | null>(null);
@@ -418,36 +422,60 @@ export default function CreatorProfilePage() {
   };
 
   const handleTarikCampaign = async () => {
-    if(!campForm.campaign_id) return;
-    await addCampaignCreator({
-      campaign_id: Number(campForm.campaign_id),
-      creator_id: creatorId,
-      assigned_sku_ids: null,
-      tier: null,
-      price: campForm.price,
-      qty_vt: campForm.qty_vt,
-      content_type: null,
-      approval: 'pending',
-      status_bayar: 'belum',
-      pic_assist: profile?.nama || null,
-      notes_manager: null,
-      notes_pic: null,
-      sample_progress: null,
-      gmv_organic_legacy: null,
-      gmv_ads_legacy: null,
-      nominal_pelunasan: null,
-      tgl_pembayaran: null,
-      client_approval: 'pending',
-      added_by: profile?.id || null,
-      approved_by: null,
-      approved_at: null,
-      not_approved_by: null,
-      not_approved_at: null,
-      payment_updated_by: null,
-      payment_updated_at: null
-    });
-    alert('Berhasil ditarik ke Campaign!');
-    setCampOpen(false);
+    if (!campForm.campaign_id || tarikBusy) return;
+    setTarikBusy(true);
+    try {
+      const campaignName = campaigns.find(c => String(c.id) === String(campForm.campaign_id))?.nama || '';
+
+      const res: any = await addCampaignCreator({
+        campaign_id: Number(campForm.campaign_id),
+        creator_id: creatorId,
+        assigned_sku_ids: null,
+        tier: null,
+        price: campForm.price,
+        qty_vt: campForm.qty_vt,
+        content_type: null,
+        approval: 'pending',
+        status_bayar: 'belum',
+        pic_assist: profile?.nama || null,
+        notes_manager: null,
+        notes_pic: null,
+        sample_progress: null,
+        gmv_organic_legacy: null,
+        gmv_ads_legacy: null,
+        nominal_pelunasan: null,
+        tgl_pembayaran: null,
+        client_approval: 'pending',
+        added_by: profile?.id || null,
+        approved_by: null,
+        approved_at: null,
+        not_approved_by: null,
+        not_approved_at: null,
+        payment_updated_by: null,
+        payment_updated_at: null
+      });
+
+      // WAJIB dicek. Sebelumnya hasilnya diabaikan sehingga "Berhasil" tetap
+      // muncul walau INSERT-nya gagal.
+      if (!res?.success) {
+        alert(`GAGAL menarik kreator ke campaign.\n\n${res?.error || 'Penyebab tidak diketahui.'}`);
+        return;
+      }
+
+      setCampOpen(false);
+      setCampForm({ campaign_id: '', price: 0, qty_vt: 1 });
+
+      const missing: string[] = res.missing || [];
+      if (missing.length > 0) {
+        setTarikNotice({ campaignId: Number(campForm.campaign_id), campaignName, missing });
+      } else {
+        alert(`Berhasil menarik @${creator.username} ke campaign "${campaignName}".\n\nStatus: Pending, menunggu persetujuan manager.`);
+      }
+    } catch (err: any) {
+      alert(`GAGAL menarik kreator ke campaign.\n\n${err?.message || 'Terjadi kesalahan.'}`);
+    } finally {
+      setTarikBusy(false);
+    }
   };
 
   const handleAddVideo = async () => {
@@ -594,7 +622,62 @@ export default function CreatorProfilePage() {
                     <input type="number" value={campForm.qty_vt} onChange={e=>setCampForm({...campForm, qty_vt: Number(e.target.value)})} className="w-full p-2 border rounded" />
                   </div>
                 </div>
-                <button className="btn btn-primary w-full" onClick={handleTarikCampaign} disabled={!campForm.campaign_id}>Tambahkan ke Listing</button>
+                <button className="btn btn-primary w-full" onClick={handleTarikCampaign} disabled={!campForm.campaign_id || tarikBusy}>
+                  {tarikBusy ? 'Menyimpan...' : 'Tambahkan ke Listing'}
+                </button>
+                {campForm.price === 0 && campForm.campaign_id ? (
+                  <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
+                    Rate Card 0 berarti <strong>barter</strong>. Kalau bukan barter, isi rate cardnya dulu.
+                  </p>
+                ) : null}
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          {/* Notice data yang masih perlu dilengkapi setelah ditarik ke campaign */}
+          <Dialog open={!!tarikNotice} onOpenChange={(v) => { if (!v) setTarikNotice(null); }}>
+            <DialogContent className="max-w-lg">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                  Kreator Berhasil Ditambahkan
+                </DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 py-2">
+                <p className="text-sm text-slate-600">
+                  @{creator?.username} sudah masuk ke campaign <strong>{tarikNotice?.campaignName}</strong>{' '}
+                  dengan status <strong>Pending</strong>, menunggu persetujuan manager.
+                </p>
+
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+                  <p className="text-sm font-semibold text-amber-900 flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 text-amber-600" />
+                    Data berikut belum lengkap ({tarikNotice?.missing.length}):
+                  </p>
+                  <ul className="mt-2 space-y-1">
+                    {tarikNotice?.missing.map((m) => (
+                      <li key={m} className="text-sm text-amber-900 flex items-center gap-2">
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0" />
+                        {m}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                <p className="text-sm text-slate-700">
+                  Silakan <strong>lengkapi data tersebut di menu Listing</strong> pada campaign
+                  <strong> {tarikNotice?.campaignName}</strong>. Kreator dengan data belum lengkap tidak bisa
+                  dipakai untuk perhitungan.
+                </p>
+
+                <div className="flex justify-end gap-2 pt-2">
+                  <Button variant="outline" onClick={() => setTarikNotice(null)}>Nanti Saja</Button>
+                  <Link href={`/campaigns/${tarikNotice?.campaignId}/listing`}>
+                    <Button className="flex items-center gap-2">
+                      Buka Listing <ArrowRight className="w-4 h-4" />
+                    </Button>
+                  </Link>
+                </div>
               </div>
             </DialogContent>
           </Dialog>

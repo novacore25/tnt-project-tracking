@@ -4,7 +4,7 @@ import { db } from '@/db';
 import { sql } from 'drizzle-orm';
 import { auth } from '@/auth';
 import { revalidatePath } from 'next/cache';
-import { requireRole, requireUserOrError, requireRoleOrError } from '@/lib/guards';
+import { requireRole, requireUserOrError, requireRoleOrError, requireCampaignAccessOrError } from '@/lib/guards';
 
 // ============================================================
 // AUDIT LOG
@@ -386,11 +386,71 @@ async function ensureCampaignCreatorColumns() {
   }
 }
 
+/**
+ * Daftar data yang masih kurang untuk satu kreator di satu campaign.
+ * Sama dengan syarat yang dipakai halaman Import Kreator, supaya kreator yang
+ * ditarik lewat "Tarik ke Campaign" punya kelengkapan yang setara.
+ */
+async function getMissingCreatorFields(creatorId: number, qtyVt: number, qtyLive: number): Promise<string[]> {
+  const rows = await db.execute(sql`
+    SELECT
+      (SELECT nomor FROM creator_contacts
+        WHERE creator_id = ${creatorId} AND status = 'aktif' ORDER BY id DESC LIMIT 1) AS no_wa,
+      (SELECT followers FROM creator_snapshots
+        WHERE creator_id = ${creatorId} ORDER BY id DESC LIMIT 1) AS followers,
+      (SELECT gmv_30d FROM creator_snapshots
+        WHERE creator_id = ${creatorId} ORDER BY id DESC LIMIT 1) AS gmv_30d,
+      (SELECT gmv_30d_video FROM creator_snapshots
+        WHERE creator_id = ${creatorId} ORDER BY id DESC LIMIT 1) AS gmv_30d_video,
+      (SELECT gmv_30d_live FROM creator_snapshots
+        WHERE creator_id = ${creatorId} ORDER BY id DESC LIMIT 1) AS gmv_30d_live
+  `) as any[];
+
+  const d = rows[0] || {};
+  const missing: string[] = [];
+
+  if (!d.no_wa || String(d.no_wa).trim() === '') missing.push('No WA');
+  if (!(Number(d.followers) > 0)) missing.push('Followers');
+  if (!(Number(d.gmv_30d) > 0 || Number(d.gmv_30d_video) > 0 || Number(d.gmv_30d_live) > 0)) {
+    missing.push('Minimal 1 GMV');
+  }
+  if (!(qtyVt > 0 || qtyLive > 0)) missing.push('Qty VT / Qty Live');
+
+  return missing;
+}
+
 export async function addCampaignCreatorAction(cc: any) {
   const denied = await requireUserOrError();
   if (denied) return { success: false, error: denied.message } as any;
   try {
     await ensureCampaignCreatorColumns();
+
+    const campaignId = Number(cc.campaign_id);
+    const creatorId = Number(cc.creator_id);
+    if (!campaignId || !creatorId) {
+      return { success: false, error: 'Campaign atau kreator tidak valid.' } as any;
+    }
+
+    const accessDenied = await requireCampaignAccessOrError(campaignId);
+    if (accessDenied) return { success: false, error: accessDenied.message } as any;
+
+    // Cegah baris dobel. campaign_creators tidak punya UNIQUE(campaign_id, creator_id),
+    // jadi tanpa cek ini klik dua kali menghasilkan dua listing untuk kreator yang sama.
+    const dup = await db.execute(sql`
+      SELECT cc.id, c.nama AS campaign_nama
+      FROM campaign_creators cc
+      LEFT JOIN campaigns c ON c.id = cc.campaign_id
+      WHERE cc.campaign_id = ${campaignId} AND cc.creator_id = ${creatorId}
+      LIMIT 1
+    `) as any[];
+    if (dup.length > 0) {
+      const nama = dup[0].campaign_nama || `#${campaignId}`;
+      return {
+        success: false,
+        error: `Kreator ini sudah ada di campaign "${nama}". Gunakan menu Listing untuk mengubah rate card atau qty.`
+      } as any;
+    }
+
     const contentType = cc.content_type || cc.tipe_konten || 'Video';
     const price = Number(cc.price ?? cc.rate_card ?? 0);
     const qtyVt = Number(cc.qty_vt ?? cc.slot ?? 1);
@@ -403,14 +463,19 @@ export async function addCampaignCreatorAction(cc: any) {
         qty_vt, qty_live, tier, pic_assist, client_approval, added_by
       )
       VALUES (
-        ${cc.campaign_id}, ${cc.creator_id}, ${price}, ${cc.approval || 'pending'},
+        ${campaignId}, ${creatorId}, ${price}, ${cc.approval || 'pending'},
         ${contentType}, ${cc.status_bayar || 'belum'}, ${qtyVt},
         ${qtyLive}, ${tier}, ${cc.pic_assist || null},
         ${cc.client_approval || 'not_required'}, ${cc.added_by || null}
       )
       RETURNING *
     `) as any[];
-    return { success: true, data };
+
+    // Kembalikan data yang masih kurang supaya UI bisa memberi tahu PIC
+    // apa yang perlu dilengkapi di menu Listing.
+    const missing = await getMissingCreatorFields(creatorId, qtyVt, qtyLive);
+
+    return { success: true, data, missing };
   } catch (err: any) {
     console.error('Error adding campaign creator:', err);
     return { success: false, error: err.message };
