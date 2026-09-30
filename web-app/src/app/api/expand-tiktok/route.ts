@@ -284,7 +284,11 @@ export async function POST(request: Request) {
     // username + video ID benar-benar sudah lengkap. Kalau oEmbed gagal,
     // hasil setengah jadi tidak boleh tersimpan permanen.
     if (hasUsername(finalUrl) && hasVideoId(finalUrl)) {
-      void writeCache(shortUrl, finalUrl);
+      // WAJIB await, jangan `void`. Kalau fire-and-forget, response terkirim
+      // duluan dan proses bisa selesai sebelum INSERT benar-benar jalan —
+      // cache lalu diam-diam tidak pernah terisi, dan kita salah menyimpulkan
+      // "cache tidak berguna". Beberapa milidetik itu sepadan.
+      await writeCache(shortUrl, finalUrl);
     }
 
     return NextResponse.json({ originalUrl: shortUrl, expandedUrl: finalUrl, cached: false });
