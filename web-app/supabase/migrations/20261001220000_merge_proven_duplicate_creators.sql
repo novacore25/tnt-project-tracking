@@ -413,6 +413,25 @@ BEGIN
         DROP TABLE _grup;
     END LOOP;
 
+    -- 3c. Baris yang TIDAK ikut kelompok mana pun.
+    --
+    --     Loop di atas hanya menyentuh (root_id, campaign_id) yang punya lebih
+    --     dari satu baris. Baris yang sendirian di campaign-nya sendiri tidak
+    --     pernah masuk loop, sehingga masih menunjuk merge_id. Tanpa langkah
+    --     ini, penghapusan creator di bawah akan melanggar foreign key.
+    --
+    --     Aman sekarang karena loop sudah menjamin tidak ada kelompok tersisa:
+    --     kalau dua baris merge_id menuju root_id yang sama di campaign yang
+    --     sama, itu pasti kelompok dan sudah diselesaikan.
+    UPDATE campaign_creators cc
+    SET creator_id = r.root_id
+    FROM _root r
+    WHERE r.creator_id = cc.creator_id
+      AND cc.creator_id <> r.root_id;
+
+    GET DIAGNOSTICS jml = ROW_COUNT;
+    RAISE NOTICE 'Baris campaign_creators yang direpoint tanpa kelompok: %', jml;
+
     -- Guard 1: tidak boleh tersisa pasangan kembar.
     SELECT count(*) INTO jml FROM (
         SELECT campaign_id, creator_id FROM campaign_creators
