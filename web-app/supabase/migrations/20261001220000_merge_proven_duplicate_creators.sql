@@ -247,10 +247,18 @@ END $$;
 -- ---------------------------------------------------------------------
 
 -- 2a. creator_niches
+--     DISTINCT ON wajib. PostgreSQL tidak mengizinkan satu perintah
+--     ON CONFLICT DO UPDATE menyentuh baris konflik yang sama dua kali, dan
+--     itu yang terjadi di percobaan sebelumnya dengan pesan
+--       ON CONFLICT DO UPDATE command cannot affect row a second time
+--     karena beberapa merge_id menuju keep_id yang sama dengan niche_id yang
+--     sama juga. Baris sumber di-dedup dulu, ambil peringkat tertinggi.
 INSERT INTO creator_niches (creator_id, niche_id, peringkat)
-SELECT m.keep_id, cn.niche_id, cn.peringkat
+SELECT DISTINCT ON (m.keep_id, cn.niche_id)
+       m.keep_id, cn.niche_id, cn.peringkat
 FROM creator_niches cn
 JOIN _merge_map m ON m.merge_id = cn.creator_id
+ORDER BY m.keep_id, cn.niche_id, cn.peringkat DESC, cn.creator_id DESC
 ON CONFLICT (creator_id, niche_id) DO UPDATE
   SET peringkat = GREATEST(creator_niches.peringkat, EXCLUDED.peringkat);
 
@@ -258,12 +266,16 @@ DELETE FROM creator_niches cn USING _merge_map m WHERE m.merge_id = cn.creator_i
 
 -- 2b. creator_bank_accounts. payment_items.bank_account_id mereferensiasi
 --     baris ini, jadi rujukan dipindahkan dulu sebelum baris lama dihapus.
+--     DISTINCT ON dipakai dengan alasan yang sama seperti 2a: beberapa
+--     merge_id bisa menuju keep_id dan rekening yang sama.
 INSERT INTO creator_bank_accounts
   (creator_id, bank_name, account_number, account_holder, is_primary, added_by, created_at)
-SELECT m.keep_id, ba.bank_name, ba.account_number, ba.account_holder,
+SELECT DISTINCT ON (m.keep_id, ba.bank_name, ba.account_number)
+       m.keep_id, ba.bank_name, ba.account_number, ba.account_holder,
        ba.is_primary, ba.added_by, ba.created_at
 FROM creator_bank_accounts ba
 JOIN _merge_map m ON m.merge_id = ba.creator_id
+ORDER BY m.keep_id, ba.bank_name, ba.account_number, ba.id DESC
 ON CONFLICT (creator_id, bank_name, account_number) DO NOTHING;
 
 UPDATE payment_items pi
