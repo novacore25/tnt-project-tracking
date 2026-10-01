@@ -110,7 +110,7 @@ WHERE kurs > 1 AND kurs < 16000;
 -- 5. Guard: setelah koreksi semua kurs harus 0 atau dalam rentang riil
 -- ---------------------------------------------------------------------
 DO $$
-DECLAREomina integer;
+DECLARE omina integer;
 BEGIN
   SELECT count(*) INTO omina FROM ads_performance
   WHERE kurs <> 0 AND (kurs < 15000 OR kurs > 25000);
@@ -119,7 +119,7 @@ BEGIN
     RAISE EXCEPTION 'Batal: masih ada % baris dengan kurs di luar 15000-25000', omina;
   END IF;
 
-  RAISE NOTICE 'Verifikasi OK: semua kurs Either 0 atau dalam rentang riil';
+  RAISE NOTICE 'Verifikasi OK: semua kurs bernilai 0 atau berada dalam rentang riil';
 END $$;
 
 \echo ''
