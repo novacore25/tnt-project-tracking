@@ -205,10 +205,20 @@ export type CampaignSummary = {
   budget_creator_plafon: number;
   budget_ads_plafon: number;
   tracked_creator_gmv: number;
+  // Field mati. daily_performance tidak pernah diisi, jadi selalu 0.
+  // Jangan dipakai untuk decision atau perhitungan apa pun.
   total_daily_organic: number;
   total_daily_vsa: number;
   official_daily_gmv: number;
   total_gmv_achievement: number;
+  // Pecahan total_gmv_achievement berdasarkan content_type di sales.
+  // Dari order_id: live masuk ke live, selain itu video.
+  total_gmv_video: number;
+  total_gmv_live: number;
+  // Informasi iklan dari Ads Manager. TIDAK ikut dijumlahkan ke total_gmv
+  // karena mengukur revenue shop yang sama dengan sales.
+  total_ads_gmv: number;
+  total_ads_spend: number;
   achievement_video: number;
   achievement_creator: number;
   budget_ads_terpakai: number;
