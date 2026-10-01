@@ -26,7 +26,6 @@
 -- =====================================================================
 \pset pager off
 \t on
-\t on
 
 \echo ''
 \echo '=== 1. RINGKASAN ==='
@@ -44,30 +43,32 @@ SELECT (SELECT count(DISTINCT product_id) FROM sales
          + (SELECT COALESCE(sum(total_gmv),0) FROM vw_campaign_summary)    AS total_gmv_setelah_daftar;
 
 \echo ''
-\echo '=== 2. DAFTAR KERJA LENGKAP: per Partner campaign ID, urut GMV ==='
+\echo '=== 2. DAFTAR KERJA LENGKAP: partner campaign + shop + product + nama ==='
+-- Percobaan pertama gagal dengan "column t.tt does not exist" karena subquery
+-- t tidak punya alias tt, dan LEFT JOIN-nya memang tidak perlu karena
+-- tiktok_campaign_id sudah diambil langsung dari sales.
 \pset format unaligned
 \pset tuples_only on
 SELECT
-    rpad(COALESCE(t.tt,'(kosong)'), 20) || ' | ' ||
+    rpad(COALESCE(p.partner,'(kosong)'), 20) || ' | ' ||
+    rpad(COALESCE(p.shop,'?'), 22) || ' | ' ||
     rpad(p.pid, 20) || ' | ' ||
     rpad(p.gmv::bigint::text, 12) || ' | ' ||
     rpad(p.jml::text, 5) || ' | ' ||
     p.nama_produk
 FROM (
     SELECT
-        sl.tiktok_campaign_id                AS tt,
+        sl.tiktok_campaign_id                AS partner,
+        max(sl.raw_data ->> 'Shop name')     AS shop,
         sl.product_id                        AS pid,
         max(sl.raw_data ->> 'Product Name')  AS nama_produk,
-        max(sl.raw_data ->> 'Shop name')     AS shop,
         count(*)                             AS jml,
         sum(sl.gmv)                          AS gmv
     FROM sales sl
     WHERE sl.campaign_id IS NULL AND NOT sl.is_refund
     GROUP BY sl.tiktok_campaign_id, sl.product_id
 ) p
-LEFT JOIN (SELECT DISTINCT tiktok_campaign_id FROM sales
-           WHERE campaign_id IS NULL AND NOT is_refund) t ON t.tt = p.tt
-ORDER BY p.tt, p.gmv DESC;
+ORDER BY p.gmv DESC;
 \pset tuples_only off
 \pset format aligned
 
