@@ -76,8 +76,11 @@ SELECT pg_get_viewdef('vw_campaign_summary'::regclass, true) AS definisi_lama,
 
 -- ---------------------------------------------------------------------
 -- 2. Angka sebelum perubahan
+--    Tabel biasa, bukan TEMP, karena perbandingan dicetak sebelum COMMIT.
+--    Percobaan pertama memakai TEMP ON COMMIT DROP dan errornya
+--    "relation _sebelum does not exist" sesudah COMMIT.
 -- ---------------------------------------------------------------------
-CREATE TEMP TABLE _sebelum ON COMMIT DROP AS
+CREATE TABLE IF NOT EXISTS _backup_vw_campaign_summary_before_20261001 AS
 SELECT campaign_id, nama, total_gmv, total_gmv_achievement,
        budget_ads_terpakai, sisa_budget_ads
 FROM vw_campaign_summary;
@@ -86,7 +89,7 @@ FROM vw_campaign_summary;
 \echo '=== SEBELUM: total dashboard ==='
 SELECT COALESCE(sum(total_gmv),0) AS total_gmv,
        COALESCE(sum(budget_ads_terpakai),0) AS total_ads_spend
-FROM _sebelum;
+FROM _backup_vw_campaign_summary_before_20261001;
 
 -- ---------------------------------------------------------------------
 -- 3. View baru
@@ -240,24 +243,22 @@ SELECT COALESCE(sum(total_gmv),0)              AS total_gmv,
        COALESCE(sum(total_ads_spend),0)       AS total_ads_spend
 FROM vw_campaign_summary;
 
-COMMIT;
-
 -- ---------------------------------------------------------------------
--- 5. Perbandingan per campaign
+-- 5. Perbandingan per campaign, dicetak SEBELUM COMMIT
 -- ---------------------------------------------------------------------
 \echo ''
 \echo '=== PERBANDINGAN PER CAMPAIGN ==='
 SELECT s.campaign_id, s.nama,
-       s.total_gmv            AS gmv_sebelum,
-       v.total_gmv            AS gmv_sesudah,
+       s.total_gmv               AS gmv_sebelum,
+       v.total_gmv               AS gmv_sesudah,
        s.total_gmv - v.total_gmv AS selisih,
-       v.total_gmv_video      AS gmv_video,
-       v.total_gmv_live       AS gmv_live,
-       v.total_ads_gmv        AS info_ads_gmv,
-       s.budget_ads_terpakai  AS ads_spend_sebelum,
-       v.budget_ads_terpakai  AS ads_spend_sesudah,
-       v.sisa_budget_ads      AS sisa_budget
-FROM _sebelum s
+       v.total_gmv_video         AS gmv_video,
+       v.total_gmv_live          AS gmv_live,
+       v.total_ads_gmv           AS info_ads_gmv,
+       s.budget_ads_terpakai     AS ads_spend_sebelum,
+       v.budget_ads_terpakai     AS ads_spend_sesudah,
+       v.sisa_budget_ads         AS sisa_budget
+FROM _backup_vw_campaign_summary_before_20261001 s
 JOIN vw_campaign_summary v ON v.campaign_id = s.campaign_id
 WHERE s.total_gmv <> v.total_gmv OR s.budget_ads_terpakai <> v.budget_ads_terpakai
 ORDER BY abs(s.total_gmv - v.total_gmv) DESC NULLS LAST
@@ -268,3 +269,13 @@ LIMIT 40;
 SELECT count(*) AS campaign_tidak_konsisten
 FROM vw_campaign_summary
 WHERE total_gmv_video + total_gmv_live <> total_gmv;
+
+\echo ''
+\echo '=== CATATAN: GMV yang tidak masuk campaign manapun ==='
+-- Order dengan campaign_id NULL tidak dihitung di total_gmv mana pun.
+SELECT count(*) FILTER (WHERE NOT is_refund) AS order_tanpa_campaign,
+       COALESCE(sum(gmv) FILTER (WHERE NOT is_refund),0) AS gmv_tanpa_campaign
+FROM sales
+WHERE campaign_id IS NULL;
+
+COMMIT;
