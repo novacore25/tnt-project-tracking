@@ -90,10 +90,12 @@ export async function register() {
           const nowWib = new Date(now.getTime() + 7 * 60 * 60 * 1000);
           console.log(`[AutoSync Scheduler] 🚀 Triggering TikTok Sync for slot ${slotHourWIB}:00 WIB (Slot: ${slotKey}). Current WIB: ${nowWib.getUTCHours()}:${nowWib.getUTCMinutes().toString().padStart(2, '0')}. Last synced: ${lastSyncedAt ? lastSyncedAt.toISOString() : 'never'}...`);
 
-          const { runTikTokAutoSync } = await import('@/lib/tiktokAutoSync');
-          const result = await runTikTokAutoSync({ triggerType: 'cron' });
+          const { runTikTokAutoSync, SCHEDULED_SYNC_DAYS_BACK } = await import('@/lib/tiktokAutoSync');
+          // Rentang dijadwalkan, bukan default 90 hari. Tanpa ini scheduler ini
+          // menarik 90 hari penuh setiap 4 jam.
+          const result = await runTikTokAutoSync({ triggerType: 'cron', daysBack: SCHEDULED_SYNC_DAYS_BACK });
 
-          console.log(`[AutoSync Scheduler] ✅ Sync completed: ${result.success ? 'SUCCESS' : 'FAILED'} (Sales: ${result.salesUpserted}, Videos: ${result.videosUpserted}, Duration: ${result.durationMs}ms)`);
+          console.log(`[AutoSync Scheduler] ✅ Sync completed: ${result.success ? 'SUCCESS' : result.partial ? 'PARTIAL' : 'FAILED'} (Sales: ${result.salesUpserted}, Videos: ${result.videosUpserted}, Duration: ${result.durationMs}ms)${result.partial ? ' - ada bagian yang gagal, data belum lengkap' : ''}`);
         } else {
           // Already synced for this slot
           lastCheckedSlot = slotKey;

@@ -24,6 +24,15 @@ export interface SyncProgressUpdate {
  */
 export const DEFAULT_SYNC_DAYS_BACK = 90;
 
+/**
+ * Rentang untuk sync terjadwal (scheduler di instrumentation.ts dan route cron).
+ *
+ * WAJIB dipakai oleh semua pemanggil terjadwal. Nilai 90 hari di sini berarti
+ * ~11.900 order per run, dan karena dijadwalkan 4x sehari, setiap hari ada
+ * ~47.600 upsert untuk data yang baru hanya 1 hari.
+ */
+export const SCHEDULED_SYNC_DAYS_BACK = 7;
+
 export interface TikTokSyncResult {
   success: boolean;
   /** true = ada bagian yang gagal diambil, jadi angka belum utuh. */
