@@ -80,23 +80,40 @@
 
 13. **Jangan edit `web-app/chrome-extension/`** — itu salinan mati. Yang benar di root.
 
-14. **Payment: pakai TANGGAL PENGAJUAN, bukan tanggal transfer.** Kolom `Tgl Actual Payment`
-    kosong untuk April–Juni, jadi fallback ke tanggal pengajuan. Prinsipnya **rekam, jangan
-    menebak** — lebih baik tanggal kurang tepat daripada baris hilang. Alokasi **all-or-nothing
-    per batch per tanggal**, hanya baris `Paid Off`. Baris tanpa campaign **harus dilist +
-    didokumentasikan**, tidak pernah dikarang. Semua detail: `docs/KEPUTUSAN-PEMBAYARAN.md`.
+14. **Payment: pakai TANGGAL PENGAJUAN, bukan tanggal transfer.** Fallback ke tanggal
+    pembayaran kalau kosong. Prinsipnya **rekam, jangan menebak** — lebih baik tanggal
+    kurang tepat daripada baris hilang. Alokasi **all-or-nothing per batch**, hanya baris
+    `Paid Off` (`Not Yet`, `Cancel`, kosong → cukup NOTA). Baris tanpa campaign **harus
+    dilist + didokumentasikan**, tidak pernah dikarang. Semua detail: `docs/KEPUTUSAN-PEMBAYARAN.md`.
 
-15. **Jangan menyimpulkan "kolom tidak ada" dari daftar output psql.** Output bisa terpotong di
+15. **Jangan menyimpulkan "kolom X tidak ada" dari daftar output psql.** Output bisa terpotong di
     tengah — itulah akar kesalahan rencana payment §5.2 (`actual_transfer` sebenarnya ADA).
     Uji per kolom dengan `EXISTS`, atau pakai `docs/sql/42-verifikasi-payment.sql`.
 
-16. **`requireRole` untuk approval payment sengaja DITUNDA** — user ingin observasi dulu siapa
+16. **Payment: filter baris `TOTAL` dari spreadsheet sebelum migrasi.** Ada baris subtotal
+    (`TOTAL 16882900`) di kolom `Tanggal Pembayaran` — kalau lolos, **Rp 29 juta fiktif**
+    masuk sistem.
+
+17. **`submitted_by` ditautkan lewat EMAIL, bukan nama** (`auth.ts:89,115`). Placeholder dengan
+    email karangan **tidak akan pernah tertaut** — saat orang login, sistem buat profil baru dan
+    batch lama menunjuk profil orphan tanpa error. Kalau nama orang tidak ada di `profiles`, pakai
+    `submitted_by = NULL` + tulis nama di `batch_label`/`notes`, **jangan** bikin placeholder palsu.
+
+18. **Jangan fuzzy-match nama orang.** Spreadsheet payment pakai nama depan (`Wahyu`, `Marini`),
+    `profiles` pakai nama lengkap. **`Marini` ≠ `Maria`** — Marini 22 baris, sudah resign, tidak
+    ada di sistem. Selalu pakai peta eksplisit di `docs/KEPUTUSAN-PEMBAYARAN.md` §4A.2.
+
+19. **Spreadsheet payment punya 8 sheet dengan 4 layout kolom berbeda**, dan posisi kolom `PIC`
+    berbeda tiap sheet (kol 13 di September, kol 9 di Maret, kol 10 di Februari). **Selalu cari
+    kolom per NAMA header**, jangan per nomor.
+
+20. **`requireRole` untuk approval payment sengaja DITUNDA** — user ingin observasi dulu siapa
     yang menyalahgunakan. Jangan menambahkan guard itu diam-diam; angkat kalau ada bukti nyata.
 
-17. **Cegah duplikat dengan upsert, jangan replace.** Perintah eksplisit user: data yang tidak
+21. **Cegah duplikat dengan upsert, jangan replace.** Perintah eksplisit user: data yang tidak
     lengkap lebih boleh ada daripada data yang hilang saat ditimpa.
 
-18. **Dokumentasikan setiap sesi di tempat yang benar, di sesi yang sama.** Kalau tidak ada
+22. **Dokumentasikan setiap sesi di tempat yang benar, di sesi yang sama.** Kalau tidak ada
     konteks chat, dokumentasi satu-satunya cara model berikutnya tahu apa yang sudah terjadi.
 
     | Jenis info | Tujuan |
@@ -135,6 +152,8 @@ git push coolify main
       bukan `main` — path `main` di-cache dan query string diabaikan
 - [ ] Kalau menyentuh payment: **`docs/KEPUTUSAN-PEMBAYARAN.md` sudah dibaca**, tanggal pakai
       pengajuan, baris tanpa padanan dilist
+- [ ] Kalau migrasi payment: **baris `TOTAL` dari spreadsheet sudah difilter**, dan peta PIC
+      dipakai eksplisit (jangan fuzzy-match `Marini` → `Maria`)
 - [ ] Kalau menemukan jebakan/keputusan baru: **sudah ditulis** ke `SKILL.md` §3 atau
       `docs/LOG-PERTEMUAN-*.md` di sesi yang sama — bukan ditunda ke sesi berikutnya
 

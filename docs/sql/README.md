@@ -70,12 +70,14 @@ Semua **read-only** — tidak menulis ke DB.
 | **`40-preflight-constraint.sql`** | **WAJIB** sebelum migration `UPDATE`/`DELETE` |
 | `41-dampak-kurs.sql` | Analisis dampak koreksi `kurs` (sudah dipakai) |
 | **`42-verifikasi-payment.sql`** | **WAJIB sebelum migrasi payment** — uji tiap kolom dgn `EXISTS` |
+| `43-daftar-kerja-pic-tanpa-akun.sql` | 92 baris dengan PIC tanpa akun (`submitted_by = NULL`) |
 
 ### Yang paling sering dipakai ulang
 
 ```
 40  sebelum nulis migration yang UPDATE/DELETE   → baca constraint dari katalog, bukan dari file
 42  sebelum migrasi payment                       → verifikasi kolom & CHECK constraint
+43  setelah migrasi payment                       → cek 92 batch pengaju kosong + labelnya terisi
 19  saat angka dashboard tidak cocok dengan SUM(sales)
 ```
 

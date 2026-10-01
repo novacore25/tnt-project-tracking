@@ -13,15 +13,57 @@
 | | |
 |---|---|
 | File | `C:\Users\Banzilla\Downloads\Form Payment Campaign TNT.xlsx` |
-| Ukuran | 768 KB · 8 sheet |
+| Ukuran | 768 KB · **8 sheet** |
 | Periode | Februari – September 2026 |
-| Total | **840 baris / Rp 512.236.562** |
+| **Scope migrasi** | **840 baris `Paid Off`** / **Rp 512.236.562** |
 | Rincian | 783 baris kreator Rp 310.251.562 + 57 baris operasional Rp 201.985.000 |
+
+### ✅ Scope terverifikasi (scan penuh 1 Okt 2026)
+
+Harapan lama **840 baris** ternyata persis = jumlah `Paid Off`. Bukan kebetulan:
+
+| `Status Pembayaran` | Baris | Actions |
+|---|---:|---|
+| **`Paid Off`** | **840** | ✅ **DIMIGRASI** |
+| `Not Yet` | 78 | 📝 NOTA saja |
+| `Cancel` | 7 | 📝 NOTA saja |
+| (kosong) | 1 | 📝 NOTA saja |
+| **TOTAL** | **926** | |
+
+`Cancel` **baru ketemu saat scan** — rencana lama hanya tahu `Paid Off` dan `Not Yet`.
+
+**Pola yang membuat ini masuk akal:** Juni, Mei, April **0 baris** belum lunas. September 35
+dan Agustus 39. Jadi yang belum dibayar jelas berkumpul di dua bulan terakhir.
+
+### ⚠️ Ada baris SUBTOTAL di dalam sheet
+
+Contoh: `TOTAL 16882900`, `TOTAL 12132000`. Nilai ini ada di kolom `Tanggal Pembayaran`.
+**Harus dilewati** saat migrasi — kalau tidak, Rp 29 juta fiktif masuk sistem.
 
 ### ⚠️ Belum ada cache ekstrak
 
 Tidak ada CSV/JSON hasil ekstrak di repo maupun di folder plan. Setiap kali
 mulai migrasi, spreadsheet **harus di-parse ulang**.
+
+### Cara parse yang terbukti
+
+Excel COM tersedia di mesin ini dan **jauh lebih andal** daripada parse XML di dalam xlsx:
+
+```powershell
+$xl = New-Object -ComObject Excel.Application
+$xl.Visible = $false; $xl.DisplayAlerts = $false
+$wb = $xl.Workbooks.Open($path, 0, $true)   # 0,$true = read-only
+```
+
+**Dua jebakan yang sudah terbukti:**
+
+1. **`.Text` dan `.Value2` TIDAK konsisten.** Scan dengan `.Value2` gagal
+   mencocokkan `Paid Off` (hasilnya **0**), sedangkan `.Text` benar. Pakai `.Text`.
+2. **Selalu cek kolom > 0 sebelum diakses.** `$data[$r,0]` mengembalikan
+   **seluruh baris** sebagai array — itu yang bikin output meledak ribuan baris.
+3. **Cari kolom per NAMA header, bukan per nomor.** Posisi `PIC` berbeda tiap sheet
+   (kolom 13 di September, kolom 9 di Maret, kolom 10 di Februari). Lihat §4A.1.
+
 
 ---
 
@@ -52,10 +94,54 @@ Semua bertanggal 1 Okt 2026. **Jangan diubah tanpa tanya.**
 | 4 | **Baris tanpa campaign harus DILIST + didokumentasikan, termasuk bulan** — supaya user bisa cek ke spreadsheet atau tanya tim finance | 03:59 |
 | 5 | **SAMPEL KIME → operasional campaign KIME (44)**, tapi menunggu konfirmasi finance | 03:59 |
 | 6 | **TOP UP QONTAK / TOP UP LION → operasional campaign masing-masing**, tapi sheet tidak mencatat campaign mana. Perlakuannya belum final | 03:59 — "oke nanti kita bahas" |
-| 7 | **Hanya baris `Paid Off` yang dimigrasi.** `Not Yet` dilewati |_aturan migrasi_ |
-| 8 | **Alokasi all-or-nothing per batch per tanggal** — bukan 840 baris sekali jalan | _aturan migrasi_ |
-| 9 | **PIC format `<nama> - by sistem`** | _aturan migrasi_ |
-| 10 | **Tanggal: pakai TANGGAL PENGAJUAN.** Kalau kosong, samakan dengan tanggal pembayaran, dan sebaliknya | 10-01 09:2x — "pertanggal pengajuan aja bisa ga? kalo tanggal pengajuannya gada ya samain aja sama tanggal pembayaran begitupun sebaliknya" |
+| 7 | **Hanya baris `Paid Off` yang dimigrasi.** `Not Yet`, `Cancel`, dan kosong **cukup di-NOTA** | "yang di migrasiin itu hanya yang udah di bayar aja, atau Paid Off, untuk yang lainnya nanti dulu aja di note aja" |
+| 8 | **Alokasi all-or-nothing per batch** — bukan 840 baris sekali jalan | _aturan migrasi_ |
+| 9 | PIC dicatat di `batch_label` | lihat #12 |
+| 10 | **Tanggal: pakai TANGGAL PENGAJUAN.** Kalau kosong, samakan dengan tanggal pembayaran, dan sebaliknya | "pertanggal pengajuan aja bisa ga? kalo tanggal pengajuannya gada ya samain aja sama tanggal pembayaran begitapun sebaliknya" |
+| 11 | **Kunci grouping batch = tanggal pengajuan + PIC + campaign** | "tanggal + PIC + campaign ini aja" |
+| 12 | **Format label = `2026-03-15 - PIC: Ahmad - KIME`** | "2026-03-15 - PIC: Ahmad - KIME" |
+| 13 | **PIC tanpa akun tetap dimigrasi** dengan `submitted_by = NULL`, nama ditulis di label + notes | "yang 4 orang itu ya tetep tercatat dulu aja namanya bro" |
+| 14 | **`Tiara` & `Fira` (akun `inactive`) tetap dipakai apa adanya** | "tiara gapapa masukin aja, walaupun inactive yang penting ada namanya" |
+| 15 | **`Jerry` = `Jeremy`** | "jerry itu sama dengan Jeremy" |
+
+### Kombinasi #11 + #12
+
+Karena `campaign` ada di dalam label, dua campaign berbeda **wajib** punya batch berbeda.
+Ini persis yang dibutuhkan `payment_batches.campaign_id` yang `NOT NULL` dan cuma satu nilai.
+
+```
+kunci grouping = (tanggal_pengajuan, PIC, campaign)
+label          = 2026-03-15 - PIC: Ahmad - KIME
+campaign_id    = <campaign_id dari nama campaign>
+```
+
+| Yang mengajuan | Jumlah batch |
+|---|---|
+| Ahmad 15 Mar, KIME | 1 |
+| Budi 15 Mar, SDB | 1 (label beda) |
+| Ahmad 16 Mar, KIME | 1 (label beda) |
+
+**`submitted_by` satu per batch** — ini terbukti dari kode, bukan cuma konvensi:
+`createPaymentBatch()` (`paymentActions.ts:434`) mengisi `submitted_by` dari
+`auth().user.id`. Pemecahan termin mewarisi nilai yang sama (`:1010`).
+
+### ⚠️ Konvensi batch yang SEBENARNYA dipakai sistem (beda dari rencana)
+
+`BatchForm.tsx:37`:
+```ts
+const [batchLabel, setBatchLabel] = useState(`Batch - ${new Date().toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}`);
+```
+
+| Yang ada | Nilainya | Bukan |
+|---|---|---|
+| `batch_label` | `Batch - September 2026` — **per bulan**, masih bisa diedit user | tanggal |
+| `payment_batches.submitted_at` | `NOW()` saat batch dibuat di sistem | tanggal bisnis |
+| `payment_items.created_at` | **per item** | satu per batch |
+
+Bukti: 44 item `paid` berlabel sama punya `created_at` **16–25 Sep 2026**. Satu batch,
+sembilan tanggal berbeda. Jadi klausa "tiap batch pasti tanggal pengajuan sama"
+**tidak berlaku di sistem sekarang** — dan tidak perlu berlaku, karena `created_at`
+sudah per item.
 
 ### Kenapa tanggal penting
 
@@ -84,8 +170,130 @@ menjadi `username + nominal + tanggal_pengajuan` — tanpa fuzzy matching.
 
 ---
 
-## 4. Realitas database (terverifikasi 1 Okt 2026, `docs/sql/42`)
+## 4A. Analisis spreadsheet (scan penuh 1 Okt 2026)
 
+### 4A.1 ⚠️ Layout kolom BERBEDA di tiap sheet — 4 pola
+
+Tidak boleh pakai asumsi posisi kolom. Harus cari **per nama header**.
+
+| Sheet | `TANGGAL PENGAJUAN` | `Tgl Actual Payment` | `Tanggal Pembayaran` | Baris header |
+|---|---|---|---|---|
+| September 2026 | ✅ kol 2 (terisi) | kol 24 | — **kosong** | 1 |
+| Agustus 2026 | ❌ | kol 23 | ✅ | 1 |
+| Juli 2026 | ❌ | kol 22 | ✅ | 1 |
+| Juni 2026 | ❌ | — | ✅ | 1 |
+| Mei 2026 | ❌ | — | ✅ | 1 |
+| April 2026 | ❌ | — | ✅ | 1 |
+| Maret 2026 | ❌ | — | ✅ | 1 |
+| Februari 2026 | ❌ | — | ✅ | **3** |
+
+**Konsekuensi aturan tanggal:** kolom `TANGGAL PENGAJUAN` **hanya ada di September**.
+Untuk Februari–Agustus satu-satunya tanggal adalah `Tanggal Pembayaran` — jadi itu yang
+dipakai. Persis jaring pengaman aturan "pakai tanggal pengajuan".
+
+**Juga:** `Tgl Actual Payment` ada di Sept/Jul/Agu tapi **tidak selalu terisi**, dan
+terdapat data tanggal yang masuk ke kolom yang salah (`Rekening`). Jadi kolom itu
+**tidak bisa dipercaya 100%** — jangan dipakai sebagai sumber tunggal.
+
+Februari juga punya baris notes di atas header (`INPUT PAYMENT MAX JAM 15.00`) dan
+satu kolom ekstra `Biaya transfer` yang tidak ada di sheet lain.
+
+### 4A.2 Pemetaan PIC → akun sistem
+
+Spreadsheet memakai **NAMA DEPAN SAJA** (`Wahyu`, `Maria`), sedangkan `profiles`
+menyimpan nama lengkap. Jadi pencocokan selalu berupa inferensi.
+
+| PIC di spreadsheet | Baris `Paid Off` | Akun |amp; PIC_ID |
+|---|---:|---|---|
+| Wahyu | 379 | Wahyu Prakoso | `e0706894-ef03-47f9-aa63-f8340816f436` |
+| Maria | 181 | Maria Alvita | `8d348a80-d4b3-4b25-a9c3-9be9cfe5d401` |
+| Rija | 105 | Irsadur Rija | `626ea2a0-518a-475c-865d-7436e2a0245e` |
+| April | 79 | Aprilia | `709825a1-0712-4be7-8560-8f48665fab16` |
+| Tiara | 78 | Tiara — `status = inactive` | `7fc3cba9-ad11-49ff-a8ca-8e71ae2e85b3` |
+| Jerry | 2 | **Jeremy** | `dc479cf6-48dc-4cb3-a6ab-f9115d4eff2e` |
+| Fira | 2 | Fira — `status = inactive` | `0583ae90-0ba2-4594-bdea-59c92b56646e` |
+| **Daffa** | **31** | — tidak ada | `NULL` |
+| **Natallia** | **30** | — tidak ada | `NULL` |
+| **Marini** | **22** | — tidak ada | `NULL` |
+| **Riska** | **6** | — tidak ada | `NULL` |
+| **David** | **3** | — tidak ada | `NULL` |
+
+Angka = baris `Paid Off` yang akan dimigrasi.
+
+> ⚠️ **Jebakan yang akan merusak data kalau lolos:**
+> **`Marini` (22 baris) BUKAN `Maria`.** Keduanya tidak ada di sistem, dan
+> fuzzy match akan salah menempelkan `Marini` ke Maria Alvita. Padahal nama berbeda
+> dan `Marini` memang orang ketiga.
+
+### 4A.3 🚨 `submitted_by` ditautkan lewat EMAIL, bukan nama
+
+`web-app/src/auth.ts:89` dan `:115`:
+
+```sql
+UPDATE profiles SET ... WHERE LOWER(email) = ${email}
+SELECT id, nama, email, ... FROM profiles WHERE LOWER(email) = ${email} LIMIT 1
+```
+
+Artinya kalimat *"nanti ketika dia login saya sesuaiin namanya agar bisa terkoneksi"*
+**hanya jalan kalau email placeholder = email asli orang itu.**
+
+Kalau dibuat akun placeholder dengan email karangan, maka saat dia login:
+
+- `existingProfile` = **NULL** (email beda)
+- → sistem **INSERT profil baru** dengan UUID baru
+- → **batch lama menunjuk placeholder yang jadi orphan**, tanpa error apa pun
+
+ tautan hilang dan tidak kelihatan. Jadi placeholder dengan email palsu **lebih
+berbahaya daripada `submitted_by = NULL`.**
+
+### 4A.4 Keputusan untuk 5 PIC tanpa akun
+
+> "yang 4 orang itu ya tetep tercatat dulu aja namanya bro, jujur sebenernya 4 orang
+> itu udh resign dan 4 orang itu emang resign sebelum sistem ini jadi jadi yaa ditulis
+> aja biar jelas auditnya ketika keuangan di audit semua ke track"
+
+| PIC | Baris `Paid Off` | Status |
+|---|---:|---|
+| Daffa | 31 | **Resign** sebelum sistem ada |
+| Natallia | 30 | **Resign** sebelum sistem ada |
+| Marini | 22 | **Resign** sebelum sistem ada |
+| Riska | 6 | **Resign** sebelum sistem ada |
+| **David** | **3** | ⚠️ **belum diketahui** — tidak masuk daftar 4 orang |
+
+**Keputusan: `submitted_by = NULL` + nama tetap ditulis di `batch_label`
+(`2026-03-15 - PIC: Daffa - MSGLOWFORMEN`) dan di `notes` batch.**
+Alasan user: audit keuangan butuh semua tercatat, dan nama yang hilang itu
+justru yang paling sulit ditelusuri saat diaudit.
+
+**Semua 92 baris `Paid Off`** — tidak ada yang `Not Yet`/`Cancel`, jadi tidak ada
+yang hilang dari keputusan ini.
+
+### 4A.5 Baris operasional punya kolom yang tidak rapi
+
+Baris dengan `Campaign` berisi `Top up` / `Sampel` **tidak punya kreator** dan
+kolomnya tidak sejajar dengan baris kreator. Contoh nyata:
+
+```
+Top up ADS | BCA 8832578478 | 15.000.000 | PT Akselerasi Realitas Bisnis ADS | PIC: April | Paid Off | Note: "19 Juni - Ads OMG Makeup"
+```
+
+**Campaign sebenarnya ada di kolom `Note`**, bukan di kolom `Campaign` (yang isinya
+`Top up ADS`). Ini berarti sebagian baris §7 yang dianggap DEFER **sebenarnya punya
+campaign yang bisa dipulihkan dari Note** — perlu dicek satu-satu.
+
+Baris lain yang perlu perhatian:
+
+- `Sampel Kime | SAMPLE KIME | ... | David Sukanto | David David | Paid Off`
+  → kolom PIC berisi `David David` (nama dobel di satu sel)
+- `TOP UP LION | ... | LION | Fira | Paid Off` dan `TOP UP QONTAK | ... | CRM | David | Paid Off`
+  → nama orang mencampur dengan label (`LION`, `CRM`)
+- `situkangoutdoor` muncul **dua kali** dengan nominal sama (75.000), PIC sama (Daffa),
+  tapi `Status` berbeda: `50% AWAL` di satu baris dan `50% AKHIR` di baris lain.
+  Kemungkinan duplikat — harus dicek di dry-run, jangan langsung migrasi.
+
+---
+
+## 4. Realitas database (terverifikasi 1 Okt 2026, `docs/sql/42`)
 ### `payment_type` — hanya SATU nilai yang terpakai
 
 ```sql
@@ -160,10 +368,10 @@ Tiga kolom itu tidak pernah ada di `payment_items` → **fungsi ini pasti crash.
 Baris 795-796 (insert batch) juga rusak: `profileId` diulang 4 kali.
 
 Rencana §11 sudah melarang memakainya, tapi **alasan sebenarnya bukan "berbahaya"
-melainkan "outright tidak bisa jalan"**.—byidak pernah dipakai, dan tidak akan.
+melainkan "outright tidak bisa jalan"** — jadi tidak akan pernah dipakai.
 
 **Keputusan: hapus fungsi ini.** Migrasi akan murni SQL migration file, sesuai
-aturan repo. Tidak ada risiko mundur karenajalur ini sudah mati.
+aturan repo. Tidak ada risiko mundur karena jalur ini sudah mati.
 
 ### ⚠️ Unique index rencana §10 akan **menolak pembayaran sah**
 
@@ -183,6 +391,19 @@ data yang tidak boleh hilang. Kunci harusoby nomer:
 
 Pasang **setelah** dedup manual bersih, karena `CREATE UNIQUE INDEX` akan gagal
 kalau masih ada duplikat.
+
+### 🚨 Baris SUBTOTAL di dalam spreadsheet
+
+Kolom `Tanggal Pembayaran` memuat baris seperti `TOTAL 16882900` dan
+`TOTAL 12132000`. **Harus difilter sebelum migrasi** — kalau tidak, Rp 29 juta
+fiktif masuk sistem sebagai pembayaran.
+
+### 🚨 Status bentrok di spreadsheet
+
+`MSGLOWFORMEN / situkangoutdoor / 75.000 / Daffa` muncul dua kali dengan tanggal
+berbeda, `Status` berbeda (`50% AWAL` vs `50% AKHIR`), dan **file KTP-nya sama**.
+Kemungkinan besar salah satu duplikat pengajuan — tapi **jangan diasumsikan**,
+cocokkan lewat `nomor_rekening + nama_penerima + NIK` di dry-run.
 
 ---
 
@@ -272,23 +493,29 @@ Termasuk 1 sel berisi 4 creator dengan NIK atas nama orang ketiga.
 
 | Fase | Isi | Status |
 |---|---|---|
-| 1 | Parse ulang spreadsheet (768 KB, 8 sheet) | ⬜ |
-| 2 | **Dry run read-only:** cocokkan terhadap `campaign_creators` + 106 item existing. Keluarkan matched / unmatched / duplikat. **Tidak menulis apa pun** | ⬜ |
-| 3 | Tambah `100_awal` + `boost_awareness` ke CHECK (aditif) | ⬜ |
-| 4 | Migrasi per batch per tanggal pengajuan, pilot 1 bulan dulu, backup + guard | ⬜ |
-| 5 | `100% Awal` (22 baris / Rp 24.250.000) setelah fase 4 bersih | ⬜ |
-| 6 | Unique index kunci `nominal + tanggal` | ⬜ |
-| 7 | Hapus `importHistoricalBatch` | ⬜ |
-| 8 | Laporan dampak ke `vw_campaign_budget_summary` (read-only) | ⬜ |
+| 0 | ~~Parse spreadsheet & verifikasi scope~~ | ✅ **SELESAI** — 840 `Paid Off`, 86 di-note. Lihat §1 & §4A |
+| 0b | ~~Verifikasi PIC terhadap `profiles`~~ | ✅ **SELESAI** — 12 PIC, 5 tanpa akun. Lihat §4A.2 |
+| 1 | **Dry run read-only:** cocokkan 840 baris ke `campaign_creators`, hitung match rate, deteksi duplikat (terutama `situkangoutdoor` & baris operasional). **Tidak menulis apa pun** | ⬜ |
+| 2 | Tambah `100_awal` + `boost_awareness` ke CHECK (aditif) | ⬜ |
+| 3 | Migrasi **pilot 1 bulan** (pilih yang paling bersih, mis. Mei = 141 baris, 0 `Not Yet`), backup + guard berlapis | ⬜ |
+| 4 | Verifikasi pilot di UI bareng user, baru lanjut 7 bulan sisanya | ⬜ |
+| 5 | Laporan dampak ke `vw_campaign_budget_summary` (read-only) | ⬜ |
+| 6 | `100% Awal` (22 baris / Rp 24.250.000) setelah fase 4 bersih | ⬜ |
+| 7 | Unique index kunci `nominal + tanggal` | ⬜ |
+| 8 | Hapus `importHistoricalBatch` | ⬜ |
 
-### ⏳ SATU keputusan yang belum diambil
+### ⏳ Yang MASIH perlu keputusan user
 
-**Kunci pengelompokan batch ikut tanggal pengajuan, benar?**
+Tidak ada yang belum diputuskan soal **struktur** — grouping, label, tanggal, scope,
+dan PIC semuanya sudah terkunci (§3). Yang tersisa:
 
-Kalau batch dihitung dari tanggal pembayaran tapi itemnya tanggal pengajuan, satu
-batch bisa berisi item beda-beda tanggal dan rekonsiliasi jadi repot.
-Aturan tanggal item sudah jelas (keputusan #10); yang belum jelas adalah
-pengelompokannya.
+1. **`David` (3 baris `Paid Off`)** — tidak masuk daftar 4 orang yang resign. Siapa?
+   Untuk sekarang diperlakukan sama: `submitted_by = NULL`, nama di label.
+2. **Baris operasional §7** (METOO, TOP UP QONTAK/LION, SAMPEL KIME, MCN) —
+   masih DEFER sesuai keputusanmu. Tapi §4A.5 menunjukkan sebagian campaign bisa
+   dipulihkan dari kolom `Note`, jadi DEFER-nya mungkin bisa diperkecil.
+3. **Kapan mulai eksekusi.** Semua fase di atas masih ⬜ dan tidak ada yang dijalankan
+   tanpa persetujuan eksplisit.
 
 ### Guardrail
 
@@ -300,6 +527,8 @@ pengelompokannya.
 5. **Hanya menulis**, tidak pernah overwrite data yang sudah ada.
 6. **Jalankan dry run lebih dulu** — migrasi harus bisa diulang tanpa menulis.
 7. **Backup sebelum menulis**, dan jangan di-drop sampai user yakin.
+8. **Filter baris `TOTAL` dari spreadsheet** sebelum migrasi (§4A.5).
+9. **Jangan fuzzy-match nama PIC.** `Marini` ≠ `Maria`. Pakai peta eksplisit di §4A.2.
 
 ---
 

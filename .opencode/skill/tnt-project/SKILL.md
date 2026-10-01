@@ -1062,6 +1062,98 @@ menundanya:
 Jadi jangan diam-diam menambahkan guard itu — itu membatalkan keputusan
 observasi yang sudah diambil. Naikkan saja kalau ada yang benar-benar melanggar.
 
+### 3.55 `submitted_by` ditautkan lewat EMAIL, bukan nama (1 Okt 2026)
+
+`web-app/src/auth.ts:89` dan `:115`:
+
+```sql
+UPDATE profiles SET ... WHERE LOWER(email) = ${email}
+SELECT id, nama, ... FROM profiles WHERE LOWER(email) = ${email} LIMIT 1
+```
+
+**Konsekuensi:** placeholder dengan email karangan **tidak akan pernah tertaut.**
+Saat orang itu login, `existingProfile` = NULL → sistem INSERT profil baru dengan
+UUID baru → batch lama menunjuk **profil orphan**, tanpa error apa pun.
+
+Jadi **placeholder email palsu lebih berbahaya daripada `submitted_by = NULL`**, dan
+`submitted_by = NULL` + nama ditulis di `batch_label`/`notes` lebih aman karena
+auditor tetap bisa menelusuri namanya.
+
+### 3.56 Spreadsheet payment: 8 sheet, 4 LAYOUT BERBEDA (1 Okt 2026)
+
+`Form Payment Campaign TNT.xlsx` — jangan pernah pakai asumsi posisi kolom.
+Cari kolom **per nama header**.
+
+| Sheet | `TANGGAL PENGAJUAN` | `Tgl Actual Payment` | `Tanggal Pembayaran` | Baris header |
+|---|---|---|---|---|
+| September 2026 | ✅ kol 2 | kol 24 | — **kosong** | 1 |
+| Agustus 2026 | ❌ | kol 23 | ✅ | 1 |
+| Juli 2026 | ❌ | kol 22 | ✅ | 1 |
+| Juni / Mei / April / Maret | ❌ | — | ✅ | 1 |
+| Februari 2026 | ❌ | — | ✅ | **3** |
+
+Kolom `PIC` pun berbeda: kol 13 (Sept), kol 11 (Juli), kol 9 (Maret), kol 10 (Feb).
+
+**Scope terverifikasi:** 926 baris ber-PIC = **840 `Paid Off`** + 78 `Not Yet` +
+**7 `Cancel`** + 1 kosong. Yang 840 itu persis scope migrasi.
+
+**Dua jebakan isi data:**
+
+| Jebakan | Detail |
+|---|---|
+| **Baris SUBTOTAL** | Kolom `Tanggal Pembayaran` memuat `TOTAL 16882900`. Kalau tidak difilter → **Rp 29 juta fiktif** masuk sistem |
+| **Baris operasional** | `Campaign` = `Top up ADS` / `TOP UP LION` / `Sampel Kime`. **Campaign asli ada di kolom `Note`**, misal `"19 Juni - Ads OMG Makeup"` |
+| **Nama dobel di satu sel** | `David David`, `Tiara David`, `LION Fira` — kolom tidak rapi di baris non-kreator |
+
+### 3.57 ⚠️ `Marini` BUKAN `Maria` — jebakan fuzzy match (1 Okt 2026)
+
+Spreadsheet payment pakai **NAMA DEPAN SAJA**; `profiles` pakai nama lengkap.
+Jadi pencocokan selalu inferensi — dan ada yang treacherous:
+
+```
+Marini   22 baris  → TIDAK ADA di profiles
+Maria   181 baris  → Maria Alvita
+```
+
+Fuzzy match akan **salah menempelkan `Marini` ke Maria Alvita**, padahal `Marini`
+adalah orang ketiga yang **resign sebelum sistem ada**. 22 batch jadi salah pengaju
+dan mustahil direkonsiliasi.
+
+**Aturan: jangan fuzzy-match nama orang. Pakai peta eksplisit** (lihat
+`docs/KEPUTUSAN-PEMBAYARAN.md` §4A.2).
+
+Peta yang sudah diverifikasi:
+
+| PIC | Baris | `profiles.id` |
+|---|---:|---|
+| Wahyu | 379 | `e0706894-ef03-47f9-aa63-f8340816f436` |
+| Maria | 181 | `8d348a80-d4b3-4b25-a9c3-9be9cfe5d401` |
+| Rija | 105 | `626ea2a0-518a-475c-865d-7436e2a0245e` |
+| April | 79 | `709825a1-0712-4be7-8560-8f48665fab16` |
+| Tiara (`inactive`) | 78 | `7fc3cba9-ad11-49ff-a8ca-8e71ae2e85b3` |
+| Jerry = Jeremy | 2 | `dc479cf6-48dc-4cb3-a6ab-f9115d4eff2e` |
+| Fira (`inactive`) | 2 | `0583ae90-0ba2-4594-bdea-59c92b56646e` |
+| Daffa / Natallia / Marini / Riska / David | 92 | **`NULL`** — 4 sudah resign sebelum sistem ada |
+
+### 3.58 Excel COM: `.Text` vs `.Value2`, dan `$data[$r,0]` meledak (1 Okt 2026)
+
+Dua jebakan saat parse `.xlsx` di Windows yang sudah memakan 3 percobaan:
+
+| Jebakan | Gejala | Solusi |
+|---|---|---|
+| `.Value2` ≠ `.Text` | Scan `.Value2` gagal mencocokkan `Paid Off` → hasil **0** | Pakai `.Text` |
+| Kolom tidak ketemu = `0` | `$data[$r,0]` mengembalikan **seluruh baris** sebagai array → output meledak ribuan baris | Cek `if($c -gt 0)` sebelum diakses |
+| `Format-Table` / raw dump | Satu baris bisa berisi alamat KTP + link drive = sangat panjang | Agregat dulu, jangan dump baris mentah |
+
+```powershell
+$xl = New-Object -ComObject Excel.Application
+$xl.Visible = $false; $xl.DisplayAlerts = $false
+$wb = $xl.Workbooks.Open($path, 0, $true)   # read-only
+```
+
+Tersedia di mesin ini (Excel 16.0) dan **jauh lebih andal** daripada parse XML di
+dalam zip xlsx.
+
 
 ---
 
