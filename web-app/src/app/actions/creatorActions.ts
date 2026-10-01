@@ -170,8 +170,35 @@ export async function fetchCreatorProfile(creatorId: number) {
     db.execute(sql`SELECT * FROM ads_performance WHERE creator_id = ${creatorId} ORDER BY tanggal DESC`).catch(() => []),
     db.execute(sql`SELECT * FROM creator_address_book WHERE creator_id = ${creatorId} ORDER BY id DESC`).catch(() => []),
     db.execute(sql`SELECT * FROM audit_logs WHERE table_name = 'creators' AND record_id = ${creatorId.toString()} ORDER BY created_at DESC LIMIT 100`).catch(() => []),
-    db.execute(sql`SELECT * FROM live_sessions WHERE LOWER(creator_username) = LOWER(${creator.username}) ORDER BY start_time DESC LIMIT 200`).catch(() => []),
-    db.execute(sql`SELECT * FROM organic_videos WHERE LOWER(creator_username) = LOWER(${creator.username}) ORDER BY post_time DESC LIMIT 200`).catch(() => []),
+    // organic_videos memuat satu baris per (content_uid, tanggal import). Video
+    // yang sama bisa muncul puluhan baris (terverifikasi 1 Okt 2026: satu
+    // content_uid punya 70 baris). Tanpa dedup, tab "Data Video Organik" di
+    // profil kreator menampilkan video yang sama berulang-ulang.
+    //
+    // `video_views`/`video_likes` bersifat KUMULATIF (snapshot total, bukan
+    // delta harian) - 70 baris untuk satu video semuanya punya nilai identik.
+    // Jadi ambil baris terbaru per content_uid.
+    db.execute(sql`
+      SELECT DISTINCT ON (content_uid) *
+      FROM organic_videos
+      WHERE LOWER(creator_username) = LOWER(${creator.username})
+      ORDER BY content_uid, created_at DESC, id DESC
+    `).catch((err) => {
+      console.error('fetchCreatorProfile: query organic_videos gagal:', err);
+      return [];
+    }),
+
+    // live_sessions juga didedup per ruang live, alasan yang sama.
+    db.execute(sql`
+      SELECT DISTINCT ON (livestream_room_id) *
+      FROM live_sessions
+      WHERE LOWER(creator_username) = LOWER(${creator.username})
+      ORDER BY livestream_room_id, start_time DESC, id DESC
+    `).catch((err) => {
+      console.error('fetchCreatorProfile: query live_sessions gagal:', err);
+      return [];
+    }),
+
     // Catatan: kolom yang dipakai urut adalah `tanggal`, bukan `order_time`.
     // Tabel `sales` tidak punya kolom `order_time` (lihat migration
     // 20260610000001_phase_2.sql), jadi ORDER BY order_time selalu error dan
