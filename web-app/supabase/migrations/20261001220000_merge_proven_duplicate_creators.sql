@@ -225,63 +225,108 @@ BEGIN
 END $$;
 
 -- ---------------------------------------------------------------------
--- 2. campaign_creators yang BENTROK: gabung assigned_sku_ids, pindah
---    videos dulu supaya tidak ikut terhapus, baru hapus baris duplikatnya.
+-- 2. Tabel lain yang FK ke creators.id direpoint DULU, supaya tidak ada
+--    FK yang masih menunjuk creator yang sebentar lagi akan dihapus.
+--    campaign_creators ditangani terpisah di langkah 3 karena perlu
+--    penggabungan assigned_sku_ids dan potentially ada baris yang bentrok.
 -- ---------------------------------------------------------------------
-CREATE TEMP TABLE _cc_bentrok ON COMMIT DROP AS
-SELECT cc_jalan.id AS cc_merge,
-       cc_tahan.id AS cc_keep,
-       cc_jalan.campaign_id,
-       cc_jalan.creator_id AS creator_merge,
-       cc_tahan.creator_id AS creator_keep
-FROM campaign_creators cc_jalan
-JOIN _merge_map m ON m.merge_id = cc_jalan.creator_id
-JOIN campaign_creators cc_tahan
-  ON cc_tahan.campaign_id = cc_jalan.campaign_id
- AND cc_tahan.creator_id = m.keep_id
- AND cc_tahan.id <> cc_jalan.id;
-
-\echo '--- campaign_creators yang bentrok ---'
-SELECT count(*) AS cc_bentrok FROM _cc_bentrok;
-
--- 2a. Pindahkan videos ke cc_keep lebih dulu
-UPDATE videos v
-SET campaign_creator_id = b.cc_keep
-FROM _cc_bentrok b
-WHERE v.campaign_creator_id = b.cc_merge;
-
--- 2b. Gabung assigned_sku_ids dari kedua baris cc
-UPDATE campaign_creators cc_tahan
-SET assigned_sku_ids = (
-      SELECT COALESCE(array_agg(DISTINCT x ORDER BY x), '{}'::int[])
-      FROM (
-        SELECT unnest(COALESCE(cc_tahan.assigned_sku_ids, '{}'::int[])) AS x
-        UNION
-        SELECT unnest(COALESCE(
-          (SELECT cc_jalan.assigned_sku_ids FROM campaign_creators cc_jalan
-            WHERE cc_jalan.id = b.cc_merge),
-          '{}'::int[])) AS x
-      ) s
-    )
-FROM _cc_bentrok b
-WHERE cc_tahan.id = b.cc_keep;
-
--- 2c. Hapus cc yang bendrok (videos sudah dipindah di 2a)
-DELETE FROM campaign_creators cc
-USING _cc_bentrok b
-WHERE cc.id = b.cc_merge;
-
--- ---------------------------------------------------------------------
--- 3. Repoint sisa tabel yang FK ke creators.id
--- ---------------------------------------------------------------------
-UPDATE campaign_creators    cc SET creator_id = m.keep_id FROM _merge_map m WHERE cc.creator_id = m.merge_id;
-UPDATE creator_snapshots    cs SET creator_id = m.keep_id FROM _merge_map m WHERE cs.creator_id = m.merge_id;
-UPDATE creator_contacts     ct SET creator_id = m.keep_id FROM _merge_map m WHERE ct.creator_id = m.merge_id;
-UPDATE creator_niches       cn SET creator_id = m.keep_id FROM _merge_map m WHERE cn.creator_id = m.merge_id;
-UPDATE creator_notes        cn SET creator_id = m.keep_id FROM _merge_map m WHERE cn.creator_id = m.merge_id;
-UPDATE creator_address_book ab SET creator_id = m.keep_id FROM _merge_map m WHERE ab.creator_id = m.merge_id;
+UPDATE creator_snapshots     cs SET creator_id = m.keep_id FROM _merge_map m WHERE cs.creator_id = m.merge_id;
+UPDATE creator_contacts      ct SET creator_id = m.keep_id FROM _merge_map m WHERE ct.creator_id = m.merge_id;
+UPDATE creator_niches        cn SET creator_id = m.keep_id FROM _merge_map m WHERE cn.creator_id = m.merge_id;
+UPDATE creator_notes         cn SET creator_id = m.keep_id FROM _merge_map m WHERE cn.creator_id = m.merge_id;
+UPDATE creator_address_book  ab SET creator_id = m.keep_id FROM _merge_map m WHERE ab.creator_id = m.merge_id;
 UPDATE creator_bank_accounts ba SET creator_id = m.keep_id FROM _merge_map m WHERE ba.creator_id = m.merge_id;
-UPDATE ads_performance      ap SET creator_id = m.keep_id FROM _merge_map m WHERE ap.creator_id = m.merge_id;
+UPDATE ads_performance       ap SET creator_id = m.keep_id FROM _merge_map m WHERE ap.creator_id = m.merge_id;
+
+-- ---------------------------------------------------------------------
+-- 3. campaign_creators, dengan loop sampai bentrok benar-benar habis.
+--
+--    Percobaan pertama menghitung daftar bentrok SEKALI lalu menghapus,
+--    baru melakukan UPDATE sisanya. Itu gagal dengan
+--      duplicate key value violates unique constraint "uq_campaign_creator"
+--      Key (campaign_id, creator_id)=(52, 1643) already exists
+--    karena bentrok baru bisa muncul SETELAH UPDATE, dari baris yang
+--    sebelumnya tidak bentrok. Daftar sekali saja tidak cukup.
+--
+--    Di sini invariant "tidak ada dua baris dengan campaign_id dan
+--    creator_id yang sama" dijaga setiap putaran: video dipindah, sku
+--    di-union, baris kembar dihapus, sisanya di-update, lalu dicek lagi.
+--    Ulangi sampai tidak ada perubahan. Batas 20 putaran.
+-- ---------------------------------------------------------------------
+DO $$
+DECLARE iterasi integer := 0; jml integer;
+BEGIN
+    LOOP
+        iterasi := iterasi + 1;
+        IF iterasi > 20 THEN
+            RAISE EXCEPTION 'Batal: campaign_creators tidak stabil dalam 20 iterasi';
+        END IF;
+
+        CREATE TEMP TABLE _bentrok_iterasi ON COMMIT DROP AS
+        SELECT cc_jalan.id AS cc_merge, cc_tahan.id AS cc_keep
+        FROM campaign_creators cc_jalan
+        JOIN _merge_map m ON m.merge_id = cc_jalan.creator_id
+        JOIN campaign_creators cc_tahan
+          ON cc_tahan.campaign_id = cc_jalan.campaign_id
+         AND cc_tahan.creator_id = m.keep_id
+         AND cc_tahan.id <> cc_jalan.id;
+
+        SELECT count(*) INTO jml FROM _bentrok_iterasi;
+
+        IF jml = 0 THEN
+            DROP TABLE _bentrok_iterasi;
+            RAISE NOTICE 'campaign_creators stabil di iterasi %', iterasi;
+            EXIT;
+        END IF;
+
+        RAISE NOTICE 'Iterasi %: % baris campaign_creators bentrok ditangani', iterasi, jml;
+
+        -- Videonya dipindah dulu supaya tidak ikut terhapus.
+        UPDATE videos v
+        SET campaign_creator_id = b.cc_keep
+        FROM _bentrok_iterasi b
+        WHERE v.campaign_creator_id = b.cc_merge;
+
+        -- assigned_sku_ids di-union, bukan ditimpa.
+        UPDATE campaign_creators cc_tahan
+        SET assigned_sku_ids = (
+              SELECT COALESCE(array_agg(DISTINCT x ORDER BY x), '{}'::int[])
+              FROM (
+                SELECT unnest(COALESCE(cc_tahan.assigned_sku_ids, '{}'::int[])) AS x
+                UNION
+                SELECT unnest(COALESCE(
+                  (SELECT cc_jalan.assigned_sku_ids FROM campaign_creators cc_jalan
+                    WHERE cc_jalan.id = b.cc_merge),
+                  '{}'::int[])) AS x
+              ) s
+            )
+        FROM _bentrok_iterasi b
+        WHERE cc_tahan.id = b.cc_keep;
+
+        DELETE FROM campaign_creators cc
+        USING _bentrok_iterasi b
+        WHERE cc.id = b.cc_merge;
+
+        DROP TABLE _bentrok_iterasi;
+    END LOOP;
+
+    -- Repoint sisa baris yang tidak bentrok.
+    UPDATE campaign_creators cc
+    SET creator_id = m.keep_id
+    FROM _merge_map m
+    WHERE cc.creator_id = m.merge_id;
+
+    -- Guard terakhir: tidak boleh tersisa satu pun pasangan kembar.
+    SELECT count(*) INTO jml FROM (
+        SELECT campaign_id, creator_id FROM campaign_creators
+        GROUP BY 1,2 HAVING count(*) > 1
+    ) z;
+    IF jml > 0 THEN
+        RAISE EXCEPTION 'Batal: masih ada % pasangan campaign_creators kembar', jml;
+    END IF;
+
+    RAISE NOTICE 'campaign_creators bersih: tidak ada pasangan kembar tersisa';
+END $$;
 
 -- ---------------------------------------------------------------------
 -- 4. Hapus baris creators yang sudah digabung
