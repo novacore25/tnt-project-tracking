@@ -230,8 +230,23 @@ export async function fetchLivePageDataAction(campaignId: number, requireClientA
 // ============================================================
 export async function updateAdsPerformanceKursAction(id: number, kurs: number) {
   try {
+    // Kurs ini ditulis TANPA guard sebelumnya, jadi Someone bisa mengetik
+    // 17.313 dan tersimpan 17.313, bukan 17313. Akibatnya revenue dan cost
+    // baris itu 1000x terlalu kecil. importActions.ts:475 sudah punya
+    // heuristics, fungsi ini tidak punya, dan itulah sebabnya 313 baris rusak
+    // terverifikasi 1 Okt 2026.
+    //
+    // Heuristik yang sama dipakai di sini: nilai di bawah 16000 pasti salah
+    // karena kurs riil IDR/USD ada di kisaran 16000 sampai 20000. Nol
+    // diizinkan karena dipakai untuk menandai baris yang datanya korup.
+    let kursVal = Number(kurs);
+    if (!Number.isFinite(kursVal) || kursVal < 0) {
+      return { success: false, error: 'Kurs tidak valid' };
+    }
+    if (kursVal > 0 && kursVal < 16000) kursVal = kursVal * 1000;
+
     await db.execute(sql`
-      UPDATE ads_performance SET kurs = ${kurs} WHERE id = ${id}
+      UPDATE ads_performance SET kurs = ${kursVal} WHERE id = ${id}
     `);
     return { success: true };
   } catch (err: any) {
