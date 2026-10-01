@@ -144,6 +144,16 @@ creators_count AS (
 payment_stats AS (
     SELECT campaign_id, COALESCE(SUM(nominal_pelunasan), 0) AS total_pembayaran_kreator
     FROM campaign_creators GROUP BY campaign_id
+),
+-- Dipertahankan apa adanya, bukan diganti 0::bigint, supaya tipe kolom
+-- total_daily_organic, total_daily_vsa dan official_daily_gmv dijamin sama
+-- dengan definisi sebelumnya. CREATE OR REPLACE VIEW menolak perubahan tipe
+-- maupun urutan kolom. Tabelnya kosong, jadi hasilnya tetap 0.
+daily_stats AS (
+    SELECT campaign_id,
+           COALESCE(SUM(organic_sales), 0) as total_daily_organic,
+           COALESCE(SUM(vsa_sales), 0) as total_daily_vsa
+    FROM daily_performance GROUP BY campaign_id
 )
 SELECT
     c.id as campaign_id,
@@ -158,39 +168,47 @@ SELECT
     c.budget_creator_plafon,
     c.budget_ads_plafon,
 
-    -- Total GMV. Satu-satunya sumber: order affiliate yang tercatat di sales.
+    -- PENTING: urutan dan nama kolom di bawah WAJIB sama persis dengan
+    -- definisi sebelumnya. CREATE OR REPLACE VIEW tidak bisa mengubah nama
+    -- atau memindahkan kolom, hanya boleh menambah kolom baru di paling akhir.
+    -- Percobaan pertama gagal dengan:
+    --   cannot change name of view column "tracked_creator_gmv" to
+    --   "total_gmv_video"
+    -- karena kolom baru disisipkan di tengah.
     COALESCE(o.total_organic_gmv, 0) AS total_gmv_achievement,
     COALESCE(vc.total_video_tayang, 0) as achievement_video,
     COALESCE(cr.total_creator_approved, 0) as achievement_creator,
     COALESCE(a.total_ads_cost_idr, 0) as budget_ads_terpakai,
     c.budget_ads_plafon - COALESCE(a.total_ads_cost_idr, 0) as sisa_budget_ads,
 
-    -- Pecahan live vs video, supaya total bisa ditelusuri ke order_id
-    COALESCE(o.total_gmv_video, 0) AS total_gmv_video,
-    COALESCE(o.total_gmv_live, 0)  AS total_gmv_live,
-
-    -- Informasi iklan. TIDAK ikut dijumlahkan ke total_gmv, karena
-    -- gross_revenue_usd mengukur revenue shop yang sama dengan sales.
-    COALESCE(a.total_ads_gmv_idr, 0)  AS total_ads_gmv,
-    COALESCE(a.total_ads_cost_idr, 0) AS total_ads_spend,
-
     -- Sama dengan total GMV. Dipertahankan karena masih dipakai dashboard.
     COALESCE(o.total_organic_gmv, 0) AS tracked_creator_gmv,
 
     -- Field mati, selalu 0. daily_performance tidak pernah diisi siapa pun.
     -- Dipertahankan agar tidak ada kolom yang hilang, tapi jangan dipakai.
-    0::bigint AS total_daily_organic,
-    0::bigint AS total_daily_vsa,
-    0::bigint AS official_daily_gmv,
+    COALESCE(ds.total_daily_organic, 0) AS total_daily_organic,
+    COALESCE(ds.total_daily_vsa, 0) AS total_daily_vsa,
+    (COALESCE(ds.total_daily_organic, 0) + COALESCE(ds.total_daily_vsa, 0)) AS official_daily_gmv,
 
     COALESCE(o.total_organic_gmv, 0) AS total_gmv,
-    COALESCE(ps.total_pembayaran_kreator, 0) AS total_pembayaran_kreator
+    COALESCE(ps.total_pembayaran_kreator, 0) AS total_pembayaran_kreator,
+    COALESCE(a.total_ads_cost_idr, 0) AS total_ads_spend,
+
+    -- Kolom baru, ditambahkan di akhir. Pecahan live vs video supaya total
+    -- bisa ditelusuri ke order_id.
+    COALESCE(o.total_gmv_video, 0) AS total_gmv_video,
+    COALESCE(o.total_gmv_live, 0)  AS total_gmv_live,
+
+    -- Informasi iklan. TIDAK ikut dijumlahkan ke total_gmv, karena
+    -- gross_revenue_usd mengukur revenue shop yang sama dengan sales.
+    COALESCE(a.total_ads_gmv_idr, 0) AS total_ads_gmv
 FROM campaigns c
 LEFT JOIN organic_sales o ON c.id = o.campaign_id
 LEFT JOIN ads_sales a ON c.id = a.campaign_id
 LEFT JOIN videos_count vc ON c.id = vc.campaign_id
 LEFT JOIN creators_count cr ON c.id = cr.campaign_id
-LEFT JOIN payment_stats ps ON c.id = ps.campaign_id;
+LEFT JOIN payment_stats ps ON c.id = ps.campaign_id
+LEFT JOIN daily_stats ds ON c.id = ds.campaign_id;
 
 -- ---------------------------------------------------------------------
 -- 4. Verifikasi: total GMV harus PERSIS sama dengan SUM(sales.gmv)
