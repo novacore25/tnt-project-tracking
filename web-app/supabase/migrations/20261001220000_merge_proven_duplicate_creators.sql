@@ -81,29 +81,20 @@ SELECT count(*) AS backup_campaign_creators FROM _backup_campaign_creators_20261
 SELECT count(*) AS backup_videos FROM _backup_videos_20261001;
 
 -- ---------------------------------------------------------------------
--- 1. Peta merge. Kelas A dan kelas B digabung dalam satu peta supaya
---    keduanya dievaluasi terhadap data SEBELUM ada yang dihapus.
+-- 1. Peta merge. Kelas A dan kelas B dievaluasi bersamaan terhadap data
+--    SEBELUM ada yang dihapus.
+--
+--    Catatan sintaks: WITH hanya boleh muncul SATU KALI di paling atas
+--    statement. Percobaan pertama menaruh WITH di branch kedua UNION ALL dan
+--    gagal dengan "syntax error at or near WITH", karena tiap cabang UNION
+--    harus berupa SELECT biasa. Jadi semua CTE di sini mencakup kedua
+--    cabang sekaligus.
+--
+--    PERLU index videos(content_uid) dan videos(campaign_creator_id) dari
+--    20261001215000. Tanpa itu bagian bukti jadi sequential scan dan
+--    migration menggantung sangat lama.
 -- ---------------------------------------------------------------------
 CREATE TEMP TABLE _merge_map ON COMMIT DROP AS
-
--- Kelas A. LOWER() sama, terbukti aman karena LOWER sudah menyatukannya.
--- Set-based min() per grup, bukan subquery korelasi per baris.
-SELECT c.id AS merge_id, m.min_id AS keep_id
-FROM creators c
-JOIN (SELECT LOWER(username) AS k, min(id) AS min_id
-      FROM creators GROUP BY LOWER(username)) m
-  ON m.k = LOWER(c.username)
-WHERE c.id <> m.min_id
-
-UNION ALL
-
--- Kelas B. PERLU index videos(content_uid) dan videos(campaign_creator_id)
--- yang dibuat di 20261001215000. Tanpa itu, bagian bukti di bawah jadi
--- sequential scan dan migration menggantung sangat lama.
---
--- Set-based, bukan subquery korelasi per pasangan. Kandidat dikumpulkan
--- sekali lewat GROUP BY, lalu bukti dihitung sebagai agregat. Jumlah
--- kandidat hanya beberapa ratus, bukan 16.927.
 WITH norm AS (
     SELECT regexp_replace(LOWER(username),'[^a-z0-9]','','g') AS k,
            array_agg(id ORDER BY id) AS ids
@@ -134,6 +125,17 @@ WITH norm AS (
     UNION
     SELECT id_a, id_b FROM bukti_video
 )
+-- Kelas A. LOWER() sama, terbukti aman karena LOWER sudah menyatukannya.
+SELECT c.id AS merge_id, m.min_id AS keep_id
+FROM creators c
+JOIN (SELECT LOWER(username) AS k, min(id) AS min_id
+      FROM creators GROUP BY LOWER(username)) m
+  ON m.k = LOWER(c.username)
+WHERE c.id <> m.min_id
+
+UNION ALL
+
+-- Kelas B. Berbeda tanda baca, LOWER berbeda, tapi ADA bukti dari data.
 SELECT t.id_b AS merge_id, t.id_a AS keep_id
 FROM terbukti t
 JOIN creators a ON a.id = t.id_a

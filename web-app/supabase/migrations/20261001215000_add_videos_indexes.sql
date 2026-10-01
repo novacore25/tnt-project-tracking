@@ -36,6 +36,13 @@ CREATE INDEX IF NOT EXISTS idx_videos_campaign_creator
 CREATE INDEX IF NOT EXISTS idx_cc_campaign_creator_pair
   ON campaign_creators (campaign_id, creator_id);
 
+-- Index ganda. Saat migration ini dijalankan sudah ada idx_videos_cc_id yang
+-- kolomnya persis sama dengan idx_videos_campaign_creator, hanya namanya
+-- berbeda. Dua index identik bikin setiap write ke videos dua kali kerja,
+-- jadi yang lama dibuang. Ditemukan saat menjalankan migration ini, karena
+-- pencarian awal hanya melihat nama index, bukan kolomnya.
+DROP INDEX IF EXISTS idx_videos_cc_id;
+
 COMMIT;
 
 \echo ''
