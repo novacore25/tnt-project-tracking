@@ -51,16 +51,32 @@
 6. **Uang:** rupiah bulat = `bigint`. Desimal = `NUMERIC(18,2)`. `ROUND()` di SQL bukan di JS.
    Jangan `float`/JS number untuk akumulasi rupiah.
 
-7. **TypeScript sudah 89 error** dan `ignoreBuildErrors: true`. Jangan tambah error baru di
-   area yang kamu sentuh. Kalau turun di bawah 20, aktifkan `ignoreBuildErrors: false`.
+7. **`pg` return `bigint`/`numeric` sebagai STRING.** `0 + "123"` = `"0123"`. Semua penjumlahan
+   rupiah WAJIB lewat `sumNum`/`toNum` dari `web-app/src/utils/computed.ts`. Jangan tulis
+   `rows.reduce((s, r) => s + (r.gmv || 0), 0)` — itu merangkai string, bukan menjumlahkan.
+   Gejalanya di UI: angka ribuan digit diawali digit `0`.
 
-8. **UI language = Bahasa Indonesia**, termasuk komentar dan string user-facing.
-   Tidak ada i18n — hardcoded Inline, itu normal di proyek ini.
+8. **Total GMV = `SUM(sales.gmv)` saja** (non-refund, dipecah live/video dari `content_type`).
+   Jangan menjumlahkan `ads_performance.gross_revenue_usd` (itu kumulatif per ad DAN revenue
+   yang sama dengan `sales`) atau custom report (`organic_videos`, `live_session_products`
+   = awareness, bukan sales). Pemetaan selalu lewat **`product_id`**, bukan `sku_id`.
 
-9. **API route baru wajib cek auth di dalam handler.** `proxy.ts` hanya redirect UX, bukan
-   lapisan otorisasi. Jangan andalkan proxy.
+9. **Sebelum menulis migration yang `UPDATE`/`DELETE` baris, jalankan preflight constraint.**
+   `schema.ts` dan `web-app/supabase/migrations/` sama-sama TIDAK bisa dipercaya untuk
+   constraint. Baca dari katalog PostgreSQL. Lihat `docs/sql/40-preflight-constraint.sql`.
+   Untuk dedupe/merge: **pikir per GRUP bukan per baris**, dan buat peta satu-baris-per-parent
+   supaya join tidak menggandakan baris.
 
-10. **Jangan edit `web-app/chrome-extension/`** — itu salinan mati. Yang benar di root.
+10. **TypeScript sudah 89 error** dan `ignoreBuildErrors: true`. Jangan tambah error baru di
+    area yang kamu sentuh. Kalau turun di bawah 20, aktifkan `ignoreBuildErrors: false`.
+
+11. **UI language = Bahasa Indonesia**, termasuk komentar dan string user-facing.
+    Tidak ada i18n — hardcoded Inline, itu normal di proyek ini.
+
+12. **API route baru wajib cek auth di dalam handler.** `proxy.ts` hanya redirect UX, bukan
+    lapisan otorisasi. Jangan andalkan proxy.
+
+13. **Jangan edit `web-app/chrome-extension/`** — itu salinan mati. Yang benar di root.
 
 ## Git
 
@@ -81,3 +97,21 @@ git push coolify main
 - [ ] Tidak ada secret literal di file yang diubah
 - [ ] Kalau ada perubahan DB: file migration baru, bukan edit `schema.ts`
 - [ ] Kalau ada server action baru: guard sudah terpasang
+- [ ] Kalau menulis migration `UPDATE`/`DELETE`: **preflight constraint sudah dijalankan**
+      (`docs/sql/40-preflight-constraint.sql`) dan hasilnya dicatat di header migration
+- [ ] Kalau menyumplah angka rupiah: pakai `sumNum`/`toNum`, bukan `reduce` dengan `+` langsung
+- [ ] Kalau mengirim SQL ke VPS: pakai **commit SHA** di URL `raw.githubusercontent.com`,
+      bukan `main` — path `main` di-cache dan query string diabaikan
+
+### Cara mengirim SQL ke VPS
+
+```bash
+# WAJIB commit SHA, bukan "main". Cache mengabaikan query string di path "main".
+curl -s "https://raw.githubusercontent.com/novacore25/tnt-project-tracking/<SHA>/docs/sql/<file>.sql" | docker exec -i 6ve3f9zqfkypblr0f0cea4jm psql -U postgres -d db_tnt_project_system
+
+# Migration yang harus batal kalau guard gagal:
+... -v ON_ERROR_STOP=1
+```
+
+Untuk SQL panjang, taruh `\pset pager off`, `\t on`, dan `\set ON_ERROR_STOP off` +
+`\echo` per section supaya error di satu bagian tidak menghilangkan bagian lain.

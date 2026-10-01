@@ -87,9 +87,10 @@ whitelisted_emails ──> allowlist login (saat ini DILEWATI, lihat §4)
 |---|---|---|
 | **VT** | Video TikTok (UGC creator) | `videos` |
 | **VT / Live** | Dua konten berbeda,Diifferentiate via `content_type` / `is_livestream` | `organic_videos` |
-| **Organic** | GMV dari link organic/affiliate tanpa Ads | `sales` |
-| **Ads / VSA** | GMV dari iklan TikTok Ads | `ads_performance` |
-| **GMV** | Gross Merchandise Value, dalam IDR | `sales.gmv` (bigint) |
+| **Organic** | GMV dari link organic/affiliate tanpa Ads. **Ini satu-satunya sumber total GMV** | `sales` |
+| **Ads / VSA** | GMV dari iklan TikTok Ads. **KUMULATIF per ad — jangan `SUM`.** Ditampilkan terpisah, tidak dijumlahkan ke total | `ads_performance` |
+| **Custom report** | Awareness + hitung video saja. **Bukan untuk sales** | `organic_videos`, `live_session_products` |
+| **GMV** | Gross Merchandise Value, dalam IDR. **Hanya dari `order_id` di `sales`.** Lihat §3.34 | `sales.gmv` (bigint) |
 | **Komisi** | Fee creator, `%` | `skus.komisi` |
 | **Rate card** | Harga tetap per posting | `campaign_creators.price` |
 | **PIC** | Person in charge (internal) | `campaign_creators.notes_pic` |
@@ -628,6 +629,275 @@ Backup: `sales_aman_backup_20260930`. Sisa **58 kelompok ambigu** dibiarkan
 
 ---
 
+### 3.33 `pg` mengembalikan `bigint`/`numeric` sebagai STRING — 12 tempat salah (1 Okt 2026)
+
+**Ini jebakan paling merusak karena tidak kelihatan.** Driver `pg` mengembalikan kolom
+`bigint` dan `numeric` sebagai string supaya presisi tidak hilang. Akibatnya:
+
+```ts
+0 + "3191697"           // -> "03191697"     RANGAI, bukan penjumlahan
+"03191697" + "21080919" // -> "0319169721080919"
+```
+
+Gejalanya di UI: `Rp 0319169702108091919018000990010900113361919011...` — angka
+ribuan digit. **Digit `0` di depan itu `sum` awal yang sudah jadi string**, sisanya
+seluruh nilai gmv dirangkai. Totalnya **nol**, bukan cuma salah format.
+
+**Semua penjumlahan rupiah WAJIB lewat `sumNum` / `toNum` di `utils/computed.ts`:**
+
+```ts
+import { sumNum, toNum } from "@/utils/computed";
+const gmv = sumNum(rows, r => r.gmv);          // aman
+const total = rows.reduce((s, r) => s + (r.gmv || 0), 0);  // BAHAYA
+```
+
+Kolom yang terkena: `sales.gmv`, `payment_items.nominal`,
+`campaign_creators.nominal_pelunasan`, `campaigns.target_gmv`, `live_sessions.gmv`.
+**Termasuk halaman KEUANGAN** — total pembayaran pernah salah.
+
+Sudah diperbaiki di 12 tempat. Pola yang benar sudah ada di `RekapAdsTab.tsx` dan
+`LivestreamClient.tsx` (`Number(x) || 0`) — ikuti yang sudah ada, jangan buat pola baru.
+
+Untuk render nominal rupiah: `Math.round(toNum(x)).toLocaleString('id-ID')`.
+`toLocaleString()` pada string **tidak menambah pemisah ribuan**, jadi formatnya
+juga salah, bukan cuma angkanya.
+
+### 3.34 `sales` dan `organic_videos` punya universe BERBEDA (1 Okt 2026)
+
+Aturan domain dari pemilik sistem - inilah yang mendefinisikan GMV:
+
+> **Total GMV dihitung dari `order_id` saja.** Order dengan `content_type` live
+> dihitung GMV live, selain itu GMV video. **Custom report hanya untuk awareness
+> dan menghitung jumlah video, bukan untuk sales.** Ads Manager juga bukan revenue
+> tambahan, karena order-nya sudah tercatat di `sales`.
+
+Konsekuensi langsung:
+- `live_session_products.gmv` (Rp 1.255.186) **TIDAK** masuk total GMV
+- `ads_performance.gross_revenue_usd` **TIDAK** dijumlahkan dengan `sales.gmv`
+- `organic_videos` hanya menyumbang video/awareness, tidak menyumbang GMV
+- Pemetaan selalu lewat **`product_id`**, bukan `sku_id`. Nama `sku_id` di kode
+  cuma penamaan historis; yang disimpan di menu Produk per campaign adalah
+  `product_id` dari TikTok.
+
+### 3.35 `ads_performance` KUMULATIF per ad — `SUM` salah, harus MAX per ad (1 Okt 2026)
+
+`gross_revenue_usd` dan `purchases` **naik monoton per tanggal**. Untuk OMG Makeup
+`MAX` per tanggal datar di ~Rp 74 juta selama tiga minggu, sementara `SUM` merangkak
+ke Rp 786 juta. 20 tanggal x ~400 juta = Rp 8,05 miliar, persis total yang muncul.
+
+Terbukti juga oleh `ads_lifetime_snapshots` (tabel yang memang dirancang untuk ini):
+satu ad naik 1978,11 → 3979,25 → 5996,83 sepanjang Juni.
+
+Konsekuensi:
+```sql
+-- SALAH: menghitung ulang revenue yang sama
+SELECT campaign_id, SUM(gross_revenue_usd * kurs) FROM ads_performance GROUP BY 1
+-- BENAR: satu ad = satu nilai
+SELECT campaign_id, ad_id, MAX(gross_revenue_usd*kurs), MAX(cost_usd*kurs)
+FROM ads_performance GROUP BY 1,2
+```
+
+Dampaknya ke budget: 5 campaign dilaporkan "over budget" padahal dalam budget
+(OMG Makeup tercatat Rp 204 juta dari plafon Rp 60 juta, sebenarnya Rp 15,4 juta).
+
+**`purchases` juga bukan attributable ke iklan** — 16.200 pembelian berbanding 31
+order sales di hari yang sama (15 Jun 2026). Jadi jangan pakai kolom `purchases`
+untuk ROAS atau CPA.
+
+Ada infrastruktur yang sudah ada tapi **tidak dipakai**: `ads_performance_delta`
+(punya `delta_gross_revenue_usd` dan `lifetime_gross_revenue_usd`) dan
+`ads_lifetime_snapshots`.
+
+### 3.36 `kurs` rusak di 314 baris (belum diperbaiki, 1 Okt 2026)
+
+`ads_performance.kurs` tersimpan `16.993` (bukan `16993`) di **314 dari 1.130
+baris** — revenue baris itu **1000x terlalu kecil**. Penyebabnya dua:
+- `importActions.ts:475` punya heuristics `if (kurs < 1000) kurs *= 1000` yang
+  benar, TAPI
+- `campaignPageActions.ts:234` melakukan `UPDATE ads_performance SET kurs = $kurs`
+  **tanpa guard** — itulah yang menulis nilai rusak
+
+Sebanyak 816 baris memakai `kurs = 18000` bulat, bukan kurs harian (terverifikasi
+16.993–18.045). Selisih sampai ~6%.
+
+**Belum diperbaiki** karena mengoreksinya menaikkan angka, dan harus tahu dampaknya
+ke budget lebih dulu.
+
+### 3.37 Migration gagal 10x karena migration TIDAK bisa diandalkan (1 Okt 2026)
+
+**File `web-app/supabase/migrations/` bukan sumber kebenaran untuk constraint.**
+Migration merge creator gagal **10 kali berturut-turut**, tiap kali karena hal yang
+tidak tertulis di migration:
+
+| Gagal | Yang sebenarnya |
+|---|---|
+| query menggantung | `videos` **tidak punya index sama sekali** |
+| syntax error | `WITH` di branch kedua `UNION ALL` |
+| "Batal" | rantai merge `100→200→300` |
+| duplicate key | bentrok muncul **setelah** `UPDATE` |
+| duplicate key | `creator_niches` punya **PK `(creator_id, niche_id)`** |
+| macet 49x | `JOIN _merge_map` **menggandakan baris** |
+| FK violation | 1.279 baris "aman" **tidak pernah di-update** |
+
+Tabel yang **tidak ada di migration manapun** padahal ada di DB:
+`organic_videos`, `creator_address_book`, `ads_lifetime_snapshots`,
+`ads_performance_delta`. Kolom yang **tidak ada** padahal dipakai kode:
+`campaign_creators.assigned_sku_ids`, `live_sessions.gmv`.
+
+**Aturan baru: sebelum menulis migration yang UPDATE/DELETE baris, jalankan preflight
+`docs/sql/40-preflight-constraint.sql` yang membaca katalog PostgreSQL langsung.**
+
+Yang perlu dicek dan hasilnya terverifikasi 1 Okt 2026:
+- **3 constraint** saja yang bisa bentrok: `campaign_creators (campaign_id, creator_id)`,
+  `creator_niches (creator_id, niche_id)`, `creator_bank_accounts (creator_id, bank_name, account_number)`
+- 9 tabel lain punya `creator_id` tapi PK-nya cuma `id` atau `ad_name` → aman
+
+### 3.38 Empat aturan SQL yang harus diingat (1 Okt 2026)
+
+Keempatnya costing satu migration gagal. Semuanya valid untuk SELURUH query,
+bukan cuma merge:
+
+**a) `UPDATE` berurutan MEMBUAT bentrok yang tidak ada sebelumnya.**
+Menghitung collision list sekali lalu `UPDATE` sisa **tidak cukup**, karena `UPDATE`
+itu sendiri bisa menabrak. Harus **pikir per GRUP, bukan per baris**: pilih satu
+selamat per `(root_id, campaign_id)`, pindahkan video, union sku, set creator_id
+selamat itu, hapus sisanya.
+
+**b) Satu `creator` bisa jadi `keep_id` untuk BANYAK `merge_id`.**
+`JOIN _merge_map m ON cc.creator_id IN (m.merge_id, m.keep_id)` memasukkan baris
+yang sama **dua kali** ke `array_agg` → `count(*)=2` padahal cuma satu baris nyata →
+loop tidak pernah menyusut. **Buat peta `_root` dulu: satu baris per creator.**
+
+**c) `ON CONFLICT DO UPDATE` tidak boleh menyentuh baris konflik yang sama 2x.**
+```
+ERROR: ON CONFLICT DO UPDATE command cannot affect row a second time
+```
+Solusi: `SELECT DISTINCT ON (target_key) ... ORDER BY target_key, prioritas DESC`
+sebelum `INSERT ... ON CONFLICT`.
+
+**d) `ON CONFLICT` + `DO UPDATE` = pola yang lebih aman daripada loop** kalau target-nya
+PK/UNIQUE sederhana. Terapkan juga ke tabel yang tidak bentrok *saat itu* — karena
+bentrok bisa muncul di tengah proses, bukan hanya sebelumnya.
+
+### 3.39 Cache `raw.githubusercontent.com` di jalur VPS (1 Okt 2026)
+
+Path `main` **di-cache** dan query string **diabaikan**, jadi file lama terus
+tersaji meski sudah `git push`. Gejalanya: output identik setelah commit baru, dan
+banner `\pset` yang sudah dihapus masih muncul.
+
+**WAJIB pakai commit SHA di path**, bukan `main`:
+```bash
+curl -s "https://raw.githubusercontent.com/novacore25/tnt-project-tracking/<SHA>/docs/sql/x.sql" | ...
+```
+Verifikasi cepat kalau benar versinya:
+```bash
+curl -s "https://raw.githubusercontent.com/novacore25/tnt-project-tracking/<SHA>/docs/sql/x.sql" | grep -c "penanda-unik-dari-file"
+```
+
+### 3.40 Tabel/views yang tidak ada di migration tapi nyata (1 Okt 2026)
+
+Inventaris lengkap via katalog. Penting karena beberapa sudah jadi sumber GMV:
+
+| Objek | Isi | Status |
+|---|---|---|
+| `organic_videos` | 56.660 baris, UNIQUE `(content_uid, product_id) NULLS NOT DISTINCT` | dipakai app |
+| `ads_lifetime_snapshots` | 1.388, snapshot kumulatif per ad | bukti ads kumulatif |
+| `ads_performance_delta` | view, punya `delta_*` + `lifetime_*` | tidak dipakai view mana pun |
+| `creator_address_book` | ada, **tidak ada di migration** | FK CASCADE |
+| `campaign_total_sales` | view, **tidak konsisten** dengan `sales` | jangan dipakai |
+| `campaign_creators_performance` | view 23.523 baris | |
+| `sales_aman_backup_20260930` | 32.813 baris | sumber pemulihan 951 order |
+| `sales_bk_20260930b` | 32.320 baris | snapshot `sales` 30 Sep |
+| `sales_excel_backup_20260930` | 25.774 baris | sumber pemulihan 951 order |
+
+`daily_performance` **ada di migration tapi tidak pernah diisi** — 0 baris, tidak ada
+satu pun INSERT di seluruh codebase. Field `official_daily_gmv` dan
+`total_daily_organic` selalu 0 = **field mati**.
+`gmv_organic_legacy` / `gmv_ads_legacy` = 0 di semua campaign = **field mati**.
+
+### 3.41 951 order hilang dari `sales`, sudah dipulihkan (1 Okt 2026)
+
+Dua backup independen (`sales_aman_backup_20260930`, `sales_excel_backup_20260930`)
+sama-sama punya **951 `order_id` yang tidak ada di `sales`**, GMV Rp 34.257.539.
+Normal semua: 950 bukan refund, tanggal dalam rentang, `content_uid` terisi,
+912 punya `campaign_id`. Sudah dipulihkan migration `20261001210000`.
+
+`order_id` UNIQUE jadi ini|data hilang, bukan duplikat.
+
+### 3.42 Tag `product_id` palsu di `organic_videos` — SUDAH DIBERSIHKAN (1 Okt 2026)
+
+362 video ter-tag 21–70 `product_id` sekaligus, tersebar di 7 campaign brand
+berbeda. Satu video tidak mungkin menjual 7 brand. Bukti: di `sales`, video yang
+sama hanya muncul dengan 0–2 product; 4.433 dari 4.436 order tidak bisa
+dipetakan ke campaign manapun.
+
+**Penyebabnya BUKAN kode** — `syncUnmapped.ts:49` hanya `UPDATE ... WHERE product_id = X`
+dan `importActions.ts:129` sudah dedup per pasangan. Sumbernya file ekspor TikTok
+yang salah associate.
+
+Cara memetakannya: `organic_videos.tiktok_campaign_id = ANY(campaigns.tiktok_campaign_ids)`.
+**329 dari 362** resolve ke tepat 1 campaign. Selesai migration
+`20261001150000`, hapus 10.851 tag. 0 video hilang, views/likes per video utuh.
+33 video tanpa bukti dibiarkan utuh.
+
+**Pola ini juga successfully dipakai untuk 9.060 order yang tadinya terlihat salah
+atribusi — setelah diuji ketat, semuanya `ambigu` (tiktok_campaign_id ada di array
+beberapa campaign), nol yang benar-benar berbeda.**
+
+### 3.43 `creators.username` UNIQUE tapi case-SENSITIVE (1 Okt 2026)
+
+`syncUnmapped.ts` INSERT dengan username **sudah di-lowercase** dan hanya
+bergantung pada `ON CONFLICT (username)` → `Bunaandshanum` dan `bunaandshanum`
+bisa sama-sama ada. 10 dari 11 titik INSERT lain sudah benar (lookup `LOWER()` dulu).
+
+Sudah diperbaiki + `UNIQUE INDEX ON creators(LOWER(username))` (DB-level, 11 titik
+INSERT tidak bisa.Selected merge 619 creator, dan `campaign_creators` yang
+(campaign, username) sama sekarang **0** → video tidak lagi terhitung 2x di Performa.
+
+**Kelas kedua yang TIDAK tertangkap `LOWER()`: beda tanda baca.**
+`emak_kekinian` / `emak__kekinian` (3 `content_uid` sama) — sudah digabung karena
+**ada bukti** (video sama atau campaign sama). 349 pasangan **tanpa** bukti
+(`Aisyah Fitriani` / `AisyahFitriani`) **sengaja dibiarkan** — menggabungkan tanpa
+bukti = menebak orang.
+
+### 3.44 Cara mengirim SQL ke VPS yang terbukti berhasil (1 Okt 2026)
+
+```bash
+# WAJIB pakai commit SHA, bukan "main" — cache mengabaikan query string
+curl -s "https://raw.githubusercontent.com/novacore25/tnt-project-tracking/<SHA>/docs/sql/<file>.sql" | docker exec -i 6ve3f9zqfkypblr0f0cea4jm psql -U postgres -d db_tnt_project_system
+```
+
+Migration yang butuh gagal-batal:
+```bash
+... -v ON_ERROR_STOP=1
+```
+
+**Pola yang dipakai berhasil:** letakkan `\set ON_ERROR_STOP off` + `\echo` di setiap
+section, supaya error di satu bagian **tidak menghilangkan** bagian lain. Lihat
+`docs/sql/33` yang gagal di 7 dari 10 section tapi tetap memberikan info.
+
+Untuk SQL read-only yang panjang, `\pset pager off` + `\t on` supaya `\echo` jelas.
+
+### 3.45 Daftar asumsi saya yang SALAH (1 Okt 2026)
+
+Hari ini saya **salah 6x** sebelum migration pertama jalan. Semuanya ketahuan karena
+diuji dulu, dan **tidak ada data yang hilang** — itu yang menyelamatkan. Daftarnya:
+
+| Asumsi | Kenyataan |
+|---|---|
+| `legacy_gmv` penyebab selisih GMV | Kolomnya **nol semua** |
+| duplikasi `ads_performance` | Faktor **1,00** |
+| `ads_performance` = revenue sama | **Benar** (Rp 1,74 M vs Rp 920 M) |
+| `live_sessions` punya kolom `gmv` | **Tidak ada** — ada di `live_session_products` |
+| `creator_snapshots.gmv_30d_organic` | **Tidak ada** |
+| 9.060 order salah atribusi | Semua `ambigu`, **nol berbeda** |
+
+**Aturan:jangan tulis migration dari asumsi.** Urutan yang benar: query read-only
+→ baca angka → baru migration. Dan kalau migration gagal, **baca error-nya sebagai
+data** — 10 kegagalan itu semua memberi informasi yang converging.
+
+---
+
 ## 8. Referensi dokumen
 
 - `docs/KONTEKS-DATABASE.md` — **peta database terverifikasi produksi** (tabel, view, fungsi, angka asli).
@@ -637,8 +907,31 @@ Backup: `sales_aman_backup_20260930`. Sisa **58 kelompok ambigu** dibiarkan
 - `docs/DOMAIN-CHEATSHEET.md` — cheat sheet query & istilah.
 - `web-app/scripts/one-time-data-fix/` — perbaikan `order_id` + `is_refund` + status `arsip` (SQL, transaksi, backup).
 - `ARCHITECTURE.md` (root) — **DOKUMEN LAMA (v2.2), sebagian tidak akurat.** Baca sebagai sejarah, bukan kebenaran.
-- `web-app/supabase/migrations/` — sumber kebenaran DDL (43 file). **Kurang 6 view** — lihat §3.24.
+- `web-app/supabase/migrations/` — DDL, tapi **tidak bisa dipercaya untuk constraint**. Lihat §3.37.
 - `web-app/.agents/skills/ponytail/SKILL.md` — gaya kode minimal.
+
+### `docs/sql/` — query audit 1 Okt 2026 (read-only kecuali disebut lain)
+
+Semua file ini **read-only** kecuali yang ada di `web-app/supabase/migrations/`.
+Jalankan dengan **commit SHA** di URL, bukan `main` (§3.44).
+
+| File | Isi |
+|---|---|
+| `19-urai-asal-total-gmv.sql` | Mengurai asal Rp 12,5 M di dashboard -> **ads_performance** |
+| `20-dry-run-merge-creator.sql` | Dry-run merge creator (superseded oleh 40) |
+| `21-akurasi-video-profil.sql` | Buktikan `organic_videos` **nol duplikat** sejati |
+| `22-vi-banyak-sku.sql` | Buktikan cross-join tag `product_id` |
+| `25-cek-tag-palsu.sql` | Verifikasi sebelum bersihkan tag palsu |
+| `29-kontradiksi-terakhir.sql` | Bentrok video yang terlewat |
+| `33-sumber-gmv-lain.sql` | Inventaris sumber GMV (error di beberapa section) |
+| `34-inventaris-gmv.sql` | Tabel/view yang tidak ada di migration |
+| `35-order-hilang.sql` | Lacak **951 order** yang hilang dari `sales` |
+| `36-gmv-tanpa-campaign.sql` | Rp 224 M tanpa `campaign_id` |
+| `37-daftar-produk-daftarkan.sql` | 91 `product_id` yang perlu didaftarkan |
+| `38-daftar-kerja-produk.sql` | **Daftar kerja** 91 produk + nama dari `raw_data` |
+| `39-duplikat-creator.sql` | Pisahkan duplikat creator jadi 3 kelas |
+| **`40-preflight-constraint.sql`** | **WAJIB** sebelum migration UPDATE/DELETE |
+| `21`, `22`, `25` | Digunakan untuk investigasi tag palsu |
 
 ---
 
@@ -650,10 +943,34 @@ nilainya dari akurasi — entry basi lebih buruk dari tidak ada entry.
 
 ---
 
-## 10. Ringkasan 10 Hal yang Harus Diingat
+## 10. Ringkasan 12 Hal yang Harus Diingat
+
+### 10a. Aturan data (paling sering dilanggar)
+
+1. **Total GMV = `SUM(sales.gmv)` saja.** Non-refund, dipecah live/video dari `content_type`.
+   **Jangan** tambahkan `ads_performance` (revenue yang sama, dan `SUM`-nya salah karena
+   kumulatif per ad) atau custom report (awareness, bukan sales). Lihat §3.34-3.35.
+2. **`pg` mengembalikan `bigint`/`numeric` sebagai STRING.** `0 + "123"` = `"0123"`. Semua
+   penjumlahan rupiah **wajib** lewat `sumNum`/`toNum` dari `utils/computed`. 12 tempat pernah
+   salah, termasuk halaman keuangan. Lihat §3.33.
+3. **`schema.ts` DAN `supabase/migrations/` sama-sama tidak bisa dipercaya untuk constraint.**
+   Migration merge gagal **10x** karena batasan yang tidak tertulis di file. Jalankan
+   `docs/sql/40-preflight-constraint.sql` (baca katalog PostgreSQL) **sebelum** menulis migration
+   yang melakukan UPDATE/DELETE. Lihat §3.37.
+4. **`UPDATE` berurutan membuat bentrok yang belum ada sebelumnya.** Untuk dedupe/merge **pikir
+   per GRUP**, bukan per baris: pilih satu selamat, pindahkan relasi, union kolom, hapus sisanya.
+   Dan **satu parent bisa punya banyak child**, jadi buat peta `_root` satu-baris-per-creator,
+   karena join langsung menggandakan baris dan loop tidak akan pernah selesai. Lihat §3.38.
+5. **Pemetaan selalu lewat `product_id`, bukan `sku_id`.** Nama `sku_id` di kode cuma
+   penamaan historis. Yang diisi di menu Produk per campaign = `product_id` dari TikTok.
+6. **`raw.githubusercontent.com` di jalur VPS men-cache path `main`.** Selalu pakai commit SHA
+   di URL, dan verifikasi dengan `grep -c` penanda unik file sebelum jalankan. Lihat §3.44.
+
+### 10b. Jebakan lama yang masih berlaku
 
 1. **`schema.ts` tidak bisa dipercaya.** Sumber kebenaran DDL = `web-app/supabase/migrations/`.
    Jangan pernah `drizzle-kit push`. 8 tabel tidak ada di schema.ts.
+   (Dan untuk *constraint*, migration juga tidak bisa dipercaya - lihat §3.37.)
 2. **Otorisasi hanya di client.** Server action = endpoint publik. Menutupi tombol tidak
    menutupi kemampuan. `updateProfileAction` (`databaseActions.ts:1248`) = staff bisa jadi admin.
 3. **`whitelisted_emails` bukan whitelist.** Login = siapa pun dengan akun Google.
@@ -672,3 +989,24 @@ nilainya dari akurasi — entry basi lebih buruk dari tidak ada entry.
    Jangan "perbaiki" — itu sisa era Supabase Realtime dan user sudah terbiasa.
 10. **Next 16, bukan Next 14/15.** Baca `node_modules/next/dist/docs/` dulu.
     `middleware` → `proxy`. `experimental.staleTimes` masih experimental.
+
+### Cara kerja yang terbukti (1 Okt 2026)
+
+Sesi ini 10 migration gagal sebelum berhasil. Yang membuat **aman** bukan migration-nya,
+tapi **guard berlapis dalam satu transaksi** plus **backup yang tidak di-drop**. Nol data
+berubah di 10 percobaan itu, dan semuanya masih bisa di-rollback karena backup utuh:
+
+- `_backup_creators_20261001`
+- `_backup_campaign_creators_20261001`
+- `_backup_videos_20261001`
+- `_backup_organic_videos_20261001`
+- `_backup_view_vw_campaign_summary_20261001`
+- `sales_aman_backup_20260930`, `sales_bk_20260930b`, `sales_excel_backup_20260930`
+
+Yang **tidak boleh diulang**: menulis migration dari asumsi. Asumsi saya salah 6 kali
+sebelum migration pertama jalan (§3.45). Urutan yang benar:
+
+**read-only query -> baca angka -> preflight constraint -> baru migration**
+
+Dan kalau migration gagal, **baca error-nya sebagai data**. 10 kegagalan itu semuanya
+memberi informasi yang saling menguatkan, bukan noise.
