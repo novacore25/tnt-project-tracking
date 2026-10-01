@@ -8,8 +8,6 @@
 -- =====================================================================
 \pset pager off
 \t on
-\pset format unaligned
-\pset fieldsep ' | '
 
 \echo ''
 \echo '=== 1. VIDEO YANG BISA DICHAYA (tiktok_campaign_id -> 1 campaign) ==='
@@ -17,16 +15,29 @@ CREATE TEMP TABLE _g AS
 SELECT content_uid FROM organic_videos
 GROUP BY content_uid HAVING count(DISTINCT product_id) > 20;
 
+-- WAJIB: Joining ke _g. Tanpa ini _vid_campaign ikut memuat SEMUA video
+-- (terbukti 26.122 baris, bukan 362) dan cleanup jadi menghapus tag dari
+-- video yang tadinya cuma punya 1 product. Scope diawasi di bawah.
 CREATE TEMP TABLE _vid_campaign AS
 SELECT content_uid, min(campaign_id) AS keep_campaign_id
 FROM (
   SELECT DISTINCT ov.content_uid, c.id AS campaign_id
   FROM organic_videos ov
+  JOIN _g g ON g.content_uid = ov.content_uid
   JOIN campaigns c ON ov.tiktok_campaign_id = ANY(c.tiktok_campaign_ids)
   WHERE ov.tiktok_campaign_id IS NOT NULL AND ov.tiktok_campaign_id <> ''
 ) x
 GROUP BY content_uid
 HAVING count(DISTINCT campaign_id) = 1;
+
+-- Guard scope: video yang boleh disentuh hanya yang punya >20 product_id.
+SELECT CASE
+         WHEN (SELECT count(*) FROM _vid_campaign) > (SELECT count(*) FROM _g)
+           THEN 'GAGAL: _vid_campaign lebih besar dari _g, scope salah'
+         WHEN (SELECT count(*) FROM _vid_campaign) > 500
+           THEN 'GAGAL: melebihi 500 video, ini bukan cross-join'
+         ELSE 'OK: scope dalam batas'
+       END AS cek_scope;
 
 SELECT
   (SELECT count(*) FROM _g)                       AS video_crossjoin,
@@ -59,6 +70,17 @@ WHERE ov.campaign_id IS DISTINCT FROM s.keep_campaign_id
     WHERE sl.content_uid = ov.content_uid AND sl.product_id = ov.product_id
   );
 
+-- Guard kedua: video yang sudah punya 1 product TIDAK BOLEH ikut terhapus.
+SELECT count(*) AS video_tidak_boleh_ikut_terhapus
+FROM (
+  SELECT DISTINCT ov.content_uid
+  FROM organic_videos ov
+  JOIN _hapus h ON h.id = ov.id
+  JOIN _safe s ON s.content_uid = ov.content_uid
+  WHERE (SELECT count(DISTINCT o2.product_id) FROM organic_videos o2
+         WHERE o2.content_uid = ov.content_uid) <= 20
+) z;
+
 SELECT
   (SELECT count(*) FROM organic_videos ov JOIN _g g ON g.content_uid = ov.content_uid) AS baris_skSekarang,
   (SELECT count(*) FROM organic_videos ov JOIN _safe s ON s.content_uid = ov.content_uid
@@ -75,24 +97,26 @@ WHERE g.content_uid NOT IN (SELECT content_uid FROM _safe)
 GROUP BY 1,3 ORDER BY 2 DESC LIMIT 20;
 
 \echo ''
-\echo '=== 5. CONTOH KASUS BERSIH: 3 video yang akan dirapikan ==='
--- Cek manual: video_ts, campaign_ts, product_ts, campaign_sebenarnya,
--- dan berapa product_asal. Kalau product_asal >> jumlah yang tersisa = bagus.
+\echo '=== 5. CONTOH KASUS BERSIH: 3 video paling parah ==='
+-- Pilih yang produknya paling banyak, bukan yang pertama diurutan nama.
 SELECT ov.content_uid,
        ov.campaign_id              AS campaign_di_baris,
        c.nama                      AS nama_campaign,
        ov.product_id,
        ov.video_views,
-       ov.video_likes,
        CASE WHEN ov.campaign_id IS NOT DISTINCT FROM s.keep_campaign_id THEN 'DITAHAN' ELSE 'dihapus' END AS aksi,
        CASE WHEN EXISTS (SELECT 1 FROM sales sl WHERE sl.content_uid = ov.content_uid AND sl.product_id = ov.product_id)
             THEN 'ada order' ELSE '' END AS bukti_order
 FROM organic_videos ov
 JOIN _safe s ON s.content_uid = ov.content_uid
 LEFT JOIN campaigns c ON c.id = ov.campaign_id
-WHERE ov.content_uid IN (SELECT content_uid FROM _safe ORDER BY content_uid LIMIT 3)
+WHERE ov.content_uid IN (
+  SELECT content_uid FROM _safe
+  ORDER BY (SELECT count(*) FROM organic_videos o2 WHERE o2.content_uid = _safe.content_uid) DESC
+  LIMIT 3
+)
 ORDER BY ov.content_uid, aksi DESC, campaign_di_baris
-LIMIT 80;
+LIMIT 60;
 
 \echo ''
 \echo '=== 6. SETELAH BERSIH: sisa product per video cross-join ==='

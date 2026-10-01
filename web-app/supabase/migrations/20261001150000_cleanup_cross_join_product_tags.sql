@@ -63,17 +63,47 @@ SELECT count(*) AS baris_backup FROM _backup_organic_videos_20261001;
 
 -- ---------------------------------------------------------------------
 -- 1. Video cross-join yang tiktok_campaign_id-nya resolve ke 1 campaign
+--
+--    WAJIB ada JOIN ke _g di sini. Tanpa itu, subquery di bawah membaca
+--    SELURUH organic_videos dan hasilnya 26.122 baris, bukan 362. Cleanup
+--    lalu ikut menghapus tag dari video yang tdramanya cuma punya 1
+--    product. KerETA ini: dry run 25ecek-tag-palsu.sql sempat menunjukkan
+--    26.122 video dan 12.767 baris sebelum scope-nya diperbaiki.
 -- ---------------------------------------------------------------------
+CREATE TEMP TABLE _g ON COMMIT DROP AS
+SELECT content_uid
+FROM organic_videos
+GROUP BY content_uid
+HAVING count(DISTINCT product_id) > 20;
+
 CREATE TEMP TABLE _vid_campaign ON COMMIT DROP AS
 SELECT content_uid, min(campaign_id) AS keep_campaign_id
 FROM (
   SELECT DISTINCT ov.content_uid, c.id AS campaign_id
   FROM organic_videos ov
+  JOIN _g g ON g.content_uid = ov.content_uid
   JOIN campaigns c ON ov.tiktok_campaign_id = ANY(c.tiktok_campaign_ids)
   WHERE ov.tiktok_campaign_id IS NOT NULL AND ov.tiktok_campaign_id <> ''
 ) x
 GROUP BY content_uid
 HAVING count(DISTINCT campaign_id) = 1;
+
+-- Guard scope: kalau _vid_campaign lebih besar dari _g, berarti filter
+-- hilang dan seluruh tabel akan ikut dibersihkan. Batalkan.
+DO $$
+DECLARE n_crossjoin int; n_resolve int;
+BEGIN
+  SELECT count(*) INTO n_crossjoin FROM _g;
+  SELECT count(*) INTO n_resolve   FROM _vid_campaign;
+
+  IF n_resolve > n_crossjoin THEN
+    RAISE EXCEPTION 'Batal: % video ter-resolve tapi hanya % video cross-join. Scope salah.', n_resolve, n_crossjoin;
+  END IF;
+  IF n_resolve > 500 THEN
+    RAISE EXCEPTION 'Batal: % video melebihi batas 500. Cross-join terverifikasi cuma 362.', n_resolve;
+  END IF;
+  RAISE NOTICE 'Scope OK: % video cross-join, % ter-resolve ke 1 campaign', n_crossjoin, n_resolve;
+END $$;
 
 -- ---------------------------------------------------------------------
 -- 2. Hanya video yang punya baris di campaign hasil resolusi.
@@ -119,10 +149,12 @@ SELECT
      JOIN _safe s ON s.content_uid = ov.content_uid)                                   AS baris_dihapus_yang_sudah_null_campaign;
 
 -- ---------------------------------------------------------------------
--- 4. Sanity: setiap video yang dirapikan harus tetap punya >= 1 baris
+-- 4. Sanity: dua hal yang harus benar sebelum DELETE
+--    a) setiap video yang dirapikan tetap punya >= 1 baris
+--    b) TIDAK ADA baris milik video yang punya <= 20 product_id ikut terhapus
 -- ---------------------------------------------------------------------
 DO $$
-DECLARE VIDEO_HABIS text;
+DECLARE VIDEO_HABIS text; VIDEO_TERLALU_SEHAT int;
 BEGIN
   SELECT string_agg(x.content_uid, ', ')
   INTO VIDEO_HABIS
@@ -145,6 +177,25 @@ BEGIN
   IF VIDEO_HABIS IS NOT NULL THEN
     RAISE EXCEPTION 'Batal: % video akan kehilangan semua barisnya', left(VIDEO_HABIS, 200);
   END IF;
+
+  -- b) video dengan 20 product_id atau kurang adalah video normal, tidak
+  --    boleh tersentuh sama sekali
+  SELECT count(*) INTO VIDEO_TERLALU_SEHAT
+  FROM (
+    SELECT DISTINCT ov.content_uid
+    FROM organic_videos ov
+    JOIN _hapus h ON h.id = ov.id
+    JOIN _safe s ON s.content_uid = ov.content_uid
+    WHERE NOT EXISTS (
+      SELECT 1 FROM _g gg WHERE gg.content_uid = ov.content_uid
+    )
+  ) z;
+
+  IF VIDEO_TERLALU_SEHAT > 0 THEN
+    RAISE EXCEPTION 'Batal: % baris dari video non-cross-join ikut masuk daftar hapus', VIDEO_TERLALU_SEHAT;
+  END IF;
+
+  RAISE NOTICE 'Sanity OK: tidak ada video kehilangan semua baris, tidak ada baris non-cross-join ikut terhapus';
 END $$;
 
 -- ---------------------------------------------------------------------
