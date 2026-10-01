@@ -148,6 +148,52 @@ SELECT count(*) AS pasangan_merge,
        count(DISTINCT merge_id) AS creator_yang_akan_dihapus
 FROM _merge_map;
 
+-- ---------------------------------------------------------------------
+-- 1b. Resolusi rantai.
+--
+-- Rantai muncul karena kedua kelas memakai kriteria berbeda. Contoh dengan
+-- tiga baris:
+--   id 100 story_andine   (LOWER beda, normalisasi sama)
+--   id 200 Storyandine    (LOWER sama dengan 300, normalisasi sama)
+--   id 300 storyandine
+-- Kelas A membuat 300 -> 200, kelas B membuat 200 -> 100, sehingga
+-- keep_id 200 sekaligus jadi merge_id di baris lain. Menghapus berurutan
+-- seperti itu tidak bisa dipercaya, karena baris bisa hilang sebelum
+-- dipindahkan.
+--
+-- Solusinya: setiap keep_id yang ternyata juga jadi merge_id diarahkan
+-- ulang ke keep_id milik baris yang consume dia. Diulang sampai tidak ada
+-- perubahan, dengan batas iterasi supaya tidak berputar tanpa henti.
+-- ---------------------------------------------------------------------
+DO $$
+DECLARE iterasi integer := 0; berubah integer;
+BEGIN
+    LOOP
+        iterasi := iterasi + 1;
+        IF iterasi > 20 THEN
+            RAISE EXCEPTION 'Batal: rantai merge tidak selesai dalam 20 iterasi';
+        END IF;
+
+        UPDATE _merge_map m
+        SET keep_id = a.keep_id
+        FROM _merge_map a
+        WHERE a.merge_id = m.keep_id
+          AND a.keep_id <> m.keep_id;
+
+        GET DIAGNOSTICS berubah = ROW_COUNT;
+        EXIT WHEN berubah = 0;
+
+        RAISE NOTICE 'Resolusi rantai iterasi %: % keep_id dialihkan', iterasi, berubah;
+    END LOOP;
+END $$;
+
+\echo '--- setelah resolusi rantai ---'
+SELECT count(*) AS pasangan_merge,
+       count(*) FILTER (WHERE keep_id = merge_id) AS self_ref,
+       (SELECT count(*) FROM _merge_map m
+         WHERE EXISTS (SELECT 1 FROM _merge_map m2 WHERE m2.merge_id = m.keep_id)) AS sisa_rantai
+FROM _merge_map;
+
 -- Guard 1: scope tidak boleh di luar batas, dan tidak boleh membentuk rantai.
 DO $$
 DECLARE n int; self_ref integer; rantai integer;
@@ -156,7 +202,9 @@ BEGIN
   SELECT count(*) INTO self_ref FROM _merge_map WHERE keep_id = merge_id;
 
   -- Rantai: keep_id yang juga jadi merge_id di baris lain. Kalau ada, urutan
-  -- DELETE bisa salah dan hasil akhirnya tidak sesuai peta.
+  -- DELETE bisa salah dan hasil akhirnya tidak sesuai peta. Setelah resolusi
+  -- di langkah 1b, ini harus nol. Kalau tidak nol berarti ada komponen yang
+  -- tidak terselesaikan dan lebih aman membatalkan.
   SELECT count(*) INTO rantai FROM _merge_map m
   WHERE EXISTS (SELECT 1 FROM _merge_map m2 WHERE m2.merge_id = m.keep_id);
 
