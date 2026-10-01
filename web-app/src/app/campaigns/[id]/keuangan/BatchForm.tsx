@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import { createPaymentBatch, addPaymentItem, submitBatchToManager, getCreatorBankAccounts } from "../../actions/paymentActions";
 import { Loader2, Plus, Trash2, Save, Send, ArrowLeft, CheckCircle2, AlertCircle } from "lucide-react";
 import { formatRupiah } from "@/utils/formatters";
+import { sumNum } from "@/utils/computed";
 
 export interface OperationalItem {
   id: string;
@@ -723,7 +724,7 @@ export function BatchForm({
                           <label className="block text-xs font-medium text-slate-600 mb-1">Nominal Diajukan (Rp)</label>
                           <input type="number" className="w-full p-2 border border-slate-300 rounded text-sm outline-none focus:border-blue-500" value={f.nominal} onChange={e => handleChange(cc.id, 'nominal', e.target.value)} />
                           {creatorHistory[cc.id] && creatorHistory[cc.id].length > 0 && (
-                            <p className="text-[10px] text-blue-700 mt-1 font-medium bg-blue-50 p-1 rounded border border-blue-100">ℹ️ Total masa lalu: Rp {creatorHistory[cc.id].reduce((sum: number, h: any) => sum + h.nominal, 0).toLocaleString()}</p>
+                            <p className="text-[10px] text-blue-700 mt-1 font-medium bg-blue-50 p-1 rounded border border-blue-100">ℹ️ Total masa lalu: Rp {Math.round(sumNum(creatorHistory[cc.id], (h: any) => h.nominal)).toLocaleString('id-ID')}</p>
                           )}
                         </div>
                         <div>
@@ -1024,7 +1025,7 @@ export function BatchForm({
                   {selectedCreators.map(cc => {
                     const history = creatorHistory[cc.id] || [];
                     if (history.length === 0) return null;
-                    const total = history.reduce((sum, h) => sum + h.nominal, 0);
+                    const total = sumNum(history, (h: any) => h.nominal);
                     return (
                       <li key={cc.id} className="text-sm bg-slate-50 p-3 rounded border border-slate-200">
                         <strong>@{cc.creators?.username}</strong> - Total dibayar sebelumnya: <span className="font-bold text-blue-600">Rp {total.toLocaleString()}</span>

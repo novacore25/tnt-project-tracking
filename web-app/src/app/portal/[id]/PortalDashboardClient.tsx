@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/Badge";
 import { TrendingUp, Video, Users, Package, Calendar, CheckCircle, CheckCircle2, XCircle, Activity, BarChart3, ChevronDown, ChevronUp, Search, ChevronLeft, ChevronRight, Filter, ArrowUp, ArrowDown, ArrowUpDown, Download, ShoppingCart, Loader2, Eye, ExternalLink } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/Table";
 import { submitClientApproval, updateResiByClient, batchUpdateResiByClient, type BatchUpdateData, updateClientNotes } from "../actions/portalActions";
+import { sumNum } from "@/utils/computed";
 import { formatAbbreviated, formatDateTime, formatDateTimeShort } from "@/utils/formatters";
 import { useRouter } from "next/navigation";
 
@@ -1616,8 +1617,8 @@ export default function PortalDashboardClient({ data, campaignId }: { data: any,
                                                 const schedule = creatorSchedules.find((s: any) => new Date(s.tanggal_live).toISOString().substring(0, 10) === dateStr);
                                             const livesOnDate = creatorLives.filter((l: any) => l.start_time && l.start_time.startsWith(dateStr));
                                             
-                                            const totalViews = livesOnDate.reduce((sum: number, l: any) => sum + (l.video_views || 0), 0);
-                                            const campaignGmv = livesOnDate.reduce((sum: number, l: any) => sum + (l.gmv || 0), 0);
+                                            const totalViews = sumNum(livesOnDate, (l: any) => l.video_views);
+                                            const campaignGmv = sumNum(livesOnDate, (l: any) => l.gmv);
                                             
                                             const isScheduled = !!schedule;
                                             const isDone = livesOnDate.length > 0;

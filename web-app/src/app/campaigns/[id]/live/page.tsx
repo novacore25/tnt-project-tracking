@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { useDatabaseStore } from "@/store/useDatabaseStore";
 import { Calendar, Trash2, Plus, ArrowUp, ArrowDown, ArrowUpDown, CheckCircle2, XCircle, ChevronLeft, ChevronRight } from "lucide-react";
 import { fetchLivePageDataAction } from "@/app/actions/campaignPageActions";
+import { sumNum } from "@/utils/computed";
 import { useCampaignFilter } from "@/providers/CampaignFilterProvider";
 
 // ─── Skeleton Loading Component ────────────────────────────────────────────────
@@ -485,8 +486,8 @@ export default function LiveSchedulePage() {
                               const schedule = schedules.find(s => new Date(s.tanggal_live).toISOString().substring(0, 10) === dateStr);
                               const livesOnDate = creatorLives.filter(l => l.start_time && l.start_time.startsWith(dateStr));
 
-                              const totalViews = livesOnDate.reduce((sum, l) => sum + (l.video_views || 0), 0);
-                              const campaignGmv = livesOnDate.reduce((sum, l) => sum + (l.gmv || 0), 0);
+                              const totalViews = sumNum(livesOnDate, (l: any) => l.video_views);
+                              const campaignGmv = sumNum(livesOnDate, (l: any) => l.gmv);
 
                               const isScheduled = !!schedule;
                               const isDone = livesOnDate.length > 0;

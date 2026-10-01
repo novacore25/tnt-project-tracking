@@ -1,7 +1,7 @@
 "use client";
 
 import { useDatabaseStore } from "@/store/useDatabaseStore";
-import { getCreatorType, getLatestSnapshot, computeCampaignGMV, computeHighestVideoGMV, getJenisKerjasama } from "@/utils/computed";
+import { getCreatorType, getLatestSnapshot, computeCampaignGMV, computeHighestVideoGMV, getJenisKerjasama, sumNum, toNum } from "@/utils/computed";
 import { useDraftLocalStorage } from "@/hooks/useDraftLocalStorage";
 import { formatAbbreviated } from "@/utils/formatters";
 
@@ -158,7 +158,7 @@ export default function CreatorProfilePage() {
         if (campaign.end_date && dateStr > campaign.end_date) return false;
         return true;
       }) || [];
-      const gmv = campaignSales.reduce((sum: number, s: any) => sum + (s.gmv || 0), 0);
+      const gmv = sumNum(campaignSales, (s: any) => s.gmv);
 
       const manualVideos = localData?.videos?.filter((v: any) => v.campaign_creator_id === cc.id) || [];
       const uniqueVideoIds = new Set<string>();
@@ -1155,9 +1155,9 @@ export default function CreatorProfilePage() {
                             {tr.campaign_name}
                           </td>
                           <td className="py-[12px] px-[16px] capitalize">{tr.jenis_kerjasama}</td>
-                          <td className="py-[12px] px-[16px]">Rp {tr.price.toLocaleString()}</td>
+                          <td className="py-[12px] px-[16px]">Rp {Math.round(toNum(tr.price)).toLocaleString('id-ID')}</td>
                           <td className="py-[12px] px-[16px] text-right font-medium text-slate-700">
-                            {tr.nominal_pelunasan ? `Rp ${tr.nominal_pelunasan.toLocaleString()}` : '-'}
+                            {toNum(tr.nominal_pelunasan) > 0 ? `Rp ${Math.round(toNum(tr.nominal_pelunasan)).toLocaleString('id-ID')}` : '-'}
                           </td>
                           <td className="py-[12px] px-[16px]">
                             <span className="badge b-neutral">
@@ -1168,10 +1168,10 @@ export default function CreatorProfilePage() {
                             {tr.totalVtCount || 0}
                           </td>
                           <td className="py-[12px] px-[16px] text-right font-semibold text-green-600">
-                            {tr.gmv > 0 ? `Rp ${tr.gmv.toLocaleString()}` : '-'}
+                            {tr.gmv > 0 ? `Rp ${Math.round(toNum(tr.gmv)).toLocaleString('id-ID')}` : '-'}
                           </td>
                           <td className="py-[12px] px-[16px] text-right font-medium text-emerald-600">
-                            {tr.highestVideoGmv > 0 ? `Rp ${tr.highestVideoGmv.toLocaleString()}` : '-'}
+                            {tr.highestVideoGmv > 0 ? `Rp ${Math.round(toNum(tr.highestVideoGmv)).toLocaleString('id-ID')}` : '-'}
                           </td>
                           <td className="py-[12px] px-[16px]">
                             <span className="badge b-neutral">
@@ -1202,8 +1202,8 @@ export default function CreatorProfilePage() {
                                         // True video ID could be exactly the content_uid, or embedded inside it like video_ID_PRODUCTID
                                         return s.content_uid === v.content_uid || s.content_uid.includes(v.content_uid);
                                       }) || [];
-                                      const organicGmv = videoSales.reduce((sum, row) => sum + row.gmv, 0);
-                                      const itemsSold = videoSales.reduce((sum, row) => sum + (row.quantity || 0), 0);
+                                      const organicGmv = sumNum(videoSales, (row: any) => row.gmv);
+                                      const itemsSold = sumNum(videoSales, (row: any) => row.quantity);
                                       const maxViews = videoSales.length > 0 ? Math.max(...videoSales.map((s: any) => Number(s.raw_data?.['Video views'] || 0))) : 0;
                                       return { ...v, organicGmv, itemsSold, maxViews };
                                     }).sort((a: any, b: any) => {
@@ -1378,8 +1378,8 @@ export default function CreatorProfilePage() {
                                   products = products.filter(p => !p.product_id || !skus?.find(s => s.product_id === p.product_id));
                                 }
                                 
-                                const totalItemsSold = products.reduce((sum: number, p: any) => sum + (p.items_sold || 0), 0);
-                                const totalGmv = products.reduce((sum: number, p: any) => sum + (p.gmv || 0), 0);
+                                const totalItemsSold = sumNum(products, (p: any) => p.items_sold);
+                                const totalGmv = sumNum(products, (p: any) => p.gmv);
 
                                 return (
                                   <React.Fragment key={session.livestream_room_id}>
@@ -1506,7 +1506,7 @@ export default function CreatorProfilePage() {
                                     return !pId || !skus?.find(sk => sk.product_id === pId);
                                   });
                                 }
-                                const totalItemsSold = videoSales.reduce((sum: number, s: any) => sum + (s.quantity || 0), 0);
+                                const totalItemsSold = sumNum(videoSales, (s: any) => s.quantity);
                                 
                                 return (
                                   <tr key={video.id} className="border-b border-line hover:bg-slate-50">
@@ -1548,7 +1548,7 @@ export default function CreatorProfilePage() {
                   if (sales.length === 0) return null;
                   const isExpandedTab = expandedCampaignTabs[`sales_${tab.id}`];
             
-                  const totalGmvTab = sales.reduce((sum: number, s: any) => sum + (s.gmv || 0), 0);
+                  const totalGmvTab = sumNum(sales, (s: any) => s.gmv);
             
                   return (
                     <div key={tab.id} className="border border-line rounded-lg overflow-hidden">

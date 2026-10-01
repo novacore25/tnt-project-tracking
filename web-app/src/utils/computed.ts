@@ -1,5 +1,27 @@
 import { CreatorSnapshot, CampaignCreator, Video } from '@/types/database';
 
+/**
+ * Driver `pg` mengembalikan kolom `bigint` / `numeric` sebagai STRING supaya
+ * presisi tidak hilang. Akibatnya `0 + "123"` = `"0123"`, yaitu RANGKAI bukan
+ * penjumlahan, dan seluruh reduce berikutnya ikut jadi string.
+ *
+ * Gejalanya di UI: angka sangat panjang seperti
+ * `Rp 03191697021080919190180009900109...` yang diawali digit 0. Digit 0 itu
+ * `sum` awal yang sudah berubah jadi string, sisanya seluruh nilai gmv dirangkai.
+ *
+ * Semua penjumlahan rupiah WAJIB lewat toNum/sumNum. Ditemukan 1 Okt 2026 di
+ * 11 tempat: sales.gmv, payment_items.nominal, dan nominal_pelunasan semuanya
+ * bertipe bigint, termasuk halaman keuangan.
+ */
+export const toNum = (v: unknown): number => {
+  const n = typeof v === 'number' ? v : Number(v);
+  return Number.isFinite(n) ? n : 0;
+};
+
+/** Jumlahkan satu kolom numerik dengan aman terhadap bigint/string. */
+export const sumNum = <T,>(rows: T[] | null | undefined, pick: (row: T) => unknown): number =>
+  (rows || []).reduce((sum, row) => sum + toNum(pick(row)), 0);
+
 export const getCreatorType = (audience_age: string | null): 'Nano' | 'Micro' | 'Macro' | 'Mega' | 'Unknown' => {
   return 'Unknown'; // Karena kita tidak lagi menggunakan angka follower, default ke Unknown atau ambil dari Tier.
 }
@@ -23,7 +45,7 @@ export const computeCampaignGMV = (cc: CampaignCreator, videos?: Video[], sales?
     const ccVideos = videos.filter(v => v.campaign_creator_id === cc.id && v.content_uid);
     const contentUids = ccVideos.map(v => v.content_uid);
     if (contentUids.length > 0) {
-      dynamicGMV = sales.filter(s => contentUids.includes(s.content_uid)).reduce((sum, row) => sum + (row.gmv || 0), 0);
+      dynamicGMV = sumNum(sales.filter(s => contentUids.includes(s.content_uid)), row => row.gmv);
     }
   }
 
@@ -40,7 +62,7 @@ export const computeHighestVideoGMV = (cc: CampaignCreator, videos?: Video[], sa
   if (videos && sales) {
     const ccVideos = videos.filter(v => v.campaign_creator_id === cc.id && v.content_uid);
     for (const v of ccVideos) {
-      const gmv = sales.filter(s => s.content_uid === v.content_uid).reduce((sum, row) => sum + (row.gmv || 0), 0);
+      const gmv = sumNum(sales.filter(s => s.content_uid === v.content_uid), row => row.gmv);
       if (gmv > highest) highest = gmv;
     }
   }

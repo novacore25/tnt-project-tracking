@@ -5,6 +5,7 @@ import Link from "next/link";
 import { TrendingUp, Activity, Video, DollarSign, Download, FolderKanban } from "lucide-react";
 import { useAuth } from "@/providers/AuthProvider";
 import { exportToExcel } from "@/utils/exportToExcel";
+import { toNum } from "@/utils/computed";
 
 export default function Dashboard() {
   const { vw_campaign_summary } = useDatabaseStore();
@@ -143,7 +144,7 @@ export default function Dashboard() {
                       </td>
                       <td className="text-right">
                         <div className="font-bold">Rp {(c.total_gmv_achievement || 0).toLocaleString()}</div>
-                        <div className="text-[11px] text-text-mute font-medium mt-[2px]">Target: {c.target_gmv ? `Rp ${c.target_gmv.toLocaleString()}` : '-'}</div>
+                        <div className="text-[11px] text-text-mute font-medium mt-[2px]">Target: {toNum(c.target_gmv) > 0 ? `Rp ${Math.round(toNum(c.target_gmv)).toLocaleString('id-ID')}` : '-'}</div>
                       </td>
                       <td className="text-right">
                         <div className={`font-bold ${percentGmv >= 100 ? 'text-g300' : 'text-text'}`}>

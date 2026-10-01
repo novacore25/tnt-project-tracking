@@ -9,6 +9,7 @@ import {
   deletePaymentItem, deletePaymentBatch, updatePaymentItem, submitBatchToManager, revertBatchStatus, financeBulkMarkPaidItems
 } from "../../actions/paymentActions";
 import { getLogicalStatus } from "@/utils/statusHelper";
+import { sumNum } from "@/utils/computed";
 import { useAuth } from "@/providers/AuthProvider";
 import { Check, X, Loader2, ArrowLeft, Send, Trash2, Pencil, Save, ChevronDown, ChevronRight, Download, Upload, Clock, UserCheck, ShieldCheck, History, ExternalLink, Link as LinkIcon } from "lucide-react";
 import { formatDateTime, formatUserWithRole } from "@/utils/formatters";
@@ -639,7 +640,7 @@ export function BatchDetail({ batch, creatorHistory, onBack, onRefresh, onRefres
                       {creatorHistory && item.campaign_creator_id && creatorHistory[item.campaign_creator_id] && (() => {
                         const pastItems = creatorHistory[item.campaign_creator_id].filter((h: any) => h.id !== item.id && new Date(h.date) <= new Date(batch.created_at));
                         if (pastItems.length === 0) return null;
-                        const total = pastItems.reduce((sum: number, h: any) => sum + h.nominal, 0);
+                        const total = sumNum(pastItems, (h: any) => h.nominal);
                         return (
                           <div className="text-[9px] text-blue-600 mt-1 leading-tight text-right flex flex-col items-end">
                             <span className="font-medium bg-blue-50 px-1 rounded border border-blue-100">Total Sblmnya: Rp {total.toLocaleString()}</span>
