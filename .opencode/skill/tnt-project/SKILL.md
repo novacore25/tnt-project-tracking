@@ -708,20 +708,34 @@ Ada infrastruktur yang sudah ada tapi **tidak dipakai**: `ads_performance_delta`
 (punya `delta_gross_revenue_usd` dan `lifetime_gross_revenue_usd`) dan
 `ads_lifetime_snapshots`.
 
-### 3.36 `kurs` rusak di 314 baris (belum diperbaiki, 1 Okt 2026)
+### 3.36 `kurs` rusak di 314 baris - SUDAH DIPERBAIKI (1 Okt 2026)
 
 `ads_performance.kurs` tersimpan `16.993` (bukan `16993`) di **314 dari 1.130
-baris** — revenue baris itu **1000x terlalu kecil**. Penyebabnya dua:
+baris** - revenue baris itu **1000x terlalu kecil**. Penyebabnya dua:
 - `importActions.ts:475` punya heuristics `if (kurs < 1000) kurs *= 1000` yang
   benar, TAPI
 - `campaignPageActions.ts:234` melakukan `UPDATE ads_performance SET kurs = $kurs`
-  **tanpa guard** — itulah yang menulis nilai rusak
+  **tanpa guard** - itulah yang menulis nilai rusak
 
-Sebanyak 816 baris memakai `kurs = 18000` bulat, bukan kurs harian (terverifikasi
-16.993–18.045). Selisih sampai ~6%.
+Migration `20261001230000` sudah dijalankan:
 
-**Belum diperbaiki** karena mengoreksinya menaikkan angka, dan harus tahu dampaknya
-ke budget lebih dulu.
+| Aksi | Jumlah |
+|---|---|
+| `kurs = 1000` diset 0 (data korup: 1052 pembelian tanpa satu klik) | 1 |
+| `kurs` satu-titik dikali 1000 | 313 |
+
+Hasil: `total_gmv` **tidak berubah** (920.211.710 - itu yang dijanjikan),
+`total_ads_spend` 110.655.058 -> 173.207.991, dan **tidak ada campaign baru jadi
+over budget**. SALSA Cosmetic justru pulih ke dalam budget karena baris korup
+itu penyebab seluruh lonjakannya.
+
+**816 baris `kurs = 18000` SAH dan tidak disentuh.** Nilai itu kurs standar yang
+dipakai user, bukan placeholder - kurs harian memang naik turun (terverifikasi
+16.993-18.045). Jangan "meluruskan" tanpa tanya.
+
+Sisa: **12 baris korup lain** (semua campaign 35 SALSA Cosmetic, 30 Mar 2026)
+dengan `clicks = 0` tapi `purchases` 58-205. Harus diperbaiki tim Ads dari
+ekspor TikTok asli - tidak bisa done dari sisi kita.
 
 ### 3.37 Migration gagal 10x karena migration TIDAK bisa diandalkan (1 Okt 2026)
 
@@ -896,6 +910,159 @@ diuji dulu, dan **tidak ada data yang hilang** — itu yang menyelamatkan. Dafta
 → baca angka → baru migration. Dan kalau migration gagal, **baca error-nya sebagai
 data** — 10 kegagalan itu semua memberi informasi yang converging.
 
+### 3.46 Output psql yang TERPOTONG menghasilkan kesimpulan SALAH (1 Okt 2026)
+
+Rencana migrasi payment §5.2 menyatakan `payment_items` tidak punya kolom
+`actual_transfer`, sehingga `financeMarkPaid` akan error. **Salah.**
+
+Akar masalahnya bukan skema berubah: **output psql yang dipaste terpotong di
+tengah daftar kolom** (`information_schema`), lalu kesimpulan "kolom tidak ada"
+ditulis dari daftar yang tidak lengkap. Setelah dicek ulang, `actual_transfer`
+**ada** sebagai `numeric`, dan `SKILL.md` sejak lama sudah benar (glosarium
+"Split payment" merujuknya).
+
+**Aturan: jangan pernah menyimpulkan "kolom X tidak ada" dari daftar output.**
+Uji per kolom dengan `EXISTS`:
+
+```sql
+SELECT
+  EXISTS (SELECT 1 FROM information_schema.columns
+          WHERE table_name='payment_items' AND column_name='actual_transfer') AS punya_actual_transfer,
+  EXISTS (SELECT 1 FROM information_schema.columns
+          WHERE table_name='payment_items' AND column_name='transaction_id') AS punya_transaction_id;
+```
+
+`docs/sql/42-verifikasi-payment.sql` §3 memakai pola ini persis.
+
+### 3.47 `importHistoricalBatch` tidak PERNAH bisa jalan (1 Okt 2026)
+
+`web-app/src/app/campaigns/actions/paymentActions.ts:806-814`
+
+```sql
+INSERT INTO payment_items (..., actual_payment_date, bukti_transfer_url, sender_account_id)
+```
+
+Ketiga kolom itu **tidak pernah ada di `payment_items`** — semuanya ada di
+`payment_batches`. Fungsi ini pasti crash. Baris 795-796 (insert batch) juga
+rusak: `profileId` diulang 4 kali.
+
+Rencana §11 melarang memakainya, tapi **alasan sebenarnya bukan "berbahaya"
+melainkan "outright mati"** — tidak akan pernah dipakai, dan tidak akan.
+
+Status: **dihapus**. Migrasi payment akan murni SQL migration file.
+
+### 3.48 Tiga kolom payment ada di tabel yang SALAH (1 Okt 2026)
+
+Terverifikasi `docs/sql/42`:
+
+| Kolom | `payment_items` | `payment_batches` |
+|---|---|---|
+| `actual_transfer` | ✅ `numeric` | — |
+| `transaction_id` | ✅ `varchar` | — |
+| `biaya_transfer` | ✅ `bigint` | — |
+| `actual_payment_date` | ❌ | ✅ `date` |
+| `bukti_transfer_url` | ❌ | ✅ `text` |
+| `sender_account_id` | ❌ | ✅ `integer` |
+
+Jadi ini bukan "kolom hilang" — **salah target tabel**. `actual_payment_date` /
+`bukti_transfer_url` / `sender_account_id` adalah properti **batch**, bukan item.
+
+### 3.49 Realitas tabel payment (1 Okt 2026, `docs/sql/42`)
+
+```
+payment_items     106 item   →  pending 61 · paid 44 · manager_approved 1
+payment_batches    66 batch
+payment_type      hanya '100_akhir' yang terpakai (106 item / Rp 42.050.349)
+paid items        SATU batch "Batch - September 2026", 16–25 Sep 2026, Rp 13.550.000
+campaign_id       NOT NULL → Qontak/LION lintas campaign tidak bisa masuk
+orphan / NULL     0 / 0 (bersih)
+unique index      tidak ada (hanya pkey)
+creators          16.309 · campaign_creators 23.098 baris · 9.105 kreator unik
+```
+
+**CHECK `payment_type` = `100_akhir`, `50_awal`, `50_akhir`, `ads`, `crm`, `lion`,
+`reward_affiliate`, `boost_views`, `boost_comment`.** `100_awal` dan
+`boost_awareness` belum ada — perlu ditambah secara **aditif**.
+
+### 3.50 Hanya 44% kreator yang punya campaign (1 Okt 2026)
+
+`campaign_creators` = 23.098 baris tapi hanya **9.105 kreator unik**, dari total
+16.309 kreator. Artinya:
+
+- Angka "822 baris siap migrasi" di rencana payment **dihitung tanpa cek ini** —
+  match rate aslinya belum diketahui, jangan diasumsikan.
+- 23.098 baris untuk 9.105 kreator = rata-rata **2,5 campaign per kreator**, jadi
+  pencocokan **wajib** `username + campaign`, bukan username saja.
+
+### 3.51 Unique index `(campaign_creator_id, payment_type)` akan MENOLAK pembayaran sah (1 Okt 2026)
+
+Rencana payment §10 mengusulkan index itu. Kasus nyata:
+
+```
+jimmy.hen — NAISDAY — 2026-06-19
+  Rp 400.000  (bayar reguler)
+  Rp  73.900  (note: "Reimburse Sample")
+```
+
+Dua pembayaran **sah**. Index `(campaign_creator_id, payment_type)` akan
+**menolak yang kedua** — persis jenis data yang tidak boleh hilang.
+
+Kunci yang benar:
+
+```sql
+(campaign_creator_id, payment_type, nominal, COALESCE(actual_payment_date, created_at::date))
+```
+
+Pasang **setelah** dedup manual bersih — `CREATE UNIQUE INDEX` gagal kalau
+masih ada duplikat.
+
+### 3.52 Aturan tanggal payment: PENGAJUAN dulu, bukan transfer (1 Okt 2026)
+
+Spreadsheet **April–Juni tidak punya `Tgl Actual Payment` sama sekali.** Yang
+ada hanya tanggal pengajuan.
+
+> "samain aja kalo case gini dengan tanggal pengajuan, bodo amat lah yang
+> penting semua data uang keluar itu tercatat brooo"
+
+Prinsipnya **rekam, jangan menebak**. Lebih baik tanggal kurang tepat daripada
+baris pembayaran hilang.
+
+| Dari spreadsheet | Masuk ke | Fallback |
+|---|---|---|
+| Tanggal Pengajuan | `payment_items.created_at` + kunci pengelompokan batch | Tanggal Pembayaran |
+| Tanggal Pembayaran | `payment_batches.actual_payment_date` | Tanggal Pengajuan |
+
+**Efek samping yang bagus:** `paymentActions.ts:813` menyalin `tanggal_pengajuan`
+ke `created_at`. Setelah aturan ini berlaku, `created_at` 16–25 Sep di 44 item
+existing **bisa dibandingkan langsung** dengan spreadsheet → kunci dedup jadi
+`username + nominal + tanggal_pengajuan`, **tanpa fuzzy matching**.
+
+### 3.53 Dobel-input payment itu ATAS PERINTAH USER, bukan bug (1 Okt 2026)
+
+> "saya mau migrasiin data payment lama ke sistem ... kenapa begitu karena itu
+> **perintah saya** takut ada error dan data pembayarannya jadi ga akurat"
+
+User sengaja mengisi **dua form** (spreadsheet + sistem). Jadi jangan diperbaiki
+diam-diam dan jangan dianggap tidak valid - setelah migrasi, spreadsheet
+**tidak dipakai lagi** (keputusan user).
+
+Alokasi yang benar: **all-or-nothing per batch per tanggal**, hanya baris
+`Paid Off`, dan baris tanpa padanan **harus dilist + didokumentasikan**
+(laporan, bukan dikarang).
+
+### 3.54 `requireRole` untuk approval payment = SENGaja DITUNDA (30 Sep 2026)
+
+23 fungsi rantai approval tidak pernah mengecek role (§4). User **sengaja**
+menundanya:
+
+> "belum gapapa masih stabil kok dan gada yang melanggar aturan dan kalo mereka
+> approve sendiri juga ketauan namanya biar kita liat aja siapa yang melanggar
+> aturan"
+
+Jadi jangan diam-diam menambahkan guard itu — itu membatalkan keputusan
+observasi yang sudah diambil. Naikkan saja kalau ada yang benar-benar melanggar.
+
+
 ---
 
 ## 8. Referensi dokumen
@@ -905,10 +1072,18 @@ data** — 10 kegagalan itu semua memberi informasi yang converging.
 - `docs/audit/2026-09-30-AUDIT.md` — laporan audit lengkap (DB, auth, frontend, pipeline).
 - `docs/audit/REMEDIATION-PLAN.md` — rencana perbaikan bertahap.
 - `docs/DOMAIN-CHEATSHEET.md` — cheat sheet query & istilah.
+- **`docs/LOG-PERTEMUAN-2026-10-01.md`** — **catatan lengkap sesi 30 Sep–1 Okt 2026.**
+  Timeline masalah → diagnosis → solusi, semua angka sebelum/sesudah, dan siapa
+  siapa-amil item yang masih tertunda. Baca ini kalau perlu konteks "kenapa keputusan ini diambil".
+- **`docs/KEPUTUSAN-PEMBAYARAN.md`** — **sumber kebenaran migrasi payment.**
+  10 keputusan user yang sudah dikunci (jangan ditanya ulang), realitas DB
+  terverifikasi, 18 baris DEFER, dan 1 keputusan yang masih tertunda.
 - `web-app/scripts/one-time-data-fix/` — perbaikan `order_id` + `is_refund` + status `arsip` (SQL, transaksi, backup).
 - `ARCHITECTURE.md` (root) — **DOKUMEN LAMA (v2.2), sebagian tidak akurat.** Baca sebagai sejarah, bukan kebenaran.
 - `web-app/supabase/migrations/` — DDL, tapi **tidak bisa dipercaya untuk constraint**. Lihat §3.37.
 - `web-app/.agents/skills/ponytail/SKILL.md` — gaya kode minimal.
+- `C:\Users\Banzilla\.opencode\plan\rencana-migrasi-payment.md` — rencana payment
+  lama (347 baris). **Sebagian basi** - bandingkan dengan `docs/KEPUTUSAN-PEMBAYARAN.md`.
 
 ### `docs/sql/` — query audit 1 Okt 2026 (read-only kecuali disebut lain)
 
@@ -931,6 +1106,8 @@ Jalankan dengan **commit SHA** di URL, bukan `main` (§3.44).
 | `38-daftar-kerja-produk.sql` | **Daftar kerja** 91 produk + nama dari `raw_data` |
 | `39-duplikat-creator.sql` | Pisahkan duplikat creator jadi 3 kelas |
 | **`40-preflight-constraint.sql`** | **WAJIB** sebelum migration UPDATE/DELETE |
+| `41-dampak-kurs.sql` | Analisis dampak koreksi `kurs` (sudah dipakai) |
+| **`42-verifikasi-payment.sql`** | **WAJIB sebelum migrasi payment.** Uji tiap kolom dengan `EXISTS` (§3.46) |
 | `21`, `22`, `25` | Digunakan untuk investigasi tag palsu |
 
 ---
@@ -940,6 +1117,24 @@ Jalankan dengan **commit SHA** di URL, bukan `main` (§3.44).
 Setelah sesi yang modify kode, jika ada temuan baru (jebakan, keputusan arsitektur, nama
 kolom yang mengejutkan), **tambahkan ke §3 atau §5 pada sesi yang sama**. Skill ini
 nilainya dari akurasi — entry basi lebih buruk dari tidak ada entry.
+
+### Aturan tambahan (permintaan user, 1 Okt 2026)
+
+> "setiap ada sesuatu tolong update skill dan dokumentasi yaa biar anda ga lupa
+> konteks dan makin pinter dan jika saya berganti model tetep masih paham apa aja
+> yang udah kita lakukan"
+
+Kalau tidak ada konteks chat, **dokumentasi adalah satu-satunya cara model berikutnya
+bisa tahu apa yang sudah terjadi.** Jadi:
+
+| Jenis informasi | Ditempatkan di |
+|---|---|
+| Jebakan teknis, kolom aneh, asumsi yang salah | **§3 skill ini** |
+| Keputusan user + alasannya | **`docs/KEPUTUSAN-*.md`** |
+| Timeline masalah → solusi + angka sebelum/sesudah | **`docs/LOG-PERTEMUAN-*.md`** |
+| Rencana yang masih jalan | `.opencode/plan/` |
+
+**Jangan tunggu sesi berikutnya.** Tulis di sesi yang sama, lalu commit.
 
 ---
 
@@ -965,6 +1160,28 @@ nilainya dari akurasi — entry basi lebih buruk dari tidak ada entry.
    penamaan historis. Yang diisi di menu Produk per campaign = `product_id` dari TikTok.
 6. **`raw.githubusercontent.com` di jalur VPS men-cache path `main`.** Selalu pakai commit SHA
    di URL, dan verifikasi dengan `grep -c` penanda unik file sebelum jalankan. Lihat §3.44.
+7. **Jangan simpulkan "kolom X tidak ada" dari daftar output psql.** Output bisa terpotong di
+   tengah. Uji per kolom dengan `EXISTS` — inilah akar kesalahan rencana payment §5.2.
+   Lihat §3.46.
+8. **Cegah duplikat dengan upsert, jangan replace.** Ini perintah user: data yang tidak
+   lengkap lebih boleh ada daripada data yang hilang saat ditimpa.
+
+### 10c. Aturan data payment
+
+1. **Tanggal payment pakai TANGGAL PENGAJUAN dulu**, fallback tanggal pembayaran. April–Juni
+   di spreadsheet tidak punya `Tgl Actual Payment` sama sekali. Prinsipnya **rekam, jangan
+   menebak**. Lihat §3.52 dan `docs/KEPUTUSAN-PEMBAYARAN.md`.
+2. **Baris tanpa campaign harus DILIST + didokumentasikan** (laporan), tidak pernah dikarang
+   atau dibuang diam-diam.
+3. **Alokasi payment all-or-nothing per batch per tanggal**, hanya baris `Paid Off`.
+4. **Dobel-input spreadsheet + sistem itu atas perintah user**, bukan bug. Jangan diperbaiki
+   diam-diam. Lihat §3.53.
+5. **`importHistoricalBatch` sudah dihapus.** Fungsi itu insert 3 kolom yang tidak pernah ada
+   di `payment_items` → pasti crash. Migrasi = SQL migration file. Lihat §3.47.
+6. **Jangan pasang unique index `(campaign_creator_id, payment_type)`** — akan menolak
+   pembayaran sah yang sah (kasus `jimmy.hen` 2 pembayaran). Butuh `nominal` + tanggal. §3.51.
+7. **`requireRole` untuk approval payment = sengaja ditunda** untuk observasi. Jangan
+   menambahkan diam-diam. Lihat §3.54.
 
 ### 10b. Jebakan lama yang masih berlaku
 

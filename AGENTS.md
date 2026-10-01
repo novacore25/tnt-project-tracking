@@ -20,6 +20,8 @@
 | Dokumen | Kapan dibaca |
 |---|---|
 | `.opencode/skill/tnt-project/SKILL.md` | **Selalu** — konteks domain, jebakan terverifikasi, aturan kerja |
+| `docs/LOG-PERTEMUAN-2026-10-01.md` | **Sesi 30 Sep–1 Okt 2026** — masalah → diagnosis → solusi, angka sebelum/sesudah, item tertunda + pemiliknya |
+| `docs/KEPUTUSAN-PEMBAYARAN.md` | **Migrasi payment** — 10 keputusan user yang sudah dikunci + realitas DB terverifikasi |
 | `docs/ARCHITECTURE-CURRENT.md` | Paham bentuk sistem, peta domain, jalur ingestion |
 | `docs/DOMAIN-CHEATSHEET.md` | "Di mana data X?" / "Kenapa angka Y beda?" |
 | `docs/audit/2026-09-30-AUDIT.md` | Laporan audit lengkap (DB, auth, pipeline, frontend) |
@@ -78,6 +80,35 @@
 
 13. **Jangan edit `web-app/chrome-extension/`** — itu salinan mati. Yang benar di root.
 
+14. **Payment: pakai TANGGAL PENGAJUAN, bukan tanggal transfer.** Kolom `Tgl Actual Payment`
+    kosong untuk April–Juni, jadi fallback ke tanggal pengajuan. Prinsipnya **rekam, jangan
+    menebak** — lebih baik tanggal kurang tepat daripada baris hilang. Alokasi **all-or-nothing
+    per batch per tanggal**, hanya baris `Paid Off`. Baris tanpa campaign **harus dilist +
+    didokumentasikan**, tidak pernah dikarang. Semua detail: `docs/KEPUTUSAN-PEMBAYARAN.md`.
+
+15. **Jangan menyimpulkan "kolom tidak ada" dari daftar output psql.** Output bisa terpotong di
+    tengah — itulah akar kesalahan rencana payment §5.2 (`actual_transfer` sebenarnya ADA).
+    Uji per kolom dengan `EXISTS`, atau pakai `docs/sql/42-verifikasi-payment.sql`.
+
+16. **`requireRole` untuk approval payment sengaja DITUNDA** — user ingin observasi dulu siapa
+    yang menyalahgunakan. Jangan menambahkan guard itu diam-diam; angkat kalau ada bukti nyata.
+
+17. **Cegah duplikat dengan upsert, jangan replace.** Perintah eksplisit user: data yang tidak
+    lengkap lebih boleh ada daripada data yang hilang saat ditimpa.
+
+18. **Dokumentasikan setiap sesi di tempat yang benar, di sesi yang sama.** Kalau tidak ada
+    konteks chat, dokumentasi satu-satunya cara model berikutnya tahu apa yang sudah terjadi.
+
+    | Jenis info | Tujuan |
+    |---|---|
+    | Jebakan teknis, asumsi salah | `.opencode/skill/tnt-project/SKILL.md` §3 |
+    | Keputusan user + alasannya | `docs/KEPUTUSAN-*.md` |
+    | Timeline masalah → solusi + angka | `docs/LOG-PERTEMUAN-*.md` |
+    | Rencana yang masih jalan | `C:\Users\Banzilla\.opencode\plan\` |
+
+    **Entry basi lebih buruk dari tidak ada entry** — kalau suatu temuan sudah berstatus selesai,
+    tulis ulang entry lamanya, jangan tambahkan yang bertentangan.
+
 ## Git
 
 ```powershell
@@ -102,6 +133,10 @@ git push coolify main
 - [ ] Kalau menyumplah angka rupiah: pakai `sumNum`/`toNum`, bukan `reduce` dengan `+` langsung
 - [ ] Kalau mengirim SQL ke VPS: pakai **commit SHA** di URL `raw.githubusercontent.com`,
       bukan `main` — path `main` di-cache dan query string diabaikan
+- [ ] Kalau menyentuh payment: **`docs/KEPUTUSAN-PEMBAYARAN.md` sudah dibaca**, tanggal pakai
+      pengajuan, baris tanpa padanan dilist
+- [ ] Kalau menemukan jebakan/keputusan baru: **sudah ditulis** ke `SKILL.md` §3 atau
+      `docs/LOG-PERTEMUAN-*.md` di sesi yang sama — bukan ditunda ke sesi berikutnya
 
 ### Cara mengirim SQL ke VPS
 
