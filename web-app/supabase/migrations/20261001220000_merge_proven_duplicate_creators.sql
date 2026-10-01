@@ -304,34 +304,45 @@ UPDATE ads_name_mappings     am SET creator_id = m.keep_id FROM _merge_map m WHE
 UPDATE ad_name_mapping       am SET creator_id = m.keep_id FROM _merge_map m WHERE am.creator_id = m.merge_id;
 
 -- ---------------------------------------------------------------------
--- 3. campaign_creators, dikelompokkan per (keep_id, campaign_id).
+-- 3a. Peta semua creator ke root akhirnya.
 --
---    KESALAHAN SEBELUMNYA. Percobaan sebelumnya:
---      - menghitung bentrok yang SUDAH ADA
---      - menghapus yang bentrok
---      - keluar dari loop saat sudah tidak ada bentrok
---      - baru melakukan UPDATE di LUAR loop
---    Itu salah karena UPDATE itulah yang MEMBUAT bentrok. Kalau dua merge_id
---    menuju keep_id yang sama, misalnya 1643 -> 100 dan 1644 -> 100, dan
---    keduanya punya baris di campaign 52, maka UPDATE pertama membuat baris
---    (52, 100) dan UPDATE kedua menabraknya:
---      duplicate key value violates unique constraint "uq_campaign_creator"
---      Key (campaign_id, creator_id)=(52, 1643) already exists
+--     WAJIB dipakai, bukan JOIN langsung ke _merge_map. Kalau satu creator
+--     jadi keep_id untuk dua merge_id, misal 200 -> 100 dan 300 -> 100,
+--     maka
+--       JOIN _merge_map m ON cc.creator_id IN (m.merge_id, m.keep_id)
+--     memasukkan baris cc itu DUA KALI ke array_agg. count(*) jadi 2 padahal
+--     hanya ada satu baris sungguhan, sehingga kelompok itu tidak pernah
+--     menyusut dan loop berputar tanpa henti. Itu yang terjadi di percobaan
+--     sebelumnya: 443 kelompok di iterasi 1, lalu 8 kelompok yang tidak
+--     berubah sampai iterasi 50.
 --
---    ALGORITMA YANG BENAR: jangan dipikir per baris, tapi per GRUP. Untuk
---    setiap (keep_id, campaign_id) yang punya lebih dari satu baris:
---      1. pilih SATU baris selamat, yaitu baris milik keep_id kalau ada,
---         kalau tidak baris dengan id terkecil
---      2. pindahkan semua video ke baris selamat
---      3. union assigned_sku_ids dari seluruh baris di grup
---      4. set creator_id baris selamat ke keep_id
---      5. hapus baris lain di grup
---    Karena hanya satu baris yang di-set creator_id per grup, dan baris keep_id
---    yang sudah ada justru yang selalu menjadi selamat, bentrok tidak mungkin
---    terjadi. Baris keep_id tidak pernah perlu di-update sama sekali.
+--     Di sini satu baris per creator, jadi join tidak pernah menggandakan.
+-- ---------------------------------------------------------------------
+CREATE TEMP TABLE _root ON COMMIT DROP AS
+SELECT c.id AS creator_id,
+       COALESCE(m.keep_id, c.id) AS root_id
+FROM creators c
+LEFT JOIN _merge_map m ON m.merge_id = c.id;
+
+-- ---------------------------------------------------------------------
+-- 3b. campaign_creators, dikelompokkan per (root_id, campaign_id).
 --
---    Loop mengulang per kelompok. Setiap putaran menghapus minimal satu baris,
---    jadi pasti berhenti.
+--     KESALAHAN SEBELUMNYA: bentrok yang ada diperiksa, dihapus, lalu UPDATE
+--     dilakukan di LUAR loop. Padahal UPDATE itulah yang MEMBUAT bentrok.
+--     Kalau 1643 -> 100 dan 1644 -> 100, keduanya punya baris di campaign 52,
+--     UPDATE pertama membuat (52, 100) dan UPDATE kedua menabraknya.
+--
+--     ALGORITMA YANG BENAR, per GRUP bukan per baris. Untuk setiap
+--     (root_id, campaign_id) yang punya lebih dari satu baris:
+--       1. pilih SATU selamat: baris milik root_id kalau ada, kalau tidak
+--          baris dengan id terkecil
+--       2. pindahkan semua video ke baris selamat
+--       3. union assigned_sku_ids dari seluruh baris di grup
+--       4. set creator_id baris selamat ke root_id
+--       5. hapus baris lain di grup
+--     Baris root_id selalu menjadi selamat sehingga tidak pernah perlu
+--     di-update, dan hanya satu baris per grup yang diubah, jadi bentrok
+--     tidak mungkin terjadi.
 -- ---------------------------------------------------------------------
 DO $$
 DECLARE iterasi integer := 0; jml integer;
@@ -342,23 +353,20 @@ BEGIN
             RAISE EXCEPTION 'Batal: campaign_creators tidak selesai dalam 50 iterasi';
         END IF;
 
-        -- Satu baris per (keep_id, campaign_id) yang akan menyatu.
         CREATE TEMP TABLE _grup ON COMMIT DROP AS
         SELECT
-            m.keep_id,
+            r.root_id,
             cc.campaign_id,
             COALESCE(
-                -- Kalau baris milik keep_id sudah ada di campaign ini, itu
-                -- yang selamat, sehingga tidak perlu mengubah creator_id.
                 (SELECT min(cc2.id) FROM campaign_creators cc2
                  WHERE cc2.campaign_id = cc.campaign_id
-                   AND cc2.creator_id = m.keep_id),
+                   AND cc2.creator_id = r.root_id),
                 min(cc.id)
             ) AS survivor_id,
             array_agg(cc.id) AS semua_id
         FROM campaign_creators cc
-        JOIN _merge_map m ON cc.creator_id IN (m.merge_id, m.keep_id)
-        GROUP BY m.keep_id, cc.campaign_id
+        JOIN _root r ON r.creator_id = cc.creator_id
+        GROUP BY r.root_id, cc.campaign_id
         HAVING count(*) > 1;
 
         SELECT count(*) INTO jml FROM _grup;
@@ -369,16 +377,17 @@ BEGIN
             EXIT;
         END IF;
 
-        RAISE NOTICE 'Iterasi %: % kelompok campaign_creators digabung', iterasi, jml;
+        -- Karena _root tidak menggandakan baris, setiap kelompok di sini
+        -- berisi minimal dua baris sungguhan, dan langkah 4 di bawah
+        -- menghapus minimal satu. Jadi loop pasti menyusut dan berhenti.
+        RAISE NOTICE 'Iterasi %: % kelompok digabung', iterasi, jml;
 
-        -- 1. Video dari baris bukan-selamat pindah ke baris selamat.
         UPDATE videos v
         SET campaign_creator_id = g.survivor_id
         FROM _grup g
         WHERE v.campaign_creator_id = ANY(g.semua_id)
           AND v.campaign_creator_id <> g.survivor_id;
 
-        -- 2. assigned_sku_ids di-union dari SELURUH baris di grup.
         UPDATE campaign_creators survivor
         SET assigned_sku_ids = (
               SELECT COALESCE(array_agg(DISTINCT x ORDER BY x), '{}'::int[])
@@ -390,15 +399,12 @@ BEGIN
         FROM _grup g
         WHERE survivor.id = g.survivor_id;
 
-        -- 3. Baris selamat diarahkan ke keep_id. Kalau ini memang baris
-        --    keep_id, kondisi ini tidak mengubah apa pun.
         UPDATE campaign_creators survivor
-        SET creator_id = g.keep_id
+        SET creator_id = g.root_id
         FROM _grup g
         WHERE survivor.id = g.survivor_id
-          AND survivor.creator_id <> g.keep_id;
+          AND survivor.creator_id <> g.root_id;
 
-        -- 4. Sisanya dihapus; video sudah pindah dan sku sudah ter-union.
         DELETE FROM campaign_creators cc
         USING _grup g
         WHERE cc.id = ANY(g.semua_id)
@@ -416,16 +422,17 @@ BEGIN
         RAISE EXCEPTION 'Batal: masih ada % pasangan campaign_creators kembar', jml;
     END IF;
 
-    -- Guard 2: tidak boleh ada baris yang masih menunjuk creator yang sebentar
-    -- lagi akan dihapus. Kalau ada, penghapusan akan melanggar foreign key.
+    -- Guard 2: setiap baris harus menunjuk root-nya sendiri. Kalau ada yang
+    -- masih menunjuk merge_id, penghapusan creator akan melanggar foreign key.
     SELECT count(*) INTO jml
     FROM campaign_creators cc
-    JOIN _merge_map m ON m.merge_id = cc.creator_id;
+    JOIN _root r ON r.creator_id = cc.creator_id
+    WHERE cc.creator_id <> r.root_id;
     IF jml > 0 THEN
-        RAISE EXCEPTION 'Batal: masih ada % baris campaign_creators menunjuk creator yang akan dihapus', jml;
+        RAISE EXCEPTION 'Batal: masih ada % baris campaign_creators yang belum menunjuk root-nya', jml;
     END IF;
 
-    RAISE NOTICE 'campaign_creators bersih: tidak ada pasangan kembar dan tidak ada merge_id tersisa';
+    RAISE NOTICE 'campaign_creators bersih: tidak ada pasangan kembar dan semua baris menunjuk root';
 END $$;
 
 -- ---------------------------------------------------------------------
