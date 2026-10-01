@@ -71,13 +71,25 @@ export async function syncUnmappedForProduct(productId: string, campaignId: numb
 
   if (usernames.length > 0) {
     for (const u of usernames) {
-      const cRes = await db.execute(sql`
-        INSERT INTO creators (username, nama_asli, added_by, link_account)
-        VALUES (${u}, ${u}, 'system', ${`https://tiktok.com/@${u}`})
-        ON CONFLICT (username) DO UPDATE SET username = EXCLUDED.username
-        RETURNING id
+      // Cari dulu dengan LOWER(). Index UNIQUE(username) itu case-sensitive,
+      // jadi `ON CONFLICT (username)` TIDAK pernah_trigger kalau casing beda.
+      // Akibatnya baris `Bunaandshanum` dan `bunaandshanum` bisa sama-sama ada,
+      // lalu `campaign_creators` dapat dua baris untuk username yang sama dan
+      // GMV-nya terhitung dua kali (terverifikasi 1 Okt 2026: 582 kelompok).
+      const existingC = await db.execute(sql`
+        SELECT id FROM creators WHERE LOWER(username) = ${u} LIMIT 1
       `);
-      const creatorId = (cRes as any[])[0]?.id;
+      let creatorId = (existingC as any[])[0]?.id;
+
+      if (!creatorId) {
+        const cRes = await db.execute(sql`
+          INSERT INTO creators (username, nama_asli, added_by, link_account)
+          VALUES (${u}, ${u}, 'system', ${`https://tiktok.com/@${u}`})
+          ON CONFLICT (username) DO UPDATE SET username = EXCLUDED.username
+          RETURNING id
+        `);
+        creatorId = (cRes as any[])[0]?.id;
+      }
 
       if (creatorId) {
         const ccExists = await db.execute(sql`
