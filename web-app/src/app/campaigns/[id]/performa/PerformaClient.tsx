@@ -326,7 +326,14 @@ export default function CampaignPerformaClient({ campaignId }: { campaignId: num
         const totalGmv = gmvOrganic + gmvAds;
         const roas = costAds > 0 ? (gmvAds / costAds).toFixed(2) : '-';
 
-        const autoSalesVideos = videoGmvData?.filter((v: any) => v.creator_username === username) || [];
+        // Bandingkan lowercase. `sales.creator_username` berasal dari TikTok sedangkan
+        // `creators.username` diisi manual, sehingga kapitalisasi tidak selalu
+        // sama. Versi lama memakai `===` sehingga video dari sales tidak ikut
+        // terhitung di TOTAL VT, padahal GMV-nya sudah terhitung (yang pakai
+        // toLowerCase). Akibatnya GMV dan TOTAL VT tidak konsisten.
+        const autoSalesVideos = videoGmvData?.filter((v: any) =>
+          String(v.creator_username || '').toLowerCase() === usernameLower
+        ) || [];
         const dbVideos = currentHasSkus ? (cc.videos || []).filter((v: any) => {
           if (campaignSkuIds.size > 0 && v.sku_id && !campaignSkuIds.has(v.sku_id)) return false;
           return true;

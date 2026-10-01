@@ -134,12 +134,24 @@ export default function CreatorProfilePage() {
     }
   };
 
+  // Peta product_id -> campaign_id. Wajib dipakai karena sebagian besar baris
+  // `sales` punya campaign_id NULL; keterkaitannya ke campaign hanya bisa
+  // dibaca lewat product_id yang terdaftar di `skus`.
+  const skuCampaignMap = new Map<string, number>();
+  skus?.forEach(s => {
+    if (s.product_id) skuCampaignMap.set(String(s.product_id), s.campaign_id);
+  });
+
   let trackRecords = (localData?.ccs || [])
     .map((cc: any) => {
       const campaign = campaigns.find(c => c.id === cc.campaign_id);
-      
+
       const campaignSales = localData?.sales?.filter((s: any) => {
-        if (s.campaign_id !== cc.campaign_id) return false;
+        // Cocok lewat campaign_id ATAU lewat SKU. Versi lama hanya memakai
+        // campaign_id, sehingga GMV yang terhubung via SKU hilang semua.
+        const pId = s.product_id || s.raw_data?.['Product ID'];
+        const mappedCid = pId != null ? skuCampaignMap.get(String(pId)) : undefined;
+        if (s.campaign_id !== cc.campaign_id && mappedCid !== cc.campaign_id) return false;
         if (!campaign) return true;
         const dateStr = s.tanggal ? s.tanggal.substring(0, 10) : '';
         if (campaign.start_date && dateStr < campaign.start_date) return false;
@@ -160,8 +172,9 @@ export default function CreatorProfilePage() {
         
         if (vid && !uniqueVideoIds.has(vid)) {
           uniqueVideoIds.add(vid);
-          // Check if already in manual videos (either as content_uid or vt_code)
-          if (!manualVideos.some((v: any) => v.content_uid === vid || v.vt_code === vid || v.content_uid === s.content_uid)) {
+          // `vt_code` dihapus: kolom itu tidak pernah ada di tabel `videos`,
+          // jadi perbandingannya selalu undefined dan tidak berguna.
+          if (!manualVideos.some((v: any) => v.content_uid === vid || v.content_uid === s.content_uid)) {
             totalVtCount++;
           }
         }
@@ -1097,7 +1110,12 @@ export default function CreatorProfilePage() {
                       const isExpanded = expandedCampaigns[tr.id];
                       
                       const manualVideos = localData?.videos?.filter((v: any) => v.campaign_creator_id === tr.id) || [];
-                      const campaignSales = localData?.sales?.filter((s: any) => s.campaign_id === tr.campaign_id) || [];
+                      // Sama seperti perhitungan GMV di atas: campaign_id ATAU SKU.
+                      const campaignSales = localData?.sales?.filter((s: any) => {
+                        const pId = s.product_id || s.raw_data?.['Product ID'];
+                        const mappedCid = pId != null ? skuCampaignMap.get(String(pId)) : undefined;
+                        return s.campaign_id === tr.campaign_id || mappedCid === tr.campaign_id;
+                      }) || [];
                       const combinedVideos = [...manualVideos];
                       const uniqueVideoIds2 = new Set<string>();
                       campaignSales.forEach((s: any) => {
@@ -1110,7 +1128,8 @@ export default function CreatorProfilePage() {
                           if (vid && !uniqueVideoIds2.has(vid)) {
                               uniqueVideoIds2.add(vid);
                               // Check if already in manual videos
-                              if (!manualVideos.some((v: any) => v.content_uid === vid || v.vt_code === vid || v.content_uid === s.content_uid)) {
+                              // (`vt_code` dihapus: kolom itu tidak pernah ada di tabel `videos`)
+                              if (!manualVideos.some((v: any) => v.content_uid === vid || v.content_uid === s.content_uid)) {
                                   combinedVideos.push({
                                      id: `auto-${vid}`,
                                      content_uid: vid, // Use the true video ID

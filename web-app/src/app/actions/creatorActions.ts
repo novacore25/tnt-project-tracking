@@ -172,7 +172,19 @@ export async function fetchCreatorProfile(creatorId: number) {
     db.execute(sql`SELECT * FROM audit_logs WHERE table_name = 'creators' AND record_id = ${creatorId.toString()} ORDER BY created_at DESC LIMIT 100`).catch(() => []),
     db.execute(sql`SELECT * FROM live_sessions WHERE LOWER(creator_username) = LOWER(${creator.username}) ORDER BY start_time DESC LIMIT 200`).catch(() => []),
     db.execute(sql`SELECT * FROM organic_videos WHERE LOWER(creator_username) = LOWER(${creator.username}) ORDER BY post_time DESC LIMIT 200`).catch(() => []),
-    db.execute(sql`SELECT * FROM sales WHERE LOWER(creator_username) = LOWER(${creator.username}) ORDER BY order_time DESC LIMIT 500`).catch(() => []),
+    // Catatan: kolom yang dipakai urut adalah `tanggal`, bukan `order_time`.
+    // Tabel `sales` tidak punya kolom `order_time` (lihat migration
+    // 20260610000001_phase_2.sql), jadi ORDER BY order_time selalu error dan
+    // hasil query ini kosong. Error sengaja dicatat, tidak lagi diam-diam.
+    db.execute(sql`
+      SELECT * FROM sales
+      WHERE LOWER(creator_username) = LOWER(${creator.username})
+      ORDER BY tanggal DESC
+      LIMIT 5000
+    `).catch((err) => {
+      console.error('fetchCreatorProfile: query sales gagal untuk creator', creatorId, err);
+      return [];
+    }),
   ]);
 
   const ccList = (ccs as unknown as any[]) || [];

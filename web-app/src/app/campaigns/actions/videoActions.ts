@@ -41,17 +41,39 @@ export async function getInternalVideoData(campaignId: number, searchKeyword: st
       `).catch(() => []) as Promise<any[]>,
 
       // 3. Fetch Organic Video stats
+      // Filter ganda: campaign_id ATAU product_id yang terdaftar di skus.
+      // Halaman Performa memakai pola yang sama (campaignPageActions.ts:365-378).
+      // Tanpa cabang SKU, semua organic video yang terhubung lewat product_id
+      // akan hilang karena campaign_id-nya NULL.
       db.execute(sql`
-        SELECT content_uid, creator_username, product_id, video_views as views, video_likes as likes, post_time
-        FROM organic_videos WHERE campaign_id = ${campaignId}
-      `).catch(() => []) as Promise<any[]>,
+        SELECT content_uid, creator_username, product_id,
+               video_views as views, video_likes as likes, post_time, content_type
+        FROM organic_videos
+        WHERE campaign_id = ${campaignId}
+           OR (product_id IS NOT NULL AND product_id IN (
+                SELECT product_id FROM skus
+                WHERE campaign_id = ${campaignId} AND product_id IS NOT NULL
+              ))
+      `).catch((err) => {
+        console.error('getInternalVideoData: query organic_videos gagal:', err);
+        return [];
+      }) as Promise<any[]>,
 
       // 4. Fetch Sales stats for this campaign
+      // Filter ganda: campaign_id ATAU product_id yang terdaftar di skus.
       db.execute(sql`
         SELECT content_uid, creator_username, product_id, SUM(COALESCE(gmv, 0)) as gmv
-        FROM sales WHERE campaign_id = ${campaignId}
+        FROM sales
+        WHERE campaign_id = ${campaignId}
+           OR (product_id IS NOT NULL AND product_id IN (
+                SELECT product_id FROM skus
+                WHERE campaign_id = ${campaignId} AND product_id IS NOT NULL
+              ))
         GROUP BY content_uid, creator_username, product_id
-      `).catch(() => []) as Promise<any[]>,
+      `).catch((err) => {
+        console.error('getInternalVideoData: query sales gagal:', err);
+        return [];
+      }) as Promise<any[]>,
 
       // 5. Fetch Approved Campaign Creators with snapshots, contacts and videos
       db.execute(sql`
@@ -138,20 +160,42 @@ export async function getInternalVideoData(campaignId: number, searchKeyword: st
 
     // Build stats map by creator_username
     const videoStatsMap = new Map<string, any[]>();
-    
+
+    const isLiveContent = (t: unknown) => {
+      const s = String(t || '').toLowerCase();
+      return s === 'livestream' || s === 'live';
+    };
+
     // Process organic videos
+    // CATATAN PENTING: organic_videos memuat satu baris per (content_uid, tanggal
+    // import). Baris yang sama bisa muncul berkali-kali untuk video yang sama.
+    // Versi lama menjumlahkan semuanya sehingga views/likes terhitung berlipat.
+    // Di sini di-dedup per content_uid dengan mengambil nilai TERBESAR
+    // (snapshot terbaru), sama seperti PerformaClient.tsx:153-157.
     (organicRows || []).forEach((row: any) => {
       const uname = (row.creator_username || '').toLowerCase().trim();
       if (!uname) return;
       if (!videoStatsMap.has(uname)) videoStatsMap.set(uname, []);
-      videoStatsMap.get(uname)!.push({
-        content_uid: row.content_uid,
-        product_id: row.product_id,
-        views: Number(row.views) || 0,
-        likes: Number(row.likes) || 0,
-        gmv: 0,
-        post_time: row.post_time,
-      });
+      const list = videoStatsMap.get(uname)!;
+
+      const uid = row.content_uid;
+      const existing = uid ? list.find((item: any) => item.content_uid === uid) : null;
+
+      if (existing) {
+        existing.views = Math.max(existing.views || 0, Number(row.views) || 0);
+        existing.likes = Math.max(existing.likes || 0, Number(row.likes) || 0);
+        if (!existing.product_id && row.product_id) existing.product_id = row.product_id;
+      } else {
+        list.push({
+          content_uid: uid,
+          product_id: row.product_id,
+          views: Number(row.views) || 0,
+          likes: Number(row.likes) || 0,
+          gmv: 0,
+          is_live: isLiveContent(row.content_type),
+          post_time: row.post_time,
+        });
+      }
     });
 
     // Process sales GMV
@@ -171,6 +215,7 @@ export async function getInternalVideoData(campaignId: number, searchKeyword: st
           gmv: Number(row.gmv) || 0,
           views: 0,
           likes: 0,
+          is_live: false,
         });
       }
     });

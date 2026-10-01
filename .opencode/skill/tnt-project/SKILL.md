@@ -351,6 +351,67 @@ benar, jangan diubah jadi otomatis.
 `/campaigns/[id]/keuangan/import` (hanya self-link), `/campaigns/[id]/alamat/import`
 (dibuka via `window.open()` di `alamat/page.tsx:335` — satu-satunya yang tidak pakai Dialog).
 
+### 3.28 `.catch(() => [])` menyembunyikan query yang SELALU gagal (1 Okt 2026)
+Pola `db.execute(sql\`...\`).catch(() => [])` dipakai di mana-mana. Kalau query-nya salah,
+hasilnya array kosong — **tidak ada error, tidak ada log, UI tetap render** dengan angka nol.
+User melihat "data tidak ada", padahal query-nya memang tidak pernah jalan.
+
+**Verified: `creatorActions.ts:175` `ORDER BY order_time`.** Tabel `sales`
+(`20260610000001_phase_2.sql:19-36`) tidak punya kolom `order_time` — kolom tanggalnya `tanggal`.
+Query itu **selalu** error → `sales: []` → seluruh tab "Data Pesanan (Sales)" dan kolom
+"Total GMV Campaign" di profil kreator **selalu kosong untuk semua kreator**.
+`src/db/schema.ts:306` ikut salah (`orderTime: timestamp('order_time')`) — contoh terbaru
+kenapa schema.ts tidak bisa dipercaya.
+
+**Aturan:** kalau menyunting query, jangan`|catch(() => [])` polos di location yang datanya
+penting. Ganti dengan `catch(err => { console.error('<fungsi>: query X gagal', err); return []; })`.
+Error harus kelihatan di log server.
+
+### 3.29 Tiga halaman baca universe data BERBEDA untuk sales/organic_videos
+Halaman yang berbeda menghitung GMV yang berbeda dari data yang sama.
+
+| Halaman | Filter `sales` | Sumber |
+|---|---|---|
+| Performa | `campaign_id = X` **OR** `product_id IN (skus of X)` | `campaignPageActions.ts:365-366` |
+| Video & VT | **hanya** `campaign_id = X` (perbaiki 1 Okt 2026) | `videoActions.ts` |
+| Profil kreator | **hanya** `campaign_id = X` (perbaiki 1 Okt 2026) | `creator-pool/[id]/page.tsx` |
+
+Karena mayoritas baris `sales.campaign_id` **NULL** (keterkaitannya hanya ada di `product_id`),
+hanya Performa yangoriginally benar. Selain itu Performa masih Persempit dengan `skuSet`
+(`PerformaClient.tsx:115`) sedangkan dua halaman lain tidak — jadi angka tetap bisa beda.
+
+**Aturan:** saat menambah halaman aggregate, salin **persis** pola filter dari
+`fetchPerformaPageFullDataAction` (`campaignPageActions.ts:365-378`). Jangan `WHERE campaign_id = X` saja.
+
+### 3.30 `organic_videos` bisa punya BARIS GANDA per `content_uid` → over-count
+Tabel ini satu baris per (`content_uid`, tanggal import). Video yang sama bisa muncul berkali-kali
+karena laporan TikTok di-import beberapa hari.
+
+- Performa & `campaignPageActions` dedup pakai `Math.max` per `content_uid` (`PerformaClient.tsx:153-157`).
+- Video & VT **tidak** — menjumlahkan semua baris. Views/likes bisa berlipat (perbaiki 1 Okt 2026).
+- Profil kreator juga tidak.
+
+Snapshot TikTok = nilai **terkecil** per metrik (views/likes naik monoton), tapi campaign
+perCreative bisa turun. Ambil `Math.max` = snapshot terakhir = benar untuk views/likes.
+
+### 3.31 Username kreator bisa berbeda kapitalisasi, GMV terhitung 2x
+`bunaandshanum` dan `Bunaandshanum` ada sebagai **dua baris `creators` terpisah**
+(terlihat di `/campaigns/36/performa`: keduanya `12 pcs`, `Rp 202.255`).
+
+Semua agregasi server memakai `username.toLowerCase()` sebagai key Map
+(`videoActions.ts:144/159/179`), jadi **kedua baris dapat angka yang sama persis** —
+lalu campaign total terhitung **dua kali**. Barisnya tidak digabung, hanya datanya yang kembar.
+
+**Verified: harus dicek di DB** - query ada di `docs/sql/17-audit-username-duplikat.sql`.
+Jangan pakai `UNIQUE` case-insensitive tanpa memutuskan baris mana yang benar,
+karena `campaign_creators` FK-nya sudah terlanjur terisi.
+
+### 3.32 Kolom `vt_code` tidak pernah ada di tabel `videos`
+Dipakai di `creator-pool/[id]/page.tsx:176` dan `:1131` sebagai pembanding. Selalu `undefined`.
+Sudah dihapus 1 Okt 2026. Kalau ketemu lagi di file lain, itu sisa kode mati.
+`videos` juga **tidak punya** `campaign_id` — campaign hanya terjangkau lewat join
+`campaign_creators`, dan **tidak punya** kolom views/likes (tinggal di `organic_videos`).
+
 ---
 
 ## 4. Peta Otorisasi (yang SEHARUSNYA ada, dan yang tidak)
@@ -403,6 +464,17 @@ Server action yangreachable(user login staff/anggota) tanpa cek role/kepemilikan
     (multi-stage, `COPY web-app/ ./`). Tidak ada `.dockerignore` — build context bisa membengkak
     (node_modules lokal 544MB, `.next` 199MB). Pertimbangkan menambahkan `.dockerignore`.
 
+11. **Jangan pakai `.catch(() => [])` polos di query yang datanya penting.** Itu menyembunyikan
+     query yang selalu gagal - UI render normal dengan angka nol, tidak ada error, tidak ada log.
+     `creatorActions.ts:175` terbukti seperti ini, query `ORDER BY order_time` ke kolom yang
+     tidak pernah ada, hasilnya semua profil kreator kehilangan data sales (lihat 3.28).
+     Kalau menyunting query, tulis `catch(err => { console.error(...); return []; })`.
+12. **Halaman aggregate baru = salin persis pola filter dari `fetchPerformaPageFullDataAction`**
+     (`campaignPageActions.ts:365-378`). Jangan `WHERE campaign_id = X` saja, karena
+     kebanyakan baris `sales.campaign_id` NULL sehingga GMV hilang. Lihat 3.29.
+13. **Halaman aggregate baru = dedup `organic_videos` per `content_uid` pakai `Math.max`.**
+     Tabel itu satu baris per (content_uid, tanggal import). Tanpa dedup views/likes berlipat.
+     Lihat 3.30.
 ---
 
 ## 6. Peta Route (40 halaman) — siapa pakai apa

@@ -1185,32 +1185,41 @@ export default function CampaignVideoPage({
        if (creatorVideos.length === 0 && cc.videos && cc.videos.length > 0) {
           creatorVideos = cc.videos;
        }
-       const uploadedVtCount = creatorVideos.filter(v => v.link_video).length;
-       const targetVt = cc.qty_vt || 0;
+       // TOTAL VT = jumlah video UNIK, bukan jumlah baris.
+        // Versi lama memakai `creatorVideos.filter(v => v.link_video).length`
+        // yang menghitung baris, sehingga satu video yang terinput dua kali
+        // terhitung dua kali. Baris berstatus 'reject' juga ikut terhitung
+        // padahal sudah ditolak.
+        const uniqueVideoKeys = new Set<string>();
+        creatorVideos.forEach((v: any) => {
+           if (!v.link_video) return;
+           if (v.vt_approval === 'reject') return;
+           const uid = v.content_uid
+              || v.link_video.match(/video\/(\d+)/)?.[1]
+              || v.link_video;
+           uniqueVideoKeys.add(uid);
+        });
+        const uploadedVtCount = uniqueVideoKeys.size;
+        const targetVt = cc.qty_vt || 0;
        
        const vStats = cc._videoStats || [];
        let totalGmv = 0;
        let totalViews = 0;
        let totalLikes = 0;
 
-       const validContentUids = new Set<string>();
-       creatorVideos.forEach((v: any) => {
-          if (v.content_uid) {
-             validContentUids.add(v.content_uid);
-             validContentUids.add(v.content_uid.replace(/^video_/, ''));
-          }
-          if (v.link_video) {
-             const match = v.link_video.match(/video\/(\d+)/);
-             if (match) {
-                validContentUids.add(match[1]);
-             }
-          }
-       });
-
        vStats.forEach((s: any) => {
-          const sUid = s.content_uid ? s.content_uid.replace(/^video_/, '') : '';
-          if (s.content_uid && (validContentUids.has(s.content_uid) || validContentUids.has(sUid))) {
-             totalGmv += (s.gmv || 0);
+          // SEMUA _videoStats untuk kreator ini sudah di-scope di server:
+          // hanya baris organic_videos/sales milik campaign ini dan kreator ini
+          // (videoActions.ts). Versi lama masih memfilter dengan
+          // `validContentUids`, yaitu hanya menghitung GMV yang punya baris di
+          // tabel `videos`. Akibatnya GMV dari video yang ter-sync otomatis
+          // tapi belum pernah diisi PIC hilang seluruhnya.
+          //
+          // Live tidak masuk views/likes, sama seperti halaman Performa
+          // (PerformaClient.tsx:179-186). GMV live tetap dihitung karena
+          // order dari livestream adalah penjualan nyata.
+          totalGmv += (s.gmv || 0);
+          if (!s.is_live) {
              totalViews += (s.views || 0);
              totalLikes += (s.likes || 0);
           }
