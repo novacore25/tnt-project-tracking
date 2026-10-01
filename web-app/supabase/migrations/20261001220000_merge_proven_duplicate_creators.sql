@@ -86,38 +86,59 @@ SELECT count(*) AS backup_videos FROM _backup_videos_20261001;
 -- ---------------------------------------------------------------------
 CREATE TEMP TABLE _merge_map ON COMMIT DROP AS
 
--- Kelas A: LOWER() sama. Terbukti aman karena LOWER sudah menyatukannya.
-SELECT c.id AS merge_id,
-       (SELECT min(c2.id) FROM creators c2 WHERE LOWER(c2.username) = LOWER(c.username)) AS keep_id
+-- Kelas A. LOWER() sama, terbukti aman karena LOWER sudah menyatukannya.
+-- Set-based min() per grup, bukan subquery korelasi per baris.
+SELECT c.id AS merge_id, m.min_id AS keep_id
 FROM creators c
-WHERE c.id <> (SELECT min(c2.id) FROM creators c2 WHERE LOWER(c2.username) = LOWER(c.username))
+JOIN (SELECT LOWER(username) AS k, min(id) AS min_id
+      FROM creators GROUP BY LOWER(username)) m
+  ON m.k = LOWER(c.username)
+WHERE c.id <> m.min_id
 
 UNION ALL
 
--- Kelas B: sama setelah tanda baca dihapus, LOWER berbeda, dan ADA bukti.
--- Bukti = content_uid yang sama di kedua baris, atau campaign yang sama.
-SELECT a.id AS merge_id,
-       b.id AS keep_id
-FROM creators a
-JOIN creators b
-  ON a.id < b.id
- AND LOWER(a.username) <> LOWER(b.username)
- AND regexp_replace(LOWER(a.username),'[^a-z0-9]','','g')
-   = regexp_replace(LOWER(b.username),'[^a-z0-9]','','g')
-WHERE EXISTS (
-        -- bukti 1: campaign yang sama
-        SELECT 1 FROM campaign_creators ca
-        JOIN campaign_creators cb ON cb.campaign_id = ca.campaign_id
-        WHERE ca.creator_id = a.id AND cb.creator_id = b.id
-      )
-   OR EXISTS (
-        -- bukti 2: video dengan content_uid yang sama
-        SELECT 1 FROM videos va
-        JOIN videos vb ON vb.content_uid = va.content_uid
-        WHERE va.campaign_creator_id IN (SELECT id FROM campaign_creators WHERE creator_id = a.id)
-          AND vb.campaign_creator_id IN (SELECT id FROM campaign_creators WHERE creator_id = b.id)
-          AND va.content_uid IS NOT NULL
-      );
+-- Kelas B. PERLU index videos(content_uid) dan videos(campaign_creator_id)
+-- yang dibuat di 20261001215000. Tanpa itu, bagian bukti di bawah jadi
+-- sequential scan dan migration menggantung sangat lama.
+--
+-- Set-based, bukan subquery korelasi per pasangan. Kandidat dikumpulkan
+-- sekali lewat GROUP BY, lalu bukti dihitung sebagai agregat. Jumlah
+-- kandidat hanya beberapa ratus, bukan 16.927.
+WITH norm AS (
+    SELECT regexp_replace(LOWER(username),'[^a-z0-9]','','g') AS k,
+           array_agg(id ORDER BY id) AS ids
+    FROM creators
+    GROUP BY 1
+    HAVING count(*) > 1
+), kandidat AS (
+    SELECT ids[1] AS id_a, ids[2] AS id_b
+    FROM norm
+    WHERE array_length(ids,1) >= 2
+), bukti_campaign AS (
+    SELECT DISTINCT k.id_a, k.id_b
+    FROM kandidat k
+    JOIN campaign_creators ca ON ca.creator_id = k.id_a
+    JOIN campaign_creators cb ON cb.campaign_id = ca.campaign_id
+                             AND cb.creator_id = k.id_b
+), bukti_video AS (
+    SELECT DISTINCT k.id_a, k.id_b
+    FROM kandidat k
+    JOIN campaign_creators ca ON ca.creator_id = k.id_a
+    JOIN videos va ON va.campaign_creator_id = ca.id
+    JOIN videos vb ON vb.content_uid = va.content_uid
+    JOIN campaign_creators cb ON cb.id = vb.campaign_creator_id
+                             AND cb.creator_id = k.id_b
+    WHERE va.content_uid IS NOT NULL
+), terbukti AS (
+    SELECT id_a, id_b FROM bukti_campaign
+    UNION
+    SELECT id_a, id_b FROM bukti_video
+)
+SELECT t.id_b AS merge_id, t.id_a AS keep_id
+FROM terbukti t
+JOIN creators a ON a.id = t.id_a
+JOIN creators b ON b.id = t.id_b
+WHERE LOWER(a.username) <> LOWER(b.username);
 
 \echo '--- peta merge ---'
 SELECT count(*) AS pasangan_merge,
