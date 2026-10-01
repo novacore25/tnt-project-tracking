@@ -225,18 +225,71 @@ BEGIN
 END $$;
 
 -- ---------------------------------------------------------------------
--- 2. Tabel lain yang FK ke creators.id direpoint DULU, supaya tidak ada
---    FK yang masih menunjuk creator yang sebentar lagi akan dihapus.
---    campaign_creators ditangani terpisah di langkah 3 karena perlu
---    penggabungan assigned_sku_ids dan potentially ada baris yang bentrok.
+-- 2. TABEL YANG PUNYA CONSTRAINT DENGAN creator_id + KOLOM LAIN
+--
+--    Preflight docs/sql/40 membaca katalog PostgreSQL dan menemukan tepat 3
+--    constraint yang bisa bentrok, tidak ada yang terlewat:
+--      creator_niches          PRIMARY KEY (creator_id, niche_id)
+--      creator_bank_accounts   UNIQUE (creator_id, bank_name, account_number)
+--      campaign_creators       UNIQUE (campaign_id, creator_id)
+--
+--    PENTING: hitungan bentrok SEBELUM perubahan adalah 0 untuk
+--    creator_niches dan creator_bank_accounts, tapi keduanya tetap gagal
+--    dengan UPDATE biasa. Sebabnya beberapa merge_id bisa menuju keep_id
+--    yang sama. Kalau 1643 -> 100 dan 1644 -> 100, keduanya punya niche 20,
+--    maka UPDATE pertama membuat baris (100, 20) dan UPDATE kedua
+--    menabraknya. Bentrok muncul DI TENGAH proses, bukan sebelumnya.
+--
+--    Solusi tanpa loop: salin baris ke keep_id dengan INSERT ... ON CONFLICT,
+--    baru hapus baris lamanya. Beberapa baris yang menuju keep_id dan
+--    niche_id sama tertangani dalam satu statement, tanpa bergantung urutan
+--    UPDATE. Untuk niche, peringkat tidak hilang: diambil yang tertinggi.
 -- ---------------------------------------------------------------------
+
+-- 2a. creator_niches
+INSERT INTO creator_niches (creator_id, niche_id, peringkat)
+SELECT m.keep_id, cn.niche_id, cn.peringkat
+FROM creator_niches cn
+JOIN _merge_map m ON m.merge_id = cn.creator_id
+ON CONFLICT (creator_id, niche_id) DO UPDATE
+  SET peringkat = GREATEST(creator_niches.peringkat, EXCLUDED.peringkat);
+
+DELETE FROM creator_niches cn USING _merge_map m WHERE m.merge_id = cn.creator_id;
+
+-- 2b. creator_bank_accounts. payment_items.bank_account_id mereferensiasi
+--     baris ini, jadi rujukan dipindahkan dulu sebelum baris lama dihapus.
+INSERT INTO creator_bank_accounts
+  (creator_id, bank_name, account_number, account_holder, is_primary, added_by, created_at)
+SELECT m.keep_id, ba.bank_name, ba.account_number, ba.account_holder,
+       ba.is_primary, ba.added_by, ba.created_at
+FROM creator_bank_accounts ba
+JOIN _merge_map m ON m.merge_id = ba.creator_id
+ON CONFLICT (creator_id, bank_name, account_number) DO NOTHING;
+
+UPDATE payment_items pi
+SET bank_account_id = kb.id
+FROM creator_bank_accounts ba
+JOIN _merge_map m ON m.merge_id = ba.creator_id
+JOIN creator_bank_accounts kb
+  ON kb.creator_id = m.keep_id
+ AND kb.bank_name = ba.bank_name
+ AND kb.account_number = ba.account_number
+WHERE pi.bank_account_id = ba.id
+  AND kb.id <> ba.id;
+
+DELETE FROM creator_bank_accounts ba USING _merge_map m WHERE m.merge_id = ba.creator_id;
+
+-- 2c. Tabel yang HANYA punya PRIMARY KEY id, jadi UPDATE biasa aman.
+--     FK: CASCADE untuk creator_address_book, NO ACTION untuk yang lain.
+--     ad_name_mapping dan ads_name_mappings juga punya creator_id dan
+--     keduanya PK-nya hanya ad_name, jadi tidak ikut bentrok.
 UPDATE creator_snapshots     cs SET creator_id = m.keep_id FROM _merge_map m WHERE cs.creator_id = m.merge_id;
 UPDATE creator_contacts      ct SET creator_id = m.keep_id FROM _merge_map m WHERE ct.creator_id = m.merge_id;
-UPDATE creator_niches        cn SET creator_id = m.keep_id FROM _merge_map m WHERE cn.creator_id = m.merge_id;
 UPDATE creator_notes         cn SET creator_id = m.keep_id FROM _merge_map m WHERE cn.creator_id = m.merge_id;
 UPDATE creator_address_book  ab SET creator_id = m.keep_id FROM _merge_map m WHERE ab.creator_id = m.merge_id;
-UPDATE creator_bank_accounts ba SET creator_id = m.keep_id FROM _merge_map m WHERE ba.creator_id = m.merge_id;
 UPDATE ads_performance       ap SET creator_id = m.keep_id FROM _merge_map m WHERE ap.creator_id = m.merge_id;
+UPDATE ads_name_mappings     am SET creator_id = m.keep_id FROM _merge_map m WHERE am.creator_id = m.merge_id;
+UPDATE ad_name_mapping       am SET creator_id = m.keep_id FROM _merge_map m WHERE am.creator_id = m.merge_id;
 
 -- ---------------------------------------------------------------------
 -- 3. campaign_creators, dengan loop sampai bentrok benar-benar habis.
