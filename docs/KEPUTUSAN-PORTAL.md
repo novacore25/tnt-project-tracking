@@ -74,6 +74,56 @@ bagian dari masalah lama "Rp 224.219.990 sales tanpa `campaign_id`"
 **Guard:** 1 OK (video+live+ads = total) · 2 OK (tidak ada campaign turun) ·
 3 OK (view = sales mentah + ads).
 
+#### ✅ VERIFIKASI PASCA-MIGRASI (`docs/sql/52`, `53`)
+
+| Uji | Hasil |
+|---|---|
+| Rekonsiliasi refund | `0` — `310.173.535 = 233.334.998 + 76.838.537` ✓ |
+| Naik view = refund yang punya campaign | `233.334.998 = 233.334.998` ✓ |
+| Identitas video+live+ads = total | `0.00000` ✓ |
+| Organic view ≥ organic portal | **`campaign_portal_lebih_besar = 0`** ✓ |
+| Backup utuh | 1 definisi + 49 angka ✓ |
+
+**12 campaign PERSIS SAMA** antara portal dan view —nol selisih sama sekali:
+
+```
+33 OMG Makeup     223.356.397  =  223.356.397
+45 QAHIRA         146.875.930  =  146.875.930
+41 MS Glow Beauty  37.620.793  =   37.620.793
+52 MILKYBOOST       4.715.384  =    4.715.384
+77 USMILE, 49 NUTRIFLAKES, 137 Sorae, 40 DIOLY, 42, 46, 35, 36  -> semua 0
+```
+
+Sisanya punya selisih kecil karena portal membuang sales kreator non-approved
+dan product_id di luar SKU. **Selisihnya selalu positif** — portal tidak pernah
+lebih besar dari view.
+
+**Yang dibuang portal (reimbursed, Rp 26.611.651 dari Rp 1.153.546.708):**
+
+```
+kreator non-approved, SKU OK        : Rp  5.659.014
+kreator OK, di luar SKU             : Rp 21.515.353
+keduanya (dihitung 2x di atas)      : Rp    562.716
+                                       ───────────────
+total dibuang portal                : Rp 26.611.651  ✓
+```
+
+> `Rp 21.515.353` yang "di luar SKU" itu bukan bug filter — itu **produk yang belum
+> didaftarkan** (daftar kerja 91 produk, `docs/sql/38`).
+
+#### Jebakan penulisan SQL yang terjadi di script verifikasi
+
+| Jebakan | Akibat | Perbaikan |
+|---|---|---|
+| `total_gmv_video` dipakai sebagai "organic view" | Bandingkan video saja vs organic penuh; arah selisih kelihatan bolak-balik dan penjelasannya **salah** | Organic total = `total_gmv - total_ads_gmv` |
+| `SELECT SUM(...)` tanpa `FROM` | Tidak menghasilkan apa pun tapi **tetap print judul** — terbaca seperti lulus padahal tidak diuji | Tambah `FROM`, cek hasilnya |
+| Correlated subquery di `WHERE` untuk 56.660 baris | **HANG** (`skus` & `campaign_creators` tidak punya index yang dipakai) | Ubah jadi `LEFT JOIN` ke CTE hasil pre-aggregate |
+| Label `c_total_diterima_portal` |-Isinya justru jumlah **dibuang**, dibaca kebalikannya | Namai ulang + tambah guard `diterima + dibuang = total` |
+
+> ⚠️ **Pelajaran:** `\echo` judul section **bukan bukti query jalan.** Kalau output
+> kosong, query-nya gagal — bukan hasilnya nol. Cek `\timing on` dan pastikan baris
+> hasil benar-benar muncul.
+
 ### 2. `not_approved` disembunyikan
 
 > *"note approve sembunyikan aja bro"*
