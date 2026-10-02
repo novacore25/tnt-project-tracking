@@ -1,0 +1,101 @@
+=== ANCAMAN NYATA: Excel says Paid Off (Juli), lalu MASIH DI-UNGGAH ke sistem (14 Sep) ===
+Menanggal: sistem dipakai mulai 2026-09-14. Excel says "Paid Off" per CAMPAIGN,
+bukan per batch. Jadi pembayaran Juli yang SUDAH dibayar di Excel bisa saja
+sudah tercatat di sistem sebagai pengajuan September. Itu bukan duplikat
+baris - itu SAMA pembayaran yang tercatat 2 kali di 2 tempat.
+
+--- PWS di Excel: semua baris, grouped by tanggal ---
+  total 61 baris, Rp 31,600,000
+  2026-05-26   1 baris  Rp       100000
+  2026-05-29   1 baris  Rp       100000
+  2026-06-05   9 baris  Rp       800000
+  2026-06-09   6 baris  Rp     11950000
+  2026-06-12   3 baris  Rp       250000
+  2026-06-19   3 baris  Rp       300000
+  2026-06-23   4 baris  Rp       350000
+  2026-07-10   1 baris  Rp       200000
+  2026-07-24   3 baris  Rp      2650000
+  2026-07-28  10 baris  Rp      6600000
+  2026-07-31   7 baris  Rp      3700000
+  2026-08-04   7 baris  Rp      2750000
+  2026-08-14   6 baris  Rp      1850000
+
+--- username PWS di Excel (harus dibandingkan dengan item PWS di sistem) ---
+  61 username unik, 61 baris
+  _stesicahaya              1x  Rp250000     tgl=2026-07-24
+  afraa_ngereview           1x  Rp100000     tgl=2026-05-29
+  aghania2                  1x  Rp100000     tgl=2026-06-05
+  alyaaaair                 1x  Rp50000      tgl=2026-06-05
+  atsatsah                  1x  Rp100000     tgl=2026-06-09
+  aty_1602                  1x  Rp100000     tgl=2026-05-26
+  aurelianaaa               1x  Rp700000     tgl=2026-07-28
+  ayla19553                 1x  Rp100000     tgl=2026-06-09
+  azza muhammad muqoffa (125 affiliator tiktok)  1x  Rp11500000   tgl=2026-06-09
+  beautywith_kadita         1x  Rp100000     tgl=2026-06-19
+  byshofuraadz              1x  Rp700000     tgl=2026-08-04
+  chayna.4515               1x  Rp100000     tgl=2026-06-05
+  chelseaaawp               1x  Rp700000     tgl=2026-07-28
+  cherry_review21           1x  Rp100000     tgl=2026-06-23
+  cindervnss06_             1x  Rp700000     tgl=2026-07-28
+  deendarfh                 1x  Rp400000     tgl=2026-07-31
+  dipongsyalala             1x  Rp100000     tgl=2026-07-31
+  elinyuli1                 1x  Rp100000     tgl=2026-08-04
+  elynovitaaaa              1x  Rp50000      tgl=2026-06-05
+  enjesoeyono               1x  Rp100000     tgl=2026-06-05
+  eumardianaa               1x  Rp700000     tgl=2026-07-28
+  extra.0.rdinary           1x  Rp400000     tgl=2026-08-04
+  fhipy                     1x  Rp350000     tgl=2026-08-04
+  fikaazhr                  1x  Rp400000     tgl=2026-08-14
+  ghandi_ghinda             1x  Rp100000     tgl=2026-06-12
+  hai_akumanik              1x  Rp100000     tgl=2026-06-12
+  hi.syah vv.vianaaaeloraariyanizaraaa.nhbeautyaul_  1x  Rp2000000    tgl=2026-07-24
+  ibu_ninnda                1x  Rp100000     tgl=2026-06-19
+  indahnnah                 1x  Rp50000      tgl=2026-06-23
+  inii.dyan                 1x  Rp100000     tgl=2026-06-05
+  itisyours_varr            1x  Rp700000     tgl=2026-07-31
+  kamily_8512               1x  Rp100000     tgl=2026-06-09
+  khollyftnkhaliah_         1x  Rp700000     tgl=2026-07-28
+  kirana.chandraluph        1x  Rp100000     tgl=2026-06-09
+  kirananggn_               1x  Rp400000     tgl=2026-07-31
+  lehabottoh                1x  Rp350000     tgl=2026-08-14
+  luthfiiiii13              1x  Rp100000     tgl=2026-08-14
+  nadirasalma11             1x  Rp100000     tgl=2026-08-14
+  naylasyr                  1x  Rp400000     tgl=2026-07-24
+  palugada733               1x  Rp50000      tgl=2026-06-09
+  panderismad               1x  Rp300000     tgl=2026-08-14
+  rahma_shaqile1            1x  Rp50000      tgl=2026-06-12
+  rahma_sya0321             1x  Rp200000     tgl=2026-07-10
+  rantciieeee               1x  Rp550000     tgl=2026-08-04
+  review.erna27             1x  Rp100000     tgl=2026-06-19
+  reviewtetehvia            1x  Rp100000     tgl=2026-06-05
+  reviewwilda               1x  Rp100000     tgl=2026-06-05
+  s.nataliaaaaa             1x  Rp700000     tgl=2026-07-28
+  sandraamartin             1x  Rp350000     tgl=2026-08-04
+  shfieauliaa               1x  Rp700000     tgl=2026-07-28
+  sibar0324                 1x  Rp100000     tgl=2026-06-05
+  silvaaaaaaza_             1x  Rp700000     tgl=2026-07-31
+  silvalim_                 1x  Rp600000     tgl=2026-07-28
+  syaulaz                   1x  Rp600000     tgl=2026-08-14
+  tania.13_2                1x  Rp700000     tgl=2026-07-31
+  tariiiiiy_1               1x  Rp700000     tgl=2026-07-31
+  tiarasabirin6             1x  Rp400000     tgl=2026-07-28
+  tiiaran16                 1x  Rp700000     tgl=2026-07-28
+  tika_dewi027              1x  Rp300000     tgl=2026-08-04
+  una.211                   1x  Rp100000     tgl=2026-06-23
+  yanpuspita05              1x  Rp100000     tgl=2026-06-23
+
+=== SEMUA CAMPAIGN: baris Excel yang jatuh di minggu terakhir sebelum sistem aktif ===
+(14 Sep 2026 minus 14 hari = 31 Agu). Kalau ada yang dibayar akhir Agustus
+maka bisa jadi sudah masuk sistem juga.
+  DIOLY               1 baris  Rp       400000   tgl: 2026-09-04
+  GLOWIES             1 baris  Rp       300000   tgl: 2026-08-24
+  KIMME               5 baris  Rp      1000000   tgl: 2026-08-31,2026-09-09
+  MILKYBOOST          1 baris  Rp        50000   tgl: 2026-09-09
+  MSGLOWBEAUTY        5 baris  Rp      6750000   tgl: 2026-08-28,2026-09-04,2026-09-11
+  Nutriflakes         8 baris  Rp       550000   tgl: 2026-08-28,2026-09-09
+  Votre Peu           2 baris  Rp       450000   tgl: 2026-09-09
+
+=== RINGKASAN: berapa username Excel yang MUNGKIN sudah ada di sistem ===
+  Cara cek: system punya 30 item PWS (batch 16+17+18, submit 14 Sep 12:42-17:12).
+  Kalau username di daftar PWS Excel cocok dengan item sistem, itu DUPLIKAT LOKASI.
+  Daftar username PWS Excel sudah di atas - tinggal dibandingkan.
