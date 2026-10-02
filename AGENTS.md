@@ -152,16 +152,34 @@
 
 ## Git
 
+> **Pakai SSH, bukan HTTPS.** Setup selesai 2 Okt 2026.
+
 ```powershell
-# Credential helper sudah dikonfigurasi. JANGAN tulis PAT di URL atau di file.
+# Remote
+coolify  git@github.com:novacore25/tnt-project-tracking.git
+origin   git@github.com:novacore25/tnt-project-tracking.git
+
 git add -A
 git commit -m "..."
-git push coolify main
+git push coolify main      # Coolify auto-deploy dari push ke main
 ```
 
-> ⚠️ **Jangan pernah menulis GitHub PAT di `.agents/AGENTS.md`, `.git/config`, atau commit message.**
-> PAT yang ada di sana **harus dirotasi** (lihat `docs/audit/REMEDIATION-PLAN.md` §FASE 2).
-> Ganti dengan credential helper atau GitHub CLI auth.
+**Kunci SSH:** `~/.ssh/id_ed25519_github`, sudah terdaftar di akun `novacore25`.
+`~/.ssh/config` memetakan `Host github.com` ke kunci itu dengan `IdentitiesOnly yes`,
+jadi `id_ed25519` yang lain tidak ikut terpakai.
+
+Uji cepat kalau push gagal:
+
+```powershell
+ssh -T git@github.com     # harusnya: "Hi novacore25! You've successfully authenticated"
+```
+
+> `exit code 1` itu **normal** — GitHub memang tidak menyediakan shell.
+> Yang penting baris sapaannya muncul.
+>
+> ⚠️ **Jangan pernah menulis GitHub PAT di `.git/config`, `AGENTS.md`, atau commit message.**
+> Repo sudah bersih dari PAT (dicek 2 Okt 2026, tidak ada di file maupun config).
+> Kalau suatu saat perlu token, pakai **SSH** — jangan pernah URL `https://token@github.com`.
 
 ## sebelum Commit
 
