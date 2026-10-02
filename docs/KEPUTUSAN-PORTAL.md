@@ -118,7 +118,32 @@ total dibuang portal                : Rp 26.611.651  ✓
 | `total_gmv_video` dipakai sebagai "organic view" | Bandingkan video saja vs organic penuh; arah selisih kelihatan bolak-balik dan penjelasannya **salah** | Organic total = `total_gmv - total_ads_gmv` |
 | `SELECT SUM(...)` tanpa `FROM` | Tidak menghasilkan apa pun tapi **tetap print judul** — terbaca seperti lulus padahal tidak diuji | Tambah `FROM`, cek hasilnya |
 | Correlated subquery di `WHERE` untuk 56.660 baris | **HANG** (`skus` & `campaign_creators` tidak punya index yang dipakai) | Ubah jadi `LEFT JOIN` ke CTE hasil pre-aggregate |
-| Label `c_total_diterima_portal` |-Isinya justru jumlah **dibuang**, dibaca kebalikannya | Namai ulang + tambah guard `diterima + dibuang = total` |
+| Label `c_total_diterima_portal` | Isinya justru jumlah **dibuang**, dibaca kebalikannya | Namai ulang + tambah guard `diterima + dibuang = total` |
+| **`SELECT` tanpa `FROM` — occur 3× dalam satu sesi** | Output kosong **tapi judul section tetap tercetak**, jadi terbaca "lulus" padahal query-nya tidak jalan | Lint: cek tiap statement punya `FROM` sebelum `;` |
+
+#### 🔴 Pelajaran penting: `SELECT` tanpa `FROM` terjadi **3 KALI**
+
+```
+script 51 §D  -> FROM hilang
+script 52 §D  -> FROM hilang
+script 53 §D1 -> FROM hilang        <- SETELAH_lessons-nya ditulis di dokumen
+```
+
+Yang paling menyakitkan: **pelajarannya sudah saya tulis di `AGENTS.md` dan skill
+sebelum kejadian ketiga.** Jadi ini bukan sekadar lupa, tapi **tidak ada mekanisme
+yang menangkapnya** — saya hanya menulis catatan, tidak menambahkan pengecekan.
+
+**Yang harus dilakukan berikutnya kalau menulis script verifikasi:**
+
+1. **Jangan percaya output kosong = 0.** Cek `\timing on` harus muncul per section.
+2. **Tiap statement wajib punya `FROM`** — `SELECT SUM(...)` tanpa `FROM` **selalu**
+   salah, sekecil apa pun kolomnya.
+3. Jalankan script **per section**, bukan sekaligus, supaya titik errornya jelas.
+4. Tulis **nilai yang diharapkan** di `\echo` (misal
+   `total_semua_sales harus 1.153.546.708`), lalu bandingkan sendiri.
+
+> 📌 **Untuk sesi berikutnya:** script yang belum diverifikasi penuhi guard-nya,
+> anggap belum lulus. Judul section bukan bukti.
 
 > ⚠️ **Pelajaran:** `\echo` judul section **bukan bukti query jalan.** Kalau output
 > kosong, query-nya gagal — bukan hasilnya nol. Cek `\timing on` dan pastikan baris
