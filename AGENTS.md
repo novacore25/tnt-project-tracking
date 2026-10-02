@@ -67,13 +67,17 @@
    > - **Order dari video yang di-ads TIDAK masuk Partner Center.** Dua stream terpisah,
    >   jadi ads **harus dijumlahkan** ke total.
    > - Bukti: delta harian ads vs sales beda 100–1500x, nol yang mirip (`docs/sql/46`)
-   > - Cara hitung ads: **baris `tanggal TERAKHIR` per `ad_id`** (laporan Ads all-time),
+   > - Cara hitung ads: **baris `tanggal TERAKHIR` per `ad_id`** (laporan Ads all-time).
+   >   **Kurs memakai kurs pada baris itu sendiri** — tidak dijumlahkan antar tanggal,
+   >   tidak diambil dari baris lain.
    >   **JANGAN `MAX`** — `MAX(gross_revenue_usd * kurs)` diam-diam memilih baris dengan
    >   **kurs tertinggi**, jadi angka bisa naik karena kurs naik padahal revenue USD tetap.
    >   Terbukti 2 Okt 2026: 54 dari 316 ad punya nilai IDR lebih kecil di tanggal terakhir
    >   **karena kursnya lebih kecil, bukan karena data hilang** (`docs/sql/47`)
    > - `total_gmv` sekarang = **Rp 4.160.235.142** (sebelumnya Rp 920.211.710)
    > - Biaya ads **173.207.991 → 171.167.128** (ikut aturan tanggal-terakhir, konsisten)
+   > - **Ads kosong = normal.** Lakunya menyesuaikan budget, campaign yang belum mulai atau
+   >   kehabisan budget memang tidak punya data ads. Jangan dianggap gap impor.
    >
    > Halaman **Harian** dan **Portal Klien** juga `organik + ads` — konsisten.
    > Lihat `SKILL.md` §3A.7. **Kemiripan besaran bukan bukti** — jangan menyimpulkan

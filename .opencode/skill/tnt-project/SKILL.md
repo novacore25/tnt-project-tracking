@@ -1347,6 +1347,27 @@ Guard 2 OK: tidak ada campaign yang total_gmv turun
 `PortalDashboardClient.tsx:377` dan `DailyClient.tsx:732` sama-sama
 `gmv_organic + gmv_ads`. View-nya yang menyimpang.
 
+**Aturan domain yang melekat (user, 2 Okt 2026):**
+
+> "ads itu mengambil data all time hingga tanggal tersebut, jadi ga perlu hitung
+> data tanggal sebelumnya kalo mau tau jumlah hasil ads dari ads id tersebut, jadi
+> ya kurnya mah selalu ngikutin sesuai dengan tanggal. Misal tanggal 1 itu menarik
+> data all time pada tanggal 1 kursnya 16ribu yauda di konvert ke rupiah dari
+> dolar nya, nah terus tanggal 7 ada data lagi dan ini data paling baru diambil
+> alltime juga tapi kursnya jadi 18ribu yaida ikutin aja"
+
+Jadi: **baris terakhir per `ad_id`, dikalikan kurs pada baris itu sendiri.** Tidak
+ada penjumlahan antar tanggal, dan kurs **tidak** diambil dari baris lain.
+
+| Tanggal laporan | Revenue USD (all-time) | Kurs baris itu | Hasil IDR |
+|---|---:|---:|---:|
+| 1 | X | 16.000 | X × 16.000 |
+| 7 (terbaru) | Y | 18.000 | **Y × 18.000** ← yang dipakai |
+
+**Dan `ads` yang tidak ada = ads memang belum jalan lagi, itu normal.** Lakunya
+menyesuaikan budget, jadi campaigns yang kehabisan budget atau belum mulai
+benar-benar tidak punya data ads. **Tidak dianggap gap impor.**
+
 #### ✅ Ter mysteries: 54 ad itu kurs, BUKAN data hilang (2 Okt 2026)
 
 Awalnya `DISTINCT ON ... tanggal DESC` menghasilkan angka **Rp 8.368.134 lebih kecil**
