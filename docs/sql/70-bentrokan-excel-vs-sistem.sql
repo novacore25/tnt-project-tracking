@@ -33,6 +33,29 @@
 \set ON_ERROR_STOP off
 
 \echo ''
+\echo '################ §0. PREFLIGHT - KOLOM YANG DIPAKAI BENAR? ################'
+\echo '-- WAJIB dibaca lebih dulu. schema.ts TIDAK bisa dipercaya (skill §3.1).'
+\echo '-- cc.rate_card sudah terbukti TIDAK ADA di DB padahal ada di schema.ts.'
+\echo '-- Kalau nama kolom di §3 salah, ganti di sini lalu jalan ulang §3.'
+
+\echo ''
+\echo '--- campaign_creators: semua kolom ---'
+\echo '--- cari: status_bayar, tgl_bayar, pelunasan, approval, price, tier ---'
+SELECT column_name, data_type
+FROM information_schema.columns
+WHERE table_name = 'campaign_creators'
+ORDER BY ordinal_position;
+
+\echo ''
+\echo '--- payment_items + payment_batches: kolom kunci ---'
+SELECT table_name, column_name, data_type
+FROM information_schema.columns
+WHERE table_name IN ('payment_items','payment_batches')
+  AND column_name IN ('actual_payment_date','actual_transfer','submitted_at',
+                      'batch_label','campaign_id','campaign_creator_id','nominal')
+ORDER BY table_name, column_name;
+
+\echo ''
 \echo '################ §1. PAYMENT YANG SUDAH ADA DI SISTEM ################'
 \echo '-- 111 item per hasil L0. Bandingkan nominal + campaign + kreator.'
 SELECT pi.id, pi.nominal, pi.payment_type,
@@ -40,7 +63,7 @@ SELECT pi.id, pi.nominal, pi.payment_type,
        cr.username,
        pi.nama_penerima, pi.nomor_rekening,
        b.batch_label, b.submitted_at::date AS tgl_submit,
-       pi.actual_payment_date
+       b.actual_payment_date
 FROM payment_items pi
 JOIN payment_batches b ON b.id = pi.batch_id
 LEFT JOIN campaigns c ON c.id = b.campaign_id
@@ -70,7 +93,7 @@ SELECT s.sheet, s.row, s.tanggal AS tgl_excel, s.username,
        s.campaign_sheet, s.nominal AS nominal_excel, s.status_klaim,
        pi.id AS id_sistem, pi.nominal AS nominal_sistem,
        b.batch_label, b.submitted_at::date AS tgl_submit,
-       pi.actual_payment_date
+       b.actual_payment_date
 FROM payment_import_staging s
 JOIN payment_batches b
   ON b.campaign_id = CASE s.campaign_sheet

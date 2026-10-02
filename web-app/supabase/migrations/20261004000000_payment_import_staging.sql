@@ -136,37 +136,55 @@ CREATE TABLE IF NOT EXISTS payment_import_map_campaign (
     alasan     text NOT NULL
 );
 
--- ---------------------------------------------------------------------
--- View bantu: kandidat campaign per nama di spreadsheet
--- BUKAN auto-map. Hanya menampilkan kemiripan karakter supaya owner
--- bisa menilai sendiri mana yang benar.
--- ---------------------------------------------------------------------
+-- View sengaja TIDAK dibuat di transaksi ini. Lihat penjelasan di bawah.
+
+COMMIT;
+
+-- =====================================================================
+-- VIEW - TRANSAKSI TERPISAH, SENDIRI
+-- =====================================================================
+-- Kenapa dipisah dari tabel di atas:
+--   2 Okt 2026 view v_payment_campaign_candidates gagal dibuat karena salah
+--   nama kolom (s.nama_sheet vs s.campaign_sheet). Karena masih satu
+--   transaksi, seluruh migration TER-ROLLBACK - tabel staging hilang semua.
+--   Satu salah ketik di view saja menghapus semua pekerjaan.
+--
+--   Sekarang tabel sudah di-COMMIT duluan. View gagal? Tabel tetap aman.
+--
+-- Migration ini belum pernah dijalankan di lingkungan uji. Kalau tabel sudah
+-- ada, `IF NOT EXISTS` dan `DROP VIEW IF EXISTS` aman dijalankan ulang.
+BEGIN;
+
+DROP VIEW IF EXISTS v_payment_campaign_candidates;
+DROP VIEW IF EXISTS v_payment_campaign_unmapped;
+
+-- CATATAN NAMA KOLOM (bug yang sudah diperbaiki 2 Okt 2026):
+--   Kolom di staging    : campaign_sheet
+--   Kolom di tabel peta : nama_sheet
+--   Dua-duanya dipakai di bawah, jangan sampai tertukar lagi.
 CREATE OR REPLACE VIEW v_payment_campaign_candidates AS
 SELECT DISTINCT
-       s.nama_sheet,
+       s.campaign_sheet,
        c.id   AS kandidat_id,
        c.nama AS kandidat_nama,
        c.status AS kandidat_status
 FROM payment_import_staging s
 CROSS JOIN campaigns c
 WHERE upper(replace(c.nama,' ','')) LIKE '%'
-      || substring(upper(replace(s.nama_sheet,' ','')) from 1 for 4) || '%'
-   OR upper(replace(s.nama_sheet,' ','')) LIKE '%'
+      || substring(upper(replace(s.campaign_sheet,' ','')) from 1 for 4) || '%'
+   OR upper(replace(s.campaign_sheet,' ','')) LIKE '%'
       || substring(upper(replace(c.nama,' ','')) from 1 for 4) || '%'
 ORDER BY 1,2;
 
--- ---------------------------------------------------------------------
--- View: campaign yang BELUM punya campaign_id -> destined DEFER
--- ---------------------------------------------------------------------
 CREATE OR REPLACE VIEW v_payment_campaign_unmapped AS
-SELECT s.nama_sheet,
+SELECT s.campaign_sheet,
        count(*)                     AS baris,
        sum(s.nominal)               AS nominal
 FROM payment_import_staging s
 LEFT JOIN payment_import_map_campaign m
-       ON m.nama_sheet = s.nama_sheet
+       ON m.nama_sheet = s.campaign_sheet
 WHERE m.campaign_id IS NULL
-GROUP BY s.nama_sheet
+GROUP BY s.campaign_sheet
 ORDER BY nominal DESC;
 
 COMMIT;
