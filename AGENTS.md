@@ -59,6 +59,12 @@
 > | Cabang `tt_campaign_id` di filter live | **0 dari 209 session cocok** — cabang mati, semua masuk lewat `OR` yang tanpa scoping |
 > | 169 baris `videos` sia-sia | `link_video IS NULL` **dan** `content_uid IS NULL` → tidak terhitung di portal, internal, **maupun** view |
 >
+> **Keputusan owner sudah diterapkan 2 Okt 2026** (`docs/KEPUTUSAN-PORTAL.md`):
+> refund **ikut masuk** (yang diubah **view**, bukan portal — `total_gmv` se-DB naik
+> **21,32%** ke Rp 1.454.605.235, migration `20261003000000`), `not_approved`
+> **disembunyikan**, views/likes **tetap** hitung livestream, PIN `1234` **dibiarkan**,
+> jumlah video **mengikuti internal**.
+>
 > **Jangan tambah angka baru di portal sebelum menyamakan logicanya dengan internal.**
 > Kalau belum sinkron, tambahkan di internal dulu (satu sumber), lalu pakai ulang.
 

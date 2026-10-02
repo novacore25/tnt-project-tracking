@@ -1584,21 +1584,55 @@ WHERE ls.tt_campaign_id = ${campaignId}::text      -- 0 dari 209 session COCOK
 masuk lewat cabang `OR` — yang **tidak punya scoping campaign sama sekali**. Kalau
 seorang kreator ikut 2 campaign, session-nya bocor ke keduanya.
 
-### Cara memperbaiki (saran, belum dikerjakan — user belum memutuskan)
+### ✅ KEPUTUSAN OWNER + SUDAH DITERAPKAN (2 Okt 2026)
 
-1. **`is_refund = false`** di query `sales` portal **dan** Performa. (Paling penting,
-   (Rp 310 juta.)
-2. **Samakan views/likes** — putuskan mana yang benar. Saran: **buang livestream dari
-   views/likes**, karena `likes > views` korup. Tapi **tanya user dulu** — dia yang
-   pegang keputusan tampilan brand.
-3. **`calcUniqueVideos` + video manual approved** untuk `total_approved`.
-4. **Filter `approval IN ('approved','pending','alternate')`** di `portalActions`.
-5. **Hapus `pin` dari `SELECT *`**, `secure: true` di cookie, ganti 47 PIN default.
-6. **Buang `||` → pakai `NOT IN`**, atau ask user soal livestream.
-7. **Isi `target_gmv`**, atau perlakukan "0 target" = "tidak ada persentase".
+Sumber: `docs/KEPUTUSAN-PORTAL.md`.
 
-> ⚠️ **Jangan langsung patch tanpa user.** Item 2, 5, 7 adalah keputusan **user**
-> (apa yang mau dilihat brand, PIN baru siapa). Sampaikan angkanya dulu.
+| # | Keputusan owner | Yang dikerjakan |
+|---|---|---|
+| 1 | *"semua data masuk termasuk refund"* | **View** diubah — `WHERE is_refund = false` dihapus. `total_gmv` se-DB naik **Rp 1.144,4 M → Rp 1.454,6 M (+21,32%)**. Migration `20261003000000`. |
+| 2 | *"note approve sembunyikan aja bro"* | Query `campaign_creators` portal + filter `approval IN ('approved','pending','alternate')` |
+| 3 | *"jika uinya ada di portal brand ya harus tampilin"* | **Tidak diubah.** Views/likes tetap hitung livestream. Selisih vs internal = beda definisi yang **disetujui**, bukan bug |
+| 4 | *"gapapa pinnya 1234"* | **Tidak diubah.** Kalau PIN diganti lewat Campaign Settings, nilai lama masih ada di cookie browser sampai 7 hari |
+| 5 | *"internal broo, soalnya di internal ada input manual"* | Blok `3b` di `portalActions.ts` — video manual ikut dihitung. `total_approved` = `allApprovedVideoIds.size` |
+
+#### ⚠️ Konsekuensi penting keputusan #1
+
+> Yang diubah adalah **VIEW**, bukan portal — karena portal **sudah** menjumlahkan
+> semua baris. View-lah yang `WHERE is_refund = false`.
+>
+> **Semua halaman ikut naik**, bukan cuma portal: Harian, Rekap, Dashboard,
+> Timeline, Campaign list, seluruh angka tracked.
+>
+> `sales.gmv` refund **POSITIF** → menjumlahnya **menambah** pendapatan.
+> Ini keputusan **akuntansi owner** yang diterima. Rollback: kembalikan
+> `WHERE is_refund = false` di view.
+
+#### Migration `20261003000000` punya **3 guard**
+
+Guard 3 yang baru dan **paling penting**: membandingkan view dengan **tabel
+`sales` mentah**. Guard 1 & 2 cuma membandingkan bagian view dengan bagian view,
+jadi keduanya tetap lolos walau filter refund masih aktif — hanya guard 3 yang
+bisa menangkap.
+
+> ✅ **Polanya pakai ulang:** kalau migrasi mengubah cara agregasi, tulis guard
+> yang membandingkan hasil dengan **tabel asal**, bukan hanya dengan kolom lain
+> di view yang sama.
+
+### ❌ Yang TIDAK diubah (dan kenapa)
+
+| Temuan | Alasan |
+|---|---|
+| Cabang `tt_campaign_id` mati | Butuh scoping benar, risiko session ikut hilang. Tertunda. |
+| `organic_videos` 46% duplikat | Butuh migration sendiri + preflight. |
+| 169 baris `videos` tanpa link & uid | Perlu keputusan: hapus atau diisi PIC. |
+| `target_gmv` NULL di 37 campaign | Butuh data owner, bukan kode. |
+| Biaya ads tidak tampil di portal | Keputusan tampilan. |
+
+> 🔑 **Aturan going forward:** jangan tambah angka baru di portal sebelum
+> menyamakan dengan internal. Kalau belum sinkron, tambah di **internal** dulu
+> (satu sumber), lalu pakai ulang. Akar semua selisih: **dua implementasi logika
+> yang sama ditulis terpisah.**
 
 ---
 

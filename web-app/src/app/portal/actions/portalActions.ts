@@ -75,6 +75,10 @@ export async function getPortalData(campaignId: number) {
     }) as Promise<any[]>,
 
     // 2. Campaign Creators with Snapshots & Contacts
+    //    Filter approval WAJIB sama dengan `performaActions.ts:18`.
+    //    Tanpa filter ini portal menampilkan 6.160 baris `not_approved`
+    //    yang PIC tidak lihat di halaman internal (audit 2 Okt 2026).
+    //    Keputusan user: `not_approved` disembunyikan dari portal.
     db.execute(sql`
       SELECT 
         cc.id, cc.creator_id, cc.campaign_id, cc.approval, cc.client_approval, 
@@ -92,6 +96,7 @@ export async function getPortalData(campaignId: number) {
         SELECT nomor FROM creator_contacts WHERE creator_id = cc.creator_id AND status = 'aktif' LIMIT 1
       ) ct ON true
       WHERE cc.campaign_id = ${campaignId}
+        AND LOWER(COALESCE(cc.approval, '')) IN ('approved', 'pending', 'alternate')
       ORDER BY cc.id DESC
     `).catch(err => {
       console.error('Error fetching campaign_creators:', err);
@@ -353,10 +358,14 @@ export async function getPortalData(campaignId: number) {
   let calcTotalLikes = 0;
   let calcUniqueVideos = 0;
   let calcUniqueLivestreams = 0;
+  // Uid video organik (bukan live). Dasar untuk hitungan video approved
+  // setelah video manual ikut ditambahkan di blok 3b.
+  const calcApprovedOrgVideoUids = new Set<string>();
 
   for (const [uid, v] of orgUidMap.entries()) {
     if (v.contentType !== 'livestream' && v.contentType !== 'live') {
       calcUniqueVideos++;
+      calcApprovedOrgVideoUids.add(uid);
     } else {
       calcUniqueLivestreams++;
     }
@@ -384,6 +393,58 @@ export async function getPortalData(campaignId: number) {
           monthlyMap[mStr].liveSessions.add(uid);
         }
       }
+    }
+  }
+
+  // 3b. Video manual dari tabel `videos` (input PIC) -- WAJIB ikut dihitung.
+  //
+  //     Tanpa blok ini portal hanya menghitung video organik, padahal
+  //     `PerformaClient.tsx:202-224` menghitung video organik + video manual
+  //     dari kreator approved. Akibatnya portal menampilkan ~48% dari
+  //     jumlah video sebenarnya, di SEMUA campaign (audit 2 Okt 2026:
+  //     26.439 portal vs 54.736 internal).
+  //
+  //     Meniru logika internal persis:
+  //       - skip kalau `sku_id` tidak termasuk SKU campaign
+  //       - id dari `content_uid`, atau digit dari `link_video`
+  //       - hanya kreator approved/alternate yang menambah ke total approved
+  //       - `not_approved` menambah ke pending, TAPI hanya kalau id-nya
+  //         belum masuk approved (supaya tidak dobel hitung)
+  const campaignSkuIds = new Set<number>(skusData.map((sk: any) => Number(sk.id)));
+  const allApprovedVideoIds = new Set<string>(calcApprovedOrgVideoUids);
+  const allPendingVideoIds = new Set<string>();
+  // Username kreator pending yang punya minimal satu video pending.
+  const pendingCreatorsWithVideoUids = new Set<string>();
+
+  // Group manual videos by campaign_creator_id (dipakai blok 3b di atas)
+  const videoMapByCc = new Map<number, any[]>();
+  manualVideos.forEach((v: any) => {
+    if (!videoMapByCc.has(v.campaign_creator_id)) {
+      videoMapByCc.set(v.campaign_creator_id, []);
+    }
+    videoMapByCc.get(v.campaign_creator_id)!.push(v);
+  });
+
+  for (const cc of rawCc) {
+    const u = (cc.username || '').toLowerCase().trim();
+    const perf = u ? getOrCreatePerf(u) : null;
+    const isApproved = cc.approval === 'approved' || cc.approval === 'alternate';
+    const vids = videoMapByCc.get(cc.id) || [];
+
+    for (const v of vids) {
+      if (campaignSkuIds.size > 0 && v.sku_id && !campaignSkuIds.has(Number(v.sku_id))) continue;
+      const id = v.content_uid
+        ? String(v.content_uid).trim()
+        : (v.link_video ? (v.link_video.match(/video\/(\d+)/)?.[1] || v.link_video) : null);
+      if (!id) continue;
+
+      if (isApproved) {
+        allApprovedVideoIds.add(id);
+      } else if (!allApprovedVideoIds.has(id)) {
+        allPendingVideoIds.add(id);
+        if (u) pendingCreatorsWithVideoUids.add(u);
+      }
+      if (perf) perf.video_uids.add(id);
     }
   }
 
@@ -430,13 +491,7 @@ export async function getPortalData(campaignId: number) {
   }
 
   // Group manual videos by campaign_creator_id
-  const videoMapByCc = new Map<number, any[]>();
-  manualVideos.forEach((v: any) => {
-    if (!videoMapByCc.has(v.campaign_creator_id)) {
-      videoMapByCc.set(v.campaign_creator_id, []);
-    }
-    videoMapByCc.get(v.campaign_creator_id)!.push(v);
-  });
+  // (sudah didefinisikan di blok 3b, jangan diduplikasi)
 
   // 5. Build Enriched CC Data
   const enrichedCcData = rawCc.map((cc: any) => {
@@ -664,11 +719,17 @@ export async function getPortalData(campaignId: number) {
     fastCountsData: {
       approved: approvedCreatorsCount,
       pending: pendingCreatorsCount,
-      pending_with_videos: 0
+      // Kreator pending yang punya minimal satu video pending. Bukan
+      // hardcoded 0 seperti sebelumnya. `pendingCreatorsWithVideoUids`
+      // diisi di blok 3b.
+      pending_with_videos: pendingCreatorsWithVideoUids.size
     },
     fastVideoCountsData: {
-      total_approved: calcUniqueVideos,
-      total_pending: 0,
+      // SAMPAI dengan internal: organik + video manual dari kreator approved.
+      // Sebelumnya `calcUniqueVideos` (organik saja) sehingga portal hanya
+      // menampilkan ~48% dari jumlah video sebenarnya.
+      total_approved: allApprovedVideoIds.size,
+      total_pending: allPendingVideoIds.size,
       total_livestream: calcUniqueLivestreams
     },
     initialTotalAdsGmv: globalAdsGmv,
