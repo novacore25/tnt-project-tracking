@@ -5,6 +5,7 @@ import { sql } from 'drizzle-orm';
 import { auth } from '@/auth';
 import { revalidatePath } from 'next/cache';
 import { requireRole, requireUserOrError, requireRoleOrError, requireCampaignAccessOrError } from '@/lib/guards';
+import { normalizeKurs } from '@/utils/computed';
 
 // ============================================================
 // AUDIT LOG
@@ -678,7 +679,7 @@ export async function addAdsSpendAction(spend: any) {
   try {
     const [data] = await db.execute(sql`
       INSERT INTO ads_spends (campaign_id, tanggal, amount, kurs, catatan)
-      VALUES (${spend.campaign_id}, ${spend.tanggal}, ${spend.amount || 0}, ${spend.kurs || 16000}, ${spend.catatan || null})
+      VALUES (${spend.campaign_id}, ${spend.tanggal}, ${spend.amount || 0}, ${normalizeKurs(spend.kurs)}, ${spend.catatan || null})
       RETURNING *
     `) as any[];
     return { success: true, data };

@@ -1,7 +1,7 @@
 "use client";
 
 import { useDatabaseStore } from "@/store/useDatabaseStore";
-import { getCreatorType, getLatestSnapshot, computeCampaignGMV, computeHighestVideoGMV, getJenisKerjasama, sumNum, toNum } from "@/utils/computed";
+import { getCreatorType, getLatestSnapshot, computeCampaignGMV, computeHighestVideoGMV, getJenisKerjasama, sumNum, toNum, normalizeKurs } from "@/utils/computed";
 import { useDraftLocalStorage } from "@/hooks/useDraftLocalStorage";
 import { formatAbbreviated } from "@/utils/formatters";
 
@@ -1283,8 +1283,7 @@ export default function CreatorProfilePage() {
                                     </thead>
                                     <tbody>
                                       {localData?.ads?.filter((a: any) => a.campaign_id === tr.campaign_id).map((ad: any) => {
-                                        let kurs = Number(ad.kurs) || 16000;
-                                        if (kurs < 1000) kurs = kurs * 1000;
+                                        const kurs = normalizeKurs(ad.kurs);
                                         const costIdr = (Number(ad.cost_usd) || 0) * kurs;
                                         const revenueIdr = (Number(ad.gross_revenue_usd) || 0) * kurs;
                                         const roas = costIdr > 0 ? (revenueIdr / costIdr).toFixed(2) : '-';

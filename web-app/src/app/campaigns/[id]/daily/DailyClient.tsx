@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import { useDatabaseStore } from "@/store/useDatabaseStore";
 import { fetchDailyPerformancePageDataAction } from "@/app/actions/campaignPageActions";
+import { normalizeKurs } from "@/utils/computed";
 import TimelineTarget from "./TimelineTarget";
 import { ChevronDown, ChevronRight, Video, Radio, ShoppingBag, ExternalLink, Search } from "lucide-react";
 
@@ -172,7 +173,9 @@ export default function CampaignDailyPerformanceClient({ campaignId }: { campaig
       const allOrganicVideos = res.organicVideos || [];
       const allLiveSessions = (res as any).liveSessions || [];
 
-      const snapshotTierMap = new Map<number, string>();
+      // Catatan: `snapshotTierMap` pernah ada di sini tapi tidak pernah diisi,
+      // jadi `resolvedTier` selalu jatuh ke `cc.tier || 'Nano'`. Sudah dihapus
+      // karena hanya memberi ilusi bahwa tier bisa dipulihkan dari snapshot.
 
       // Grouping
       const grouped: Record<string, GroupData> = {};
@@ -302,7 +305,7 @@ export default function CampaignDailyPerformanceClient({ campaignId }: { campaig
       if (allVideosFromCreators.length > 0) {
         allVideosFromCreators.forEach(cc => {
           const username = (cc.creators?.username || 'unknown').toLowerCase().trim();
-          const resolvedTier = cc.tier || snapshotTierMap.get(cc.creator_id) || 'Nano';
+          const resolvedTier = cc.tier || 'Nano';
 
           let cType = cc.content_type || '-';
           if (cType === '-' || !cType) {
@@ -337,7 +340,13 @@ export default function CampaignDailyPerformanceClient({ campaignId }: { campaig
           }
 
           // Approved creator tracking
-          if (cc.approved_at) {
+          // WAJIB cek `approval` juga. Dulu hanya `if (cc.approved_at)`, sehingga
+          // kreator yang sudah di-approve lalu dibalik jadi not_approved/alternate
+          // tetap terhitung "Kr Approve" pada tanggal approve yang lama.
+          // Itu membuat angka Kr Approve di halaman ini beda dari tab Listing
+          // (terverifikasi 265 vs 263 di campaign 57) DAN ikut menggeser
+          // sisa target kreator di kartu bulanan.
+          if (cc.approval === 'approved' && cc.approved_at) {
             const approvedDateStr = toWIBDateStr(cc.approved_at);
             let countCreator = true;
             if (approvedDateStr && campaignStartStr && approvedDateStr < campaignStartStr) countCreator = false;
@@ -529,7 +538,7 @@ export default function CampaignDailyPerformanceClient({ campaignId }: { campaig
           if (campaignStartStr && dateStr < campaignStartStr) return;
           
           if (deltaUsd > 0) {
-            const kurs = (ad.kurs && ad.kurs < 1000) ? ad.kurs * 1000 : (ad.kurs || 16000);
+            const kurs = normalizeKurs(ad.kurs);
             const deltaIdr = deltaUsd * kurs;
             
             initGroup(dateStr);

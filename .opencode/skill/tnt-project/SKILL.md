@@ -901,7 +901,7 @@ diuji dulu, dan **tidak ada data yang hilang** — itu yang menyelamatkan. Dafta
 |---|---|
 | `legacy_gmv` penyebab selisih GMV | Kolomnya **nol semua** |
 | duplikasi `ads_performance` | Faktor **1,00** |
-| `ads_performance` = revenue sama | **Benar** (Rp 1,74 M vs Rp 920 M) |
+| ~~`ads_performance` = revenue sama~~ | SALAH - asumsi saya. User membetulkan 2 Okt 2026. Lihat 3A.7. Kemiripan besaran bukan bukti. |
 | `live_sessions` punya kolom `gmv` | **Tidak ada** — ada di `live_session_products` |
 | `creator_snapshots.gmv_30d_organic` | **Tidak ada** |
 | 9.060 order salah atribusi | Semua `ambigu`, **nol berbeda** |
@@ -1158,10 +1158,10 @@ dalam zip xlsx.
 
 ## 3A. Audit Halaman Harian & Timeline (1 Okt 2026)
 
-Diaudit karena user minta "pastikan akurat dengan performa dan kinerja". **6 temuan,
-2 di antaranya bug yang structurally tidak mungkin benar.**
+Diaudit karena user minta "pastikan akurat dengan performa dan kinerja". **6 temuan.**
+Empat sudah diperbaiki (2 Okt 2026), satu dibatalkan oleh user, satu masih terbuka.
 
-### 3A.1 🚨 Rekap Harian: `Not Approve` & `Alternate` SELALU 0
+### 3A.1 ✅ SUDAH DIPERBAIKI — Rekap Harian: `Not Approve` & `Alternate` SELALU 0
 
 `web-app/src/app/campaigns/[id]/listing/page.tsx:1053`
 
@@ -1189,7 +1189,14 @@ Jadi `approved_at` NULL untuk kedua status itu → **tidak pernah masuk cabang**
 **Bukti inkonsistensi di file yang sama:** filter tanggal di `:996` justru memakai
 `row.not_approved_at` dengan benar. Satu file, dua cara.
 
-### 3A.2 `kurs = 0` jatuh ke `|| 16000` - koreksi kurs dibatalkan di UI
+**Perbaikan (2 Okt 2026):** tanggal aksi dipilih sesuai statusnya.
+
+```ts
+const actionDateStr = r.approval === 'approved' ? r.approved_at : r.not_approved_at;
+if (actionDateStr) { ... }
+```
+
+### 3A.2 ✅ SUDAH DIPERBAIKI — `kurs = 0` jatuh ke `|| 16000`
 
 `DailyClient.tsx:532`:
 ```ts
@@ -1202,20 +1209,31 @@ Migration `20261001230000` sengaja menyetel 1 baris jadi `kurs = 0` supaya netra
 Baris itu (`id 2641`, campaign 35 SALSA Cosmetic, `gross_revenue_usd = 1261.34`)
 jadi tampil sebagai **Rp 20.181.440**, bukan 0.
 
-**Pola yang sama di 5 tempat lain:**
+**Perbaikan (2 Okt 2026):** satu helper di `web-app/src/utils/computed.ts`, dipakai
+di **10 tempat**.
 
-| Lokasi | Baris |
-|---|---|
-| `DailyClient.tsx` | 532 |
-| `ads/page.tsx` | 102–103 |
-| `ads/actions.ts` | 146–147, 189 |
-| `ads/page.tsx` | 680 |
-| `portalActions.ts` | 406 |
-| `databaseActions.ts` | 681 |
+```ts
+export const normalizeKurs = (raw: unknown): number => {
+  if (raw === null || raw === undefined || raw === '') return 16000;
+  const n = typeof raw === 'number' ? raw : Number(raw);
+  if (!Number.isFinite(n)) return 16000;
+  if (n > 0 && n < 1000) return n * 1000;   // heuristik impor lama
+  return n;                                  // 0 TETAP 0
+};
+```
 
-Semua memakai `ad.kurs || 16000`. **Koreksi kurs tidak berlaku di halaman mana pun.**
+| Input | Sebelum | Sesudah |
+|---|---|---|
+| `0` | 16000 | **0** |
+| `16.993` (impor lama) | 16993 | 16993 |
+| `null` | 16000 | 16000 |
 
-### 3A.3 ⚠️ GMV Harian ≠ Total GMV resmi (2 filter tersembunyi)
+Lokasi yang diganti: `DailyClient.tsx`, `ads-report/actions.ts` (×2),
+`ads-report/page.tsx`, `ads-report/budgeting-ads/page.tsx`,
+`performa/PerformaClient.tsx` (×2), `creator-pool/[id]/page.tsx`,
+`portalActions.ts`, `databaseActions.ts`, `importActions.ts`.
+
+### 3A.3 ⏳ MASIH TERBUKA — GMV Harian ≠ Total GMV resmi (2 filter tersembunyi)
 
 `DailyClient.tsx:207-208`:
 ```ts
@@ -1230,18 +1248,16 @@ Catatan: `approvedUsernameSet` memasukkan **`alternate`** sebagai approved (`:19
 `alternate` = kreator pengganti; apakah sales-nya memang harus dihitung, perlu
 konfirmasi user.
 
-### 3A.4 ⚠️ "GMV Total" = sales + ads — melanggar aturan sendiri
+### 3A.4 ❌ BUKA BUG — "GMV Total" = sales + ads (dikonfirmasi user)
 
-`DailyClient.tsx:698,732` dan `TimelineTarget.tsx:72`:
-```ts
-(m.gmvOrganic || 0) + (m.gmvAds || 0)
-```
+Awalnya saya laporkan sebagai pelanggaran §10a. **User memastikan itu memang desain:**
 
-`SKILL.md` §10a aturan 1: total GMV = sales saja, ads ditampilkan terpisah dan
-**tidak dijumlahkan**. Persis bug yang sudah diperbaiki di `vw_campaign_summary`,
-masih ada di sini. Tidak terlihat untuk campaign tanpa ads, tapi meminflasi yang punya ads.
+- **Harian** → satu angka GMV = **sales + ads**
+- **Bulanan** → tiga kotak terpisah: `GMV Total` · `Sales` · `Ads`
 
-### 3A.5 ⚠️ `Kr Approve` tidak cek status → 265 vs 263
+**Jangan diubah.** Tapi asumsi dasarnya sedang ditantang — lihat §3A.7.
+
+### 3A.5 ✅ SUDAH DIPERBAIKI — `Kr Approve` tidak cek status → 265 vs 263
 
 `DailyClient.tsx:340`: `if (cc.approved_at)` — **tanpa cek `approval`**. Jadi kreator
 yang sudah di-approve lalu dibalik jadi `not_approved` **tetap terhitung approved**,
@@ -1250,7 +1266,13 @@ pada tanggal approve yang lama.
 Terbukti di campaign 57 GHANISKIN: Listing **Approved 263**, Daily **Kr Approve 265**.
 Selisih **2 baris** = `approved_at` basi yang tidak dikosongkan saat approval dibalik.
 
-### 3A.6 ℹ️ `snapshotTierMap` dead code + Timeline awareness
+**Perbaikan (2 Okt 2026):** `if (cc.approval === 'approved' && cc.approved_at)`.
+
+Efek sampingnya penting: `runningApprovedCreator` di kartu bulanan
+(`DailyClient.tsx:703`) memakai angka yang sama, jadi bug ini **ikut menggeser sisa
+target kreator tiap bulan** — bukan cuma tampilan.
+
+### 3A.6 ✅ SUDAH DIPERBAIKI — `snapshotTierMap` dead code + Timeline awareness
 
 - `snapshotTierMap` (`DailyClient.tsx:175`) **dideklarasi dan dibaca (`:305`), tapi
   tidak pernah diisi**. Jadi `resolvedTier = cc.tier || 'Nano'` — tidak salah, tapi
@@ -1259,6 +1281,41 @@ Selisih **2 baris** = `approved_at` basi yang tidak dikosongkan saat approval di
   **"GMV 0 / -"** karena `target_gmv = 0` untuk tipe awareness. Secara logika benar,
   tapi membingungkan karena GMV aktual 1,41 T tampil di kartu lain.
 
+### 3A.7 🔴 TERBUKA — apakah `ads_performance` itu revenue yang BERBEDA?
+
+**Asumsi saya 1 Okt SALAH dan dicabut user:**
+
+> "gmv organik gmv sales atau gmv yang dari custom report yang order id itu tidak
+> sama dengan gmv ads, tidak sama dengan order yang lewat ads, kalo yang data dari
+> tiktok partner center itu pure organik gada video sama sekali yang di ads"
+
+Kode mengonfirmasi **dua sumber berbeda**:
+
+| Tabel | Diisi dari | Lokasi |
+|---|---|---|
+| `sales` | Impor **TikTok Partner Center** | `importActions.ts:99` |
+| `ads_performance` | Impor laporan **Ads Manager** (impression/click/purchase) | `importActions.ts:499` |
+
+Saya sebelumnya menyimpulkan "ads = revenue yang sama dengan sales" hanya dari dua
+angka yang **urutan besarnya mirip** (ads Rp 1,74 M vs sales Rp 920 M). Itu tebakan
+yang saya angkat jadi "terverifikasi" di 3.45 - **salah, dan saya menulisnya sebagai fakta.** Pelajaran: **kemiripan besaran bukan bukti.**
+
+**Kalau memang stream terpisah, `vw_campaign_summary` sedang UNDERESTIMATE:**
+
+```
+sekarang  total_gmv = sales saja   = Rp   920.211.710
+seharusnya sales + ads              = Rp 1.093.419.701   (+ Rp 173.207.991)
+```
+
+**STATUS: belum ada yang diubah.** Migration `20261001200000` masih hidup, view masih
+`sales` saja. Tidak boleh diubah sebelum:
+
+1. User memastikan: order dari video yang di-ads **muncul atau tidak** di Partner Center
+2. Query read-only (`docs/sql/45-*.sql`) membuktikan stream-nya terpisah
+3. Migration **baru** (timestamp monotonic) membangun ulang view dengan guard identity
+
+**Setelah langkah 1 selesai, §3.45 dan `AGENTS.md` aturan #8 HARUS dikoreksi** — keduanya
+masih menyatakan "jangan jumlahkan ads" sebagai fakta.
 
 ---
 

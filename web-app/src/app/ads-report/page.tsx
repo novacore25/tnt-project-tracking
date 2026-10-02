@@ -8,6 +8,7 @@ import { Edit2, Check, X, Search, FileSpreadsheet, Loader2, Trash2, Lock, Downlo
 import Link from "next/link";
 import { useAuth } from "@/providers/AuthProvider";
 import { exportToExcel } from "@/utils/exportToExcel";
+import { normalizeKurs } from "@/utils/computed";
 import { Button } from "@/components/ui/Button";
 
 import { SearchableSelect } from "@/components/SearchableSelect";
@@ -677,7 +678,7 @@ export default function AdsReportPage() {
       "Ad ID": ad.ad_id,
       "Cost": ad.cost,
       "Kurs": ad.kurs,
-      "Cost (IDR)": (ad.cost || 0) * (ad.kurs || 16000),
+      "Cost (IDR)": (Number(ad.cost) || 0) * normalizeKurs(ad.kurs),
       "Video Views": ad.video_views,
       "GMV (VSA)": ad.vsa_gmv
     }));

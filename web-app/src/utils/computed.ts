@@ -22,6 +22,30 @@ export const toNum = (v: unknown): number => {
 export const sumNum = <T,>(rows: T[] | null | undefined, pick: (row: T) => unknown): number =>
   (rows || []).reduce((sum, row) => sum + toNum(pick(row)), 0);
 
+/**
+ * Normalisasi kurs USD -> IDR untuk data `ads_performance` / `ads_spends`.
+ *
+ * ATURAN:
+ * - `null` / `undefined` / `''` / NaN -> 16000 (default, sama seperti lama)
+ * - `0` -> TETAP 0, bukan 16000
+ * - `> 0` dan `< 1000` -> x1000 (heuristik untuk impor lama yang menulis
+ *   16.993 statt 16993)
+ *
+ * KENAPA `0` HARUS TETAP 0:
+ *   Migration `20261001230000` menyetel satu baris jadi `kurs = 0` karena datanya
+ *   korup (1052 pembelian tanpa satu klik). Nol adalah keputusan, bukan "tidak ada".
+ *   Versi lama menulis `ad.kurs || 16000`, dan `0 || 16000` = `16000`, sehingga
+ *   baris itu dikalikan 16000 di UI: revenue Rp 1.261,34 -> Rp 20.181.440.
+ *   Pola `||` yang sama ada di 10 tempat dan semuanya sudah diganti ke helper ini.
+ */
+export const normalizeKurs = (raw: unknown): number => {
+  if (raw === null || raw === undefined || raw === '') return 16000;
+  const n = typeof raw === 'number' ? raw : Number(raw);
+  if (!Number.isFinite(n)) return 16000;
+  if (n > 0 && n < 1000) return n * 1000;
+  return n;
+};
+
 export const getCreatorType = (audience_age: string | null): 'Nano' | 'Micro' | 'Macro' | 'Mega' | 'Unknown' => {
   return 'Unknown'; // Karena kita tidak lagi menggunakan angka follower, default ke Unknown atau ambil dari Tier.
 }

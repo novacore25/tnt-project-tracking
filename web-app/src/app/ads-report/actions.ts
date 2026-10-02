@@ -3,6 +3,7 @@
 import { db, sqlInList } from '@/db';
 import { sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
+import { normalizeKurs } from '@/utils/computed';
 
 export async function getAdsReportData(params: {
   startDate?: string;
@@ -143,8 +144,7 @@ export async function getAdsReportData(params: {
   const campaignBreakdown: Record<number, any> = {};
   let globalUnmappedCampaigns = 0;
   for (const ad of allTimeLatestData) {
-    let kurs = ad.kurs || 16000;
-    if (kurs < 1000) kurs = kurs * 1000;
+    const kurs = normalizeKurs(ad.kurs);
     const cId = ad.campaign_id;
     if (!cId) {
        globalUnmappedCampaigns++;
@@ -185,8 +185,7 @@ export async function getAdsReportData(params: {
   const calcSummary = (dataArr: any[], useDelta = false) => {
     let sumSpend = 0; let sumGmv = 0; let sumImpr = 0; let sumSpendUsd = 0;
     for (const ad of dataArr) {
-      let kurs = Number(ad.kurs) || 16000;
-      if (kurs < 1000) kurs = kurs * 1000;
+      const kurs = normalizeKurs(ad.kurs);
       
       const cost = Number(useDelta && ad.delta_cost_usd !== undefined ? ad.delta_cost_usd : ad.cost_usd) || 0;
       const gmv = Number(useDelta && ad.delta_gross_revenue_usd !== undefined ? ad.delta_gross_revenue_usd : ad.gross_revenue_usd) || 0;

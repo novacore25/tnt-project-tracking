@@ -5,6 +5,7 @@ import { TrendingUp, BarChart3, Activity, ArrowUpDown, ChevronDown, ChevronRight
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { exportToCSV } from "@/utils/exportCsv";
+import { normalizeKurs } from "@/utils/computed";
 import { useAuth } from "@/providers/AuthProvider";
 import { useCampaignFilter } from "@/providers/CampaignFilterProvider";
 import { fetchPerformaPageFullDataAction, updateAdsPerformanceKursAction } from "@/app/actions/campaignPageActions";
@@ -269,8 +270,7 @@ export default function CampaignPerformaClient({ campaignId }: { campaignId: num
       let unmappedAdsItemsSoldVal = 0;
 
       for (const ad of latestAdsMap.values()) {
-        let kurs = Number(ad.kurs) || 16000;
-        if (kurs < 1000) kurs = kurs * 1000;
+        const kurs = normalizeKurs(ad.kurs);
         
         const costUsd = Number(ad.cost_usd) || 0;
         const grossRevenueUsd = Number(ad.gross_revenue_usd) || 0;
@@ -901,8 +901,7 @@ export default function CampaignPerformaClient({ campaignId }: { campaignId: num
                 <tbody>
                   {adsPerf.map((ad, i) => {
                     const creatorUsername = ad.creators?.username;
-                    const rawKurs = Number(ad.kurs) || 16000;
-                    const adjustedKurs = rawKurs < 1000 ? rawKurs * 1000 : rawKurs;
+                    const adjustedKurs = normalizeKurs(ad.kurs);
                     const costUsd = Number(ad.cost_usd) || 0;
                     const revenueUsd = Number(ad.gross_revenue_usd) || 0;
                     

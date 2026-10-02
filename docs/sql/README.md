@@ -72,6 +72,7 @@ Semua **read-only** — tidak menulis ke DB.
 | **`42-verifikasi-payment.sql`** | **WAJIB sebelum migrasi payment** — uji tiap kolom dgn `EXISTS` |
 | `43-daftar-kerja-pic-tanpa-akun.sql` | 92 baris dengan PIC tanpa akun (`submitted_by = NULL`) |
 | `44-verifikasi-bug-harian.sql` | **Uji 6 temuan bug** Harian / Rekap / Timeline Target |
+| `45-apakah-ads-berbeda.sql` | 🔴 **TENTUKAN**: apakah `ads_performance` revenue terpisah dari `sales` |
 
 ### Yang paling sering dipakai ulang
 

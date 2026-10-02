@@ -58,10 +58,16 @@
    `rows.reduce((s, r) => s + (r.gmv || 0), 0)` — itu merangkai string, bukan menjumlahkan.
    Gejalanya di UI: angka ribuan digit diawali digit `0`.
 
-8. **Total GMV = `SUM(sales.gmv)` saja** (non-refund, dipecah live/video dari `content_type`).
-   Jangan menjumlahkan `ads_performance.gross_revenue_usd` (itu kumulatif per ad DAN revenue
-   yang sama dengan `sales`) atau custom report (`organic_videos`, `live_session_products`
-   = awareness, bukan sales). Pemetaan selalu lewat **`product_id`**, bukan `sku_id`.
+8. **Total GMV = `SUM(sales.gmv)`** (non-refund, dipecah live/video dari `content_type`).
+   Pemetaan selalu lewat **`product_id`**, bukan `sku_id`.
+
+   > 🔴 **ATURAN INI SEDANG DITINJAU (2 Okt 2026).** Saya sebelumnya menulis "jangan
+   > jumlahkan ads" berdasarkan asumsi bahwa `ads_performance` = revenue yang sama
+   > dengan `sales`. **User membetulkan itu:** Partner Center itu pure organik,
+   > dan order dari video yang di-ads tidak masuk ke sana.
+   > Kalau benar, `total_gmv` sekarang **kurang Rp 173 juta**.
+   > **Jangan ubah view apa pun** sebelum §3A.7 di `SKILL.md` selesai diverifikasi.
+   > Halaman **Harian** memang `sales + ads` — itu desain yang sudah dikonfirmasi user.
 
 9. **Sebelum menulis migration yang `UPDATE`/`DELETE` baris, jalankan preflight constraint.**
    `schema.ts` dan `web-app/supabase/migrations/` sama-sama TIDAK bisa dipercaya untuk

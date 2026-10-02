@@ -3,6 +3,7 @@
 import { db } from '@/db';
 import { sql } from 'drizzle-orm';
 import { cookies } from 'next/headers';
+import { normalizeKurs } from '@/utils/computed';
 
 export async function loginPortal(campaignId: number, pin: string) {
   const [campaign] = await db.execute(sql`
@@ -402,8 +403,7 @@ export async function getPortalData(campaignId: number) {
   let globalAdsSpend = 0;
 
   for (const ad of latestAdsMap.values()) {
-    let kurs = Number(ad.kurs) || 16000;
-    if (kurs < 1000) kurs = kurs * 1000;
+    const kurs = normalizeKurs(ad.kurs);
 
     const grossRevenueUsd = Number(ad.gross_revenue_usd) || 0;
     const costUsd = Number(ad.cost_usd) || 0;

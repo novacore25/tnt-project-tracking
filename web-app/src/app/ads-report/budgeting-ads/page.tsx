@@ -6,6 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ArrowLeft, Plus, DollarSign, Wallet, TrendingUp, AlertCircle, History, Trash2, ChevronDown, ChevronUp } from "lucide-react";
 import Link from "next/link";
 import { useDatabaseStore } from "@/store/useDatabaseStore";
+import { normalizeKurs } from "@/utils/computed";
 import {
   fetchAdsBudgetingDataAction,
   addAdsTopupAction,
@@ -99,8 +100,7 @@ export default function BudgetingAdsPage() {
     let spentUsd = 0;
     let spentIdr = 0;
     for (const ad of adIdMap.values()) {
-      let kurs = Number(ad.kurs || 16000);
-      if (kurs < 1000) kurs = kurs * 1000;
+      const kurs = normalizeKurs(ad.kurs);
       spentUsd += Number(ad.cost_usd || 0);
       spentIdr += Number(ad.cost_usd || 0) * kurs;
     }

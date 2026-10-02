@@ -3,6 +3,7 @@
 import { db } from '@/db';
 import { sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
+import { normalizeKurs } from '@/utils/computed';
 
 export async function fetchImportMetadataAction() {
   const [skus, campaigns] = await Promise.all([
@@ -471,8 +472,7 @@ export async function executeAdsImportAction(
       const chunk = rawInserts.slice(i, i + CHUNK_SIZE);
       const tuples = chunk.map(item => {
         const rawClean = JSON.stringify(item.raw_data || {}).replace(/\\u0000/g, '');
-        let kursVal = Number(item.kurs) || 16000;
-        if (kursVal < 1000) kursVal = kursVal * 1000;
+        const kursVal = normalizeKurs(item.kurs);
 
         return sql`(
           ${item.ad_id},

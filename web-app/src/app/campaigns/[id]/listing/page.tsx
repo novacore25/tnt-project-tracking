@@ -1049,9 +1049,16 @@ function CampaignListingContent() {
         else group[createDateKey].nano++;
       }
 
-      // 2. Process Action (Approved, Alternate, Not Approved) based on approved_at
-      if (r.approved_at && r.approval !== 'pending') {
-        const actionDateKey = getLocalDateStr(r.approved_at);
+      // 2. Process Action (Approved, Alternate, Not Approved)
+      // TANGGAL AKSI TIDAK SERAGAM. Hanya 'approved' yang memakai `approved_at`.
+      // 'alternate' dan 'not_approved' menyimpan waktunya di `not_approved_at`
+      // (lihat blok merge di bawah: `notApprovedAt = r.not_approved_at || NOW()`).
+      // Dulu baris ini memakai `approved_at` untuk ketiganya, sehingga dua status
+      // terakhir tidak pernah punya tanggal -> baris Not Approve & Alternate di
+      // Rekap Harian selalu 0 dan tidak mungkin jadi selain itu.
+      const actionDateStr = r.approval === 'approved' ? r.approved_at : r.not_approved_at;
+      if (actionDateStr) {
+        const actionDateKey = getLocalDateStr(actionDateStr);
         if (!group[actionDateKey]) group[actionDateKey] = { total: 0, approved: 0, pending: 0, alternate: 0, not_approved: 0, nano: 0, micro: 0, macro: 0, mega: 0 };
         
         if (r.approval === 'approved') group[actionDateKey].approved++;
