@@ -1453,6 +1453,122 @@ Jalankan dengan **commit SHA** di URL, bukan `main` (§3.44).
 | `41-dampak-kurs.sql` | Analisis dampak koreksi `kurs` (sudah dipakai) |
 | **`42-verifikasi-payment.sql`** | **WAJIB sebelum migrasi payment.** Uji tiap kolom dengan `EXISTS` (§3.46) |
 | `21`, `22`, `25` | Digunakan untuk investigasi tag palsu |
+| `47-selidihi-54-ad-berbeda.sql` | Buktikan 54 ad = beda kurs, bukan data hilang (§3A.7) |
+| `48-audit-portal-52.sql` | Audit portal bagian 1 — **nama view salah**, section §5/§10 error |
+| `49-audit-portal-52-bagian2.sql` | Audit portal bagian 2 — §12/§14 masih salah nama kolom |
+| **`50-audit-portal-52-bagian3.sql`** | **Angka final portal.** Nama view/kolom sudah benar (§3B) |
+
+---
+
+## 3B. AUDIT PORTAL BRAND (2 Okt 2026) — 9 SELISIH TERBUKTI
+
+`/portal/[id]/dashboard` **tidak memakai view mana pun.** Ia fetch data mentah lalu
+menghitung ulang sendiri di `portal/actions/portalActions.ts` + `PortalDashboardClient.tsx`.
+Sirinya dengan `campaigns/[id]/performa/PerformaClient.tsx` — **dua implementasi
+logika yang sama, ditulis terpisah.** Itu akar semua selisih di bawah.
+
+### Cara mengaudit ulang (WAJIB pakai nama yang benar)
+
+Nama view = **`vw_campaign_summary`**. `total_gmv` itu **nama kolom di dalamnya**,
+bukan nama view. Nama kolom yang tersedia:
+
+```
+total_gmv_achievement  total_gmv          total_gmv_video   total_gmv_live
+total_ads_gmv          total_ads_spend    achievement_video achievement_creator
+budget_ads_terpakai    sisa_budget_ads    tracked_creator_gmv
+```
+
+> ❌ **Tidak ada kolom `total_organic_gmv` di view.** Organic cuma ada di CTE internal
+> `organic_sales`. Oles ke view = error, dan seluruh section berikutnya hilang.
+> Dua script pertama (`48`, `49`) tersandung ini. `50` sudah benar.
+
+Script: `docs/sql/48` (bagian 1), `49` (bagian 2), `50` (bagian 3, angka final).
+
+### 9 temuan, semuanya TERBUKTI dengan angka (campaign 52 = MILKYBOOST)
+
+| # | Temuan | Dampak terukur | Lokasi |
+|---|---|---|---|
+| A | **Refund dihitung sebagai penjualan** | **+Rp 225.253 (+5,0%)** di 52; **+Rp 310.173.535** total DB (7.054 baris) | `portalActions.ts:118` & `PerformaClient:29` tidak punya `is_refund = false`; view **punya** |
+| B | **Views/likes menjumlah livestream** | views **+11.711**, likes **+79.250 (10,9×)** | `portalActions:357-364` vs `PerformaClient:180-198` |
+| C | **Jumlah video hanya organik** | portal **~50%** dari sebenarnya (seluruh campaign) | `fastVideoCountsData.total_approved = calcUniqueVideos` |
+| D | **Status creator tidak difilter** | **6.160 baris `not_approved` tampil** di portal, hilang di internal | `portalActions` tidak filter; `performaActions:18` filter 3 nilai |
+| E | **PIN `1234` untuk 47 dari 49 campaign** | semua portal brand terbuka | `campaigns.pin` plaintext |
+| F | **`target_gmv` NULL di 37 dari 49 campaign** | persentase selalu `0%` | `PortalDashboardClient:127` |
+| G | **Cabang `tt_campaign_id` tidak pernah kena** | 0 dari 209 session cocok | `portalActions:190` |
+| H | **Livestream terduplikasi di `organic_videos`** | content_uid sama muncul 3× | lihat §50 §26 |
+| I | **PIN bocor ke browser** | `SELECT *` → `pin` ikut ke payload RSC | `portalActions:50` → `return { campaign }` |
+
+### A. Refund — bukti(storage) yang harus diingat
+
+```
+7.054 baris is_refund = true
+  6.985 Positif  |  0 Negatif  |  69 Nol
+  SUM = Rp 310.173.535
+```
+
+> **Refund disimpan sebagai `gmv` POSITIF, bukan negatif.** Jadi `SUM(gmv)` tanpa
+> filter **menambah** refund ke penjualan — bukan mengurangi. View benar karena
+> memang `WHERE is_refund = false`. Portal dan Performa **salah**, dan comedy:
+> **keduanya tidak punya filter itu sama sekali.**
+>
+> Ini bukan hanya campaign 52. Total DB: **Rp 310 juta** angka portal lebih besar
+> dari kenyataan. Harian (view) vs Performa/Portal akan **selalu** beda.
+
+### B. Kenapa likes portal 10,9× internal
+
+`portalActions:357-364` menjumlah `views`/`likes` untuk **semua** entri.
+`PerformaClient:180-184` hanya untuk `!isLive`.
+
+Data livestream-nya memang rusak — `likes > views` (likes 79.250 vs views 11.711 di
+campaign 52), dan `content_uid` yang sama muncul **3×**. Jadi portal tidak cuma
+metode beda, **datanya juga beda**. Lihat §50 §15 dan §26.
+
+### C. Video — tetap sekitar 50%, di SEMUA campaign
+
+| Campaign | Portal | Internal | Manual |
+|---|---:|---:|---:|
+| KIME (44) | 9.648 | 19.253 | 9.605 |
+| MS Glow Beauty (41) | 806 | 1.601 | 795 |
+| WARDAH (37) | 682 | 1.288 | 606 |
+| OMG Makeup (33) | 679 | 1.388 | 709 |
+| SYB (46) | 493 | 985 | 492 |
+
+Internal = `allApprovedVideoIds` = organik **+** tabel `videos` (approved).
+Portal = `calcUniqueVideos` (organik saja). **Semua video input manual PIC
+tidak pernah masuk hitungan portal.**
+
+### E. PIN — 47 dari 49 campaign masih `1234`
+
+Semua kecuali 50 Biodef dan 51 GLOWIES (kosong). Catatan: `SKILL.md` §3.5 sudah
+bilang PIN plaintext, tapi **skornya masih default untuk semua campaign produksi.**
+Selector: `WHERE pin = '1234'` (lihat `50` §19).
+
+### G. Cabang mati di filter live session
+
+```sql
+WHERE ls.tt_campaign_id = ${campaignId}::text      -- 0 dari 209 session COCOK
+   OR ls.creator_username IN (...)                  -- satu-satunya yang bekerja
+```
+
+`tt_campaign_id` **bukan** id internal kita. Jadi seluruh 39 live session campaign 52
+masuk lewat cabang `OR` — yang **tidak punya scoping campaign sama sekali**. Kalau
+seorang kreator ikut 2 campaign, session-nya bocor ke keduanya.
+
+### Cara memperbaiki (saran, belum dikerjakan — user belum memutuskan)
+
+1. **`is_refund = false`** di query `sales` portal **dan** Performa. (Paling penting,
+   (Rp 310 juta.)
+2. **Samakan views/likes** — putuskan mana yang benar. Saran: **buang livestream dari
+   views/likes**, karena `likes > views` korup. Tapi **tanya user dulu** — dia yang
+   pegang keputusan tampilan brand.
+3. **`calcUniqueVideos` + video manual approved** untuk `total_approved`.
+4. **Filter `approval IN ('approved','pending','alternate')`** di `portalActions`.
+5. **Hapus `pin` dari `SELECT *`**, `secure: true` di cookie, ganti 47 PIN default.
+6. **Buang `||` → pakai `NOT IN`**, atau ask user soal livestream.
+7. **Isi `target_gmv`**, atau perlakukan "0 target" = "tidak ada persentase".
+
+> ⚠️ **Jangan langsung patch tanpa user.** Item 2, 5, 7 adalah keputusan **user**
+> (apa yang mau dilihat brand, PIN baru siapa). Sampaikan angkanya dulu.
 
 ---
 

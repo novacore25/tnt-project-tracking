@@ -31,6 +31,35 @@
 
 ## Aturan Kerja (tidak bisa dinegosiasikan)
 
+> **Dua aturan tambahan dari audit portal 2 Okt 2026 — baca sebelum kerja di `portal/`.**
+>
+> **0. Portal brand bukan sumber kebenaran.** `/portal/[id]/dashboard` **tidak memakai
+>    view sama sekali** — ia fetch data mentah lalu hitung ulang sendiri di
+>    `portalActions.ts` + `PortalDashboardClient.tsx`, terpisah dari
+>    `PerformaClient.tsx`. **Dua implementasi logika yang sama, ditulis terpisah.**
+>
+> **0b. View itu `vw_campaign_summary`, bukan `total_gmv`.** `total_gmv` itu **nama kolom**
+>    di dalamnya. Kolom yang tersedia: `total_gmv_achievement`, `total_gmv`,
+>    `total_gmv_video`, `total_gmv_live`, `total_ads_gmv`, `total_ads_spend`,
+>    `achievement_video`, `achievement_creator`, `budget_ads_terpakai`, `sisa_budget_ads`,
+>    `tracked_creator_gmv`. **Tidak ada `total_organic_gmv` di view** — hanya di CTE internal.
+>    Oles ke view = error, dan section setelahnya hilang. Sudah menewaskan 2 script (`48`, `49`).
+>
+> **9 selisih portal vs internal — semuanya TERBUKTI dengan angka** (`docs/sql/48`–`50`):
+>
+> | Temuan | Dampak terukur |
+> |---|---|
+> | **Refund dihitung sebagai penjualan** | `sales.gmv` untuk `is_refund = true` disimpan **POSITIF**, jadi `SUM(gmv)` tanpa filter **menambah** refund. View pakai `is_refund = false`; **portal & Performa tidak punya filter itu sama sekali** → **Rp 310.173.535** se-DB |
+> | Views/likes menghitung livestream | likes **10,9×** lebih besar (portal 87.223 vs internal 7.973) |
+> | Jumlah video hanya organik | portal **~50%** dari sebenarnya, di semua campaign |
+> | Status creator tidak difilter | **6.160 baris `not_approved`** tampil di portal |
+> | **PIN `1234` untuk 47 dari 49 campaign** | semua portal brand terbuka; `pin` juga bocor ke browser via `SELECT *` → payload RSC, cookie `secure: false` |
+> | `target_gmv` NULL di 37 campaign | persentase selalu `0%` |
+> | Cabang `tt_campaign_id` di filter live | **0 dari 209 session cocok** — cabang mati, semua masuk lewat `OR` yang tanpa scoping |
+>
+> **Jangan tambah angka baru di portal sebelum menyamakan logicanya dengan internal.**
+> Kalau belum sinkron, tambahkan di internal dulu (satu sumber), lalu pakai ulang.
+
 1. **Jangan pernah `drizzle-kit push` atau `generate`.** `src/db/schema.ts` stale dan tidak
    cocok dengan DB. `push` akan menghapus unique constraint `sales.order_id`.
    Perubahan skema = file SQL baru di `web-app/supabase/migrations/` dengan timestamp monotonic.
