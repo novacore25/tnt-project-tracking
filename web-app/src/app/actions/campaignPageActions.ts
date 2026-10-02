@@ -1274,7 +1274,7 @@ export async function commitBulkImportVideosAction(
       await tx.execute(sql`
         INSERT INTO creators (username, link_account, added_by)
         VALUES (${u}, ${'https://www.tiktok.com/@' + u}, ${addedById || null})
-        ON CONFLICT (username) DO UPDATE SET link_account = EXCLUDED.link_account
+        ON CONFLICT (lower(username)) DO UPDATE SET link_account = EXCLUDED.link_account
       `);
     }
 
@@ -1810,7 +1810,7 @@ export async function insertCreatorsAndCcAction(campaignId: number, creatorPaylo
       await db.execute(sql`
         INSERT INTO creators (username, link_account, added_by)
         VALUES (${c.username}, ${c.link_account}, ${c.added_by || null})
-        ON CONFLICT (username) DO UPDATE SET link_account = EXCLUDED.link_account
+        ON CONFLICT (lower(username)) DO UPDATE SET link_account = EXCLUDED.link_account
         RETURNING id
       `);
     }
@@ -2046,7 +2046,7 @@ export async function saveCreatorImportBatchAction(params: {
           const inserted = await db.execute(sql`
             INSERT INTO creators (username, link_account, added_by)
             VALUES (${row.username.trim()}, ${'https://www.tiktok.com/@' + row.username.trim()}, ${picId || null})
-            ON CONFLICT (username) DO UPDATE SET link_account = EXCLUDED.link_account
+            ON CONFLICT (lower(username)) DO UPDATE SET link_account = EXCLUDED.link_account
             RETURNING id
           `) as any[];
           cid = inserted[0]?.id;

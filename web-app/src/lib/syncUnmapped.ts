@@ -82,10 +82,16 @@ export async function syncUnmappedForProduct(productId: string, campaignId: numb
       let creatorId = (existingC as any[])[0]?.id;
 
       if (!creatorId) {
+        // PENTING (2 Okt 2026): target konflik WAJIB lower(username).
+        // Migration 20261001220000 menambah idx_creators_username_lower_unique.
+        // Dengan target username saja, Serbaserbishp vs serbaserbishp lolos
+        // dari index biasa lalu ditolak index LOWER, dan UPDATE username di
+        // sini justru merusak kapitalisasi yang sudah ada.
+        // Penjelasan lengkap di importActions.ts.
         const cRes = await db.execute(sql`
           INSERT INTO creators (username, nama_asli, added_by, link_account)
           VALUES (${u}, ${u}, 'system', ${`https://tiktok.com/@${u}`})
-          ON CONFLICT (username) DO UPDATE SET username = EXCLUDED.username
+          ON CONFLICT (lower(username)) DO UPDATE SET username = EXCLUDED.username
           RETURNING id
         `);
         creatorId = (cRes as any[])[0]?.id;

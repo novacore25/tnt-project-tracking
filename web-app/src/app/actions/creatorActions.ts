@@ -270,7 +270,7 @@ export async function addCreatorFull(formData: {
   const cRows = await db.execute(sql`
     INSERT INTO creators (username, nama_asli, link_account, added_by, status)
     VALUES (${username}, ${formData.nama || username}, ${link_account}, ${profileId || null}, 'active')
-    ON CONFLICT (username) DO UPDATE 
+    ON CONFLICT (lower(username)) DO UPDATE 
     SET 
       nama_asli = EXCLUDED.nama_asli,
       link_account = EXCLUDED.link_account,
@@ -404,7 +404,7 @@ export async function bulkImportCreatorsAction(creatorsList: any[]) {
     const cRes = await db.execute(sql`
       INSERT INTO creators (username, nama_asli, link_account, added_by, status)
       VALUES (${username}, ${item.nama || username}, ${link_account}, ${profileId || null}, 'active')
-      ON CONFLICT (username) DO UPDATE 
+      ON CONFLICT (lower(username)) DO UPDATE 
       SET 
         nama_asli = COALESCE(EXCLUDED.nama_asli, creators.nama_asli),
         last_updated_by = ${profileId || null}
@@ -467,7 +467,7 @@ export async function executeSpreadsheetImportAction(rows: any[]) {
     const cRes = await db.execute(sql`
       INSERT INTO creators (username, nama_asli, link_account, added_by, status, mcn, avatar_url)
       VALUES (${username}, ${r.nama || username}, ${link_account}, ${profileId || null}, 'active', ${r.mcn || null}, ${r.avatar_url || null})
-      ON CONFLICT (username) DO UPDATE 
+      ON CONFLICT (lower(username)) DO UPDATE 
       SET 
         mcn = COALESCE(EXCLUDED.mcn, creators.mcn),
         avatar_url = COALESCE(EXCLUDED.avatar_url, creators.avatar_url),

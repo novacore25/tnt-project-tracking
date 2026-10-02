@@ -213,10 +213,19 @@ export async function executeSalesImportChunkAction(salesRows: any[], videoRows:
         const creatorTuples = allUsernames.map(uname => sql`(
           ${uname}, ${uname}, ${'https://tiktok.com/@' + uname}, 'system'
         )`);
+        // PENTING (2 Okt 2026): target konflik HARUS lower(username), bukan username.
+        // Migration 20261001220000 menambah index idx_creators_username_lower_unique
+        // atas LOWER(username), sementara creators_username_key tetap case-sensitive.
+        // Dengan ON CONFLICT (username) hanya duplikat yang PERSIS sama yang
+        // tertangkap; Serbaserbishp vs serbaserbishp lolos dari index yang biasa lalu
+        // ditolak index LOWER, dan karena satu batch = satu transaksi, 1 kreator yang
+        // bentrok rollback seluruh 150 baris.
+        // Gejalanya: "duplicate key value violates unique constraint
+        // idx_creators_username_lower_unique", 429 baris sales gagal.
         await tx.execute(sql`
           INSERT INTO creators (username, nama_asli, link_account, added_by)
           VALUES ${sql.join(creatorTuples, sql`, `)}
-          ON CONFLICT (username) DO NOTHING
+          ON CONFLICT (lower(username)) DO NOTHING
         `);
       }
 

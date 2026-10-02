@@ -474,9 +474,13 @@ export async function syncAddressBatchAction(campaignId: number, previewRows: an
         let creatorId = (creatorRows as any[])[0]?.id;
 
         if (!creatorId) {
+          // `lower(username)`:igration 20261001220000 menambah unique index atas
+          // LOWER(username). Tanpa ini, username huruf besar bentrok saat diimpor
+          // dan seluruh batch gagal. Lihat importActions.ts.
           const newCreatorRes = await db.execute(sql`
             INSERT INTO creators (username, link_account)
             VALUES (${rawUsername}, ${`https://tiktok.com/@${cleanUsername}`})
+            ON CONFLICT (lower(username)) DO UPDATE SET username = creators.username
             RETURNING id
           `);
           creatorId = (newCreatorRes as any[])[0]?.id;

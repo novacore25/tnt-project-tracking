@@ -70,6 +70,10 @@ export async function addCreatorFullAction(
     const [cData] = await db.execute(sql`
       INSERT INTO creators (username, nama_asli, link_account, added_by)
       VALUES (${creator.username}, ${namaAsli}, ${linkAccount}, ${creator.added_by || null})
+      ON CONFLICT (lower(username)) DO UPDATE
+        SET nama_asli  = COALESCE(EXCLUDED.nama_asli, creators.nama_asli),
+            link_account = COALESCE(EXCLUDED.link_account, creators.link_account),
+            added_by   = COALESCE(EXCLUDED.added_by, creators.added_by)
       RETURNING *
     `) as any[];
     if (!cData) throw new Error('Failed to insert creator');
@@ -1159,6 +1163,9 @@ export async function executeFullCampaignSyncAction(payload: {
           const [newC] = await db.execute(sql`
             INSERT INTO creators (username, platform, status)
             VALUES (${username}, 'tiktok', 'aktif')
+            ON CONFLICT (lower(username)) DO UPDATE
+              SET platform = COALESCE(EXCLUDED.platform, creators.platform),
+                  status   = COALESCE(EXCLUDED.status, creators.status)
             RETURNING id, username
           `) as any[];
           if (newC) {

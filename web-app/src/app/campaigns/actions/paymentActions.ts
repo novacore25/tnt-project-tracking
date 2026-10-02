@@ -750,6 +750,9 @@ export async function resolveCreatorForMigration(username: string, campaignId: n
     const insCr = await db.execute(sql`
       INSERT INTO creators (username, nama_asli, status)
       VALUES (${cleanUsername}, ${rowData.nama_penerima || cleanUsername}, 'active')
+      ON CONFLICT (lower(username)) DO UPDATE
+        SET nama_asli = COALESCE(EXCLUDED.nama_asli, creators.nama_asli),
+            status    = COALESCE(EXCLUDED.status, creators.status)
       RETURNING id
     `);
     creatorId = (insCr as any[])[0].id;
