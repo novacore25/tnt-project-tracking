@@ -29,7 +29,7 @@ export const sumNum = <T,>(rows: T[] | null | undefined, pick: (row: T) => unkno
  * - `null` / `undefined` / `''` / NaN -> 16000 (default, sama seperti lama)
  * - `0` -> TETAP 0, bukan 16000
  * - `> 0` dan `< 1000` -> x1000 (heuristik untuk impor lama yang menulis
- *   16.993 statt 16993)
+ *   16.993, bukan 16993)
  *
  * KENAPA `0` HARUS TETAP 0:
  *   Migration `20261001230000` menyetel satu baris jadi `kurs = 0` karena datanya
