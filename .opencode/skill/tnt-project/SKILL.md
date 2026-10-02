@@ -1669,6 +1669,38 @@ Naik total_gmv view          : Rp 233.334.998  ✓ SAMA DENGAN YANG HARUSNYA
 
 ---
 
+### 🔴 Import Penjualan mati total — regresi dari `20261001220000` (2 Okt 2026)
+
+> Gejala: `duplicate key value violates unique constraint
+> "idx_creators_username_lower_unique"` → **429 sales + 10.650 awareness gagal.**
+
+| | |
+|---|---|
+| **Penyebab** | Migration `20261001220000` menambah `UNIQUE (lower(username))`. Kode import masih `ON CONFLICT (username)` yang hanya cocok dengan index `creators_username_key` (case-sensitive). Bentrok kapital lolos dari sana, lalu ditolak index LOWER. |
+| **Kenapa banyak sekali** | **1 batch = 1 transaksi.** 1 kreator bentrok → seluruh 150 baris rollback. 10.650 baris gagal BUKAN 10.650 masalah. |
+| **Bukti** | `docs/sql/57`: 796 dari 16.311 creator masih huruf besar; **0 duplikat** setelah di-lowercase |
+| **Fix** | Semua **12** titik `INSERT INTO creators` → `ON CONFLICT (lower(username))` |
+| **Doc** | `docs/BUG-IMPORT-CREATOR-CONFLICT.md` |
+
+> ⚠️ **Empat titik tadinya TIDAK punya `ON CONFLICT` sama sekali**
+> (`addressActions.ts:478`, `databaseActions.ts:71` & `1160`, `paymentActions.ts:751`).
+> Semuanya akan crash dengan cara yang sama. Sudah diperbaiki.
+
+> 📌 **Pola:** kalau sebuah index UNIQUE berubah (dari kolom jadi ekspresi), **SEMUA**
+> `ON CONFLICT` yang menunjuk kolom itu harus ikut berubah. Index itu ditambahkan
+> *setelah* kodenya ditulis, jadi tidak ada yang mengetesnya.
+
+#### Jebakan saat memperbaiki (2 dari saya sendiri)
+
+| Kesalahan | Gejala | Deteksi |
+|---|---|---|
+| Backtick penutup hilang di template literal | 84 → **286** TS error | `tsc --noEmit` |
+| Komentar berisi **backtick** di dalam template SQL | **5** TS error | `tsc --noEmit` |
+
+> ⚠️ **Jangan tulis backtick di dekat template literal SQL.** Backtick menutup
+> template lebih awal. Sama seperti pelajaran "SELECT tanpa FROM" (§KEPUTUSAN-PORTAL):
+> **yang berhasil hanya cek otomatis, bukan niat.**
+
 ## 9. Cara memperbarui skill ini
 
 Setelah sesi yang modify kode, jika ada temuan baru (jebakan, keputusan arsitektur, nama
