@@ -54,6 +54,40 @@ SELECT
      JOIN last_per_ad l ON l.ad_id = m.ad_id AND l.campaign_id = m.campaign_id
     WHERE m.gmv <> l.gmv)                                                  AS ad_yang_berbeda;
 
+\echo ''
+\echo '=== 20 AD YANG NILAINYA BEDA: MAX vs TANGGAL TERAKHIR ==='
+\echo '-- Kalau nilai di tanggal terakhir LEBIH KECIL dari max, berarti ada'
+\echo '-- baris yang nilainya turun (report-all-time TikTok biasanya reset'
+\echo '-- atau refresh). Periksa 20 ini sebelum trusting angka.'
+WITH max_per_ad AS (
+    SELECT campaign_id, ad_id, tanggal,
+           MAX(gross_revenue_usd * kurs) AS gmv_max,
+           MAX(cost_usd * kurs)          AS cost_max
+    FROM ads_performance GROUP BY campaign_id, ad_id
+),
+last_per_ad AS (
+    SELECT DISTINCT ON (campaign_id, ad_id)
+           campaign_id, ad_id, tanggal,
+           gross_revenue_usd * kurs AS gmv_terakhir,
+           cost_usd * kurs          AS cost_terakhir
+    FROM ads_performance
+    ORDER BY campaign_id, ad_id, tanggal DESC, id DESC
+)
+SELECT
+  l.campaign_id,
+  l.ad_id,
+  l.tanggal                                        AS tanggal_terakhir,
+  m.tanggal                                        AS tanggal_max,
+  round(m.gmv_max)                                 AS gmv_max,
+  round(l.gmv_terakhir)                            AS gmv_tanggal_terakhir,
+  round(m.gmv_max - l.gmv_terakhir)                AS gmv_beda,
+  round(m.cost_max - l.cost_terakhir)              AS spend_beda
+FROM last_per_ad l
+JOIN max_per_ad m ON m.ad_id = l.ad_id AND m.campaign_id = l.campaign_id
+WHERE m.gmv_max <> l.gmv_terakhir
+ORDER BY abs(m.gmv_max - l.gmv_terakhir) DESC
+LIMIT 20;
+
 -- ---------------------------------------------------------------------
 -- 3. View baru
 --    Urutan & nama kolom WAJIB sama persis. CREATE OR REPLACE VIEW tidak
@@ -192,18 +226,35 @@ BEGIN
 END $$;
 
 -- ---------------------------------------------------------------------
--- 5. GUARD 2: total_gmv tidak boleh turun
+-- 5. GUARD 2: TIDAK BOLEH ADA campaign yang total_gmv-nya turun
+--
+--    BUG YANG PERNAH ADA DI SINI (2 Okt 2026, sudah diperbaiki):
+--      SELECT sum(GREATEST(b.total_gmv,0) - v.total_gmv)
+--    Itu menjumlahkan SELISIH, jadi kenaikan di satu campaign meniadakan
+--    penurunan di campaign lain. Semua campaign naik -> hasilnya negatif ->
+--    guard membatalkan padahal tidak ada yang salah. Dan lebih berbahaya:
+--    satu campaign yang turun bisa tertutup oleh kenaikan campaign lain dan
+--    guard tetap lolos.
+--
+--    Yang benar: hitung campaign yang turun. Satu pun = batal.
 -- ---------------------------------------------------------------------
 DO $$
-DECLARE turun numeric;
+DECLARE jumlah_turun integer;
+DECLARE contoh text;
 BEGIN
-    SELECT COALESCE(sum(GREATEST(b.total_gmv, 0) - COALESCE(v.total_gmv, 0)), 0)
-    INTO turun
-    FROM _backup_vw_campaign_summary_before_20261002 b
-    JOIN vw_campaign_summary v ON v.campaign_id = b.campaign_id;
+    SELECT count(*),
+           string_agg(x.nama, ' | ')
+    INTO jumlah_turun, contoh
+    FROM (
+        SELECT b.nama
+        FROM _backup_vw_campaign_summary_before_20261002 b
+        JOIN vw_campaign_summary v ON v.campaign_id = b.campaign_id
+        WHERE COALESCE(v.total_gmv, 0) < COALESCE(b.total_gmv, 0)
+    ) x;
 
-    IF turun <> 0 THEN
-        RAISE EXCEPTION 'Batal: ada campaign yang total_gmv-nya turun, total %', turun;
+    IF jumlah_turun > 0 THEN
+        RAISE EXCEPTION 'Batal: % campaign punya total_gmv turun: %',
+              jumlah_turun, left(COALESCE(contoh, ''), 400);
     END IF;
 
     RAISE NOTICE 'Guard 2 OK: tidak ada campaign yang total_gmv turun';
