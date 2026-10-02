@@ -73,6 +73,7 @@ Semua **read-only** — tidak menulis ke DB.
 | `43-daftar-kerja-pic-tanpa-akun.sql` | 92 baris dengan PIC tanpa akun (`submitted_by = NULL`) |
 | `44-verifikasi-bug-harian.sql` | **Uji 6 temuan bug** Harian / Rekap / Timeline Target |
 | `45-apakah-ads-berbeda.sql` | 🔴 **TENTUKAN**: apakah `ads_performance` revenue terpisah dari `sales` |
+| `46-angka-ads-benarlah.sql` | 🔴 **WAJIB sebelum update view**: angka ads via MAX per ad (SUM salah 4x) |
 
 ### Yang paling sering dipakai ulang
 
