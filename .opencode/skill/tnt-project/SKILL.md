@@ -901,7 +901,7 @@ diuji dulu, dan **tidak ada data yang hilang** — itu yang menyelamatkan. Dafta
 |---|---|
 | `legacy_gmv` penyebab selisih GMV | Kolomnya **nol semua** |
 | duplikasi `ads_performance` | Faktor **1,00** |
-| ~~`ads_performance` = revenue sama~~ | SALAH - asumsi saya. User membetulkan 2 Okt 2026. Lihat 3A.7. Kemiripan besaran bukan bukti. |
+| ~~`ads_performance` = revenue sama~~ | ❌ **SALAH** — asumsi saya. **User membetulkan 2 Okt 2026:** Partner Center itu PURE ORGANIK, order dari video yang di-ads tidak masuk ke sana. Ads = Video Shopping Ads, sumber & cara lapor berbeda. Lihat §3A.7. **Kemiripan besaran bukan bukti.** |
 | `live_sessions` punya kolom `gmv` | **Tidak ada** — ada di `live_session_products` |
 | `creator_snapshots.gmv_30d_organic` | **Tidak ada** |
 | 9.060 order salah atribusi | Semua `ambigu`, **nol berbeda** |
@@ -1281,45 +1281,86 @@ target kreator tiap bulan** — bukan cuma tampilan.
   **"GMV 0 / -"** karena `target_gmv = 0` untuk tipe awareness. Secara logika benar,
   tapi membingungkan karena GMV aktual 1,41 T tampil di kartu lain.
 
-### 3A.7 🔴 TERBUKA — apakah `ads_performance` itu revenue yang BERBEDA?
+### 3A.7 ✅ SELESAI — `ads_performance` itu revenue TERPISAH dari `sales`
 
-**Asumsi saya 1 Okt SALAH dan dicabut user:**
+**Asumsi saya 1 Okt SALAH dan dicabut user.** Saya menyimpulkan "ads = revenue yang
+sama dengan sales" dari bukti ini (tertulis di header migration `20261001200000`):
 
-> "gmv organik gmv sales atau gmv yang dari custom report yang order id itu tidak
-> sama dengan gmv ads, tidak sama dengan order yang lewat ads, kalo yang data dari
-> tiktok partner center itu pure organik gada video sama sekali yang di ads"
+> "dengan ambil MAX per ad, total ads = Rp 1.086.274.665, sedangkan sales =
+> Rp 1.110.174.161. **Selisih 2,2 persen, jadi itu revenue yang sama dari dua
+> sumber.**"
 
-Kode mengonfirmasi **dua sumber berbeda**:
+**"Selisih 2,2% ⟹ revenue yang sama" tidak berlaku.** Dua angka segede itu bisa
+saja dua stream yang **sama-sama bagus**. Kemiripan besaran bukan bukti — dan saya
+menuliskannya sebagai fakta terverifikasi.
+
+Koreksi user:
+
+> "data ads dan data gmv organik itu ga pernah nyentu brooo, cara reportnya juga
+> beda, kalo misal selisih 2 persen yaa, berarti emmg ads dan organik dari
+> partner center ya sama sama bagus"
+
+Dan: **ads = Video Shopping Ads**, langsung dari TikTok Ads, tidak lewat
+Partner Center. Partner Center **pure organik**.
+
+Kode mengonfirmasi dua sumber terpisah:
 
 | Tabel | Diisi dari | Lokasi |
 |---|---|---|
 | `sales` | Impor **TikTok Partner Center** | `importActions.ts:99` |
 | `ads_performance` | Impor laporan **Ads Manager** (impression/click/purchase) | `importActions.ts:499` |
 
-Saya sebelumnya menyimpulkan "ads = revenue yang sama dengan sales" hanya dari dua
-angka yang **urutan besarnya mirip** (ads Rp 1,74 M vs sales Rp 920 M). Itu tebakan
-yang saya angkat jadi "terverifikasi" di 3.45 - **salah, dan saya menulisnya sebagai fakta.** Pelajaran: **kemiripan besaran bukan bukti.**
-
-**Kalau memang stream terpisah, `vw_campaign_summary` sedang UNDERESTIMATE:**
+**Bukti dari database** (`docs/sql/46`, 2 Okt 2026) — delta harian ads vs sales:
 
 ```
-sekarang  total_gmv = sales saja   = Rp   920.211.710
-seharusnya sales + ads              = Rp 1.093.419.701   (+ Rp 173.207.991)
+34 | 2026-06-22 | ads   880.818.439 | sales     583.408  → 1500x
+34 | 2026-07-20 | ads   126.066.182 | sales     925.280  →  136x
+33 | 2026-06-22 | ads   148.490.104 | sales   1.353.319  →  110x
 ```
 
-**STATUS: belum ada yang diubah.** Migration `20261001200000` masih hidup, view masih
-`sales` saja. Tidak boleh diubah sebelum:
+Semuanya "beda jauh - stream terpisah". **Nol yang mirip.** Rata-rata nilai per
+item ads Rp 39.243 vs sales Rp 40.297 — order dari tipe sama, sumber berbeda.
 
-1. User memastikan: order dari video yang di-ads **muncul atau tidak** di Partner Center
-2. Query read-only (`docs/sql/45-*.sql`) membuktikan stream-nya terpisah
-3. Migration **baru** (timestamp monotonic) membangun ulang view dengan guard identity
+#### Cara menghitung ads yang benar
 
-**Setelah langkah 1 selesai, §3.45 dan `AGENTS.md` aturan #8 HARUS dikoreksi** — keduanya
-masih menyatakan "jangan jumlahkan ads" sebagai fakta.
+Laporan Ads mengambil **ALL TIME setiap tanggal** → tiap `ad_id` punya baris
+kumulatif. Yang dipakai adalah **baris pada TANGGAL TERAKHIR**:
 
----
+```sql
+SELECT DISTINCT ON (campaign_id, ad_id)
+       campaign_id, ad_id, gross_revenue_usd * kurs, cost_usd * kurs
+FROM ads_performance
+ORDER BY campaign_id, ad_id, tanggal DESC, id DESC
+```
 
-## 8. Referensi dokumen
+**Migration `20261002000000` sudah dijalankan** (2 Okt 2026):
+
+```
+total_gmv   920.211.710  →  4.160.235.142
+  video       865.468.962  |  live   54.742.748
+  ads_gmv   3.240.023.432  |  spend 171.167.128
+Guard 1 OK: video + live + ads = total_gmv
+Guard 2 OK: tidak ada campaign yang total_gmv turun
+```
+
+**Konsisten dengan dua halaman yang memang sudah benar:**
+`PortalDashboardClient.tsx:377` dan `DailyClient.tsx:732` sama-sama
+`gmv_organic + gmv_ads`. View-nya yang menyimpang.
+
+#### ⚠️ Yang MASIH belum dijelaskan
+
+54 dari 316 ad punya nilai **lebih rendah di tanggal terakhir** dari nilai max-nya
+selama periode. Selisih total Rp 8.368.134 (0,26%). Belum diketahui penyebabnya —
+bisa counter TikTok yang di-restate, impor dobel, atau `ad_id` yang dipakai ulang.
+Dampaknya kecil tapi **belum boleh dianggap selesai**. Lihat `docs/sql/47`.
+
+#### Pelajaran
+
+Saya menulis "terverifikasi" pada sesuatu yang sebenarnya **tebakan dari satu
+perbandingan angka**. Kalau asumsi domain disampaikan sebagai fakta, seluruh
+dokumentasi ikut mewarisi kesalahan itu — dan perubahan sudah terlanjur ditulis
+ke migration produksi. **Tanyakan fakta domain ke pemilik sistem sebelum
+menulis asumsi sebagai kesimpulan.**
 
 - `docs/KONTEKS-DATABASE.md` — **peta database terverifikasi produksi** (tabel, view, fungsi, angka asli).
 - `docs/ARCHITECTURE-CURRENT.md` — deskripsi arsitektur akurat (tidak seperti ARCHITECTURE.md lama yang stale).

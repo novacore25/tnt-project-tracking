@@ -58,22 +58,32 @@
    `rows.reduce((s, r) => s + (r.gmv || 0), 0)` — itu merangkai string, bukan menjumlahkan.
    Gejalanya di UI: angka ribuan digit diawali digit `0`.
 
-8. **Total GMV = `SUM(sales.gmv)`** (non-refund, dipecah live/video dari `content_type`).
-   Pemetaan selalu lewat **`product_id`**, bukan `sku_id`.
+8. **Total GMV = `SUM(sales.gmv)` + `ads_performance` (Video Shopping Ads)**, non-refund,
+   dipecah live/video dari `content_type`. Pemetaan selalu lewat **`product_id`**, bukan `sku_id`.
 
-   > 🔴 **ATURAN INI SEDANG DITINJAU (2 Okt 2026).** Saya sebelumnya menulis "jangan
-   > jumlahkan ads" berdasarkan asumsi bahwa `ads_performance` = revenue yang sama
-   > dengan `sales`. **User membetulkan itu:** Partner Center itu pure organik,
-   > dan order dari video yang di-ads tidak masuk ke sana.
-   > Kalau benar, `total_gmv` sekarang **kurang Rp 173 juta**.
-   > **Jangan ubah view apa pun** sebelum §3A.7 di `SKILL.md` selesai diverifikasi.
-   > Halaman **Harian** memang `sales + ads` — itu desain yang sudah dikonfirmasi user.
+   > **BUKTI (2 Okt 2026, migration `20261002000000` sudah jalan):**
+   > - `sales` ← impor **TikTok Partner Center**, **pure organik**
+   > - `ads_performance` ← impor **TikTok Ads Manager** (Video Shopping Ads)
+   > - **Order dari video yang di-ads TIDAK masuk Partner Center.** Dua stream terpisah,
+   >   jadi ads **harus dijumlahkan** ke total.
+   > - Bukti: delta harian ads vs sales beda 100–1500x, nol yang mirip (`docs/sql/46`)
+   > - Cara hitung ads: **baris `tanggal TERAKHIR` per `ad_id`** (laporan Ads all-time),
+   >   bukan `SUM`, bukan `MAX`
+   > - `total_gmv` sekarang = **Rp 4.160.235.142** (sebelumnya Rp 920.211.710)
+   >
+   > Halaman **Harian** dan **Portal Klien** juga `organik + ads` — konsisten.
+   > Lihat `SKILL.md` §3A.7. **Kemiripan besaran bukan bukti** — jangan menyimpulkan
+   > "datanya sama" cuma karena angkanya mirip.
 
 9. **Sebelum menulis migration yang `UPDATE`/`DELETE` baris, jalankan preflight constraint.**
    `schema.ts` dan `web-app/supabase/migrations/` sama-sama TIDAK bisa dipercaya untuk
    constraint. Baca dari katalog PostgreSQL. Lihat `docs/sql/40-preflight-constraint.sql`.
    Untuk dedupe/merge: **pikir per GRUP bukan per baris**, dan buat peta satu-baris-per-parent
    supaya join tidak menggandakan baris.
+
+   > ⚠️ **Guard jangan pakai `sum(before - after)`.** Itu meniadakan kenaikan dengan
+   > penurunan — guard bisa **lolos** padahal ada campaign yang turun. Hitung **jumlah**
+   > baris yang turun; satu pun = batal. (Pernah terjadi di `20261002000000`.)
 
 10. **TypeScript sudah 89 error** dan `ignoreBuildErrors: true`. Jangan tambah error baru di
     area yang kamu sentuh. Kalau turun di bawah 20, aktifkan `ignoreBuildErrors: false`.
