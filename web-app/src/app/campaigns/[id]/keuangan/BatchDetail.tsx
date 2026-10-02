@@ -375,7 +375,18 @@ export function BatchDetail({ batch, creatorHistory, onBack, onRefresh, onRefres
     }
   });
 
-  const getGroupTitle = (key: string, count: number) => {
+  // Item pembayaran tidak selalu punya kreator. `campaign_creator_id` NULL
+  // dipakai untuk pembayaran operasional (ads / crm / lion / sampel), dan
+  // itu kondisi yang SAH - bukan data rusak.
+  //
+  // Sebelumnya judul selalu "<status> (N Kreator)" dengan N = jumlah ITEM.
+  // Jadi batch yang isinya 1 pembayaran operasional tampil sebagai
+  // "Menunggu Manager (1 Kreator)" padahal TIDAK ADA kreator-nya. Salah
+  // label, dan bikin orang salah baca isi batch.
+  //
+  // Di sini N dihitung terpisah: kreator dihitung dari yang punya
+  // campaign_creator_id, operasional dari yang tidak punya.
+  const getGroupTitle = (key: string, items: any[]) => {
     const titles: Record<string, string> = {
       pending_manager: 'Menunggu Manager',
       pending_executive_1: 'Menunggu Executive 1',
@@ -386,7 +397,14 @@ export function BatchDetail({ batch, creatorHistory, onBack, onRefresh, onRefres
       rejected: 'Ditolak / Dibatalkan',
       pending_finance_outstanding: 'Ditunda Finance (Outstanding)'
     };
-    return `${titles[key] || key} (${count} Kreator)`;
+    const title = titles[key] || key;
+    const nKreator = items.filter((i: any) => i.campaign_creator_id != null).length;
+    const nOperasional = items.length - nKreator;
+
+    const bagian: string[] = [];
+    if (nKreator > 0) bagian.push(`${nKreator} Kreator`);
+    if (nOperasional > 0) bagian.push(`${nOperasional} Operasional`);
+    return bagian.length ? `${title} (${bagian.join(', ')})` : title;
   };
 
   return (
@@ -536,7 +554,7 @@ export function BatchDetail({ batch, creatorHistory, onBack, onRefresh, onRefres
               <div key={groupKey} className="overflow-hidden border border-slate-200 rounded-lg shadow-sm">
                 <div className="bg-slate-50 px-5 py-3 border-b border-slate-200 flex items-center justify-between">
                   <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2">
-                    {getGroupTitle(groupKey, items.length)}
+                    {getGroupTitle(groupKey, items)}
                   </h3>
                   <span className={`text-[10px] font-bold px-2 py-1 rounded uppercase tracking-wider ${badgeColor}`}>
                     {groupKey.replace(/_/g, ' ')}
@@ -580,7 +598,9 @@ export function BatchDetail({ batch, creatorHistory, onBack, onRefresh, onRefres
                       {isExpanded ? <ChevronDown className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
                     </td>
                     <td className="px-4 py-3 font-medium">
-                      @{item.campaign_creators?.creators?.username}
+                      {item.campaign_creators?.creators?.username
+                        ? `@${item.campaign_creators.creators.username}`
+                        : <span className="text-slate-500 font-normal italic">Tanpa kreator (operasional)</span>}
                       {(() => {
                         if (!item.campaign_creator_id || item.payment_type === 'ads') return null;
                         const pastHistory = creatorHistory[item.campaign_creator_id] || [];
