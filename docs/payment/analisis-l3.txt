@@ -1,0 +1,53 @@
+=== TANGGAL DI LUAR RENTANG 2026 (aneh) ===
+  2025-04-17  [April 2026]  asal=[17/04/2025] dari=tanggal_pembayaran
+  2025-04-17  [April 2026]  asal=[17/04/2025] dari=tanggal_pembayaran
+  2025-04-17  [April 2026]  asal=[17/04/2025] dari=tanggal_pembayaran
+  2025-04-17  [April 2026]  asal=[17/04/2025] dari=tanggal_pembayaran
+
+=== USERNAME KOSONG (3) ===
+  Agustus 2026:r32 tgl=2026-08-12 camp=[TOP UP LION] status=[LION] Rp5000000 nama=[] rek=[22188593043711741493752] pic=[Fira] note=[]
+  Agustus 2026:r33 tgl=2026-08-12 camp=[TOP UP QONTAK] status=[CRM] Rp4440000 nama=[] rek=[3816513341908421] pic=[April] note=[]
+  Juli 2026:r49 tgl=2026-07-21 camp=[TOP UP LION] status=[LION] Rp2000000 nama=[] rek=[22188593043711741493752] pic=[Fira] note=[]
+
+=== NAMA PENERIMA KOSONG (6) ===
+  Agustus 2026:r32 tgl=2026-08-12 camp=[TOP UP LION] status=[LION] Rp5000000 user=[] rek=[22188593043711741493752]
+  Agustus 2026:r33 tgl=2026-08-12 camp=[TOP UP QONTAK] status=[CRM] Rp4440000 user=[] rek=[3816513341908421]
+  Juli 2026:r49 tgl=2026-07-21 camp=[TOP UP LION] status=[LION] Rp2000000 user=[] rek=[22188593043711741493752]
+  Juli 2026:r50 tgl=2026-07-21 camp=[TOP UP QONTAK] status=[CRM] Rp2220000 user=[top up qontak] rek=[3816513341175112]
+  Juli 2026:r72 tgl=2026-07-28 camp=[TOP UP QONTAK] status=[] Rp5550000 user=[top up qontak] rek=[3816513341092926]
+  Juli 2026:r101 tgl=2026-07-31 camp=[TOP UP LION] status=[LION] Rp2000000 user=[top up lion] rek=[22188593043711741493752]
+
+=== STATUS (KOSONG) 7 BARIS + 'KEKURANGAN DIKIT' ===
+  [] Agustus 2026:r116 tgl=2026-08-31 camp=[KIMME] Rp50000 user=[aniirohaeti02] status_awal=[31/08/2026] ratecard_awal=[50000]
+  [] Agustus 2026:r117 tgl=2026-08-31 camp=[KIMME] Rp500000 user=[tokokhaira13] status_awal=[31/08/2026] ratecard_awal=[500000]
+  [] Agustus 2026:r118 tgl=2026-08-31 camp=[KIMME] Rp50000 user=[kaaaaast] status_awal=[31/08/2026] ratecard_awal=[50000]
+  [] Juli 2026:r72 tgl=2026-07-28 camp=[TOP UP QONTAK] Rp5550000 user=[top up qontak] status_awal=[28/07/2026] ratecard_awal=[0]
+  [] Juli 2026:r91 tgl=2026-07-31 camp=[Sampel Kime] Rp10000000 user=[sample kime] status_awal=[31/07/2026] ratecard_awal=[0]
+  [] Juni 2026:r125 tgl=2026-06-12 camp=[PWS] Rp100000 user=[hai_akumanik] status_awal=[12/06/2026] ratecard_awal=[0]
+  [] Juni 2026:r126 tgl=2026-06-12 camp=[PWS] Rp50000 user=[rahma_shaqile1] status_awal=[12/06/2026] ratecard_awal=[0]
+  [kekurangan dikit] Juni 2026:r196 tgl=2026-06-26 camp=[MSGLOWBEAUTY] Rp50000 user=[zihanokta] status_awal=[26/06/2026] ratecard_awal=[0]
+
+=== OPERASIONAL: username = 'top up ads' / 'top up ads vsa' / kosong ===
+   | status=CRM                        1 baris  Rp      4440000
+      campaign: TOP UP QONTAK(1)
+   | status=LION                       2 baris  Rp      7000000
+      campaign: TOP UP LION(2)
+  top up ads | status=ADS             41 baris  Rp    138415000
+      campaign: SALSA COSMETICS(8) QAHIRA(7) SALSA Baby Care(5) OMG Skincare(5) OMG Makeup(5) SYB(4) WARDAH(3) ISWHITE(2) NAISDAY(2)
+  top up ads vsa | status=ADS         10 baris  Rp     42360000
+      campaign: QAHIRA(3) OMG Skincare(3) SALSA Baby Care(2) OMG Makeup(1) SALSA COSMETICS(1)
+  top up lion | status=LION            1 baris  Rp      2000000
+      campaign: TOP UP LION(1)
+  top up qontak | status=              1 baris  Rp      5550000
+      campaign: TOP UP QONTAK(1)
+  top up qontak | status=CRM           1 baris  Rp      2220000
+      campaign: TOP UP QONTAK(1)
+
+=== RATE CARD AWAL TERISI ===
+  baris: 78
+     100% AKHIR       74 baris
+     100% AWAL         1 baris
+                       3 baris
+
+=== 50% AWAL + 50% AKHIR PADA USERNAME YANG SAMA ===
+  username dengan pasangan 50% AWAL & 50% AKHIR: 17 dari 44

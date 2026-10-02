@@ -1701,6 +1701,140 @@ Naik total_gmv view          : Rp 233.334.998  ✓ SAMA DENGAN YANG HARUSNYA
 > template lebih awal. Sama seperti pelajaran "SELECT tanpa FROM" (§KEPUTUSAN-PORTAL):
 > **yang berhasil hanya cek otomatis, bukan niat.**
 
+## 3C. IMPORT PAYMENT HISTORIS (2 Okt 2026) - SPREADSHEET MEMBOHONG DI 6 TEMPAT
+
+`C:\Users\Banzilla\Downloads\Form Payment Campaign TNT.xlsx`, 8 sheet, 4 layout kolom.
+Cakupan: **826 baris `Paid Off` dengan tanggal < 2026-09-14, Rp 507.736.562.**
+
+Yang sudah dibuktikan (bukan dugaan) ada di `docs/payment/analisis-l2.txt` dan `l3.txt`.
+
+### 3C.1 Kunci dedup HARUS ikut `campaign` - ini差点 menghapus Rp 42.600.000
+
+Rencana lama: duplikat kalau `username + nominal + tanggal` sama persis.
+Applied ke 826 baris, itu kena **26 grup / 31 baris**. **NOL satu pun duplikat sejati.**
+
+| Yang "kena" | Bukti bahwa beda pembayaran |
+|---|---|
+| `intnwulnn_` Rp300.000 02/06 | MSGLOWBEAUTY `50% AWAL` + NAISDAY `100% AKHIR` - status beda |
+| `tesazakia` Rp300.000 05/06 | DIOLY `100% AWAL` + NAISDAY `100% AKHIR` - status beda |
+| `zihanokta` Rp350.000 19/05 | **4 campaign** (OMG Makeup/ISWHITE/SYB/NAISDAY) |
+| `top up ads` Rp5.000.000 09/06 | OMG Makeup + QAHIRA - top up ads memang per campaign |
+
+Kunci benar: `username + campaign_sheet + status_klaim + nominal + tanggal` → **0 grup**.
+Konfirmasi owner 2 Okt 2026: *"staff selalu memasukan dengan benar, finance ga pernah
+membayar dobel."* Jadi **jangan dedup baris payment sama sekali.**
+
+### 3C.2 `Ratecard` = nominal. BukanBiaya, bukan rate per unit
+
+Kolom `Ratecard` berisi `Rp100.000` / `Rp450.000` - itu **nominal yang dibayar**.
+`Ratecard Awal` terpisah (78 baris terisi, biasanya di baris `100% AKHIR`).
+Nominal kecil Rp 50.000-850.000 → ini biaya operasional harian (transport/meet),
+bukan fee kreator. Average ~Rp 614.000 x 826 baris = Rp 507 juta, konsisten.
+
+### 3C.3 Kolom `Status` BERISI NGGAWUR - 7 nilai, bukan cuma `100% AWAL/AKHIR`
+
+```
+100% AKHIR 603 | 50% AKHIR 106 | ADS 51 | 50% AWAL 35 | 100% AWAL 18
+(kosong) 7 | LION 3 | CRM 2 | "kekurangan dikit" 1
+```
+
+- **`ADS` / `LION` / `CRM` = baris OPERASIONAL**, bukan pembayaran kreator.
+  `username`-nya literal `top up ads`, `top up lion`, `top up qontak`.
+  Jangan dipaksa jadi `campaign_creator_id`.
+- `"kekurangan dikit"` = **catatan**, bukan jenis pembayaran.
+- 7 baris kosong. Semuanya butuh `payment_type` diputuskan manual.
+- 18 baris `100% AWAL` butuh `payment_type = '100_awal'` yang **BELUM ada** di CHECK
+  `payment_items_payment_type_check` (lihat 3C.6).
+
+### 3C.4 ⚠️ SEL DI EXCEL BOLEH PUNYA NEWLINE - SQL langsung rusak
+
+**6 dari 826 baris punya `\n` di dalam sel.** Contoh: `April 2026` r97 isinya
+`aleena_balqis\n`. Kalau diteruskan mentah ke SQL, **satu baris jadi dua** dan
+seluruh migration gagal tanpa nilai error yang berguna.
+
+**Sel Worse: `Juli 2026` r61 = 4 username dalam 1 sel:**
+
+```
+hi.syah vv.vianaaa
+eloraariyani
+zaraaa.nh
+beautyaul_
+```
+
+1 pembayaran Rp 2.000.000 ke 1 penerima (`M FARHAN MAULANA`, rek 8881127032) untuk
+**4 akun**. Ini **SATU** `payment_items`, bukan 4. Memecahnya = mengarang nominal
+per akun yang tidak pernah ada di spreadsheet. Ada kolom `username_multi boolean`
+bertamaXNama untuk menandainya.
+
+**Sel non-ASCII/single-quote** juga harus di-escape (`'` → `''`), dan newline
+harus ditulis `\n`/`\r`/`\t` sebagai teks dua huruf supaya jejak audit tetap ada.
+
+### 3C.5 Satu username bisa punya campaign berbeda di sheet yang sama
+
+`ndaahq` Rp250.000 tanggal 02/06 → `ISWHITE` **dan** `SYB`, dua baris terpisah.
+Itu **dua pembayaran sah**.熟了们不要 دمج based on username saja.
+
+### 3C.6 `payment_type` CHECK - yang dipakai sistem vs yang butuh
+
+Nilai yang di CHECK: `100_akhir, 50_awal, 50_akhir, ads, crm, lion,
+reward_affiliate, boost_views, boost_comment`.
+
+**Tidak ada `100_awal`.** 18 baris / Rp 22.950.000 butuh nilai itu → migration
+Fase 2 wajib menambahkannya DULUAN sebelum INSERT.
+
+### 3C.7 Precedent baris operasional (dibuktikan owner 2 Okt 2026)
+
+Owner tes add pengajuan operasional di campaign 55 `Banzilla Test Bug`:
+
+```
+payment_batches : campaign_id = 55, status = pending_manager   <- campaign WAJIB ada
+payment_items   : payment_type = 'ads', campaign_creator_id = NULL
+```
+
+Jadi polanya jelas: item operasional **boleh tanpa kreator**, tapi **batch tetap
+butuh campaign nyata**. 51 baris `top up ads` punya kolom Campaign yang bisa
+dipakai (`OMG Makeup`, `SALSA COSMETICS`, ...). 6 baris `TOP UP LION` /
+`TOP UP QONTAK` tidak punya campaign → DEFER.
+
+> ⚠️ **Bug UI ketahuan dari tes ini:** item tanpa kreator tetap tampil dengan
+> judul **"Menunggu Manager (1 Kreator)"** dan baris kolom `Kreator` berisi
+> `@ Hibban` padahal `campaign_creator_id IS NULL`. Salah label, bukan salah data.
+
+### 3C.8 `*.csv` sudah di-ignore git - dipakai untuk menyimpan PII
+
+`.gitignore` memuat `*.csv` dan `*.xlsx`. Staging payment therefore **tidak boleh
+pakai `\copy` dari file CSV di repo**. Yang dipakai: SQL `INSERT ... VALUES`
+dengan PII dikecualikan (`nama_penerima`, `nomor_rekening`, `nik`, `alamat`
+tidak ikut di fase staging), lalu disisihkan terpisah di SQL INSERT fase 2.
+
+### 3C.9 Nama PIC di spreadsheet ≠ nama profil (tapi ini BUKAN fuzzy match)
+
+PIC di sheet: Wahyu, Maria, **April**, Tiara, **Rija**, Fira, Daffa, Natallia,
+Marini, Riska, David.
+
+Konfirmasi owner 2 Okt 2026 - **dua pemetaan ini bukan tebakan saya**:
+
+| PIC di sheet | Profil | Bukti |
+|---|---|---|
+| `April` | `Aprilia` | *"April tuh nama aslinya Aprilia bro"* |
+| `Rija` | `Irsadur Rija` | *"Cocokkan ke Irsadur Rija"* |
+
+Sisanya **tetap NULL** (`Daffa`, `Natallia`, `Marini`, `Riska`, `David`) sesuai
+aturan #17/#18. Hasil: 729 baris / Rp 356.181.562 punya `submitted_by`,
+97 baris / Rp 151.555.000 NULL.
+
+### 3C.10 Staging-first: jangan INSERT langsung ke `payment_items`
+
+Tabel `payment_import_staging` (+ `payment_import_map_pic`,
+`payment_import_map_campaign`) dibuat oleh migration
+`20261004000000_payment_import_staging.sql`. Alasan: **match rate
+`(username + campaign) -> campaign_creators` belum pernah diukur.** Hanya 44%
+kreator yang punya baris `campaign_creators` (§3.50). Kalau langsung INSERT,
+kita baru tahu hasilnya SETELAH data masuk.
+
+`views`: `v_payment_campaign_candidates` (kandidat, **bukan auto-map**) dan
+`v_payment_campaign_unmapped` ( destined DEFER).
+
 ## 9. Cara memperbarui skill ini
 
 Setelah sesi yang modify kode, jika ada temuan baru (jebakan, keputusan arsitektur, nama

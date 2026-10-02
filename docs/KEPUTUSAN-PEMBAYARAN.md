@@ -104,6 +104,33 @@ Semua bertanggal 1 Okt 2026. **Jangan diubah tanpa tanya.**
 | 14 | **`Tiara` & `Fira` (akun `inactive`) tetap dipakai apa adanya** | "tiara gapapa masukin aja, walaupun inactive yang penting ada namanya" |
 | 15 | **`Jerry` = `Jeremy`** | "jerry itu sama dengan Jeremy" |
 
+### Keputusan 2 Oktober 2026 (hasil parsing penuh + verifikasi ke DB)
+
+Semua bertanggal **2 Okt 2026**. **Jangan diubah tanpa tanya.**
+
+| # | Keputusan | Sumber / bukti |
+|---|---|---|
+| **16** | **TIDAK ADA dedup sama sekali. 826 baris semua masuk.** Kunci duplikat yang benar adalah `username + campaign + status + nominal + tanggal` → **0 grup duplikat**. Aturan lama (`username+nominal+tanggal`) akan menghapus **31 pembayaran nyata = Rp 42.600.000** | *"username + nominal + tanggal + campaign kalo beda berarti itu ya beda pembayaran, tapi emang ada yang kayak gitu... staff saya selalu memasukan dengan benar kok ga pernah masukin dobel, dan finance juga ga pernah membayar dobel"* |
+| **17** | **`PIC April` = profil `Aprilia`** | *"Iya April tuh nama aslinya Aprilia bro"* |
+| **18** | **`PIC Rija` = profil `Irsadur Rija`** (67 baris / Rp 44.200.000) | *"Cocokkan ke Irsadur Rija"* — konfirmasi eksplisit owner, **bukan** fuzzy match |
+| **19** | **`17/04/2025` di sheet April 2026 = salah ketik** → `2026-04-17`, teks aslinya tetap ditulis di `tanggal_asal`/`catatan` | *"oh itu typo broo harusnya 2026 benerin aja, aman kok bro"* |
+
+> ⚠️ **#16 membatalkan rencana lama** di §6 "Deteksi duplikat" dan nomor **#3 di §4A.2**
+> masih menyebut `April` → `NULL`. **Koreksi:** `April` → `Aprilia` (keputusan #17).
+> Section §6 dan §7 di dokumen ini sudah usang — angka-angkanya dihitung dengan
+> aturan dedup yang terbukti salah.
+
+### Konsekuensi keputusan #16 terhadap daftar DEFER (§7)
+
+Jumlah DEFER **tidak berubah** — daftar di §7 sudah benar. Yang berubah adalah
+**nominal total dan pengelompokan kategori**:
+
+```
+SEBELUM (aturan dedup salah, 795 baris)   : Rp 465.136.562
+SESUDAH (826 baris, tanpa dedup)         : Rp 507.736.562
+Selisih                                   : Rp  42.600.000  <- 31 pembayaran nyata
+```
+
 ### Kombinasi #11 + #12
 
 Karena `campaign` ada di dalam label, dua campaign berbeda **wajib** punya batch berbeda.
@@ -624,23 +651,62 @@ dan PIC semuanya sudah terkunci (§3). Yang tersisa:
 
 ---
 
-## 9. Campaign yang sudah terpetakan
+## 9. Campaign: status pemetaan (per 2 Okt 2026, setelah parse penuh)
 
-21 campaign punya padanan `campaign_id` yang sudah diverifikasi.
+**Peta ini BELUM final.** Tabel `payment_import_map_campaign` sengaja dibiarkan
+kosong sampai owner mengonfirmasi. Sumber kandidat:
+`docs/sql/66-petakan-campaign.sql` dan view `v_payment_campaign_candidates`.
 
-| Nama di spreadsheet | `campaign_id` | Nama di DB |
-|---|---|---|
-| KIMME | 44 | KIME |
-| PWS | 38 | PWS |
-| DIOLY | 40 | DIOLY |
-| SYB | 46 | SYB |
-| GLOWIES | 51 | GLOWIES |
-| MS Glow For Men | 42 | MSGLOWFORMEN |
-| SKINMOLOGY | 43 | SKINMOLOGY |
-| WARDAH | 37 | WARDAH |
-| VOTRE PEAU | 53 | VOTRE PEU (typo di spreadsheet) |
-| GHANISKIN | 57 | GHANISKIN |
-| MILKYBOOST | 52 | MILKYBOOST |
+### Sudah pasti (nama di sheet cocok persis / selisih ketik jelas)
 
-**Total 822 baris / Rp 383.776.562** dianggap siap — **tapi angka ini belum
-divalidasi terhadap `campaign_creators`.** Lihat §4.
+| Nama di spreadsheet | `campaign_id` | Nama di DB | Baris |
+|---|---|---|---:|
+| PWS | 38 | PWS | 61 |
+| DIOLY | 40 | DIOLY | 54 |
+| SKINMOLOGY | 43 | SKINMOLOGY | 12 |
+| WARDAH | 37 | WARDAH | 11 |
+| GLOWIES | 51 | GLOWIES | 19 |
+| ISWHITE | 47 | ISWHITE | 23 |
+| SYB | 46 | SYB | 19 |
+| QAHIRA | 45 | QAHIRA | 36 |
+| OMG Makeup | 33 | OMG Makeup | 45 |
+| OMG Skincare | 34 | OMG Skincare | 31 |
+| NAISDAY | 39 | NAISDAY | 34 |
+| Nutriflakes | 49 | NUTRIFLAKES | 28 |
+| MILKYBOOST | 52 | MILKYBOOST | 1 |
+
+### Selisih ketik / kapitalisasi — kandidat kuat, **tapi belum dikonfirmasi owner**
+
+| Nama di spreadsheet | Kandidat | Nama di DB | Baris | Catatan |
+|---|---|---|---:|---|
+| KIMME | 44 | KIME | **325** | `KIMME` bukan `KIME`; baris terbanyak, harus pasti benar sebelum dipakai |
+| MSGLOWBEAUTY | 41 | MS Glow Beauty | 32 | |
+| MSGLOWFORMEN | 42 | MS Glow For Men | 14 | |
+| SALSA COSMETICS | 35 | SALSA Cosmetic | 37 | jamak vs tunggal |
+| **Votre Peu** | 53 | **VOTRE PEAU** | 2 | ⚠️ **koreksi §9 lama:** yang terbalik. `docs/sql/42` + `payment_batches` **membuktikan nama DB campaign 53 adalah `VOTRE PEAU`**, dan sheet menulis `Votre Peu`. Bukan sebaliknya. |
+
+### ⚠️ Belum ada padanan / belum diputuskan — destined DEFER
+
+| Nama di spreadsheet | Baris | Nominal | Status |
+|---|---:|---:|---|
+| `METOO` | 4 | Rp 89.500.000 | Tidak ada di `campaigns` yang Known. Receiver asli: `jesselinjess`, `sindi9rande`, `yusmankusumaa`, `lauratheux` (nama bank `PT Potluck Studio Indonesia`). Perlu cek `SELECT nama FROM campaigns WHERE ...` |
+| `TOP UP QONTAK` | 3 | Rp 12.210.000 | Campaign tidak dicatat di sheet (keputusan #6 belum final) |
+| `TOP UP LION` | 3 | Rp 9.000.000 | Sama. Kandidat: 58 `LION PARCEL`? **Belum dikonfirmasi** |
+| `Sampel Kime` | 1 | Rp 10.000.000 | Keputusan #5 → kandidat 44 KIME, **menunggu konfirmasi finance** |
+| `SALSA Baby Care` | 24 | Rp 22.450.000 | ⚠️ Kandidat 36 `SALSA Mom & Baby` — **TIDAK terbukti**. Dua brand "SALSA", jangan diasumsikan |
+| `MCN`, `MCN Zoicy`, `MCN CLOGENT`, `Referal MCN` | 6 | Rp 7.700.000 | MCN/agen, tidak punya campaign sendiri |
+| `BOA` | 1 | Rp 50.000 | `note` = "dibayar dari brand" → bukan expenses TNT |
+
+**Rekap 826 baris / Rp 507.736.562:**
+
+```
+kreator         769 baris   Rp 301.301.562
+ads              51 baris   Rp 180.775.000   <- kolom Status = 'ADS'
+lion              3 baris   Rp   9.000.000   <- kolom Status = 'LION'
+crm               2 baris   Rp   6.660.000   <- kolom Status = 'CRM'
+operasional_lain  1 baris   Rp  10.000.000   <- Sampel Kime
+```
+
+**Status "siap" versi lama (822 baris / Rp 383.776.562) sudah usang** — dihitung
+dengan aturan dedup yang terbukti menghapus Rp 42.600.000 pembayaran sah.
+Jangan dipakai sebagai angka acuan. Lihat keputusan #16.

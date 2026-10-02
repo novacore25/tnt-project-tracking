@@ -1,0 +1,98 @@
+=== DUP LENGKAP (username+campaign+status+nominal+tanggal) ===
+  grup : 0
+
+=== DAMAKAN ATURAN LAMA (username+nominal+tanggal) ===
+  baris yang akan DIHAPUS : 31
+  nominal hilang           : Rp 42600000
+
+=== KLASIFIKASI (username = label operasional) ===
+  top up ads               41 baris  Rp     138415000   status: ADS
+  nris9                    11 baris  Rp       2300000   status: 100% AKHIR,50% AWAL
+  top up ads vsa           10 baris  Rp      42360000   status: ADS
+  zihanokta                10 baris  Rp       3500000   status: 50% AKHIR,50% AWAL,kekurangan dikit
+  thnlykai                  9 baris  Rp       1350000   status: 100% AKHIR,50% AKHIR
+  moodtiaraaaaa             9 baris  Rp       2800000   status: 100% AKHIR,50% AKHIR,50% AWAL
+  fitrianahisnainy          8 baris  Rp       1750000   status: 100% AKHIR
+  ozbahrilky                8 baris  Rp       1000000   status: 50% AKHIR,50% AWAL
+  thya_pookie               8 baris  Rp       1550000   status: 100% AKHIR
+  ekbardiary                7 baris  Rp       2902500   status: 100% AKHIR
+  itscendi                  7 baris  Rp       1300000   status: 100% AKHIR
+  ginafathonah_             6 baris  Rp        750000   status: 50% AKHIR,50% AWAL
+  gadisaries97              6 baris  Rp       1800000   status: 100% AKHIR
+  ferenaceta                6 baris  Rp        900000   status: 100% AKHIR
+  tarigumala3               6 baris  Rp       1000000   status: 50% AKHIR,50% AWAL
+  umashanum                 6 baris  Rp        550000   status: 100% AKHIR,50% AKHIR,50% AWAL
+  sabinaaccura              6 baris  Rp       1700000   status: 100% AKHIR
+  gabolegalakya             6 baris  Rp        750000   status: 100% AKHIR
+  hayakuelaaaa              5 baris  Rp       1000000   status: 100% AKHIR,50% AKHIR
+  berkah.glosir             5 baris  Rp       1000000   status: 100% AKHIR,50% AKHIR
+  imaawhn                   5 baris  Rp       1000000   status: 100% AKHIR,50% AKHIR
+  tesazakia                 5 baris  Rp       1250000   status: 100% AKHIR,100% AWAL
+  indahcavalera             5 baris  Rp        750000   status: 50% AKHIR,50% AWAL
+  rindi.afrilia             5 baris  Rp       1000000   status: 100% AKHIR,50% AKHIR
+  racun_spalspil12          5 baris  Rp       1000000   status: 100% AKHIR,50% AKHIR
+  ndaahq                    5 baris  Rp       1650000   status: 100% AKHIR,50% AKHIR
+  nolisnurjanah21           5 baris  Rp       1000000   status: 100% AKHIR,50% AKHIR
+  outfitce_                 5 baris  Rp       1000000   status: 100% AKHIR,50% AKHIR
+  tiarasabirin6             5 baris  Rp       1850000   status: 100% AKHIR,100% AWAL,50% AKHIR,50% AWAL
+  latriftby2                5 baris  Rp       1000000   status: 100% AKHIR,50% AKHIR
+  lehabottoh                4 baris  Rp       1550000   status: 100% AKHIR
+  aputtii                   4 baris  Rp       1000000   status: 50% AKHIR,50% AWAL
+  auroraaa.jm               4 baris  Rp        600000   status: 50% AKHIR,50% AWAL
+  jossone_                  4 baris  Rp        500000   status: 100% AKHIR,50% AKHIR
+  mei_arifin180899          4 baris  Rp      13900000   status: 100% AKHIR,100% AWAL
+  rezkyhamdayani277         4 baris  Rp        600000   status: 100% AKHIR,50% AKHIR
+  shavirapuspitacitra       4 baris  Rp       1000000   status: 100% AKHIR,100% AWAL
+  muhannah.fitria           4 baris  Rp        900000   status: 100% AKHIR
+  intnwulnn_                4 baris  Rp       1300000   status: 100% AKHIR,50% AWAL
+  nurnnyas                  4 baris  Rp        700000   status: 100% AKHIR,100% AWAL
+
+=== STATUS KLAIM ===
+  100% AKHIR          603 baris  Rp     243851562
+  50% AKHIR           106 baris  Rp      20025000
+  ADS                  51 baris  Rp     180775000
+  50% AWAL             35 baris  Rp       8125000
+  100% AWAL            18 baris  Rp      22950000
+  (kosong)              7 baris  Rp      16300000
+  LION                  3 baris  Rp       9000000
+  CRM                   2 baris  Rp       6660000
+  kekurangan dikit      1 baris  Rp         50000
+
+=== PIC ===
+  Wahyu               354 baris  Rp      62180000
+  Maria               145 baris  Rp      51960400
+  April                84 baris  Rp     105932000
+  Tiara                77 baris  Rp      84909162
+  Rija                 67 baris  Rp      44200000
+  Daffa                31 baris  Rp       4835000
+  Natallia             30 baris  Rp     106300000
+  Marini               22 baris  Rp      17200000
+  Riska                 6 baris  Rp       7700000
+  (kosong)              5 baris  Rp       1300000
+  David                 3 baris  Rp      14220000
+  Fira                  2 baris  Rp       7000000
+
+=== NOMINAL 0 / KOSONG ===
+  0 baris, Rp 
+
+=== KOLOM KOSONG (berapa baris) ===
+  nomor_rekening   kosong:    0 / 826
+  nama_penerima    kosong:    6 / 826
+  nik              kosong:  350 / 826
+  alamat           kosong:   77 / 826
+  link_ktp         kosong:  116 / 826
+  link_kontrak     kosong:  433 / 826
+  bukti_tf         kosong:  374 / 826
+  metode_bayar     kosong:    0 / 826
+  tgl_actual       kosong:  714 / 826
+  note             kosong:  803 / 826
+  pic              kosong:    5 / 826
+  username         kosong:    3 / 826
+
+=== TANGGAL DARI SUMBER MANA ===
+  tanggal_pengajuan      11 baris
+  tanggal_pembayaran    815 baris
+
+=== RENTANG TANGGAL ===
+  min : 2025-04-17
+  max : 2026-09-11
