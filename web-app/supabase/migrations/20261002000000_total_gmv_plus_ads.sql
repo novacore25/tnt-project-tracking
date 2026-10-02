@@ -60,14 +60,18 @@ SELECT
 \echo '-- baris yang nilainya turun (report-all-time TikTok biasanya reset'
 \echo '-- atau refresh). Periksa 20 ini sebelum trusting angka.'
 WITH max_per_ad AS (
-    SELECT campaign_id, ad_id, tanggal,
+    SELECT campaign_id,
+           ad_id,
            MAX(gross_revenue_usd * kurs) AS gmv_max,
            MAX(cost_usd * kurs)          AS cost_max
-    FROM ads_performance GROUP BY campaign_id, ad_id
+    FROM ads_performance
+    GROUP BY campaign_id, ad_id
 ),
 last_per_ad AS (
     SELECT DISTINCT ON (campaign_id, ad_id)
-           campaign_id, ad_id, tanggal,
+           campaign_id,
+           ad_id,
+           tanggal,
            gross_revenue_usd * kurs AS gmv_terakhir,
            cost_usd * kurs          AS cost_terakhir
     FROM ads_performance
@@ -76,12 +80,11 @@ last_per_ad AS (
 SELECT
   l.campaign_id,
   l.ad_id,
-  l.tanggal                                        AS tanggal_terakhir,
-  m.tanggal                                        AS tanggal_max,
-  round(m.gmv_max)                                 AS gmv_max,
-  round(l.gmv_terakhir)                            AS gmv_tanggal_terakhir,
-  round(m.gmv_max - l.gmv_terakhir)                AS gmv_beda,
-  round(m.cost_max - l.cost_terakhir)              AS spend_beda
+  l.tanggal                             AS tanggal_terakhir,
+  round(m.gmv_max)                      AS gmv_max,
+  round(l.gmv_terakhir)                 AS gmv_tanggal_terakhir,
+  round(m.gmv_max - l.gmv_terakhir)     AS gmv_beda,
+  round(m.cost_max - l.cost_terakhir)   AS spend_beda
 FROM last_per_ad l
 JOIN max_per_ad m ON m.ad_id = l.ad_id AND m.campaign_id = l.campaign_id
 WHERE m.gmv_max <> l.gmv_terakhir
