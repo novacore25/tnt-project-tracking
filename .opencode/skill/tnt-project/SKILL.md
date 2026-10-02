@@ -1347,12 +1347,40 @@ Guard 2 OK: tidak ada campaign yang total_gmv turun
 `PortalDashboardClient.tsx:377` dan `DailyClient.tsx:732` sama-sama
 `gmv_organic + gmv_ads`. View-nya yang menyimpang.
 
-#### ⚠️ Yang MASIH belum dijelaskan
+#### ✅ Ter mysteries: 54 ad itu kurs, BUKAN data hilang (2 Okt 2026)
 
-54 dari 316 ad punya nilai **lebih rendah di tanggal terakhir** dari nilai max-nya
-selama periode. Selisih total Rp 8.368.134 (0,26%). Belum diketahui penyebabnya —
-bisa counter TikTok yang di-restate, impor dobel, atau `ad_id` yang dipakai ulang.
-Dampaknya kecil tapi **belum boleh dianggap selesai**. Lihat `docs/sql/47`.
+Awalnya `DISTINCT ON ... tanggal DESC` menghasilkan angka **Rp 8.368.134 lebih kecil**
+daripada `MAX`. Sekarang sudah jelas penyebabnya (`docs/sql/47`):
+
+```
+3182 | 2026-06-15 | 2602.34 USD | 1021 | 6023 | 141937 | kurs 18000
+2731 | 2026-06-22 | 2602.34 USD | 1021 | 6023 | 141937 | kurs 17819
+                          ↑ IDENTIK. Tidak ada penurunan sama sekali.
+```
+
+**Nilai USD-nya sama persis.** Yang beda hanya konversi:
+`2602.34 × 18000 = 46.842.120` vs `2602.34 × 17819 = 46.371.096`, beda `471.024` —
+persis sama dengan yang dilaporkan migration.
+
+**Dan justru itu bukti bahwa `tanggal TERAKHIR` lebih benar dari `MAX`:**
+
+> `MAX(gross_revenue_usd × kurs)` = memilih baris dengan **kurs TERTINGGI**.
+> Itu bukan aturan — itu **memilih kurs yang paling menguntungkan tanpa sengaja.**
+> Kalau besok kurs 20.000, MAX ikut naik padahal revenue USD tidak berubah.
+
+Kurs di baris MAX selalu lebih tinggi (campaign 33: 17.819–18.045) dibanding baris
+terakhir (17.819–17.953). Conclusion: **jangan pernah pakai `MAX` untuk kolom
+yang sudah dikalikan kurs.** Ambil berdasarkan tanggal, bukan berdasarkan nilai.
+
+Dua verifikasi lain:
+
+- **§C — nol baris dobel.** Tidak ada `ad_id + tanggal` sama dengan nilai beda,
+  jadi tidak ada impor ganda.
+- **§D — penurunan besar campaign 35 = baris `kurs = 0`** yang sengaja dinol-kan
+  migration `20261001230000`. Itu justru yang diinginkan: baris korup tidak boleh
+  menyumbang revenue.
+
+**Tidak ada data hilang. 54 ad itu bukan rusak — kursnya berbeda di baris terakhir.**
 
 #### Pelajaran
 
