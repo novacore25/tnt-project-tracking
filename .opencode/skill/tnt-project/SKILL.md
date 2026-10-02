@@ -1508,11 +1508,22 @@ Script: `docs/sql/48` (bagian 1), `49` (bagian 2), `50` (bagian 3, angka final).
 
 > **Refund disimpan sebagai `gmv` POSITIF, bukan negatif.** Jadi `SUM(gmv)` tanpa
 > filter **menambah** refund ke penjualan — bukan mengurangi. View benar karena
-> memang `WHERE is_refund = false`. Portal dan Performa **salah**, dan comedy:
+> memang `WHERE is_refund = false`. Portal dan Performa **salah**, dan
 > **keduanya tidak punya filter itu sama sekali.**
 >
-> Ini bukan hanya campaign 52. Total DB: **Rp 310 juta** angka portal lebih besar
-> dari kenyataan. Harian (view) vs Performa/Portal akan **selalu** beda.
+> **Skala penuh (bukan cuma campaign 52):**
+>
+> ```
+> portal se-DB  : Rp 1.454.605.235
+> refund        : Rp   310.173.535
+> seharusnya    : Rp 1.144.431.700
+> OVERSTATEMENT :         21,32 %
+> ```
+>
+> **Paling parah: KEMBANG 7 RUPA (76) = 89,5%** (portal 36,3 M vs kenyataan 19,2 M —
+> hampir 2×). Lalu USMILE 64,1%, NUTRIFLAKES 76,2%, NAISDAY 43,7%, ISWHITE 37,4%.
+> **Jangan hanya perbaiki campaign yang paling besar — campaign kecil (52) justru
+> yang pencongkarannya paling kecil (5,0%).**
 
 ### B. Kenapa likes portal 10,9× internal
 
@@ -1520,22 +1531,41 @@ Script: `docs/sql/48` (bagian 1), `49` (bagian 2), `50` (bagian 3, angka final).
 `PerformaClient:180-184` hanya untuk `!isLive`.
 
 Data livestream-nya memang rusak — `likes > views` (likes 79.250 vs views 11.711 di
-campaign 52), dan `content_uid` yang sama muncul **3×**. Jadi portal tidak cuma
-metode beda, **datanya juga beda**. Lihat §50 §15 dan §26.
+campaign 52), dan **`content_uid` yang sama muncul sampai 28×**.
 
-### C. Video — tetap sekitar 50%, di SEMUA campaign
+### C. Video — 48,3% di seluruh DB, dan ada TIGA angka berbeda
 
-| Campaign | Portal | Internal | Manual |
+```
+portal    : 26.439 video
+internal  : 54.736 video
+manual    : 28.297 video
+portal menampilkan 48,3%
+```
+
+| Campaign | Portal | Internal | View |
 |---|---:|---:|---:|
-| KIME (44) | 9.648 | 19.253 | 9.605 |
-| MS Glow Beauty (41) | 806 | 1.601 | 795 |
-| WARDAH (37) | 682 | 1.288 | 606 |
-| OMG Makeup (33) | 679 | 1.388 | 709 |
-| SYB (46) | 493 | 985 | 492 |
+| KIME (44) | 9.648 | 19.253 | **9.605** |
+| MS Glow Beauty (41) | 806 | 1.601 | **795** |
+| WARDAH (37) | 682 | 1.288 | **681** |
+| OMG Makeup (33) | 679 | 1.388 | **709** |
 
-Internal = `allApprovedVideoIds` = organik **+** tabel `videos` (approved).
-Portal = `calcUniqueVideos` (organik saja). **Semua video input manual PIC
-tidak pernah masuk hitungan portal.**
+> **`achievement_video` di view = `COUNT(v.id) WHERE link_video IS NOT NULL`, TANPA
+> filter approval.** Jadi view dan internal menghitung dua hal berbeda. **Tiga
+> layar, tiga angka, campaign sama. Mana definisi resmi "video tayang"? → user.**
+
+### H. `organic_videos` — 46% baris duplikat
+
+```
+content_uid dobel    : 8.655
+total baris          : 56.660
+baris terlibat       : 26.118  (46,1%)
+livestream di antaranya: 12.124
+paling parah         : 28 salinan (7645587310418922260)
+```
+
+> **Jangan pernah `SELECT COUNT(*)` dari `organic_videos`.** Selalu
+> `COUNT(DISTINCT content_uid)`. Portal aman karena pakai `Math.max()` per uid.
+> **Sebagian besar duplikat punya `campaign_id` = NULL** — tidak bisa diatribusi.
 
 ### E. PIN — 47 dari 49 campaign masih `1234`
 

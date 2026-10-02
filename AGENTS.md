@@ -49,13 +49,15 @@
 >
 > | Temuan | Dampak terukur |
 > |---|---|
-> | **Refund dihitung sebagai penjualan** | `sales.gmv` untuk `is_refund = true` disimpan **POSITIF**, jadi `SUM(gmv)` tanpa filter **menambah** refund. View pakai `is_refund = false`; **portal & Performa tidak punya filter itu sama sekali** → **Rp 310.173.535** se-DB |
+> | **Refund dihitung sebagai penjualan** | `sales.gmv` untuk `is_refund = true` disimpan **POSITIF**, jadi `SUM(gmv)` tanpa filter **menambah** refund. View pakai `is_refund = false`; **portal & Performa tidak punya filter itu sama sekali** → **21,32% overstatement se-DB** (Rp 310.173.535). **KEMBANG 7 RUPA (76) hampir 2× lebih tinggi dari kenyataan (89,5%).** Campaign kecil justru paling aman — jangan hanya perbaiki yang paling besar. |
 > | Views/likes menghitung livestream | likes **10,9×** lebih besar (portal 87.223 vs internal 7.973) |
-> | Jumlah video hanya organik | portal **~50%** dari sebenarnya, di semua campaign |
+> | Jumlah video hanya organik | portal **48,3%** dari sebenarnya, dan ada **TIGA angka berbeda** untuk campaign yang sama (portal / internal / `achievement_video` di view — yang itu **tidak** filter approval) |
+> | **`organic_videos` 46% baris duplikat** | 26.118 dari 56.660 baris, paling parah **28×**. **Jangan pernah `COUNT(*)` dari tabel ini** — selalu `COUNT(DISTINCT content_uid)`. Sebagian besar duplikat punya `campaign_id` NULL |
 > | Status creator tidak difilter | **6.160 baris `not_approved`** tampil di portal |
 > | **PIN `1234` untuk 47 dari 49 campaign** | semua portal brand terbuka; `pin` juga bocor ke browser via `SELECT *` → payload RSC, cookie `secure: false` |
 > | `target_gmv` NULL di 37 campaign | persentase selalu `0%` |
 > | Cabang `tt_campaign_id` di filter live | **0 dari 209 session cocok** — cabang mati, semua masuk lewat `OR` yang tanpa scoping |
+> | 169 baris `videos` sia-sia | `link_video IS NULL` **dan** `content_uid IS NULL` → tidak terhitung di portal, internal, **maupun** view |
 >
 > **Jangan tambah angka baru di portal sebelum menyamakan logicanya dengan internal.**
 > Kalau belum sinkron, tambahkan di internal dulu (satu sumber), lalu pakai ulang.
