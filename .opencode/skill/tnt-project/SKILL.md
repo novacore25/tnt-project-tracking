@@ -1607,6 +1607,9 @@ Sumber: `docs/KEPUTUSAN-PORTAL.md`.
 > `sales.gmv` refund **POSITIF** → menjumlahnya **menambah** pendapatan.
 > Ini keputusan **akuntansi owner** yang diterima. Rollback: kembalikan
 > `WHERE is_refund = false` di view.
+>
+> **Naik aktual: `total_gmv` Rp 4.160.235.142 → Rp 4.393.570.140 (+Rp 233.334.998).**
+> Verifikasi rekonsiliasi: `docs/sql/51-verifikasi-setelah-refund.sql`.
 
 #### Migration `20261003000000` punya **3 guard**
 
@@ -1618,6 +1621,36 @@ bisa menangkap.
 > ✅ **Polanya pakai ulang:** kalau migrasi mengubah cara agregasi, tulis guard
 > yang membandingkan hasil dengan **tabel asal**, bukan hanya dengan kolom lain
 > di view yang sama.
+
+#### ✅ HASIL AKTUAL migration `20261003000000` (2 Okt 2026)
+
+```
+SEBELUM : total_gmv Rp 4.160.235.142,36
+SESUDAH : total_gmv Rp 4.393.570.140,36
+NAIK    :           Rp   233.334.998,00
+Ketiga guard LOLOS.
+```
+
+**Rekonsiliasi yang membuktikan benar — pakai ini kalau migrasi agregasiSimilar:**
+
+```
+refund total di sales        : Rp 310.173.535
+  campaign_id IS NOT NULL    : Rp 233.334.998  <- masuk ke view
+  campaign_id IS NULL        :  Rp 76.838.537  <- TIDAK masuk
+  ---------------------------------------------
+  jumlah                     : Rp 310.173.535  ✓
+
+Naik total_gmv view          : Rp 233.334.998  ✓ SAMA DENGAN YANG HARUSNYA
+```
+
+> ⚠️ **Dua angka refund itu BEDA, jangan dicampur:**
+> - **Rp 233.334.998** = refund yang punya `campaign_id` → masuk view
+> - **Rp 310.173.535** = semua refund di `sales`
+>
+> Selisihnya **Rp 76.838.537 = refund tanpa `campaign_id`**, bagian dari masalah
+> lama "Rp 224.219.990 sales tanpa campaign" (`docs/sql/36`, `38`).
+> **Masalah terpisah, belum tersentuh.** Jangan_PROCESSED "sudah beres" karena
+> refund sudah masuk view — baris tanpa campaign masih belum punya rumah.
 
 ### ❌ Yang TIDAK diubah (dan kenapa)
 

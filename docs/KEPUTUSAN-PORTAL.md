@@ -43,6 +43,37 @@ tidak ada lagi dua angka untuk campaign yang sama.
 
 Rollback: `CREATE OR REPLACE VIEW` dengan `WHERE is_refund = false` dikembalikan.
 
+#### ✅ HASIL AKTUAL (2 Okt 2026, ketiga guard LOLOS)
+
+```
+SEBELUM : total_gmv Rp 4.160.235.142,36
+SESUDAH : total_gmv Rp 4.393.570.140,36
+NAIK    :           Rp   233.334.998,00
+
+video   :  865.468.962  ->  1.082.877.810
+live    :   54.742.748  ->     70.668.898
+ads     : 3.240.023.432,36  (tidak berubah, benar)
+```
+
+**Rekonsiliasi yang membuktikan 100% yakin:**
+
+```
+refund total di sales                     : Rp 310.173.535
+  dengan campaign_id                     : Rp 233.334.998  <- masuk ke view
+  campaign_id NULL                       :  Rp 76.838.537  <- tidak masuk
+                                           ───────────────
+                                           Rp 310.173.535  ✓ COCOK PAS
+
+Naik total_gmv view                      : Rp 233.334.998  ✓ SAMA
+```
+
+Jadi angka **Rp 76.838.537** refund ada di `sales` tapi **tidak punya campaign** —
+bagian dari masalah lama "Rp 224.219.990 sales tanpa `campaign_id`"
+(`docs/sql/36`, `docs/sql/38`). Itu masalah **terpisah**, belum tersentuh.
+
+**Guard:** 1 OK (video+live+ads = total) · 2 OK (tidak ada campaign turun) ·
+3 OK (view = sales mentah + ads).
+
 ### 2. `not_approved` disembunyikan
 
 > *"note approve sembunyikan aja bro"*
