@@ -1154,6 +1154,111 @@ $wb = $xl.Workbooks.Open($path, 0, $true)   # read-only
 Tersedia di mesin ini (Excel 16.0) dan **jauh lebih andal** daripada parse XML di
 dalam zip xlsx.
 
+---
+
+## 3A. Audit Halaman Harian & Timeline (1 Okt 2026)
+
+Diaudit karena user minta "pastikan akurat dengan performa dan kinerja". **6 temuan,
+2 di antaranya bug yang structurally tidak mungkin benar.**
+
+### 3A.1 🚨 Rekap Harian: `Not Approve` & `Alternate` SELALU 0
+
+`web-app/src/app/campaigns/[id]/listing/page.tsx:1053`
+
+```ts
+if (r.approved_at && r.approval !== 'pending') {
+  const actionDateKey = getLocalDateStr(r.approved_at);
+  if (r.approval === 'approved')      group[actionDateKey].approved++;
+  else if (r.approval === 'alternate')     group[actionDateKey].alternate++;
+  else if (r.approval === 'not_approved') group[actionDateKey].not_approved++;
+}
+```
+
+Dipakai `approved_at` untuk **ketiga** jenis aksi. Tapi saat penulisan datanya
+(`:826-827`), `alternate` dan `not_approved` menyimpan tanggalnya di
+**`not_approved_at`**, bukan `approved_at`:
+
+```ts
+if (r.approval === 'approved') { approvedAt = ...; }
+else if (r.approval === 'alternate' || r.approval === 'not_approved') { notApprovedAt = ...; }
+```
+
+Jadi `approved_at` NULL untuk kedua status itu → **tidak pernah masuk cabang** → baris
+`Not Approve` dan `Alternate` di Rekap Harian **selalu 0**.
+
+**Bukti inkonsistensi di file yang sama:** filter tanggal di `:996` justru memakai
+`row.not_approved_at` dengan benar. Satu file, dua cara.
+
+### 3A.2 `kurs = 0` jatuh ke `|| 16000` - koreksi kurs dibatalkan di UI
+
+`DailyClient.tsx:532`:
+```ts
+const kurs = (ad.kurs && ad.kurs < 1000) ? ad.kurs * 1000 : (ad.kurs || 16000);
+```
+
+Dengan `kurs = 0`: `(0 && 0<1000)` = falsy → cabang else → `(0 || 16000)` = **16000**.
+
+Migration `20261001230000` sengaja menyetel 1 baris jadi `kurs = 0` supaya netral.
+Baris itu (`id 2641`, campaign 35 SALSA Cosmetic, `gross_revenue_usd = 1261.34`)
+jadi tampil sebagai **Rp 20.181.440**, bukan 0.
+
+**Pola yang sama di 5 tempat lain:**
+
+| Lokasi | Baris |
+|---|---|
+| `DailyClient.tsx` | 532 |
+| `ads/page.tsx` | 102–103 |
+| `ads/actions.ts` | 146–147, 189 |
+| `ads/page.tsx` | 680 |
+| `portalActions.ts` | 406 |
+| `databaseActions.ts` | 681 |
+
+Semua memakai `ad.kurs || 16000`. **Koreksi kurs tidak berlaku di halaman mana pun.**
+
+### 3A.3 ⚠️ GMV Harian ≠ Total GMV resmi (2 filter tersembunyi)
+
+`DailyClient.tsx:207-208`:
+```ts
+if (approvedUsernameSet.size > 0 && !approvedUsernameSet.has(u)) return;   // hanya approved+alternate
+if (!hasSkus || !s.product_id || !skuSet.has(s.product_id)) return;       // hanya produk terdaftar
+```
+
+GMV di Harian = `SUM(sales.gmv)` yang **difilter** dua kali. Tidak sama dengan
+`SUM(sales.gmv)` untuk campaign itu, dan tidak ada penjelasan di UI.
+
+Catatan: `approvedUsernameSet` memasukkan **`alternate`** sebagai approved (`:191`).
+`alternate` = kreator pengganti; apakah sales-nya memang harus dihitung, perlu
+konfirmasi user.
+
+### 3A.4 ⚠️ "GMV Total" = sales + ads — melanggar aturan sendiri
+
+`DailyClient.tsx:698,732` dan `TimelineTarget.tsx:72`:
+```ts
+(m.gmvOrganic || 0) + (m.gmvAds || 0)
+```
+
+`SKILL.md` §10a aturan 1: total GMV = sales saja, ads ditampilkan terpisah dan
+**tidak dijumlahkan**. Persis bug yang sudah diperbaiki di `vw_campaign_summary`,
+masih ada di sini. Tidak terlihat untuk campaign tanpa ads, tapi meminflasi yang punya ads.
+
+### 3A.5 ⚠️ `Kr Approve` tidak cek status → 265 vs 263
+
+`DailyClient.tsx:340`: `if (cc.approved_at)` — **tanpa cek `approval`**. Jadi kreator
+yang sudah di-approve lalu dibalik jadi `not_approved` **tetap terhitung approved**,
+pada tanggal approve yang lama.
+
+Terbukti di campaign 57 GHANISKIN: Listing **Approved 263**, Daily **Kr Approve 265**.
+Selisih **2 baris** = `approved_at` basi yang tidak dikosongkan saat approval dibalik.
+
+### 3A.6 ℹ️ `snapshotTierMap` dead code + Timeline awareness
+
+- `snapshotTierMap` (`DailyClient.tsx:175`) **dideklarasi dan dibaca (`:305`), tapi
+  tidak pernah diisi**. Jadi `resolvedTier = cc.tier || 'Nano'` — tidak salah, tapi
+  menyesatkan.
+- `TimelineTarget` untuk campaign `awareness` (GHANISKIN) menampilkan
+  **"GMV 0 / -"** karena `target_gmv = 0` untuk tipe awareness. Secara logika benar,
+  tapi membingungkan karena GMV aktual 1,41 T tampil di kartu lain.
+
 
 ---
 

@@ -252,13 +252,39 @@ berbahaya daripada `submitted_by = NULL`.**
 > itu udh resign dan 4 orang itu emang resign sebelum sistem ini jadi jadi yaa ditulis
 > aja biar jelas auditnya ketika keuangan di audit semua ke track"
 
-| PIC | Baris `Paid Off` | Status |
-|---|---:|---|
-| Daffa | 31 | **Resign** sebelum sistem ada |
-| Natallia | 30 | **Resign** sebelum sistem ada |
-| Marini | 22 | **Resign** sebelum sistem ada |
-| Riska | 6 | **Resign** sebelum sistem ada |
-| **David** | **3** | ⚠️ **belum diketahui** — tidak masuk daftar 4 orang |
+> "MArini casenya sama kayak david daffa danlainnya, dia udh resign sebelum sistem ada,
+> anda cek aja transaksi pertama apa deh di sistem, soalnya sistem pembayaran baru di
+> terapkan atau dipake di aplikasi kita ini tuh sekitar minggu ke3 september"
+
+### ✅ Terverifikasi: sistem pembayaran baru dipakai **14 September 2026**
+
+Dari `batch_pertama` di `profiles` (30 akun):
+
+| Nama | Batch pertama | Batch terakhir |
+|---|---|---|
+| **Irsadur Rija** | **2026-09-14** ← paling awal | 2026-09-28 |
+| Wahyu Prakoso | 2026-09-16 | 2026-09-24 |
+| Maria Alvita | 2026-09-16 | 2026-10-01 |
+| Shabrina puspa | 2026-09-16 | 2026-09-16 |
+| Aprilia | 2026-09-17 | 2026-09-17 |
+| Jeremy | 2026-09-17 | 2026-09-17 |
+
+Semua 66 batch dibuat **14–28 Sep 2026**. Jadi **minggu ke-3 September** — sesuai
+katamu, dan sekarang bukan lagi dugaan.
+
+**Artinya semua baris payment Feb–Agustus 2026 berada sebelum sistem ada** — tidak ada
+satupun yang mungkin sudah tercatat di `payment_items`. Tidak ada risiko duplikat dari
+periode itu.
+
+### PIC tanpa akun — semua 5 sudah resign
+
+| PIC | Baris `Paid Off` | Bulan | Status |
+|---|---:|---|---|
+| Daffa | 31 | Jun, Mei, Jul | 🔴 **Resign** sebelum sistem ada |
+| Natallia | 30 | Feb, Mar, Apr, Mei | 🔴 **Resign** |
+| Marini | 22 | Jun, Mei | 🔴 **Resign** |
+| Riska | 6 | Feb, Mar, Apr, Jun | 🔴 **Resign** |
+| David | 3 | Jul | 🔴 **Resign** |
 
 **Keputusan: `submitted_by = NULL` + nama tetap ditulis di `batch_label`
 (`2026-03-15 - PIC: Daffa - MSGLOWFORMEN`) dan di `notes` batch.**
@@ -267,6 +293,72 @@ justru yang paling sulit ditelusuri saat diaudit.
 
 **Semua 92 baris `Paid Off`** — tidak ada yang `Not Yet`/`Cancel`, jadi tidak ada
 yang hilang dari keputusan ini.
+
+### 4A.6 Logika buat-kreator: sudah ada di kode, tapi TIDAK dipakai
+
+`paymentActions.ts:729` — `resolveCreatorForMigration()` sudah mengimplementasikan logika yang
+sama persis dengan yang kamu maksud:
+
+```ts
+// 1. Cari creator (case-insensitive)
+SELECT id FROM creators WHERE LOWER(username) = LOWER(${cleanUsername}) LIMIT 1
+// tidak ada → INSERT INTO creators (username, nama_asli, status) VALUES (..., 'active')
+
+// 2. Cari di campaign
+SELECT id FROM campaign_creators WHERE campaign_id = ${campaignId} AND creator_id = ${creatorId}
+// tidak ada → INSERT INTO campaign_creators (..., 'approved', 'Nano', ratecard_awal || nominal, ...)
+//             dengan notes = 'Di-import otomatis via Migrasi'
+```
+
+ bandingkan dengan `syncUnmapped.ts:119` (auto-assign dari TikTok) — **hampir identik**:
+
+| | `syncUnmapped` | `resolveCreatorForMigration` |
+|---|---|---|
+| Cari creator | ✅ `LOWER(username)` | ✅ `LOWER(username)` |
+| Bikin profil | ✅ `added_by='system'` | ✅ `status='active'` |
+| Bikin `campaign_creators` | ✅ | ✅ |
+| `approval` | `'pending'` | `'approved'` |
+| `price` | `0` | `ratecard_awal \|\| nominal` |
+
+Untuk migrasi historis, `approval='approved'` + `price` dari ratecard itu benar —
+uang sudah keluar, jadi kreator memang sudah disetujui di campaign itu.
+
+### ✅ KEPUTUSAN: tulis ulang di SQL migration (opsi C)
+
+Pertanyaan awalnya "pakai fungsi yang sudah ada atau tulis ulang". Jawabannya: **tulis
+ulang di SQL migration.** Alasannya:
+
+1. `resolveCreatorForMigration` **tidak mengisi bukti transfer** sama sekali — itu
+   kolom di `payment_batches`, dan fungsi itu tidak menyentuh batch
+2. **PIC di fungsi itu pakai `ILIKE '%nama%'`** (`paymentActions.ts:739`) — bom waktu
+   untuk `Marini` vs `Maria`. Plus `LIMIT 1` tanpa `ORDER BY`, jadi hasilnya tidak
+   ditentukan kalau dua yang cocok
+3. Kita sudah memutuskan hapus `importHistoricalBatch`, jadi mempertahankan file itu
+   hanya demi satu fungsi terasa awkward
+
+Logikanya akan ditulis **di dalam SQL migration** dengan pola yang sama persis
+(`LOWER(username)` → insert kalau tidak ada → `campaign_creators` kalau belum ada),
+tapi memakai **peta UUID PIC eksplisit** dari §4A.2. Nol perubahan kode produksi.
+
+### Kolom yang akan diisi
+
+| Kolom | Sumber di spreadsheet | Kartu |
+|---|---|---|
+| `payment_items.nik` | `NIK` | ✅ wajib |
+| `payment_items.alamat_ktp` | `Alamat sesuai KTP` | ✅ |
+| `payment_items.link_ktp` | `Link Drive KTP` | ✅ |
+| `payment_items.link_kontrak` | `Kontrak` | ✅ |
+| `payment_items.nomor_rekening` | `Nomor Rekening/ VA` | ✅ |
+| `payment_items.nama_penerima` | `Nama Penerima Bank` | ✅ |
+| `payment_items.biaya_transfer` | `Biaya transfer` (Februari saja) | ✅ |
+| `payment_batches.bukti_transfer_url` | `Link Bukti TF` | ✅ |
+| `payment_batches.actual_payment_date` | `Tgl Actual Payment` | ✅ |
+| `creators.nama_asli` | `Nama Penerima Bank` | ✅ |
+
+⚠️ **`Link Bukti TF` di spreadsheet tampaknya dipakai ulang di banyak banyak baris** —
+scan September menunjukkan link Google Drive yang sama (`1eNwB9HI3gXvY8bag_Au-Tx1Zrm-lCeee`)
+untuk banyak baris berbeda. Kalau begitu itu **link folder, bukan bukti per transaksi.**
+Perlu dikonfirmasi sebelum dipakai — probative yang salah lebih berbahaya daripada kosong.
 
 ### 4A.5 Baris operasional punya kolom yang tidak rapi
 
