@@ -415,6 +415,19 @@ export async function getPortalData(campaignId: number) {
   const allPendingVideoIds = new Set<string>();
   // Username kreator pending yang punya minimal satu video pending.
   const pendingCreatorsWithVideoUids = new Set<string>();
+  // Uid dari tabel `videos` yang ternyata LIVESTREAM. Dihitung sebagai live,
+  // bukan video (keputusan owner 2 Okt 2026).
+  const manualLiveUids = new Set<string>();
+  // Peta content_uid -> 'live' dari organic_videos. Sumber kebenaran tipe.
+  const vStatsByUid = new Map<string, 'live' | 'video'>();
+  for (const ov of organicVideos) {
+    if (!ov.content_uid) continue;
+    const ct = String(ov.content_type || 'video').toLowerCase();
+    const isLive = ct === 'livestream' || ct === 'live';
+    const uid = String(ov.content_uid).trim();
+    if (isLive) vStatsByUid.set(uid, 'live');
+    else if (!vStatsByUid.has(uid)) vStatsByUid.set(uid, 'video');
+  }
 
   // Group manual videos by campaign_creator_id (dipakai blok 3b di atas)
   const videoMapByCc = new Map<number, any[]>();
@@ -437,6 +450,20 @@ export async function getPortalData(campaignId: number) {
         ? String(v.content_uid).trim()
         : (v.link_video ? (v.link_video.match(/video\/(\d+)/)?.[1] || v.link_video) : null);
       if (!id) continue;
+
+      // Pisahkan live dari video (keputusan owner 2 Okt 2026):
+      // "kalo video yaa harusnya menghitung video aja, kalo live ya menghitung
+      //  live aja... live juga bagian dari campaign juga ada menu live stream"
+      //
+      // Tabel `videos` tidak punya kolom content_type. Sumber kebenaran-nya
+      // `organic_videos.content_type`, dan 654 baris di tabel `videos` ternyata
+      // livestream (docs/sql/58). Link video tidak bisa jadi patokan: 0 link
+      // mengandung '/live/', livestream pun ditulis '/video/<room_id>'.
+      const liveStat = vStatsByUid.get(id);
+      if (liveStat === 'live') {
+        manualLiveUids.add(id);
+        continue;                      // BUKAN video
+      }
 
       if (isApproved) {
         allApprovedVideoIds.add(id);
@@ -730,7 +757,7 @@ export async function getPortalData(campaignId: number) {
       // menampilkan ~48% dari jumlah video sebenarnya.
       total_approved: allApprovedVideoIds.size,
       total_pending: allPendingVideoIds.size,
-      total_livestream: calcUniqueLivestreams
+      total_livestream: calcUniqueLivestreams + manualLiveUids.size
     },
     initialTotalAdsGmv: globalAdsGmv,
     topSkus: salesPerProduct.slice(0, 5),

@@ -169,6 +169,19 @@ export default function CampaignPerformaClient({ campaignId }: { campaignId: num
       const allPendingVideoIds = new Set<string>();
       const allUniqueLiveIds = new Set<string>();
 
+      // Uid yang `organic_videos` tandai sebagai live. Dipakai untuk memisahkan
+      // baris tabel `videos` yang sebenarnya livestream (keputusan owner
+      // 2 Okt 2026). Tanpa ini, 654 livestream ikut terhitung sebagai video dan
+      // card "Pencapaian Target Video" meleset - sudah dilaporkan ke brand.
+      const liveUidSet = new Set<string>();
+      for (const ov of (orgVidsData || [])) {
+        if (!ov?.content_uid) continue;
+        const ct = String(ov.content_type || 'video').toLowerCase();
+        if (ct === 'livestream' || ct === 'live') {
+          liveUidSet.add(String(ov.content_uid).trim());
+        }
+      }
+
       if (currentHasSkus) {
         for (const perf of perfMap.values()) {
           perf.video_views = 0;
@@ -209,6 +222,17 @@ export default function CampaignPerformaClient({ campaignId }: { campaignId: num
             if (campaignSkuIds.size > 0 && v.sku_id && !campaignSkuIds.has(v.sku_id)) continue;
             const id = v.content_uid || (v.link_video ? (v.link_video.match(/video\/(\d+)/)?.[1] || v.link_video) : null);
             if (id) {
+              // Pisahkan live dari video (keputusan owner 2 Okt 2026):
+              // video hanya menghitung video, live hanya menghitung live.
+              // Sumber kebenaran = `organic_videos.content_type`, karena
+              // tabel `videos` tidak punya kolom tipe. 654 baris di tabel
+              // `videos` ternyata livestream (docs/sql/58). Link video tidak
+              // bisa jadi patokan: 0 link mengandung '/live/'.
+              if (liveUidSet.has(id)) {
+                allUniqueLiveIds.add(id);
+                if (perf) perf.live_uids.add(id);
+                continue;                      // BUKAN video
+              }
               if (isApproved) {
                 allApprovedVideoIds.add(id);
               } else {

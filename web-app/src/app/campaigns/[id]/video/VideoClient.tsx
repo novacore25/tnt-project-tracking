@@ -1327,10 +1327,10 @@ export default function CampaignVideoPage({
     sourceVideos.forEach(v => {
        const cc = listingData.find(c => c.id === v.campaign_creator_id);
        if (!cc || !cc.creators || !isCreatorVisible(cc.creators.username)) return;
-       
+
        const creator = cc.creators;
        const vStats = cc._videoStats || [];
-       
+
        let dynamicContentUid = (v.content_uid && v.content_uid !== '') ? v.content_uid : null;
        if (!dynamicContentUid && v.link_video) {
          const match = v.link_video.match(/video\/(\d+)/);
@@ -1338,6 +1338,28 @@ export default function CampaignVideoPage({
            dynamicContentUid = match[1];
          }
        }
+
+       // KELUARKAN livestream dari menu Video (keputusan owner 2 Okt 2026):
+       // "kalo video yaa harusnya menghitung video aja, kalo live ya menghitung
+       //  live aja... ada menu live stream"
+       //
+       // 654 baris tabel `videos` ternyata livestream (docs/sql/58), dan halaman
+       // ini sebelumnya menampilkannya tanpa cek. Sumber kebenaran =
+       // `organic_videos.content_type` via `_videoStats`. Link video tidak bisa
+       // jadi patokan karena 0 link mengandung '/live/'.
+       if (dynamicContentUid) {
+         const rawUid = String(dynamicContentUid).replace(/^video_/, '');
+         // `_videoStats` sudah punya flag `is_live` yang dihitung dari
+         // `organic_videos.content_type` (videoActions.ts:195). Pakai itu,
+         // jangan baca `content_type` -- field itu tidak ada di objek ini.
+         const liveStat = vStats.find((s: any) => {
+           if (!s?.content_uid || !s?.is_live) return false;
+           const su = String(s.content_uid).replace(/^video_/, '');
+           return s.content_uid === dynamicContentUid || su === rawUid;
+         });
+         if (liveStat) return;
+       }
+
         const hasContentUid = Boolean(dynamicContentUid);
         
         let vidGmv = 0;
