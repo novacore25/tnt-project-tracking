@@ -18,6 +18,14 @@ build/
 *.xlsx
 *.xls
 
+# SQL hasil impor payment historis - MENGANDUNG DATA PII.
+# NIK, nomor rekening, dan nama penerima ada di dalam file ini. Nama file
+# di sini WAJIB evocative supaya tidak salah commit. Prinsipnya: data yang
+# masuk DB produksi tidak harus masuk git history.
+# Lihat docs/payment/PII.md.
+docs/sql/7*-insert-payment-historis.sql
+docs/payment/payment-historis-lokal.sql
+
 # OS generated files
 .DS_Store
 Thumbs.db
