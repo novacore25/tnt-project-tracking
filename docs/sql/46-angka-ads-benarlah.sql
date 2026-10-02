@@ -190,7 +190,7 @@ SELECT
   count(*) FILTER (WHERE abs(d.ads_delta - COALESCE(sh.gmv_sales,0)) < 1)       AS nyaris_identik,
   count(*) FILTER (WHERE COALESCE(sh.gmv_sales,0) > 0
                      AND abs(d.ads_delta - COALESCE(sh.gmv_sales,0))
-                         < COALESCE(sh.gmv_sales,0) * 0.05)                     AS mirip_dalam_5 persen,
+                         < COALESCE(sh.gmv_sales,0) * 0.05)                     AS mirip_5_persen,
   count(*) FILTER (WHERE COALESCE(sh.gmv_sales,0) > 0
                      AND abs(d.ads_delta - COALESCE(sh.gmv_sales,0))
                          >= COALESCE(sh.gmv_sales,0) * 0.05)                    AS beda_jauh
