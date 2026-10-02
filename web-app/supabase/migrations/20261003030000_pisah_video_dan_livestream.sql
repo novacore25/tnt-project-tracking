@@ -5,7 +5,19 @@
 BEGIN;
 
 -- =====================================================================
--- 20261003010000 - Pisahkan video dan livestream di semua perhitungan
+-- 20261003030000 - Pisahkan video dan livestream di semua perhitungan
+--
+-- ⚠️ RUN KE-2. Run pertama (20261003010000) tidak pernah sampai COMMIT:
+--    Gagal di guard 4 karena RUMUS GUARD-nya salah, bukan karena data.
+--    Guard 4 membandingkan `total_gmv` dengan `SUM(sales)` tanpa ditambah ads,
+--    padahal `total_gmv = organic_sales + ads_sales`. Akibatnya 9 campaign
+--    yang punya data ads (33, 35, 46, 36, 45, 37, 34, 39, 47) ditolak.
+--    Transaksi rollback, nol perubahan.
+--    Run kedua: rumus guard 4 diperbaiki, plus_guard 5 baru yang memastikan
+--    `total_gmv` benar-benar TIDAK bergeser di satu campaign pun.
+--
+-- ⚠️ Nama file sengaja diganti. GitHub sempat menahan path lama dengan cache
+--    negatif 404 walau commit-nya sudah ada di remote. Path baru = kunci cache baru.
 --
 -- ATURAN PEMILIK (2 Okt 2026):
 --   "kalo video ya harusnya menghitung video aja, kalo live ya menghitung
@@ -136,7 +148,9 @@ END $$;
 -- 3. Backup angka lama
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS _backup_vw_campaign_summary_before_2026100301 AS
-SELECT campaign_id, nama, achievement_video FROM vw_campaign_summary;
+SELECT campaign_id, nama, achievement_video, total_gmv, total_gmv_video,
+       total_gmv_live, total_ads_gmv
+FROM vw_campaign_summary;
 
 CREATE TABLE IF NOT EXISTS _backup_video_klasifikasi_20261003 AS
 SELECT id, campaign_creator_id, content_uid, is_livestream, content_type
@@ -267,21 +281,69 @@ BEGIN
     RAISE NOTICE 'Guard 3 OK: video + live + ads = total_gmv';
 END $$;
 
+-- ⚠️ PERBAIKAN RUMUS (2 Okt 2026, run pertama gagal di guard ini)
+-- `total_gmv` = organic_sales + ads_sales, BUKAN organic_sales saja.
+-- Versi pertama membandingkan `total_gmv` dengan `SUM(sales)` tanpa ads,
+-- jadi 9 campaign yang punya data ads (33, 35, 46, 36, 45, 37, 34, 39, 47)
+-- semuanya ditolak. Datanya benar, rumus guard yang salah.
+-- Guard 3 di migration `20261003000000` sudah benar; ini mengikuti pola yang sama.
 DO $$
 DECLARE n_rusak integer;
+DECLARE contoh text;
 BEGIN
-    SELECT count(*) INTO n_rusak
-    FROM vw_campaign_summary v
-    JOIN _backup_vw_campaign_summary_before_2026100301 b ON b.campaign_id = v.campaign_id
-    WHERE v.total_gmv IS DISTINCT FROM (
-        SELECT COALESCE(sum(gmv::numeric), 0) FROM sales s WHERE s.campaign_id = v.campaign_id
-    );
+    SELECT count(*), string_agg(x.nama, ' | ') INTO n_rusak, contoh
+    FROM (
+        SELECT c.nama
+        FROM campaigns c
+        LEFT JOIN (
+            SELECT campaign_id, SUM(gmv::numeric) AS org
+            FROM sales WHERE campaign_id IS NOT NULL GROUP BY campaign_id
+        ) s ON s.campaign_id = c.id
+        LEFT JOIN (
+            SELECT campaign_id, SUM(ads_gmv_idr) AS ads
+            FROM (
+                SELECT DISTINCT ON (campaign_id, ad_id)
+                       campaign_id, gross_revenue_usd * kurs AS ads_gmv_idr
+                FROM ads_performance
+                ORDER BY campaign_id, ad_id, tanggal DESC, id DESC
+            ) z GROUP BY campaign_id
+        ) a ON a.campaign_id = c.id
+        JOIN vw_campaign_summary v ON v.campaign_id = c.id
+        WHERE COALESCE(v.total_gmv, 0)
+              <> COALESCE(s.org, 0) + COALESCE(a.ads, 0)
+    ) x;
 
     IF n_rusak > 0 THEN
-        RAISE EXCEPTION 'Batal: % campaign total_gmv tidak sama dengan sales mentah', n_rusak;
+        RAISE EXCEPTION
+            'Batal: % campaign total_gmv tidak sama dengan sales mentah + ads: %',
+            n_rusak, left(COALESCE(contoh, ''), 400);
     END IF;
 
-    RAISE NOTICE 'Guard 4 OK: total_gmv tetap = sales mentah + ads';
+    RAISE NOTICE 'Guard 4 OK: total_gmv = sales semua baris (refund ikut) + ads, di semua campaign';
+END $$;
+
+-- ---------------------------------------------------------------------
+-- 6. GUARD 5: total_gmv TIDAK BOLEH berubah sama sekali
+--    Yang boleh berubah hanya `achievement_video`. Kalau `total_gmv` bergeser
+--    satu rupiah pun, migration ini salah sasaran dan harus batal.
+-- ---------------------------------------------------------------------
+DO $$
+DECLARE jumlah_turun integer;
+DECLARE jumlah_naik integer;
+BEGIN
+    SELECT count(*) FILTER (WHERE COALESCE(v.total_gmv,0) <  COALESCE(b.total_gmv,0)),
+           count(*) FILTER (WHERE COALESCE(v.total_gmv,0) >  COALESCE(b.total_gmv,0))
+    INTO jumlah_turun, jumlah_naik
+    FROM _backup_vw_campaign_summary_before_2026100301 b
+    JOIN vw_campaign_summary v ON v.campaign_id = b.campaign_id;
+
+    IF jumlah_turun > 0 OR jumlah_naik > 0 THEN
+        RAISE EXCEPTION
+            'Batal: total_gmv bergerak (% turun, % naik). Hanya achievement_video yang boleh berubah.',
+            jumlah_turun, jumlah_naik;
+    END IF;
+
+    RAISE NOTICE 'Guard 5 OK: total_gmv tidak berubah di satu campaign pun';
 END $$;
 
 \echo ''
