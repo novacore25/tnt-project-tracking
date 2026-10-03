@@ -10,9 +10,14 @@
 --   3. Staging diperkaya: campaign_id, submitted_by, payment_type, status_import
 --
 -- YANG SENGAJA TIDAK DIISI
---   Map campaign untuk METOO / TOP UP LION / TOP UP QONTAK / Sampel Kime /
---   MCN* / Referal MCN / BOA. Baris-baris itu di-DEFER (status_import='defer')
---   dan NOMINALNYA TIDAK PERNAH HILANG - masih tercatat di staging.
+--   Map campaign untuk METOO / TOP UP LION / TOP UP QONTAK / MCN* /
+--   Referal MCN / BOA. Baris-baris itu di-DEFER (status_import='defer'),
+--   NOMINALNYA TIDAK PERNAH HILANG, dan rinciannya ada di
+--   docs/payment/DEFER.md.
+--
+--   Aturan owner 3 Okt 2026: "atasannya pengen balance aja semua data
+--   pembayaran dan akurat untuk campaign campaign yang saat ini ada di sistem."
+--   Kalau nama campaign di sheet tidak ada di `campaigns`, jangan dipaksa masuk.
 -- =====================================================================
 
 BEGIN;
@@ -76,7 +81,10 @@ INSERT INTO payment_import_map_campaign (nama_sheet, campaign_id, alasan) VALUES
   ('SALSA COSMETICS', 35, 'Jamak vs tunggal, DB "SALSA Cosmetic".'),
   ('Votre Peu',       53, 'Konfirmasi owner 2 Okt 2026. DB "VOTRE PEAU" - sheet menulis "Votre Peu".'),
 
-  ('SALSA Baby Care', 36, 'Konfirmasi owner 2 Okt 2026: "salsa baby care itu sama dengan salsa mom & baby bro, beda dengan salsa cosmetic". 24 baris / Rp 22.450.000.')
+  ('SALSA Baby Care', 36, 'Konfirmasi owner 2 Okt 2026: "salsa baby care itu sama dengan salsa mom & baby bro, beda dengan salsa cosmetic". 24 baris / Rp 22.450.000.'),
+
+  -- 3 Okt 2026: hanya "Sampel Kime" yang Dimahankan dari daftar DEFER.
+  ('Sampel Kime',     44, 'Konfirmasi owner 3 Okt 2026: "gapapa masukin asal ada nama campaignnya jelas". Label sheet "Sampel Kime" jelas arahnya, dan keputusan #5 (1 Okt 2026) sudah menetapkan: operasional campaign KIME (44). 1 baris / Rp 10.000.000, penerima David Sukanto.')
 ON CONFLICT (nama_sheet) DO UPDATE
   SET campaign_id = EXCLUDED.campaign_id,
       alasan      = EXCLUDED.alasan;

@@ -1708,7 +1708,7 @@ Cakupan: **826 baris `Paid Off` dengan tanggal < 2026-09-14, Rp 507.736.562.**
 
 Yang sudah dibuktikan (bukan dugaan) ada di `docs/payment/analisis-l2.txt` dan `l3.txt`.
 
-### 3C.1 Kunci dedup HARUS ikut `campaign` - ini差点 menghapus Rp 42.600.000
+### 3C.1 Kunci dedup HARUS ikut `campaign` - ini hampir menghapus Rp 42.600.000
 
 Rencana lama: duplikat kalau `username + nominal + tanggal` sama persis.
 Applied ke 826 baris, itu kena **26 grup / 31 baris**. **NOL satu pun duplikat sejati.**
@@ -1772,7 +1772,7 @@ harus ditulis `\n`/`\r`/`\t` sebagai teks dua huruf supaya jejak audit tetap ada
 ### 3C.5 Satu username bisa punya campaign berbeda di sheet yang sama
 
 `ndaahq` Rp250.000 tanggal 02/06 → `ISWHITE` **dan** `SYB`, dua baris terpisah.
-Itu **dua pembayaran sah**.熟了们不要 دمج based on username saja.
+Itu **dua pembayaran sah**. Jangan gabung berdasarkan username saja.
 
 ### 3C.6 `payment_type` CHECK - yang dipakai sistem vs yang butuh
 
@@ -1834,6 +1834,159 @@ kita baru tahu hasilnya SETELAH data masuk.
 
 `views`: `v_payment_campaign_candidates` (kandidat, **bukan auto-map**) dan
 `v_payment_campaign_unmapped` ( destined DEFER).
+
+### 3C.10 Staging-first: jangan INSERT langsung ke `payment_items`
+
+Tabel `payment_import_staging` (+ `payment_import_map_pic`,
+`payment_import_map_campaign`) dibuat oleh migration
+`20261004000000_payment_import_staging.sql`. Alasan: **match rate
+`(username + campaign) -> campaign_creators` belum pernah diukur.** Hanya 44%
+kreator yang punya baris `campaign_creators` (§3.50). Kalau langsung INSERT,
+kita baru tahu hasilnya SETELAH data masuk.
+
+`views`: `v_payment_campaign_candidates` (kandidat, **bukan auto-map**) dan
+`v_payment_campaign_unmapped` ( destined DEFER).
+
+### 3C.11 DUPLIKAT LOKASI - batas tanggal TIDAK menjamin apa pun (2-3 Okt 2026)
+
+batas impor `tanggal < 2026-09-14` berdasarkan
+`MIN(payment_batches.submitted_at) = 2026-09-14`. Itu **SALAH** untuk
+tujuan anti-duplikat:
+
+- Data **benar-benar** mulai masuk sistem **16-17 Sep 2026**. 14 Sep cuma batch
+  PWS pertama.
+- Semua 71 batch dibuat **14-28 Sep 2026**.
+- Jadi pembayaran bertanggal **Juli** pun bisa sudah tercatat di sistem.
+
+**Terbukti 17 baris / Rp 4.250.000 duplikat lokasi:**
+sama persis di `username + campaign + nominal`. **11 dari 11 baris sheet
+"September 2026"** + 6 baris Agustus.
+
+**PWS justru aman** (0 username sama dari 61 baris Excel vs 30 item sistem).
+Angka "30 = 30" yang terlihat ICollectionYork ternyata kebetulan - item PWS
+sistem adalah 25 kreator @ Rp700.000 ke satu rekening.
+
+> ⚠️ `docs/sql/70 §4` melaporkan "66 baris sudah ada" - itu **terlalu longgar**
+> (cuma `EXISTS` username, tidak peduli campaign/nominal). Angka yang bisa
+> dipakai hanya dari `docs/sql/71 §1b`: **17 baris / Rp 4.250.000**.
+
+### 3C.12 Nilai CHECK constraint TIDAK BOLEH DITEBAK (3 Okt 2026)
+
+Saya menulis `final_status = 'approved'` karena **`approved` tidak ada di CHECK**.
+Tidak ada nama kolom yang salah, tapi nilainya tetap salah → **semua 795 item
+akan tampil "belum dibayar" padahal uangnya sudah keluar sebulan.**
+
+Nilai yang benar (terbukti dari `pg_constraint`):
+
+```
+payment_items.manager_status    pending | approved | rejected
+payment_items.executive_status  pending | approved | rejected
+payment_items.final_status      pending | manager_approved | executive_1_approved |
+                                pending_finance_outstanding | finance_selected |
+                                executive_approved | ready_to_pay | paid | rejected
+payment_batches.status          draft | pending_manager | pending_executive_1 |
+                                pending_finance | pending_executive |
+                                ready_to_pay | paid | cancelled
+```
+
+Untuk pembayaran historis yang **sudah dibayar**: `manager=approved`,
+`executive_1=approved`, `executive=approved`, `final=paid`, `batch=paid`.
+
+**Pelajaran lebih besar:** preflight `pg_constraint` itu wajib, sama seperti
+preflight `information_schema` untuk nama kolom (§3.1 `schema.ts` tidak bisa
+diandalkan). Nama kolom dan nilai CHECK adalah dua hal berbeda yang sama-sama
+harus dicek.
+
+### 3C.13 Empat bug SQL yang tertahan oleh `-v ON_ERROR_STOP=1` (3 Okt 2026)
+
+Semua rollback bersih. Produksi tetap di 111 item / Rp 44.270.000 sampai
+perbaikan terakhir.
+
+| Bug | Gejala | Akar |
+|---|---|---|
+| `submitted_by uuid` diisi nama | `invalid input syntax for type uuid: "Aprilia"` | kolom tak perlu - `submitted_by` diambil dari JOIN `profiles` |
+| Tiap baris VALUES diakhiri `;` | `syntax error at or near "1"` | tiap baris jadi statement sendiri |
+| `UPDATE ... FROM` rujuk tabel target | `invalid reference to FROM-clause entry` | PostgreSQL tidak mengizinkan; pakai subquery korelasi |
+| `final_status = 'approved'` | `violates check constraint` | lihat §3C.12 |
+
+> Plus satu migration rollback: view `v_payment_campaign_candidates` pakai
+> `s.nama_sheet`, padahal kolom di staging `campaign_sheet`. Satu transaksi =
+> 3 tabel hilang. **Perbaikan struktural: view dipindah ke transaksi sendiri
+> setelah tabel di-COMMIT.** Lihat §3C.14.
+
+### 3C.14 Migration: pisahkan transaksi "tahan data" dari "laporan" (3 Okt 2026)
+
+Satu typo di view menghapus 3 tabel yang sudah berhasil dibuat. Aturan:
+
+```sql
+BEGIN;  -- tabel + peta + data
+  CREATE TABLE ...; INSERT ...; 
+COMMIT;
+
+BEGIN;  -- view / laporan, transaksi TERPISAH
+  DROP VIEW IF EXISTS ...; CREATE VIEW ...;
+COMMIT;
+```
+
+Plus `DROP VIEW IF EXISTS` di awal supaya migration bisa dijalankan ulang.
+
+### 3C.15 NIK di spreadsheet TIDAK bisa dipakai sebagai identitas (3 Okt 2026)
+
+- **1 NIK dipakai 32 username berbeda.** `3201232511970003` dipakai 25 kreator PWS.
+- 8 username punya **2 NIK berbeda** (`lehabottoh`, `nurnnyas`, `salwanarulita`).
+- 7 NIK total dipakai >1 username, menyentuh 331 baris.
+
+**Artinya kolom NIK di `payment_items` tidak boleh dipakai untuk pencocokan
+identitas.** Data masuk apa adanya dari Excel (keputusan owner #25: Excel
+adalah sumber kebenaran). Kalau suatu saat butuh repair, selalu cek dulu
+"NIK ini dipakai berapa username".
+
+### 3C.16 Cara kirim file SQL berisi PII tanpa masuk git (3 Okt 2026)
+
+`*.csv` sudah di-ignore, tapi SQL harus tetap dikirim lewat jalur lain karena
+`raw.githubusercontent` hanya bisa membaca file yang ada di repo.
+
+**Jalur yang terbukti berhasil** (SSH alias `vps` sudah ada di `~/.ssh/config`):
+
+```powershell
+# 1. cek hash dulu sebelum eksekusi apa pun
+cmd /c 'ssh vps "sha256sum /root/payment-historis.sql"' < docs\sql\73-insert-payment-historis.sql
+
+# 2. kirim sebagai byte mentah - JANGAN lewat base64 (PowerShell membungkus
+#    string panjang saat pipe, jadi `base64 -d` gagal "invalid input")
+cmd /c 'ssh vps "cat > /root/payment-historis.sql" < docs\sql\73-insert-payment-historis.sql'
+
+# 3. bandingkan hash lokal vs VPS
+(Get-FileHash docs\sql\73-insert-payment-historis.sql -Algorithm SHA256).Hash
+
+# 4. jalankan
+ssh vps "docker exec -i <container> psql -U postgres -d db_tnt_project_system -v ON_ERROR_STOP=1 < /root/payment-historis.sql"
+```
+
+> ⚠️ **`wsl` tidak dipakai di mesin owner** ("no installed distributions").
+> WSL hanya ada di mesin developer.
+
+### 3C.17 HASIL AKHIR impor (3 Okt 2026)
+
+```
+826 baris di-parse dari spreadsheet
+-17  duplikat lokasi                      Rp   4.250.000
+-17  DEFER (tanpa campaign di DB)          Rp 118.460.000
+─────────────────────────────────────────────────────────
+= 792 baris siap diimport  Rp 385.026.562
+→ jadi 796 payment_items / 278 batch (1 baris agency dipecah jadi 5 item)
+
+Sistem total: 907 item / Rp 429.296.562 / 349 batch
+```
+
+`METOO` (Rp 89.500.000) adalah defer terbesar dan **tidak ada di rekap
+manapun** - perlu ditanyakan ke PIC Natallia. Rincian 17 baris defer ada di
+`docs/payment/DEFER.md`.
+
+**Risiko yang dibiarkan terbuka** (keputusan owner, dicatat bukan diubah):
+`KIME spill.by.lily` tercatat Rp 750.000 dari ratecard Rp 500.000, dan
+`KIME beauty.iidd` Rp 550.000 dari ratecard Rp 450.000. Item system'seorang
+berasal dari batch September 2026, **bukan dari impor ini**.
 
 ## 9. Cara memperbarui skill ini
 

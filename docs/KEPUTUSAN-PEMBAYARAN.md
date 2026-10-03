@@ -115,6 +115,29 @@ Semua bertanggal **2 Okt 2026**. **Jangan diubah tanpa tanya.**
 | **18** | **`PIC Rija` = profil `Irsadur Rija`** (67 baris / Rp 44.200.000) | *"Cocokkan ke Irsadur Rija"* — konfirmasi eksplisit owner, **bukan** fuzzy match |
 | **19** | **`17/04/2025` di sheet April 2026 = salah ketik** → `2026-04-17`, teks aslinya tetap ditulis di `tanggal_asal`/`catatan` | *"oh itu typo broo harusnya 2026 benerin aja, aman kok bro"* |
 
+### Keputusan 3 Oktober 2026 (sesi discussion: duplikat lokasi + import final)
+
+| # | Keputusan | Sumber / bukti |
+|---|---|---|
+| **20** | **17 baris duplikat LOKASI tidak diimport** — `username + campaign + nominal` identik dengan item yang sudah ada di sistem. Sheet **September 2026 11 dari 11 baris** + 6 baris Agustus. Total **Rp 4.250.000** | `docs/sql/71 §1b`, output `17 | 4250000` |
+| **21** | **`spill.by.lily` & `beauty.iidd` di KIME tetap diimport**, walau `campaign_creators.nominal_pelunasan` lebih kecil dari item sistem. Alasannya **tanggal berbeda** → pembayaran berbeda | *"emang tanggalnya yang di excel sama sama 16 september? ... yauda jika tanggalnya beda berarti pembayarannya emng beda bro, yauda masukin aja sesuai yang di excel"* |
+| **22** | **Hanya `Sampel Kime` yang dimasukkan dari 17 baris DEFER** → campaign 44 KIME. 1 baris / Rp 10.000.000 | *"gapapa masukin asal ada nama campaignnya jelas bro"* |
+| **23** | **17 baris lain tetap DEFER** (`METOO`, `TOP UP LION`, `TOP UP QONTAK`, `MCN*`, `Referal MCN`, `BOA`) = **Rp 118.460.000**. Rincian di `docs/payment/DEFER.md` | *"gausah di migrasiin catat dulu aja di dokumentasi"* |
+| **24** | **BOA tidak boleh masuk sistem, apa pun hasilnya** — note di Excel: *"dibayar dari brand"* | *"BOA gausah di masukin, di notes aja"* |
+| **25** | **Excel adalah sumber kebenaran. Mutasi bank tidak bisa diminta.** NIK yang dipakai >1 username dibiarkan apa adanya | *"mutasi bank itu ga cuman pembayaran sistem aja, dan juga sesuain aja sama data di excel"* |
+
+> ⚠️ **Konsekuensi #21 yang belum diselesaikan** — dicatat, tidak diubah:
+> ```
+> KIME  spill.by.lily  ratecard Rp500.000 → tercatat Rp750.000 (Rp100.000 + Rp150.000 + Rp500.000)
+> KIME  beauty.iidd    ratecard Rp450.000 → tercatat Rp550.000 (Rp100.000 + Rp450.000)
+> ```
+> Item Rp500.000 dan Rp450.000 itu **bukan hasil impor** — sudah ada sebelum
+> 14 Sep 2026 (batch "Batch - September 2026", submitted 16 Sep 16:56 dan
+> 16:36). `nominal_pelunasan` di `campaign_creators` tercatat Rp250.000 dan
+> Rp100.000 — cocok dengan Excel. Jadi selisih Rp600.000 itu kemungkinan
+> berasal dari data lama, **bukan dari impor ini**. Belum diverifikasi, belum
+> dikoreksi. Lihat §Risiko di `docs/payment/DEFER.md`.
+
 > ⚠️ **#16 membatalkan rencana lama** di §6 "Deteksi duplikat" dan nomor **#3 di §4A.2**
 > masih menyebut `April` → `NULL`. **Koreksi:** `April` → `Aprilia` (keputusan #17).
 > Section §6 dan §7 di dokumen ini sudah usang — angka-angkanya dihitung dengan
@@ -555,7 +578,12 @@ Tidak ada baris yang dieksklusi diam-diam. Semua hasil perbandingan keluar di la
 
 ---
 
-## 7. Yang di-DEFER — 18 baris / Rp 128.460.000
+## 7. Yang di-DEFER - **17 baris / Rp 118.460.000** *(diperbarui 3 Okt 2026)*
+
+> ⚠️ **Bagian ini sudah usang sebagian.** Angka aslinya 18 baris / Rp 128.460.000.
+> Pada **3 Okt 2026** `Sampel Kime` (1 baris / Rp 10.000.000) diputuskan
+> **dimasukkan** ke campaign 44 KIME (keputusan #22), jadi sisanya **17 baris /
+> Rp 118.460.000**. Rincian per baris yang bisa dipakai: **`docs/payment/DEFER.md`**.
 
 User memutuskan **membiarkan DEFER** (1 Okt 09:2x: "Biarkan DEFER dulu").
 Tidak dimigrasi, tapi tetap tercetak di laporan supaya tidak hilang jejaknya.
@@ -582,10 +610,13 @@ Tidak dimigrasi, tapi tetap tercetak di laporan supaya tidak hilang jejaknya.
 
 Ketiganya `nama_penerima` kosong, lintas campaign.
 
-### 7.3 SAMPEL KIME — 1 baris, Rp 10.000.000
+### 7.3 SAMPEL KIME - 1 baris, Rp 10.000.000 **→ SUDAH DIMASUKKAN 3 Okt 2026**
 
-2026-07-31 · `SAMPLE KIME` · 100% AKHIR · David Sukanto
-Seharusnya operasional campaign KIME (44) — menunggu konfirmasi finance.
+> Keputusan #22: *"gapapa masukin asal ada nama campaignnya jelas bro"*.
+> Dipetakan ke campaign **44 KIME** sesuai keputusan #5. Batch
+> `2026-07-31 - PIC: David - KIME`, item Rp 10.000.000 ke `David Sukanto`
+> (BCA 5295174126), `campaign_creator_id` NULL karena username di spreadsheet
+> cuma label `sample kime`, bukan akun TikTok.
 
 ### 7.4 TOP UP LION — 3 baris, Rp 9.000.000
 

@@ -197,7 +197,7 @@ W ''
 W 'DO $b$'
 W 'BEGIN'
 W '  IF EXISTS (SELECT 1 FROM payment_batches WHERE import_riwayat = ''payment-historis-2026'') THEN'
-W '    RAISE EXCEPTION ''Import ini sudah pernah jalan. Batalkan, atau hapus dulu baris import_riwayatpayment-historis-2026.'';'
+W '    RAISE EXCEPTION ''Import ini sudah pernah jalan. Batalkan, atau hapus dulu baris dengan import_riwayat = payment-historis-2026.'';'
 W '  END IF;'
 W 'END $b$;'
 W ''
@@ -225,40 +225,58 @@ W '-- ====================================================================='
 W '-- payment_batches'
 W '-- ====================================================================='
 W 'CREATE TEMP TABLE t_batch ('
-W '  urut serial PRIMARY KEY, campaign_id int, label text, submitted_by uuid,'
-W '  tgl date, nominal bigint, item_count int, pic text);'
+W '  urut serial PRIMARY KEY, campaign_id int, label text, tgl date,'
+W '  nominal bigint, item_count int, pic text);'
 W ''
 foreach($b in $batches){
     $nom = ($b.items | Measure-Object nominal -Sum).Sum
-    $sbUid = if($picProfil.ContainsKey($b.pic)){ Q $picProfil[$b.pic] } else { 'NULL' }
-    W ("INSERT INTO t_batch (urut,campaign_id,label,submitted_by,tgl,nominal,item_count,pic) VALUES ({0},{1},{2},{3},DATE '{4}',{5},{6},{7});" -f `
-        $b.urut, $b.cid, (Q $b.label), $sbUid, $b.tanggal, $nom, $b.items.Count, (Q $b.pic))
+    W ("INSERT INTO t_batch (urut,campaign_id,label,tgl,nominal,item_count,pic) VALUES ({0},{1},{2},DATE '{3}',{4},{5},{6});" -f `
+        $b.urut, $b.cid, (Q $b.label), $b.tanggal, $nom, $b.items.Count, (Q $b.pic))
 }
 W ''
 W '-- ====================================================================='
 W '-- payment_items'
 W '--'
-W '-- manager/executive/final = ''approved''. Pembayaran ini SUDAH terjadi di'
-W '-- dunia nyata (sudah dibayar, sudah direkam di Excel). Kalau diset'
-W '-- ''pending'', Rp 375 juta akan tampil sebagai "belum dibayar" padahal'
-W '-- uangnya sudah keluar.'
+W '-- NILAI STATUS TIDAK BOLEH DITEBAK. Sudah diverifikasi dari katalog:'
+W '--   manager_status   CHECK (pending|approved|rejected)'
+W '--   executive_status CHECK (pending|approved|rejected)'
+W '--   final_status     CHECK (pending|manager_approved|executive_1_approved|'
+W '--                            pending_finance_outstanding|finance_selected|'
+W '--                            executive_approved|ready_to_pay|paid|rejected)'
+W '--   executive_1_status tidak punya CHECK, tapi item yang sudah dibayar di'
+W '--   sistem sekarang semuanya bernilai ''approved'' - ikut Ditiru.'
 W '--'
-W '-- actual_transfer = nominal dan akan diikutkan ke actual_payment_date'
-W '-- batch, supaya tidak ada item yang terlihat "dibayar Rp 0".'
+W '-- Dipakai: manager=approved, executive_1=approved, executive=approved,'
+W '-- final=paid. Ini persis pola 44 item yang sudah dibayar di sistem sekarang.'
+W '-- Kalau diset ''pending'', Rp 375 juta akan tampil sebagai "belum dibayar"'
+W '-- padahal uangnya sudah keluar.'
+W '--'
+W '-- actual_transfer = nominal dan ikut ke actual_payment_date batch,'
+W '-- supaya tidak ada item yang terlihat "dibayar Rp 0".'
 W '-- ====================================================================='
 W 'CREATE TEMP TABLE t_item ('
 W '  urut serial PRIMARY KEY, batch_urut int, campaign_creator_id int,'
 W '  payment_type text, ratecard_awal bigint, nominal bigint,'
 W '  metode_pembayaran text, nomor_rekening text, nama_penerima text,'
 W '  nik text, alamat_ktp text, link_ktp text, link_kontrak text,'
-W '  manager_status text, executive_status text, final_status text,'
-W '  notes text, actual_transfer numeric, username text, campaign_id int);'
+W '  manager_status text, executive_1_status text, executive_status text,'
+W '  final_status text, notes text, actual_transfer numeric,'
+W '  username text, campaign_id int);'
 W ''
-W 'INSERT INTO t_item (batch_urut,campaign_creator_id,payment_type,ratecard_awal,nominal,metode_pembayaran,nomor_rekening,nama_penerima,nik,alamat_ktp,link_ktp,link_kontrak,manager_status,executive_status,final_status,notes,actual_transfer,username,campaign_id) VALUES'
+W 'INSERT INTO t_item (batch_urut,campaign_creator_id,payment_type,ratecard_awal,nominal,metode_pembayaran,nomor_rekening,nama_penerima,nik,alamat_ktp,link_ktp,link_kontrak,manager_status,executive_1_status,executive_status,final_status,notes,actual_transfer,username,campaign_id) VALUES'
+
+# PENTING: SEMUA baris VALUES harus berada dalam SATU statement INSERT.
+# Kalau tiap baris diakhiri ';', setiap baris jadi statement sendiri dan
+# baris kedua ke bawah akan error "syntax error at or near (".
+# Yang diakhiri ';' hanya baris TERAKHIR. Ini bug yang sudah pernah menimpa.
+$total = ($batches | ForEach-Object { $_.items.Count } | Measure-Object -Sum).Sum
+$done = 0
 foreach($b in $batches){
     foreach($x in $b.items){
+        $done++
         $notes = (@($x.note, $x.catatan) | Where-Object { $_ }) -join ' | '
-        W ("({0},NULL,{1},{2},{3},{4},{5},{6},{7},{8},{9},{10},'approved','approved','approved',{11},{12},{13},{14});" -f `
+        $end = if($done -eq $total){ ');' } else { '),' }
+        W ("({0},NULL,{1},{2},{3},{4},{5},{6},{7},{8},{9},{10},'approved','approved','approved','paid',{11},{12},{13},{14}{15}" -f `
             $b.urut,
             (Q $x.pt),
             ([int64]$x.ratecard_awal),
@@ -273,7 +291,8 @@ foreach($b in $batches){
             (Q $notes),
             ([int64]$x.nominal),
             (Q $x.username),
-            $x.cid)
+            $x.cid,
+            $end)
     }
 }
 
@@ -310,10 +329,18 @@ W '  JOIN payment_batches pb'
 W '    ON pb.import_riwayat = ''payment-historis-2026'''
 W '   AND pb.batch_label = tb.label;'
 W ''
-W '-- GUARD: setiap batch harus ketemu balik, kalau tidak ada yang gagal diam-diam.'
+W '-- GUARD: jumlah row t_map HARUS sama dengan t_batch.'
+W '-- Kalau lebih, itu berarti JOIN ke profiles menghasilkan baris ganda -'
+W '-- artinya ada >1 profil dengan nama yang sama. Kalau itu terjadi, batch'
+W '-- akan ter-INSERT dua kali dan uang terhitung 2x. Tolak, jangan diloloskan.'
 W 'DO $gb$'
-W 'DECLARE n int;'
+W 'DECLARE n int; m int;'
 W 'BEGIN'
+W '  SELECT count(*) INTO n FROM t_batch;'
+W '  SELECT count(*) INTO m FROM t_map;'
+W '  IF n <> m THEN'
+W '    RAISE EXCEPTION ''GAGAL: t_batch % baris tapi t_map % baris. JOIN ke profiles menghasilkan baris ganda - cek profiles.nama yang duplikat.'', n, m;'
+W '  END IF;'
 W '  SELECT count(*) INTO n FROM t_batch tb'
 W '   WHERE NOT EXISTS (SELECT 1 FROM t_map m WHERE m.urut = tb.urut);'
 W '  IF n > 0 THEN'
@@ -328,17 +355,26 @@ W '-- campaign_creator_id diisi lewat creators.username, HANYA kalau username it
 W '-- terdaftar DAN ada di campaign yang sama. Kalau tidak, NULL - beserta'
 W '-- username aslinya di notes supaya jejaknya tetap ada.'
 W '--'
+W '-- PAKAI SUBQUERY KORELASI, bukan UPDATE ... FROM.'
+W '-- PostgreSQL tidak mengizinkan tabel target disebut di klausa FROM-nya:'
+W '-- "invalid reference to FROM-clause entry". Sudah pernah menimpa.'
+W '--'
+W '-- min(cc.id) dipakai supaya hasilnya deterministik kalau ternyata ada'
+W '-- lebih dari satu baris campaign_creators untuk pasangan yang sama.'
+W '--'
 W '-- Item tanpa username (ads / crm / lion / sampel) tetap dapat'
 W '-- campaign_creator_id NULL. Itu kondisi SAH, sudah dibuktikan oleh tes'
 W '-- owner di batch 93.'
 W '-- ====================================================================='
 W 'UPDATE t_item t'
-W '   SET campaign_creator_id = cc.id'
-W '  FROM creators cr'
-W '  JOIN campaign_creators cc ON cc.creator_id = cr.id'
-W '                          AND cc.campaign_id = t.campaign_id'
-W ' WHERE t.username IS NOT NULL'
-W '   AND lower(cr.username) = t.username;'
+W '   SET campaign_creator_id = ('
+W '       SELECT min(cc.id)'
+W '         FROM creators cr'
+W '         JOIN campaign_creators cc ON cc.creator_id = cr.id'
+W '                                AND cc.campaign_id = t.campaign_id'
+W '        WHERE t.username IS NOT NULL'
+W '          AND lower(cr.username) = t.username)'
+W ' WHERE t.username IS NOT NULL;'
 W ''
 W '-- Laporan: berapa item yang punya creator vs tidak.'
 W '\echo ''--- item dengan campaign_creator_id ---'''
@@ -349,14 +385,14 @@ W ''
 W 'INSERT INTO payment_items ('
 W '  batch_id, campaign_creator_id, payment_type, ratecard_awal, nominal,'
 W '  metode_pembayaran, nomor_rekening, nama_penerima, nik, alamat_ktp,'
-W '  link_ktp, link_kontrak, manager_status, executive_status, final_status,'
-W '  notes, actual_transfer, import_riwayat'
+W '  link_ktp, link_kontrak, manager_status, executive_1_status,'
+W '  executive_status, final_status, notes, actual_transfer, import_riwayat'
 W ')'
 W 'SELECT m.id, t.campaign_creator_id, t.payment_type, t.ratecard_awal, t.nominal,'
 W '       t.metode_pembayaran, t.nomor_rekening, t.nama_penerima, t.nik,'
 W '       t.alamat_ktp, t.link_ktp, t.link_kontrak,'
-W '       t.manager_status, t.executive_status, t.final_status,'
-W '       t.notes, t.actual_transfer, ''payment-historis-2026'''
+W '       t.manager_status, t.executive_1_status, t.executive_status,'
+W '       t.final_status, t.notes, t.actual_transfer, ''payment-historis-2026'''
 W '  FROM t_item t'
 W '  JOIN t_map m ON m.urut = t.batch_urut;'
 W ''
