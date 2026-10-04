@@ -271,3 +271,64 @@ fuzzy match. Beda性质: kalau tidak dikonfirmasi, baris itu tetap `NULL`.
 6. SQL INSERT ke payment_batches + payment_items (Fase 2, belum ditulis)
 7. Bersihkan batch tes 93 / item 155
 ```
+
+---
+
+# STATUS AKHIR — 4 Oktober 2026
+
+Sesi 2 Okt ditutup dengan impor **berhasil**. Semua yang tercatat di file ini
+sudah dijalankan ke produksi.
+
+```
+Payment historis : 796 item / Rp 385.026.562 / 278 batch
+Data asli        : 110 item / Rp 44.270.000  (batch tes 93 SUDAH dihapus)
+Staff baru       :   5 item / Rp  1.790.000  (LION PARCEL, pending_manager)
+TOTAL            : 911 item / Rp 431.086.562 / 349 batch
+```
+
+## Yang terjadi setelah impor selesai
+
+1. **Bug label "1 Kreator"** untuk item operasional - sudah diperbaiki
+   (commit `b7289cd`). Judul batch sekarang hitung kreator dan operasional
+   terpisah; kolom Kreator menampilkan "Tanpa kreator (operasional)".
+
+2. **Bug kolom "PIC Submit" kosong** - sudah diperbaiki. `getPaymentBatches`
+   tidak pernah mengambil kolom `submitter` yang dibaca `keuangan/page.tsx:330`.
+   Bug **lama**, bukan dari impor - cuma baru kelihatan karena jumlah batch
+   PWS mendadak banyak. Data `submitted_by` sendiri sudah benar sejak awal
+   (Rija -> Irsadur Rija).
+
+3. **Rollback disiapkan** - `docs/sql/74-rollback-payment-historis.sql`,
+   100% read-only. Semua `DELETE` di dalam `\echo`.
+
+4. **`jimmy.hen` dicek** - 2 baris NAISDAY 19 Jun (Rp400.000 + Rp73.900),
+   keduanya masuk, tidak kena dedup. Kasus yang rencana lama tandai
+   "wajib tidak terdedup" terbukti jalan dengan benar.
+
+5. **5 item baru muncul** dari staff (LION PARCEL, `pending_manager`,
+   4 Okt 2026) - sistem berjalan normal setelah impor.
+
+## Angka lama yang sudah TIDAK berlaku di dokumen ini
+
+| Angka lama | Angka sebenarnya | Kenapa |
+|---|---|---|
+| 840 baris `Paid Off` | **826** | 11 baris September jatuh setelah 14 Sep, sisanya baris TOTAL |
+| 822 baris / Rp 383.776.562 | **792 / Rp 385.026.562** | dihitung dengan aturan dedup yang terbukti menghapus Rp 42.600.000 |
+| "semua 840 masuk" | 792 dari 826 | 17 duplikat lokasi + 17 DEFER |
+| 18 baris DEFER / Rp 128.460.000 | **17 / Rp 118.460.000** | Sampel Kime masuk ke KIME (keputusan #22) |
+
+## Tahap berikutnya
+
+Keputusan owner #1 (1 Okt 2026): **"Plafon budget diisi SETELAH migrasi selesai,
+atau kita bahas lagi setelah rencana migrasi beres dan sudah akurat 100 persen
+gada yang ke dobel."**
+
+Syaratnya sekarang **terpenuhi**: impor selesai, nol duplikat terbukti, semua
+angka terverifikasi ke-VPS.
+
+Sisa pekerjaan lain:
+- 17 baris DEFER / Rp 118.460.000 menunggu jawaban bos (METOO, TOP UP LION,
+  TOP UP QONTAK, MCN). Rincian: `docs/payment/DEFER.md`
+- Hapus `importHistoricalBatch` (fungsinya pasti crash, 3 kolom tidak pernah ada)
+- Risiko terbuka: `KIME spill.by.lily` Rp750.000 vs ratecard Rp500.000,
+  `KIME beauty.iidd` Rp550.000 vs ratecard Rp450.000

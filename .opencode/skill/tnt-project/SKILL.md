@@ -1988,6 +1988,64 @@ manapun** - perlu ditanyakan ke PIC Natallia. Rincian 17 baris defer ada di
 `KIME beauty.iidd` Rp 550.000 dari ratecard Rp 450.000. Item system'seorang
 berasal dari batch September 2026, **bukan dari impor ini**.
 
+### 3C.18 STATUS SETELAH IMPOR (4 Okt 2026) - SUDAH SELESAI
+
+```
+Payment historis : 796 item / Rp 385.026.562 / 278 batch
+Data asli        : 110 item / Rp 44.270.000  (batch tes 93 sudah dihapus)
+Staff baru       :   5 item / Rp  1.790.000  (LION PARCEL, pending_manager)
+TOTAL            : 911 item / Rp 431.086.562 / 349 batch
+```
+
+**Angka lama yang sudah tidak berlaku** (jangan dipakai lagi):
+
+| Angka lama | Sebenarnya | Kenapa |
+|---|---|---|
+| 840 baris `Paid Off` | **826** | 11 baris Sept jatuh setelah 14 Sep + baris TOTAL |
+| 822 / Rp 383.776.562 | **792 / Rp 385.026.562** | dihitung dengan aturan dedup yang terbukti menghapus Rp 42.600.000 |
+| 18 baris DEFER / Rp 128.460.000 | **17 / Rp 118.460.000** | Sampel Kime masuk ke KIME (keputusan #22) |
+
+### 3C.19 Dua bug UI yang BUKAN dari impor (4 Okt 2026)
+
+Keduanya sudah diperbaiki, tapi **pola’ellesnya perlu diingat**:
+
+**1. Kolom "PIC Submit" selalu kosong.** `keuangan/page.tsx:330` baca
+`b.submitter?.nama`, tapi query `getPaymentBatches` (`paymentActions.ts:14`)
+**tidak pernah mengambil kolom itu**. Yang punya `submitter` cuma query lain
+di `L338`. Jadi tampil `-` untuk SEMUA batch — termasuk yang `submitted_by`-nya
+sudah terisi. Bug lama, baru ketahuan setelah impor karena jumlah batch
+mendadak banyak.
+
+**2. Label "1 Kreator" untuk item operasional.** `getGroupTitle` memakai
+`items.length` (jumlah ITEM) untuk memberi label "Kreator". Begitu ada item
+operasional tanpa kreator, angkanya bohong.
+
+> 📌 **Pola yang sama di keduanya:** UI membaca field yang query-nya tidak
+> mengambil, atau menghitung jumlah item tapi menamainya "kreator". Setelah
+> impor massal, **cek UI-nya** - jangan cuma cek angka di SQL. Kedua bug ini
+> tidak terlihat dari query mana pun.
+
+### 3C.20 `jimmy.hen` - kasus wajib tidak terdedup, SUDAH DICEK (4 Okt 2026)
+
+Rencana lama menandai `jimmy.hen` sebagai kasus yang WAJIB tidak terdedup.
+
+Hasil: NAISDAY 19 Jun 2026, **2 baris** - Rp400.000 dan Rp73.900. Keduanya
+masuk, satu batch `2026-06-19 - PIC: Maria - NAISDAY`. Tidak kena dedup karena
+nominal berbeda. **Yang jelas,** tapi dicek karena sudah lama ditandai wajib.
+
+### 3C.21 Rollback siap pakai (4 Okt 2026)
+
+`docs/sql/74-rollback-payment-historis.sql` - **100% read-only**, semua
+`DELETE` ada di dalam `\echo`. Dijalankan = hanya mencetak laporan.
+
+Yang penting untuk diingat: **rollback tidak menghapus data Excel.**
+`payment_import_staging` selalu utuh 826 baris termasuk 17 baris DEFER. Kalau
+perbaiki, koreksi peta campaign di `payment_import_map_campaign`, ubah
+`status_import`, generate ulang `67-` lalu `73-`. Tidak perlu buka Excel lagi.
+
+> Untuk kasus 1 campaign yang salah mapping, **jangan rollback semua.**
+> 796 item itu benar secara aritmetika. `UPDATE` satu campaign jauh lebih aman.
+
 ## 9. Cara memperbarui skill ini
 
 Setelah sesi yang modify kode, jika ada temuan baru (jebakan, keputusan arsitektur, nama

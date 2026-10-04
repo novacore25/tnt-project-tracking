@@ -18,13 +18,31 @@
 | **Scope migrasi** | **840 baris `Paid Off`** / **Rp 512.236.562** |
 | Rincian | 783 baris kreator Rp 310.251.562 + 57 baris operasional Rp 201.985.000 |
 
-### ✅ Scope terverifikasi (scan penuh 1 Okt 2026)
+### ⚠️ Scope AKTUAL (parse penuh 2 Okt 2026) — INI YANG SUDAH DIJALANKAN
 
-Harapan lama **840 baris** ternyata persis = jumlah `Paid Off`. Bukan kebetulan:
+Harapan lama **840 baris ternyata melebihi kenyataan**. Setelah parse penuh
+(Excel COM, read-only) dan verifikasi ke-VPS:
+
+```
+826 baris   Status Pembayaran = "Paid Off"  DAN  tanggal < 2026-09-14
+Rp 507.736.562
+rentang 2026-02-04 s/d 2026-09-11
+815 baris dari kolom Tanggal Pembayaran, 11 dari TANGGAL PENGAJUAN
+0 baris tanpa nominal
+0 baris TOTAL ikut terbawa (sudah dibuang)
+```
+
+Selisih 840 − 826 = **14 baris**. 11 di antaranya baris sheet September 2026
+yang memakai `TANGGAL PENGAJUAN` dan jatuh **setelah** 14 Sep (22/09 atau
+26/09) — artinya sudah pernah dibayar lewat sistem, jadi memang tidak boleh
+diimpor dua kali.
+
+> **Angka 840 di bawah hanya untuk rencana awal.** Untuk hasil final pakai
+> §Rekap Final di bagian paling bawah dokumen ini.
 
 | `Status Pembayaran` | Baris | Actions |
 |---|---:|---|
-| **`Paid Off`** | **840** | ✅ **DIMIGRASI** |
+| **`Paid Off`** | **840** *(826 yang dimigrasi)* | ✅ **SUDAH DIJALANKAN** |
 | `Not Yet` | 78 | 📝 NOTA saja |
 | `Cancel` | 7 | 📝 NOTA saja |
 | (kosong) | 1 | 📝 NOTA saja |
@@ -741,3 +759,73 @@ operasional_lain  1 baris   Rp  10.000.000   <- Sampel Kime
 **Status "siap" versi lama (822 baris / Rp 383.776.562) sudah usang** — dihitung
 dengan aturan dedup yang terbukti menghapus Rp 42.600.000 pembayaran sah.
 Jangan dipakai sebagai angka acuan. Lihat keputusan #16.
+
+---
+
+# REKAP FINAL - 4 Oktober 2026
+
+Status: **SELESAI dan sudah dijalankan ke produksi.**
+
+## Angka final
+
+```
+Payment historis diimport : 796 item / Rp 385.026.562 / 278 batch
+Data asli sistem          : 110 item / Rp 44.270.000  (batch tes 93 sudah dihapus)
+Baru dari staff 04 Okt    :   5 item / Rp  1.790.000  (LION PARCEL, pending_manager)
+-----------------------------------------------------------------------------
+TOTAL SISTEM              : 911 item / Rp 431.086.562 / 349 batch
+```
+
+## Dari 826 baris spreadsheet
+
+| Bagian | Baris | Nominal | Status |
+|---|---:|---:|---|
+| Hasil parse | 826 | Rp 507.736.562 |selesai |
+| - duplikat lokasi | -17 | -Rp 4.250.000 | tidak diimport |
+| - DEFER (tanpa campaign) | -17 | -Rp 118.460.000 | tertahan di staging |
+| = siap diimport | 792 | Rp 385.026.562 | diimport |
+| -> jadi payment_items | **796** | **Rp 385.026.562** | +4 dari pemecahan agency |
+
+> 792 staging -> 796 item karena 1 baris agency (Juli 2026 r61, Rp 2.000.000)
+> dipecah jadi 5 item x Rp 400.000 atas keputusan owner.
+
+## Yang BELUM selesai
+
+| Item | Nilai | Kenapa |
+|---|---|---|
+| 17 baris DEFER | Rp 118.460.000 | Tidak ada campaign di `campaigns`. Rincian: `docs/payment/DEFER.md` |
+| Plafon budget | - | Keputusan #1: diisi **setelah** migrasi selesai & terverifikasi. **INI TAHAP BERIKUTNYA** |
+| Hapus `importHistoricalBatch` | - | Rencana 8 langkah 8. Fungsinya pasti crash (3 kolom tidak pernah ada) |
+| Unique index `(nominal + tanggal)` | - | **JANGAN** - lihat SKILL.md 3.51: index itu menolak pembayaran sah |
+| Koreksi NIK | 7 NIK dipakai >1 username | Keputusan #25: Excel sumber kebenaran, dibiarkan apa adanya |
+
+## Risiko yang dibiarkan terbuka
+
+```
+KIME  spill.by.lily   ratecard Rp500.000 -> tercatat Rp750.000
+KIME  beauty.iidd     ratecard Rp450.000 -> tercatat Rp550.000
+```
+
+Item itu berasal dari batch September 2026, **bukan dari impor ini**.
+`campaign_creators.nominal_pelunasan` = Rp250.000 dan Rp100.000, cocok dengan
+Excel. Selisih Rp600.000 belum diverifikasi. Keputusan owner #21: tanggal
+bereda berarti pembayaran berbeda.
+
+## Kalau finance complain
+
+`docs/sql/74-rollback-payment-historis.sql` - **read-only, menjalankannya tidak
+mengubah apa pun.** Semua `DELETE` ada di dalam `\echo`.
+
+Yang perlu diketahui: **tidak ada data Excel yang hilang.** `payment_import_staging`
+masih 826 baris termasuk 17 baris DEFER. Kalau rollback, koreksi peta campaign
+lalu generate ulang - tidak perlu buka Excel lagi.
+
+Backup: `backup_payment_items_20261002` (111 item) dan
+`backup_payment_batches_20261002` (71 batch).
+
+## Kasus khusus yang WAJIB tidak terdedup - sudah dicek
+
+`jimmy.hen` (SKILL.md / rencana lama menyebutnya wajib dipisah):
+NAISDAY 19 Jun 2026, **2 baris** - Rp400.000 dan Rp73.900. Keduanya masuk,
+satu batch `2026-06-19 - PIC: Maria - NAISDAY`. Tidak kena dedup karena
+nominal berbeda.

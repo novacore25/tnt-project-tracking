@@ -94,7 +94,14 @@ export async function getPaymentBatches(campaignId?: number, status?: string) {
           ) ORDER BY pi.id ASC)
           FROM payment_items pi
           WHERE pi.batch_id = pb.id
-        ) as payment_items
+        ) as payment_items,
+        -- Kolom "PIC Submit" di halaman Keuangan membaca b.submitter?.nama.
+        -- Subquery ini TIDAK ADA sebelumnya, jadi kolomnya selalu undefined dan
+        -- tampil "-" untuk SEMUA batch - termasuk batch yang submitted_by-nya
+        -- sudah terisi. Bug lama, baru ketahuan setelah impor historis
+        -- (3 Okt 2026) karena jumlah batch suddenly banyak.
+        (SELECT json_build_object('nama', p.nama, 'role', p.role)
+           FROM profiles p WHERE p.id = pb.submitted_by) as submitter
       FROM payment_batches pb
       LEFT JOIN campaigns c ON pb.campaign_id = c.id
       ${whereClause}
