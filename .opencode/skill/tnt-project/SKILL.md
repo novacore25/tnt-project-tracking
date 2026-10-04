@@ -2046,6 +2046,68 @@ perbaiki, koreksi peta campaign di `payment_import_map_campaign`, ubah
 > Untuk kasus 1 campaign yang salah mapping, **jangan rollback semua.**
 > 796 item itu benar secara aritmetika. `UPDATE` satu campaign jauh lebih aman.
 
+### 3C.22 DNS VPS punya SATU nameserver - build Docker gagal karena itu (4 Okt 2026)
+
+Deploy gagal 2x berturut-turut, **bukan karena kode**:
+
+```
+Percobaan 1 (08:01)  gagal di #2 FROM node:20-alpine
+  -> auth.docker.io: "lookup ... on 127.0.0.11:53: server misbehaving"
+  -> timeout 5 dari 6 percobaan
+
+Percobaan 2 (08:57)  LOLOS dari #2 (image sudah ter-cache), gagal di
+  #6 deps RUN apk add --no-cache libc6-compat
+  -> dl-cdn.alpinelinux.org: "DNS: transient error (try again later)"
+```
+
+**Diagnosis yang menyelamatkan waktu** ( jangan langsung menyalahkan kode ):
+
+| Uji | Hasil | Arti |
+|---|---|---|
+| `dig @1.1.1.1` 20x | 20/20 | resolver-nya SEHAT |
+| `getent ahostsv4` 10x | **4/10** | glibc gagal 60% |
+| `registry.npmjs.org` 20x | 30/30 | host yang dipakai `npm ci` aman |
+| `conntrack_count` | 99/262144 | bukan SYN flood |
+| `ss -s` | 286 total | koneksi normal |
+
+`/etc/resolv.conf` cuma punya `nameserver 1.1.1.1`. `dig` pakai resolver
+sendiri (sehat), glibc/`apk` retry ke satu-satunya server itu - satu packet
+ hilang = build gagal total.
+
+**Perbaikan:**
+1. `/etc/resolv.conf` ditambah `8.8.8.8` + `9.9.9.9` → `getent ahostsv4`
+   4/10 → 18/20. Backup di `/etc/resolv.conf.bak-20261004`.
+2. `RUN apk add --no-cache libc6-compat` **dihapus** dari `web-app/Dockerfile`.
+   node:20-alpine sudah musl, nol dari 32 dependency butuh glibc, dan
+   `node -e "require('fs')"` jalan tanpa itu. Baris itu panggilan jaringan
+   PERTAMA di build - jadi satu-satunya yang bisa menggagalkan build sebelum
+   kode bahkan dievaluasi.
+
+> 📌 **Pelajaran:** error `DNS: transient error` / `server misbehaving` di
+> log Coolify itu **infrastruktur, bukan kode.** Jangan mulai debugging
+> aplikasi. Cek `dig @<ns> <host>` vs `getent hosts <host>` dulu - kalau
+> yang pertama sehat dan yang kedua gagal, itu NSS/resolv.conf.
+
+### 3C.23 Cara diagnosa cepat saat deploy Coolify gagal
+
+```bash
+# 1. steps #N di log itu apa? Kalau #2 = FROM, itu DNS/registry.
+#    Kalau #9+ = npm/build, itu baru masalah kode.
+
+# 2. apakah container lama masih jalan? (tidak ada downtime?)
+ssh vps "docker ps --filter name=<prefix> --format '{{.Image}} | {{.Status}}'"
+
+# 3. DNS sehat?
+ssh vps "dig +short @1.1.1.1 <host> A; getent ahostsv4 <host>"   # bandingkan
+
+# 4. image sudah ter-cache?
+ssh vps "docker images node:20-alpine"
+```
+
+> Coolify memakai **nama image = commit SHA** (`du7trdtlmdpmahkkptmjokvp:edeb2b4...`).
+> Cara paling cepat tahu build lama atau baru:
+> `docker inspect <container> --format '{{index .Config.Image}}'`
+
 ## 9. Cara memperbarui skill ini
 
 Setelah sesi yang modify kode, jika ada temuan baru (jebakan, keputusan arsitektur, nama
