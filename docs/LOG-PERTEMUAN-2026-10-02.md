@@ -239,7 +239,7 @@ NULL       :  97 baris   Rp 151.555.000
 ```
 
 `Rija` → `Irsadur Rija` dicatat sebagai **konfirmasi eksplisit owner**, bukan
-fuzzy match. Beda性质: kalau tidak dikonfirmasi, baris itu tetap `NULL`.
+fuzzy match. Beda sifat: kalau tidak dikonfirmasi, baris itu tetap `NULL`.
 
 > `*.csv` ada di `.gitignore`. Staging dibungkus sebagai SQL `INSERT ... VALUES`
 > dengan PII dikecualikan — supaya bisa lewat `curl` tanpastoredata sensitif di git.

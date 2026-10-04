@@ -3,7 +3,18 @@ FROM node:20-alpine AS base
 
 # 1. Install dependencies only when needed
 FROM base AS deps
-RUN apk add --no-cache libc6-compat
+# `apk add libc6-compat` DIHAPUS 4 Okt 2026.
+#
+# Alasannya: baris itu tidak pernah dipakai. node:20-alpine sudah berbasis
+# musl, dan tidak ada dependency di package.json yang butuh glibc (dicek:
+# 32 dependency, nol binding native). Diverifikasi langsung di VPS:
+# `node -e "require('fs')"` jalan normal di node:20-alpine tanpa libc6-compat.
+#
+# Dihapus karena `apk add` adalah panggilan jaringan PERTAMA di build, dan
+# /etc/resolv.conf di VPS hanya punya SATU nameserver (1.1.1.1) yang
+# kadang gagal resolve. Satu packet hilang = build gagal total padahal
+# tidak ada yang salah pada kodenya. Baris aslinya berasal dari commit
+# f813afd dan tidak pernah ditanya sejak itu.
 WORKDIR /app
 
 COPY package.json package-lock.json* ./
