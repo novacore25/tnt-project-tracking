@@ -2171,6 +2171,91 @@ pemetaan. Konsekuensi:
 - Kalau auto-sync bermasalah someday, cek `skus.campaign_id` DULU,
   bukan `tiktok_campaign_ids`.
 
+### 3C.27 "SYB X TNT CREATOR FEST 2026" = TikTok campaign tanpa campaign internal (6 Okt 2026)
+
+Semua laporan TikTok Shop dari user bisa memuat **lebih dari satu** Campaign ID
+—even kalau hanya satu brand yang dipilih. Yang kedua tidak selalu punya
+campaign internal sendiri:
+
+```
+7631140567631972112  "TNT MEDIA x SYB"                 -> campaign 46 (SYB)
+7643606629893670677  "SYB X TNT CREATOR FEST 2026"     -> TIDAK ADA di tabel campaigns
+
+campaign 76 KEMBANG 7 RUPA - CREATOR FEST 2026   tiktok_campaign_ids = {}
+campaign 77 USMILE - Creator Fest 2026            tiktok_campaign_ids = {}
+campaign 137 Sorae x Creator Fest 2026            tiktok_campaign_ids = {}
+```
+
+Jadi pola "Creator Fest 2026" punya campaign internal untuk 3 brand, tapi
+**bukan untuk SYB**. Konsekuensi: isi TikTok campaign `7643606629893670677`
+ikut masuk ke campaign 46 karena **product_id**-nya cocok (`skus`),
+bukan karena campaign ID-nya dicocokkan.
+
+**Cara memastikan nama campaign TikTok:** kolom `Campaign name` di laporan
+TikTok (kolom 4). Cek dengan:
+
+```sql
+SELECT DISTINCT raw_data->>'Campaign name' FROM organic_videos WHERE campaign_id=46;
+```
+
+Atau dari file Excel user langsung — `CustomReport_..._Video_...` dan
+`CustomReport_..._Live_...` bisa berisi Campaign ID BERBEDA.
+
+### 3C.28 `videos.content_uid` bisa menunjuk konten campaign LAIN (6 Okt 2026)
+
+`videos` terhubung ke `campaign_creators` (slot kreator), lalu
+`content_uid`-nya dicocokkan ke `organic_videos`. **Tidak ada filter
+campaign di JOIN itu** — jadi satu `content_uid` bisa jadi "milik"
+beberapa campaign. Kebocoran silang terukur:
+
+```
+45.845 baris videos yang punya content_uid
+ 40.858 senada (93%)
+  3.398 BOCOR  -> 714 content_uid, isinya milik campaign lain
+
+videos.id 62072: slot campaign 46 (SYB), tapi organic_videos-nya
+                 campaign 42 (MS Glow For Men), produk MS Glow
+```
+
+Terparah: **campaign 76 (1.258 baris), 77 (344), 137 (41)** menunjuk
+konten MS Glow Beauty — padahal `skus` campaign 76/77/137 **tidak punya
+satu pun** produk MS Glow Beauty. Jadi benar-benar salah, bukan
+kebetulan.
+
+> ✅ **Yang menyelamatkan: semuanya masih `vt_approval = 'pending'`.**
+> Belum ada satu pun yang approved. Jadi tidak ada data "sudah disetujui"
+> yang perlu diturunkan ke pending — user sendiri yang dikonfirmasi aturan
+> ini: *"kalau statusnya udh approve ya gausah di pendingin lagi"*.
+
+Query deteksi (read-only, `docs/sql/76-audit-konsistensi-content-id.sql`):
+
+```sql
+WITH link AS (
+  SELECT cc.campaign_id AS camp_slot, v.content_uid, v.vt_approval,
+         o.campaign_id AS camp_isinya
+  FROM videos v
+  JOIN campaign_creators cc ON cc.id = v.campaign_creator_id
+  JOIN organic_videos o ON o.content_uid = v.content_uid
+  WHERE v.content_uid IS NOT NULL
+)
+SELECT vt_approval, count(*), count(DISTINCT content_uid)
+FROM link WHERE camp_slot <> camp_isinya GROUP BY 1;
+```
+
+### 3C.29 Hampir semua `videos.sku_id` NULL - produk tak bisa diverifikasi
+
+```
+videos (seluruh DB): 31.816 baris
+  31.621 punya content_uid
+  25.818 punya sku_id
+campaign 46: 513 baris videos -> 512 punya sku_id NULL
+```
+
+Artinya **"cocok dengan product_id campaign" tidak bisa dicek** untuk
+mayoritas baris. Yang bisa dicek cuma lewat `content_uid` ->
+`organic_videos.product_id`. Kalau suatu saat harus diverifikasi manual,
+join lewat `content_uid`, bukan `sku_id`.
+
 ## 9. Cara memperbarui skill ini
 
 Setelah sesi yang modify kode, jika ada temuan baru (jebakan, keputusan arsitektur, nama
