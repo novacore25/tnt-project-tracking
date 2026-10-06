@@ -2256,6 +2256,96 @@ mayoritas baris. Yang bisa dicek cuma lewat `content_uid` ->
 `organic_videos.product_id`. Kalau suatu saat harus diverifikasi manual,
 join lewat `content_uid`, bukan `sku_id`.
 
+### 3C.30 GMV kreator pending DIHITUNG, bukan ditahan (koreksi 6 Okt 2026)
+
+User koreksi asumsi awal saya: **kreator yang belum approve tapi sudah
+berproduksi TETAP dihitung GMV-nya.** Filter "Unattributed (Sisa + GMV)"
+di halaman listing justru untuk melihat itu - siapa yang belum approve
+tapi sudah ada penjualan.
+
+Sudah ada di `campaignPageActions.ts:1653-1664`:
+`cc.approval != 'approved' AND EXISTS (sales ... gmv > 0)`.
+
+> 📌 **Jangan pernah dipersempit jadi `approval = 'approved'`.** Itu
+> menghapus justru informasi yang dicari tim. Kreator yang sudah ada di
+> listing juga **tidak boleh diapa-apain** - itu kinerja listingan PIC.
+
+### 3C.31 `gmv_30d*` di listing BUKAN performa campaign (6 Okt 2026)
+
+Tiga kolom di `CreatorRow.tsx`:
+
+```
+GMV 30 Days  <- creator_snapshots.gmv_30d        :577
+GMV (Video)  <- creator_snapshots.gmv_30d_video  :597
+GMV (Live)   <- creator_snapshots.gmv_30d_live   :617
+```
+
+Semuanya **snapshot manual dari TikTok**, bisa diedit per sel
+(`onClick` -> input -> `onBlur` -> simpan). Disimpan di
+`creator_snapshots` bersama `followers`, `tier`, `level`, `ratecard` -
+jadi jelas ini data **screening kreator**, bukan performa campaign.
+
+Bukti selisihnya 1.000-5.000x (campaign 46):
+
+```
+_karisma__01      snapshot Rp 3.000.000.000  | sales SYB Rp    603.145
+mei_arifin180899  snapshot Rp 2.700.000.000  | sales SYB Rp    454.669
+nris9             snapshot Rp 1.150.000.000  | sales SYB Rp 13.113.484
+```
+
+> Kalau user tanya "performa penjualan kreator ini berapa", jangan pakai
+> angka ini. Pakai `sales` dengan filter `campaign_id` + `creator`.
+
+### 3C.32 `sales.content_type` punya 6 nilai, 2 di luar live/video (6 Okt 2026)
+
+```
+Video                       25.011 item  Rp 1.028.207.026
+video                        7.576 item  Rp   321.646.014
+Livestream                   1.069 item  Rp    69.284.015
+livestream                     327 item  Rp    29.263.249
+External Traffic Program       653 item  Rp    29.988.918   <- di luar
+Showcase                        96 item  Rp     4.919.285   <- di luar
+```
+
+`ILIKE '%live%'` **tidak** cocok untuk dua nilai terakhir, jadi 749 item /
+Rp 34.908.203 tidak masuk hitungan live maupun video. `organic_videos`
+justru bersih - hanya 4 nilai (`Video`, `Livestream`, `livestream`,
+`video`). Lihat §3C.25 untuk angka lengkapnya.
+
+### 3C.33 Tag `AUTO` sudah ada - jangan bikin kolom baru (6 Okt 2026)
+
+Saya sempat bertanya mau taruh tag "dibuat otomatis" di mana. **Jawabannya
+sudah ada di kode** - `CreatorRow.tsx:232`:
+
+```tsx
+{(!cc.added_by || cc.tier === 'Auto-Detect') && <span>AUTO</span>}
+```
+
+Jadi tag = `campaign_creators.added_by` NULL (bukan dibuat PIC) **atau**
+`tier = 'Auto-Detect'`. Tidak perlu migration, tidak perlu kolom baru.
+
+> `campaign_creators.added_by` bertipe **UUID** (referensi `profiles`),
+> jadi tidak mungkin diisi string `'auto'`. Hanya `creators.added_by`
+> yang varchar, dan itu sudah dipakai `'system'` (`syncUnmapped.ts:93`).
+
+### 3C.34 Tiga definisi "performa" berbeda, tapi angkanya sama sekarang (6 Okt 2026)
+
+```
+performaActions.ts:31,41    WHERE campaign_id = X
+portalActions.ts:135        WHERE campaign_id = X
+videoActions.ts:52-55,67-70 WHERE campaign_id = X OR product_id IN (skus X)
+```
+
+Cabang `OR` menarik baris dari campaign lain **secara teori**, tapi
+**0 campaign punya angka berbeda** sekarang - karena tidak ada
+`product_id` yang dipakai lebih dari 1 campaign (terverifikasi 6 Okt:
+0 dari 33.000+ baris `skus`).
+
+> ⚠️ **Risiko latent.** Kalau suatu saat satu produk dipakai 2 campaign,
+> definisi `videoActions.ts` akan menarik data campaign lain dan angka
+> Performa vs Video akan mulai beda. Kalau products didaftarkan ganda,
+> ini yang pertama harus dicek.
+
 ## 9. Cara memperbarui skill ini
 
 Setelah sesi yang modify kode, jika ada temuan baru (jebakan, keputusan arsitektur, nama
