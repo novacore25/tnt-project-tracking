@@ -738,20 +738,32 @@ export async function ensureVideoColumns() {
       END $$;
     `);
 
+    // PENTING (6 Okt 2026): JANGAN drop CHECK constraint di sini.
+    //
+    // Blok lama melakukan `DROP CONSTRAINT ... conname ILIKE '%vt_approval%'`
+    // SETIAP KALI halaman video dibuka. Efeknya: constraint itu hilang
+    // permanen di produksi, jadi nilai vt_approval apa pun bisa masuk
+    // tanpa ditolak. Formasi constraint yang benar sekarang dibuat ulang
+    // di bawah dengan ADD CONSTRAINT (bisa diulang karena DO-blok di bawah
+    // membersihkannya lebih dulu).
     await db.execute(sql`
       DO $$
       DECLARE
         r RECORD;
       BEGIN
         FOR r IN (
-          SELECT conname 
-          FROM pg_constraint 
-          WHERE conrelid = 'videos'::regclass 
-            AND contype = 'c' 
+          SELECT conname
+          FROM pg_constraint
+          WHERE conrelid = 'videos'::regclass
+            AND contype = 'c'
             AND conname ILIKE '%vt_approval%'
         ) LOOP
           EXECUTE 'ALTER TABLE videos DROP CONSTRAINT IF EXISTS ' || quote_ident(r.conname);
         END LOOP;
+
+        ALTER TABLE videos
+          ADD CONSTRAINT videos_vt_approval_check
+          CHECK (vt_approval IN ('pending','approved','revisi','reject'));
       EXCEPTION
         WHEN OTHERS THEN NULL;
       END $$;
@@ -790,6 +802,22 @@ export async function upsertVideoAction(params: {
 }) {
   try {
     await ensureVideoColumns();
+
+    // GUARD: pastikan campaign_creator_id benar-benar milik campaign yang
+    // boleh diakses user SEBELUM menyentuh baris video.
+    //
+    //Sebelum ini `WHERE id = ?` saja, jadi siapa pun yang login bisa
+    // menebak `id` dan mengubah video campaign lain. Ownership harus di
+    // WHERE (pola yang benar sudah ada di skuActions.ts:50), bukan dicek
+    // terpisah setelahnya.
+    const cc = await db.execute(sql`
+      SELECT cc.campaign_id FROM campaign_creators cc WHERE cc.id = ${params.campaign_creator_id} LIMIT 1
+    `) as any[];
+    if (!cc[0]) {
+      return { success: false, error: 'campaign_creator_id tidak ditemukan' };
+    }
+    await requireCampaignAccess(Number(cc[0].campaign_id));
+
     if (params.id) {
       // Update
       const sets: any[] = [];
@@ -811,10 +839,17 @@ export async function upsertVideoAction(params: {
       if (params.added_by !== undefined) sets.push(sql`added_by = ${params.added_by}`);
 
       if (sets.length === 0) return { success: true, data: null };
+      // `AND campaign_creator_id` menambah-yakin: baris yang salah campaign
+      // tidak akan ter-update walau guard di atas lolos.
       const rows = await db.execute(sql`
-        UPDATE videos SET ${sql.join(sets, sql`, `)} WHERE id = ${params.id} RETURNING *
+        UPDATE videos SET ${sql.join(sets, sql`, `)}
+        WHERE id = ${params.id} AND campaign_creator_id = ${params.campaign_creator_id}
+        RETURNING *
       `) as any[];
-      return { success: true, data: rows[0] || null };
+      if (!rows[0]) {
+        return { success: false, error: 'Video tidak ditemukan pada campaign ini' };
+      }
+      return { success: true, data: rows[0] };
     } else {
       // Check existing for same ccId + urutan
       const existing = await db.execute(sql`

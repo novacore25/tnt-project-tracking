@@ -165,6 +165,24 @@ export async function executeSalesImportChunkAction(salesRows: any[], videoRows:
               ? String(v.creator_username).trim().toLowerCase()
               : 'unknown';
 
+            // Normalisasi content_type (6 Okt 2026).
+            //
+            // Nilai diambil apa adanya dari kolom "Content Type" di laporan
+            // TikTok, jadi campur huruf besar/kecil: 'Livestream' 15.346
+            // baris vs 'livestream' 115 baris, 'Video' 47.386 vs 'video' 29.
+            // Query dengan `content_type = 'Livestream'` diam-diam kehilangan
+            // 115 room. Semua jalur baca sekarang pakai ILIKE, tapi lebih aman
+            // menyimpan satu kapitalisasi saja sejak awal.
+            //
+            // 'Showcase' (96 item) dan 'External Traffic Program' (653 item)
+            // memang ada di laporan TikTok tapi BUKAN live dan bukan video.
+            // Keduanya dikembalikan 'Video' supaya tidak hilang dari DB - yang
+            // penting tidak salah diklasifikasi sebagai live.
+            const rawType = String(v.content_type || '').trim().toLowerCase();
+            const normType = (rawType === 'livestream' || rawType === 'live')
+              ? 'Livestream'
+              : 'Video';
+
             return sql`(
               ${v.content_uid},
               ${v.product_id || null},
@@ -175,7 +193,7 @@ export async function executeSalesImportChunkAction(salesRows: any[], videoRows:
               ${Number(v.video_likes) || 0},
               ${v.duration_str || null},
               ${Number(v.video_product_rpm) || 0},
-              ${v.content_type || 'Video'},
+              ${normType},
               ${v.tiktok_campaign_id ? String(v.tiktok_campaign_id).trim() : null},
               ${rawClean}::jsonb
             )`;

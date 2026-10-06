@@ -648,7 +648,12 @@ export default function CampaignVideoPage({
             link_video: v.link_video,
             content_uid: finalContentUid,
             sku_id: v.sku_id ? Number(v.sku_id) : null,
-            vt_approval: v.vt_approval || 'approved',
+            // PENTING (6 Okt 2026): default WAJIB 'pending', bukan 'approved'.
+            // Sebelumnya baris ini 'approved', jadi slot video baru yang disimpan
+            // pertama kali LANGSUNG lolos review tanpa pernah dilihat PIC/Manajer.
+            // Cabang update (baris 633) sudah pakai 'pending' - hanya insert yang
+            // tidak konsisten.
+            vt_approval: v.vt_approval || 'pending',
             vt_approved_by: v.vt_approved_by || null,
             vt_approved_at: v.vt_approved_at || null,
             added_by: v.link_video ? (profile?.nama || profile?.username || 'PIC') : undefined

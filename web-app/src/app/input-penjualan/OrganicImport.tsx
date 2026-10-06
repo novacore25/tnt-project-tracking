@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Upload, AlertCircle, CheckCircle2, FileSpreadsheet, Loader2, BarChart3, Users, Tags, ArrowRight, XCircle, ChevronDown, ChevronRight } from "lucide-react";
@@ -76,8 +76,48 @@ export default function OrganicImport({ mode = 'sales' }: { mode?: 'sales' | 'vi
   const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
   const [columnMapping, setColumnMapping] = useState<Record<string, string>>({});
   const [parsedData, setParsedData] = useState<any[]>([]);
+  // Peringatan auto-deteksi format (6 Okt 2026).
+  const [formatWarning, setFormatWarning] = useState<string | null>(null);
 
-  const REQUIRED_COLUMNS = mode === 'sales' ? [
+  // ================= AUTO-DETECT FORMAT DARI HEADER (6 Okt 2026) =================
+  //
+  // ID livestream room dan video sama-sama 19 digit, prefix 4 digit-nya tumpang
+  // tindih 100% - tidak ada cara bedain dari ID-nya (terverifikasi 6 Okt 2026).
+  // Dulu `content_type` di-hardcode dari tab, jadi upload file LIVE ke tab VIDEO
+  // akan menyimpan live room sebagai 'Video' tanpa protes apa pun.
+  //
+  // Sekarang HEADER Excel yang menentukan. Laporan TikTok selalu punya kolom
+  // yang tidak ambigu:
+  //   LIVE  -> "Livestream room ID", "LIVE time info", "LIVE views"
+  //   VIDEO -> "Video ID", "Video views", "Video likes"
+  //
+  // Tab tetap jadi cadangan kalau header tidak dikenali.
+  const detectedFormat: 'live' | 'video' | 'sales' = useMemo(() => {
+    if (mode === 'sales') return 'sales';
+    const headers = (parsedData[0] ? Object.keys(parsedData[0]) : csvHeaders)
+      .map(h => h.toLowerCase().trim());
+    const has = (...names: string[]) => names.some(n => headers.includes(n));
+    const live  = has('livestream room id', 'live time info', 'live views', 'live likes');
+    const vid   = has('video id', 'video views', 'video likes');
+    if (live && !vid) return 'live';
+    if (vid && !live)  return 'video';
+    return mode; // header tidak dikenali -> pakai tab
+  }, [mode, parsedData, csvHeaders]);
+
+  // Peringatan kalau tab dan header tidak cocok
+  useEffect(() => {
+    if (mode === 'sales' || !parsedData.length) { setFormatWarning(null); return; }
+    if (detectedFormat === mode) { setFormatWarning(null); return; }
+    const label = detectedFormat === 'live' ? 'LIVE' : 'VIDEO';
+    setFormatWarning(
+      `File ini terdeteksi sebagai laporan ${label} dari kolomnya, `
+      + `padahal diunggah lewat tab "${mode === 'video' ? 'Awareness Video' : 'Awareness Live'}". `
+      + `Format ${label} yang dipakai. Kalau ini keliru, ganti nama kolom di file Excel `
+      + `agar kembali ke "${detectedFormat === 'live' ? 'Livestream room ID' : 'Video ID'}".`
+    );
+  }, [detectedFormat, mode, parsedData.length]);
+
+  const REQUIRED_COLUMNS = detectedFormat === 'sales' ? [
     { key: 'order_id', label: 'Order ID', autoMatch: ['order id', 'id pesanan'] },
     { key: 'sku_id', label: 'SKU ID', autoMatch: ['sku id'] },
     { key: 'product_id', label: 'Product ID', autoMatch: ['product id', 'id produk'] },
@@ -246,8 +286,8 @@ export default function OrganicImport({ mode = 'sales' }: { mode?: 'sales' | 'vi
     // We already parsed the data and have mapping
     const data = parsedData;
     const isSalesFormat = mode === 'sales';
-    const isAwarenessFormat = mode === 'video';
-    const isLiveFormat = mode === 'live';
+    const isAwarenessFormat = detectedFormat === 'video';
+    const isLiveFormat = detectedFormat === 'live';
 
     // Buat Dictionary Mapping
     const skuMapping: Record<string, number> = {};
