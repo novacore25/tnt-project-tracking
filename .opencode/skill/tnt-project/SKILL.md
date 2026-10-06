@@ -2346,6 +2346,77 @@ Cabang `OR` menarik baris dari campaign lain **secara teori**, tapi
 > Performa vs Video akan mulai beda. Kalau products didaftarkan ganda,
 > ini yang pertama harus dicek.
 
+### 3C.35 SATU live room = BANYAK produk di BANYAK campaign (6 Okt 2026)
+
+Ini fakta paling penting untuk memahami semua angka organic. Terverifikasi
+langsung dari file Excel owner (`1 APRIL - 31 AGUSTUS LIVE`):
+
+```
+room 7645577769421867783   creator: mamizain.homedecor
+  SORAE X TNT CREATOR FEST 2026        SORAE PERFUME
+  TNT x MS GLOW Beauty                 msglow.beauty
+  CRYSTAL GLOW X TNT CREATOR FEST      CRYSTAL GLOW OFC
+  PWS X TNT CREATOR FEST 2026          perfectwhiteseries
+  KIME X TNT CREATOR FEST 2026         Kime Skincare Shop
+  KYMMSKIN X TNT CREATOR FEST          KymmSkin
+  PRATISUN X TNT CREATOR FEST          Pratisun cosmetics
+  BEAUTY OF ANGEL X TNT CREATOR FEST   Beauty Of Angel
+  USMILE X TNT CREATOR FEST 2026       usmile Indonesia
+  SYB X TNT CREATOR FEST 2026          SYB
+```
+
+Satu creator, satu live room panjang (program "Creator Fest 2026"), di
+dalamnya jualan produk dari ~10 shop. TikTok menulis **satu baris per
+(room x produk x campaign)**.
+
+> ⚠️ **Karena itu 62.876 baris `organic_videos` hanya berisi 42.586 uid.**
+> Itu **BUKAN** bug duplikasi - itu format laporan TikTok. JANGAN
+> "dideduplikasi" dengan menghapus baris: satu room memang harus punya banyak
+> baris, satu per produk yang dijual di dalamnya.
+
+### 3C.36 Aturan hitung yang dipakai owner (6 Okt 2026)
+
+> *"untuk campaign SYB misal cukup hitung yang ada product id dia aja ...
+> livestream room id dan product id jadi acuan untuk menghitung sesi live
+> di campaign tersebut"*
+
+Definisi baku: **room dihitung untuk campaign X HANYA kalau `product_id`-nya
+terdaftar di `skus` campaign X.**
+
+Ternyata `organic_videos.campaign_id` selalu di-set dari `product_id` saat
+import, jadi `WHERE campaign_id = X` **sudah** equivalent dengan
+product-scoped. Verifikasi 44 campaign aktif (6 Okt):
+
+| Definisi | Hasil |
+|---|---|
+| live by `campaign_id` vs by `product_id` | **43/44 identik** |
+| video by `campaign_id` vs by `product_id` | **43/44 identik** |
+| longgar (`videoActions`) vs ketat | **44/44 identik** |
+
+Yang beda cuma **campaign 38 PWS** (live 677 vs 676, video 8.125 vs
+8.037) - produknya belum terdaftar di Master Produk PWS. SYB identik di
+semua definisi.
+
+### 3C.37 Views WAJIB MAX, bukan SUM - dan semua jalur sudah benar (6 Okt 2026)
+
+Satu room dengan 13 baris produk punya `video_views = 232` **diulang 13
+kali** (itu views ruangan, bukan per produk). Jadi:
+
+```
+SUM = 3.016   <- 13x lebih besar, SALAH
+MAX =   232   <- ini yang benar
+```
+
+Untuk SYB: `SUM 691.030` vs `MAX 529.526` = **30,5% lebih** kalau dijumlah.
+
+Semua jalur baca sudah benar:
+- `PerformaClient.tsx:156-157` - `Math.max` ✓ (plus filter `skuSet` di `:143`)
+- `portalActions.ts:351-352` - `Math.max` ✓
+- `videoActions.ts:185-186` - `Math.max` ✓
+
+> Kalau menambah jalur baca baru, **jangan pernah `SUM(video_views)`**.
+> Dedup per `content_uid` dulu, lalu `MAX`.
+
 ## 9. Cara memperbarui skill ini
 
 Setelah sesi yang modify kode, jika ada temuan baru (jebakan, keputusan arsitektur, nama
