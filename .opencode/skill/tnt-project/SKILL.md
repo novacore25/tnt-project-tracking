@@ -2108,6 +2108,69 @@ ssh vps "docker images node:20-alpine"
 > Cara paling cepat tahu build lama atau baru:
 > `docker inspect <container> --format '{{index .Config.Image}}'`
 
+### 3C.24 SATU campaign internal bisa punya BEBERAPA TikTok Campaign ID (6 Okt 2026)
+
+User skeptis: sistem tunjuk **547 livestream** untuk SYB, export alltime
+TikTok Shop miliknya cuma **271 room ID unik**. Selisihnya 276 room.
+
+**Data sistem BENAR.** Bedanya bukan import salah, bukan data hilang:
+
+```
+campaign 46 (SYB) di tabel campaigns:
+  tiktok_campaign_ids = {7631140567631972112}      <- CUMA SATU
+
+tapi organic_videos campaign 46 berisi DUA TikTok campaign:
+  7631140567631972112  -> 273 live   <- ada di file Excel user
+  7643606629893670677  -> 278 live   <- TIDAK ada di file Excel user
+  4 room tercatat di keduanya (dobel)
+  273 + 278 - 4 = 547   ✅ sama dengan angka di UI
+```
+
+Kedua campaign itu **shop yang sama persis**: `SYB` / `IDLCDYLLQP` /
+shop ID `7494083758024001281`. Artinya `7643606629893670677` adalah
+campaign TikTok kedua di dalam shop SYB — sah. Export Excel user
+di-filter satu Campaign ID, jadi tidak ikut terbawa.
+
+### 3C.25 `content_type` di `organic_videos` BERCAMPUR HURUF BESAR/KECIL
+
+Import mengambil nilai **apa adanya** dari Excel
+(`OrganicImport.tsx:420` — `contentType = row[...content_type]`). Hasilnya
+di seluruh DB:
+
+```
+Video        47.386 baris / 36.865 uid
+Livestream   15.346 baris /  5.670 uid
+livestream      115 baris /    115 uid    <-- huruf kecil, 115 room
+video            29 baris /     29 uid    <-- huruf kecil
+```
+
+> ⚠️ **Query dengan `content_type = 'Livestream'` akan kehilangan 115
+> room.** Selalu pakai `ILIKE '%live%'` atau `lower(content_type)`.
+
+**Semua jalur baca di app sudah aman** — semuanya pakai `ILIKE`:
+`campaignPageActions.ts:133,142`, `livestreamActions.ts:59,117`,
+`paymentActions.ts:213,215`. Jadi angka di UI **tidak** salah karena
+kasus ini. Tetap perlu normalisasi kapitalisasinya, tapi itu nanti,
+**bukan bug yang menjelaskan selisih angka SYB.**
+
+### 3C.26 Auto-sync TIDAK memetakan lewat `tiktok_campaign_ids`
+
+`web-app/src/lib/tiktokAutoSync.ts:547-559` — campaign TikTok dicocokkan
+ke campaign internal dengan urutan:
+
+1. **cocok `product_id`** (lewat `skus.campaign_id`)
+2. kalau gagal, cocok **nama campaign** (`tapName` vs `ic.nama_campaign`)
+
+`campaigns.tiktok_campaign_ids` **tidak dipakai sama sekali** untuk
+pemetaan. Konsekuensi:
+
+- Mendaftarkan `7643606629893670677` ke `campaign 46` itu **kosmetik**
+  (keterangan saja), **tidak** memperbaiki auto-sync.
+- Semua 20 produk SYB sudah terdaftar di `skus` dengan `campaign_id=46`
+  → auto-sync **tetap** akan menarik kedua campaign TikTok.
+- Kalau auto-sync bermasalah someday, cek `skus.campaign_id` DULU,
+  bukan `tiktok_campaign_ids`.
+
 ## 9. Cara memperbarui skill ini
 
 Setelah sesi yang modify kode, jika ada temuan baru (jebakan, keputusan arsitektur, nama
