@@ -20,11 +20,19 @@ build/
 
 # SQL hasil impor payment historis - MENGANDUNG DATA PII.
 # NIK, nomor rekening, dan nama penerima ada di dalam file ini. Nama file
-# di sini WAJIB evocative supaya tidak salah commit. Prinsipnya: data yang
+# di sini WAJIB eksplisit supaya tidak salah commit. Prinsipnya: data yang
 # masuk DB produksi tidak harus masuk git history.
 # Lihat docs/payment/PII.md.
 docs/sql/7*-insert-payment-historis.sql
 docs/payment/payment-historis-lokal.sql
+
+# Cache hasil parse Excel payment / laporan TikTok.
+# SEMUA file .txt di docs/payment/ adalah turunan mentah dari Excel yang
+# di-upload owner. Sebagian berisi NIK 16 digit, nomor rekening, dan nama
+# penerima. File ini sempat ter-commit sebelum aturan ini dibuat - sudah
+# di-`git rm --cached`, tapi ISI LAMA MASIH ADA di git history.
+# Lihat docs/payment/PII.md bagian "riwayat git".
+docs/payment/*.txt
 
 # OS generated files
 .DS_Store

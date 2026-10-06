@@ -19,6 +19,32 @@ Repo ini private, tapi "private" bukan alasan untuk menaruh NIK orang di sana.
 | `docs/payment/parsed-826.csv` | 826 baris + nama penerima, nomor rekening, NIK, alamat | **di-ignore** (`*.csv`) |
 | `docs/sql/73-insert-payment-historis.sql` | INSERT final ke `payment_items`, berisi PII | **di-ignore** |
 
+## Riwayat git — PII yang SUDAH masuk history (6 Okt 2026)
+
+Ternyata `*.csv` sudah di-ignore, tapi **cache `.txt` di `docs/payment/` tidak
+pernah di-ignore** — dan salah satu di antaranya mengandung PII asli:
+
+| File | Temuan | Commit pertama |
+|---|---|---|
+| `docs/payment/analisis-duplikat-rekening.txt` | **18 NIK 16 digit** (kode wilayah 390108 = Bekasi), nomor rekening bank, nama penerima | `fde90cd` |
+| `docs/payment/analisis-l3.txt` | 4 NIK 16 digit | `fde90cd` |
+| `docs/payment/analisis-l1.txt`, `analisis-l2.txt`, `analisis-pws-september.txt`, `verifikasi-73.txt` | tanpa NIK, tapi tetap turunan mentah Excel | `fde90cd` |
+| `docs/payment/live-syb-rooms.txt` | 271 room ID TikTok (bukan PII), tetap tidak perlu di git | `70d9f1d` |
+
+Semua file di atas **sudah di-`git rm --cached`** dan `.gitignore` sekarang
+menutup `docs/payment/*.txt`. File tetap ada di disk owner.
+
+> ⚠️ **Isi lama MASIH ADA di git history.** `git rm` hanya menghapus di HEAD.
+> Menghapus dari history butuh `git filter-repo` yang write ulang SEMUA SHA —
+> karena itu repo ini private dan hanya punya satu remote, keputusan ada di
+> tangan owner. Lihat bagian "Kalau PII terlanjur ter-commit" di bawah.
+
+Cara memastikan file .txt di `docs/payment/` tidak naik lagi:
+
+```powershell
+git check-ignore -v docs\payment\analisis-duplikat-rekening.txt
+```
+
 ## Yang AMAN di-commit
 
 File di `docs/sql/` yang hanya berisi query `SELECT` atau SQL ke tabel staging
