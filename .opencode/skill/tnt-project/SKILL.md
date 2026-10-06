@@ -2417,6 +2417,122 @@ Semua jalur baca sudah benar:
 > Kalau menambah jalur baca baru, **jangan pernah `SUM(video_views)`**.
 > Dedup per `content_uid` dulu, lalu `MAX`.
 
+### 3C.38 ARSITEKTUR: raw import + filter per campaign saat BACA (6 Okt 2026)
+
+Ini prinsip yang owner reiterate, dan saya sempat salah paham beberapa kali:
+
+> *"data yang masuk akan mentah plek ketiplek seperti Excelnya, dan nanti di
+> bagian tiap-tiap campaign akan memfilternya sesuai campaign setting-nya:
+> waktunya kapan, kreatornya siapa aja, product id-nya apa aja, tipe
+> kontennya apa aja, dan order id yang layak masuk"*
+
+```
+IMPORT (MENTAH)  organic_videos = isi apa adanya dari CustomReport TikTok
+                 sales          = semua order_id yang pernah di-import
+READ   (PER CAMPAIGN, mandiri)
+                 product_id ∈ skus(campaign)   ← penyentu utama
+                 creator    ∈ campaign_creators(campaign)
+                 content_type ∈ {Livestream, Video}
+                 tanggal ∈ start_date .. end_date
+                 order_id → sales
+```
+
+> **"Kalau database-nya ngaco atau ga jelas gapapa, kita ubah aja."**
+> Yang penting logikanya benar dan angka yang tampil akurat.
+
+Dokumentasi lengkap: `docs/KEPUTUSAN-ARSITEKTUR-DATA.md`.
+
+### 3C.39 JANGAN PERNAH pakai `tiktok_campaign_id` untuk memetakan campaign
+
+Owner **sengaja** tidak memakainya:
+
+```
+33 OMG Makeup     tiktok_campaign_ids = {7584662142017324821}   10 produk make up
+34 OMG Skincare   tiktok_campaign_ids = {7584662142017324821}    8 produk skincare
+                  produk yang tumpang tindih = 0
+```
+
+Satu TikTok campaign ID untuk 2 campaign internal. `product_id` satu-satunya
+pembeda yang sah.
+
+> Konsekuensi: produk SYB dipakai di 2 campaign TikTok (7631140567631972112 dan
+> 7643606629893670677), dan karena produknya terdaftar di `skus` campaign 46,
+> **room Creator Fest tetap dihitung sebagai SYB**. Owner sudah menyetujuinya.
+> SYB live = **847** sesuai aturan ini, bukan 547.
+
+Kalau product_id salah input, itu **kesalahan PIC, bukan kesalahan sistem**.
+Sistem tidak berwenang menebak.
+
+### 3C.40 Import video manual: organic menang, lalu manual (6 Okt 2026)
+
+```
+1. Video ID ada di organic_videos  → PAKAI YANG ORGANIK, manual diabaikan
+2. Tidak ada di raw data          → pakai hasil import manual, tetap dihitung
+                                     di Performa tapi tidak terhubung
+3. Live room                      → HARUS dihitung LIVE, tidak jadi pending video
+```
+
+Semua hitungan pakai `Set`, jadi satu ID tidak pernah terhitung dua kali
+(`PerformaClient.tsx:236,240,244,251`). **Tapi ada dua bug** — lihat §3C.41.
+
+### 3C.41 Dua bug di PerformaClient yang belum diperbaiki (6 Okt 2026)
+
+**Bug 1 — approved/pending bisa dobel** (`:236` vs `:238`)
+
+```tsx
+:236  allApprovedVideoIds.add(id);                              // tidak cek pending
+:238  if (!allApprovedVideoIds.has(id)) allPendingVideoIds.add(id);   // cek approved
+```
+
+Kalau organic sudah **pending** lalu manual masukkan **approved** → ID ada di
+dua Set → terhitung dua kali. Persis skenario yang owner minta dihindari.
+
+**Bug 2 — `sku_id` NULL lolos filter produk** (`:222`)
+
+```tsx
+if (campaignSkuIds.size > 0 && v.sku_id && !campaignSkuIds.has(v.sku_id)) continue;
+```
+
+`v.sku_id` NULL → baris **tidak difilter sama sekali**. Seharusnya NULL berarti
+"belum terverifikasi", bukan "lolos semua filter".
+
+### 3C.42 `start_date` / `end_date` campaign tidak pernah dipakai (6 Okt 2026)
+
+Searching seluruh `web-app/src`: `start_date`/`end_date` campaign hanya muncul
+di `app/page.tsx:29` (daftar campaign) dan `layout.tsx:30-38` (oper ke props
+`CampaignFilterProvider`). **Tidak ada query data yang memfilter rentang
+tanggal campaign.**
+
+Yang ada di `importActions.ts:464-471` adalah filter tanggal untuk import Ads,
+bukan campaign.
+
+> Artinya filter "waktunya kapan" yang owner sebut **belum diimplementasikan**.
+> Kalau perlu, ini gap yang harus diisi.
+
+### 3C.43 `creator_filter_type` / `creator_filter_usernames` hanya filter UI
+
+`providers/CampaignFilterProvider.tsx:55-58` → `isCreatorVisible` menyembunyikan
+kreator dari tampilan di semua tab. **Tidak menyentuh query**, jadi tidak
+memengaruhi GMV, live count, atau angka lain.
+
+Yang dipakai untuk menghitung, hanya `campaign_creators.campaign_id` +
+`creators.username` (misal `performaActions.ts:17`).
+
+### 3C.44 `videos` tercemar live room — siap dibersihkan (6 Okt 2026)
+
+```
+jenis                          baris     uid    approved
+Video                       39.844   30.008         22
+tidak ada di organic_videos  1.150    1.139         28
+LIVESTREAM  <- seharusnya bukan 1.015     358          0
+```
+
+358 live room nyangkut di `videos`. **Nol approved** → aman dihapus tanpa
+melanggar aturan owner "approved jangan di-pendingin lagi".
+
+Owner juga siap refresh data: *"gapapa kok jika saya harus refresh data biar
+masuknya sesuai dan rapih raw datanya"*.
+
 ## 9. Cara memperbarui skill ini
 
 Setelah sesi yang modify kode, jika ada temuan baru (jebakan, keputusan arsitektur, nama
