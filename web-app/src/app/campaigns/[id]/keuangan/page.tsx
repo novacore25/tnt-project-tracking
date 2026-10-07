@@ -5,7 +5,7 @@ import { useDatabaseStore } from "@/store/useDatabaseStore";
 import { 
   Loader2, Plus, ArrowRight, Wallet, Activity, CheckCircle2, 
   Search, X, Check, Trash2, Pencil, StickyNote, AlertTriangle, 
-  Clock, TrendingUp, Layers, ChevronRight, AlertCircle, ShieldAlert, ShieldCheck
+  Clock, TrendingUp, Layers, ChevronRight, ChevronDown, AlertCircle, ShieldAlert, ShieldCheck
 } from "lucide-react";
 import { useParams } from "next/navigation";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -43,6 +43,19 @@ function CampaignKeuanganContent() {
   const [batches, setBatches] = useState<any[]>([]);
   const [selectedBatch, setSelectedBatch] = useState<any>(null);
   const [isLoadingBatches, setIsLoadingBatches] = useState(true);
+  const [expandedBatches, setExpandedBatches] = useState<Set<number>>(new Set());
+
+  const toggleBatchAccordion = (batchId: number) => {
+    setExpandedBatches(prev => {
+      const next = new Set(prev);
+      if (next.has(batchId)) {
+        next.delete(batchId);
+      } else {
+        next.add(batchId);
+      }
+      return next;
+    });
+  };
 
   // Creators Data for Form & Financial Calculations
   const [creators, setCreators] = useState<any[]>([]);
@@ -624,42 +637,325 @@ function CampaignKeuanganContent() {
                       <tr><td colSpan={8} className="h-32 text-center text-slate-500">Belum ada batch pembayaran yang diajukan.</td></tr>
                     ) : (
                       batches.map((b, idx) => {
+                        const isExpanded = expandedBatches.has(b.id);
                         const totalItem = b.payment_items?.length || 0;
                         const totalDibayar = b.payment_items?.filter((i: any) => i.final_status === 'paid').length || 0;
                         const totalDitolak = b.payment_items?.filter((i: any) => i.final_status === 'rejected').length || 0;
-                        const totalNominal = b.payment_items?.reduce((acc: number, cur: any) => {
+                        const totalNominal = sumNum(b.payment_items || [], (cur: any) => {
                           const base = cur.actual_transfer != null ? toNum(cur.actual_transfer) : toNum(cur.nominal || 0);
-                          return acc + base + toNum(cur.biaya_transfer || 0);
-                        }, 0) || 0;
-                        const nominalDibayar = b.payment_items?.filter((i: any) => i.final_status === 'paid').reduce((acc: number, cur: any) => {
+                          return base + toNum(cur.biaya_transfer || 0);
+                        });
+                        const nominalDibayar = sumNum((b.payment_items || []).filter((i: any) => i.final_status === 'paid'), (cur: any) => {
                           const base = cur.actual_transfer != null ? toNum(cur.actual_transfer) : toNum(cur.nominal || 0);
-                          return acc + base + toNum(cur.biaya_transfer || 0);
-                        }, 0) || 0;
+                          return base + toNum(cur.biaya_transfer || 0);
+                        });
                         
                         return (
-                          <tr key={b.id} className="hover:bg-slate-50/80 transition-colors">
-                            <td className="px-4 py-3 text-center text-slate-400">{idx + 1}</td>
-                            <td className="px-4 py-3 font-semibold text-slate-700">{b.batch_label}
-                              <div className="text-xs font-normal text-slate-400">{formatDateTime(b.submitted_at || b.created_at)}</div>
-                            </td>
-                            <td className="px-4 py-3 font-medium text-slate-600">{formatUserWithRole(b.submitter?.nama, b.submitter?.role)}</td>
-                            <td className="px-4 py-3">
-                              <div className="flex flex-col gap-1 items-center text-[10px] w-24 mx-auto">
-                                <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded font-semibold w-full text-center">Diajukan: {totalItem}</span>
-                                {totalDibayar > 0 && <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded font-semibold w-full text-center">Dibayar: {totalDibayar}</span>}
-                                {totalDitolak > 0 && <span className="bg-red-100 text-red-700 px-2 py-0.5 rounded font-semibold w-full text-center">Ditolak: {totalDitolak}</span>}
-                              </div>
-                            </td>
-                            <td className="px-4 py-3 text-right font-bold text-slate-700">Rp {totalNominal.toLocaleString('id-ID')}</td>
-                            <td className="px-4 py-3 text-right font-bold text-green-600">Rp {nominalDibayar.toLocaleString('id-ID')}</td>
-                            <td className="px-4 py-3 text-center">{getBatchStatusBadge(b.status)}</td>
-                            <td className="px-4 py-3 text-center">
-                              <button onClick={() => handleViewDetail(b.id)} className="text-blue-600 hover:text-blue-800 font-semibold text-xs flex items-center justify-center gap-1 mx-auto bg-blue-50 px-3 py-1.5 rounded-full hover:bg-blue-100 transition-colors">
-                                Lihat Detail <ArrowRight className="w-3 h-3" />
-                              </button>
-                            </td>
-                          </tr>
-                        )
+                          <React.Fragment key={b.id}>
+                            <tr className={`transition-colors ${isExpanded ? 'bg-blue-50/25 border-b border-blue-100/60' : 'hover:bg-slate-50/80'}`}>
+                              <td className="px-3 py-3 text-center text-slate-400">
+                                <button
+                                  type="button"
+                                  onClick={() => toggleBatchAccordion(b.id)}
+                                  className="p-1 rounded-md hover:bg-slate-200/70 text-slate-500 hover:text-slate-800 transition-colors inline-flex items-center gap-1 focus:outline-none"
+                                  title={isExpanded ? "Tutup rincian item batch" : "Buka rincian item batch"}
+                                >
+                                  {isExpanded ? (
+                                    <ChevronDown className="w-4 h-4 text-blue-600 transition-transform" />
+                                  ) : (
+                                    <ChevronRight className="w-4 h-4 text-slate-400 hover:text-slate-600 transition-transform" />
+                                  )}
+                                  <span className="font-mono text-xs">{idx + 1}</span>
+                                </button>
+                              </td>
+                              <td className="px-4 py-3">
+                                <div 
+                                  onClick={() => toggleBatchAccordion(b.id)}
+                                  className="cursor-pointer group select-none"
+                                >
+                                  <div className="font-semibold text-slate-700 group-hover:text-blue-600 transition-colors flex items-center gap-1.5">
+                                    <span>{b.batch_label}</span>
+                                    <span className="text-[10px] font-normal px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200/80">
+                                      {totalItem} item
+                                    </span>
+                                  </div>
+                                  <div className="text-xs font-normal text-slate-400 mt-0.5">
+                                    {formatDateTime(b.submitted_at || b.created_at)}
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="px-4 py-3 font-medium text-slate-600">
+                                {formatUserWithRole(b.submitter?.nama, b.submitter?.role)}
+                              </td>
+                              <td className="px-4 py-3">
+                                <div className="flex flex-col gap-1 items-center text-[10px] w-24 mx-auto">
+                                  <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded font-semibold w-full text-center">Diajukan: {totalItem}</span>
+                                  {totalDibayar > 0 && <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded font-semibold w-full text-center">Dibayar: {totalDibayar}</span>}
+                                  {totalDitolak > 0 && <span className="bg-red-100 text-red-700 px-2 py-0.5 rounded font-semibold w-full text-center">Ditolak: {totalDitolak}</span>}
+                                </div>
+                              </td>
+                              <td className="px-4 py-3 text-right font-bold text-slate-700">Rp {totalNominal.toLocaleString('id-ID')}</td>
+                              <td className="px-4 py-3 text-right font-bold text-green-600">Rp {nominalDibayar.toLocaleString('id-ID')}</td>
+                              <td className="px-4 py-3 text-center">{getBatchStatusBadge(b.status)}</td>
+                              <td className="px-4 py-3 text-center">
+                                <button onClick={() => handleViewDetail(b.id)} className="text-blue-600 hover:text-blue-800 font-semibold text-xs flex items-center justify-center gap-1 mx-auto bg-blue-50 px-3 py-1.5 rounded-full hover:bg-blue-100 transition-colors">
+                                  Lihat Detail <ArrowRight className="w-3 h-3" />
+                                </button>
+                              </td>
+                            </tr>
+
+                            {/* Accordion Sub-table */}
+                            {isExpanded && (
+                              <tr className="bg-slate-50/50">
+                                <td colSpan={8} className="p-3 sm:p-4.5 border-t border-b border-slate-200">
+                                  <div className="bg-white rounded-xl border border-slate-200/90 shadow-xs overflow-hidden">
+                                    {/* Header bar accordion sub-table */}
+                                    <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2">
+                                      <div className="flex items-center gap-2">
+                                        <span className="w-2 h-2 rounded-full bg-blue-600"></span>
+                                        <span className="text-xs font-bold text-slate-700">
+                                          Rincian Item Pembayaran ({b.batch_label})
+                                        </span>
+                                        <span className="text-xs text-slate-500">
+                                          • {totalItem} Item diajukan
+                                        </span>
+                                      </div>
+                                      <button
+                                        onClick={() => handleViewDetail(b.id)}
+                                        className="text-xs font-semibold text-blue-600 hover:text-blue-800 flex items-center gap-1 hover:underline"
+                                      >
+                                        Lihat Detail Penuh & Audit Trail <ArrowRight className="w-3.5 h-3.5" />
+                                      </button>
+                                    </div>
+
+                                    {/* Sub-table: 8 Kolom (Kreator, Tipe Pemb., Ratecard / Final, Biaya TF, Total Transaksi, PIC, Rekening, Status) */}
+                                    <div className="overflow-x-auto">
+                                      <table className="w-full text-left text-xs">
+                                        <thead className="bg-slate-100/70 border-b border-slate-200 text-slate-600 font-semibold uppercase text-[10px] tracking-wider">
+                                          <tr>
+                                            <th className="px-3.5 py-2.5">Kreator</th>
+                                            <th className="px-3 py-2.5 text-center">Tipe Pemb.</th>
+                                            <th className="px-3 py-2.5 text-right">Ratecard / Final</th>
+                                            <th className="px-3 py-2.5 text-right">Biaya TF</th>
+                                            <th className="px-3 py-2.5 text-right">Total Transaksi</th>
+                                            <th className="px-3 py-2.5">PIC</th>
+                                            <th className="px-3.5 py-2.5">Rekening</th>
+                                            <th className="px-3 py-2.5 text-center">Status</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100">
+                                          {(!b.payment_items || b.payment_items.length === 0) ? (
+                                            <tr>
+                                              <td colSpan={8} className="px-4 py-6 text-center text-slate-400 italic">
+                                                Tidak ada rincian item dalam batch ini.
+                                              </td>
+                                            </tr>
+                                          ) : (
+                                            b.payment_items.map((item: any, itemIdx: number) => {
+                                              const baseNominal = item.actual_transfer != null ? toNum(item.actual_transfer) : toNum(item.nominal || item.ratecard_awal || 0);
+                                              const biayaTf = toNum(item.biaya_transfer || 0);
+                                              const totalTrx = baseNominal + biayaTf;
+                                              const cr = item.campaign_creators?.creators;
+                                              const bank = item.creator_bank_accounts;
+                                              const bankName = bank?.bank_name || item.metode_pembayaran;
+                                              const accNum = bank?.account_number || item.nomor_rekening;
+                                              const accHolder = bank?.account_holder || item.nama_penerima;
+                                              const picName = item.nama_wa_pic || cr?.nama_wa_pic || b.submitter?.nama || '-';
+
+                                              return (
+                                                <tr key={item.id || itemIdx} className="hover:bg-slate-50/70 transition-colors">
+                                                  {/* 1. Kreator */}
+                                                  <td className="px-3.5 py-2.5">
+                                                    {cr ? (
+                                                      <div className="flex items-center gap-2">
+                                                        {cr.avatar_url ? (
+                                                          <img
+                                                            src={cr.avatar_url}
+                                                            alt={cr.username || ''}
+                                                            className="w-7 h-7 rounded-full object-cover shrink-0 border border-slate-200"
+                                                            onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
+                                                          />
+                                                        ) : (
+                                                          <div className="w-7 h-7 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center font-bold text-[11px] shrink-0 border border-slate-200">
+                                                            {(cr.username || '?').charAt(0).toUpperCase()}
+                                                          </div>
+                                                        )}
+                                                        <div className="min-w-0">
+                                                          <a
+                                                            href={`/creator-pool/${cr.id}`}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="font-bold text-slate-900 hover:text-blue-600 hover:underline block truncate max-w-[150px]"
+                                                            title={`@${cr.username}`}
+                                                          >
+                                                            @{cr.username}
+                                                          </a>
+                                                          <div className="text-[10px] text-slate-500 truncate max-w-[150px]">
+                                                            {cr.nama_asli || item.nama_penerima || '-'}
+                                                          </div>
+                                                        </div>
+                                                      </div>
+                                                    ) : (
+                                                      <div className="min-w-0">
+                                                        <div className="font-semibold text-slate-800 truncate max-w-[150px]">
+                                                          {item.nama_penerima || 'Biaya Operasional'}
+                                                        </div>
+                                                        <div className="text-[10px] text-slate-400">
+                                                          {item.payment_type === 'ads' ? 'TikTok Ads' : 'Non-Kreator'}
+                                                        </div>
+                                                      </div>
+                                                    )}
+                                                  </td>
+
+                                                  {/* 2. Tipe Pemb. */}
+                                                  <td className="px-3 py-2.5 text-center">
+                                                    {(() => {
+                                                      switch (item.payment_type) {
+                                                        case '50_awal':
+                                                          return <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">DP 50%</span>;
+                                                        case '50_akhir':
+                                                          return <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">Pelunasan 50%</span>;
+                                                        case '100_akhir':
+                                                          return <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">Full 100%</span>;
+                                                        case 'ads':
+                                                          return <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200">TikTok Ads</span>;
+                                                        default:
+                                                          return <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200">{item.payment_type || '-'}</span>;
+                                                      }
+                                                    })()}
+                                                  </td>
+
+                                                  {/* 3. Ratecard / Final */}
+                                                  <td className="px-3 py-2.5 text-right font-medium text-slate-800">
+                                                    {item.ratecard_awal && toNum(item.ratecard_awal) !== baseNominal && (
+                                                      <div className="text-[10px] text-slate-400 line-through">
+                                                        Rp {toNum(item.ratecard_awal).toLocaleString('id-ID')}
+                                                      </div>
+                                                    )}
+                                                    <div>Rp {baseNominal.toLocaleString('id-ID')}</div>
+                                                  </td>
+
+                                                  {/* 4. Biaya TF */}
+                                                  <td className="px-3 py-2.5 text-right text-slate-600">
+                                                    {biayaTf > 0 ? (
+                                                      `Rp ${biayaTf.toLocaleString('id-ID')}`
+                                                    ) : (
+                                                      <span className="text-slate-400">-</span>
+                                                    )}
+                                                  </td>
+
+                                                  {/* 5. Total Transaksi */}
+                                                  <td className="px-3 py-2.5 text-right font-bold text-blue-700">
+                                                    Rp {totalTrx.toLocaleString('id-ID')}
+                                                  </td>
+
+                                                  {/* 6. PIC */}
+                                                  <td className="px-3 py-2.5 text-slate-600">
+                                                    <span className="truncate max-w-[120px] block" title={picName}>
+                                                      {picName}
+                                                    </span>
+                                                  </td>
+
+                                                  {/* 7. Rekening */}
+                                                  <td className="px-3.5 py-2.5">
+                                                    {(!bankName && !accNum) ? (
+                                                      <span className="text-slate-400 italic text-[11px]">-</span>
+                                                    ) : (
+                                                      <div className="leading-tight">
+                                                        <div className="font-medium text-slate-800 truncate max-w-[160px]">
+                                                          {bankName || '-'} <span className="font-mono text-slate-600">({accNum || '-'})</span>
+                                                        </div>
+                                                        {accHolder && (
+                                                          <div className="text-[10px] text-slate-500 truncate max-w-[160px]" title={accHolder}>
+                                                            a.n. {accHolder}
+                                                          </div>
+                                                        )}
+                                                      </div>
+                                                    )}
+                                                  </td>
+
+                                                  {/* 8. Status */}
+                                                  <td className="px-3 py-2.5 text-center">
+                                                    {(() => {
+                                                      const status = item.final_status;
+                                                      let badgeClass = "bg-slate-100 text-slate-700 border-slate-200";
+                                                      let label = status?.replace(/_/g, ' ') || 'Pending';
+                                                      
+                                                      if (status === 'paid') {
+                                                        badgeClass = "bg-emerald-100 text-emerald-800 border-emerald-200";
+                                                        label = "Paid";
+                                                      } else if (status === 'rejected') {
+                                                        badgeClass = "bg-rose-100 text-rose-800 border-rose-200";
+                                                        label = "Ditolak";
+                                                      } else if (status === 'cancelled') {
+                                                        badgeClass = "bg-slate-100 text-slate-600 border-slate-200";
+                                                        label = "Dibatalkan";
+                                                      } else if (status === 'ready_to_pay') {
+                                                        badgeClass = "bg-blue-100 text-blue-800 border-blue-200";
+                                                        label = "Siap Bayar";
+                                                      } else if (status === 'pending' || status === 'pending_manager') {
+                                                        badgeClass = "bg-yellow-100 text-yellow-800 border-yellow-200";
+                                                        label = "Menunggu Mgr";
+                                                      } else if (status === 'manager_approved' || status === 'pending_executive_1') {
+                                                        badgeClass = "bg-purple-100 text-purple-800 border-purple-200";
+                                                        label = "Menunggu Exec 1";
+                                                      } else if (status === 'executive_1_approved' || status === 'pending_finance') {
+                                                        badgeClass = "bg-orange-100 text-orange-800 border-orange-200";
+                                                        label = "Menunggu Fin";
+                                                      } else if (status === 'finance_selected' || status === 'pending_executive') {
+                                                        badgeClass = "bg-indigo-100 text-indigo-800 border-indigo-200";
+                                                        label = "Menunggu Exec";
+                                                      }
+
+                                                      return (
+                                                        <div className="flex flex-col items-center">
+                                                          <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold border uppercase tracking-wider ${badgeClass}`}>
+                                                            {label}
+                                                          </span>
+                                                          {(item.manager_note || item.executive_note) && (
+                                                            <span className="text-[10px] text-rose-600 mt-0.5 truncate max-w-[110px]" title={item.manager_note || item.executive_note}>
+                                                              Note: {item.manager_note || item.executive_note}
+                                                            </span>
+                                                          )}
+                                                        </div>
+                                                      );
+                                                    })()}
+                                                  </td>
+                                                </tr>
+                                              );
+                                            })
+                                          )}
+                                        </tbody>
+                                        {b.payment_items && b.payment_items.length > 0 && (
+                                          <tfoot className="bg-slate-50 border-t border-slate-200 font-semibold text-slate-700">
+                                            <tr>
+                                              <td colSpan={2} className="px-3.5 py-2.5 text-slate-600">
+                                                Total ({totalItem} Item)
+                                              </td>
+                                              <td className="px-3 py-2.5 text-right font-bold text-slate-800">
+                                                Rp {sumNum(b.payment_items, (i: any) => i.actual_transfer != null ? toNum(i.actual_transfer) : toNum(i.nominal || i.ratecard_awal || 0)).toLocaleString('id-ID')}
+                                              </td>
+                                              <td className="px-3 py-2.5 text-right text-slate-600">
+                                                Rp {sumNum(b.payment_items, (i: any) => toNum(i.biaya_transfer || 0)).toLocaleString('id-ID')}
+                                              </td>
+                                              <td className="px-3 py-2.5 text-right font-extrabold text-blue-700">
+                                                Rp {totalNominal.toLocaleString('id-ID')}
+                                              </td>
+                                              <td colSpan={3} className="px-3.5 py-2.5 text-right text-[11px] text-slate-500 font-normal">
+                                                {totalDibayar > 0 && <span className="text-emerald-700 font-semibold mr-2.5">Dibayar: {totalDibayar}</span>}
+                                                {totalDitolak > 0 && <span className="text-rose-700 font-semibold">Ditolak: {totalDitolak}</span>}
+                                              </td>
+                                            </tr>
+                                          </tfoot>
+                                        )}
+                                      </table>
+                                    </div>
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                          </React.Fragment>
+                        );
                       })
                     )}
                   </tbody>
