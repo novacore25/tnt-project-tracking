@@ -144,7 +144,16 @@ Terdapat 2 commit penting di lokal yang merangkum seluruh pembaruan sistem sesi 
    * `importActions.ts`: Normalisasi nilai `content_type` menjadi `'Livestream'` dan `'Video'`.
    * `campaignPageActions.ts` & `VideoClient.tsx`: Penguatan validasi status approval dan kepemilikan.
 2. `4f69cd9`:
-   * Script SQL reset data raw `docs/sql/79-reset-raw-tiktok-data.sql`.
-   * Dokumentasi teknis di `.opencode/skill/tnt-project/SKILL.md`.
+---
 
-*(Siap di-push ke branch main Coolify kapan saja setelah diskusi tim selesai)*.
+## 9. Kebijakan Edit/Hapus Pengajuan Payment (Opsi A)
+
+Berdasarkan diskusi dan keputusan owner terkait alur review pembayaran kreator:
+* **Latar Belakang:** Di lapangan, jika ada kesalahan nominal, rekening, atau data kreator pada batch yang sudah diajukan ke Manager (`pending_manager`), Manager sering kali tidak menolak secara eksplisit di sistem ("didiemin di sistem"), melainkan langsung menegur/memerintahkan PIC secara verbal/WhatsApp untuk merevisi data.
+* **Keputusan (Opsi A):**
+  1. **PIC diizinkan mengedit atau menghapus item tagihan** saat batch berada di tahap diajukan / funnel pertama (`batch.status === 'pending_manager'`).
+  2. **Penguncian Permanen (Lock):** Jika item tagihan **SUDAH disetujui oleh Manager** (`manager_status === 'approved'` atau `final_status === 'manager_approved'`), item tersebut **TERKUNCI PERMANEN** dan tidak dapat diubah maupun dihapus oleh PIC.
+  3. **Proteksi Ganda (Server & Client):**
+     * **UI (`BatchDetail.tsx`):** Tombol Edit (pensil) dan Hapus (tong sampah) hanya muncul jika `canEditItem(item)` bernilai true (belum disetujui Manager). Item yang sudah disetujui menampilkan ikon gembok `Terkunci`.
+     * **Server Action (`paymentActions.ts`):** `updatePaymentItem` dan `deletePaymentItem` memvalidasi status batch dan item secara ketat di database. Jika item sudah berstatus disetujui atau batch telah melaju ke tahap Executive/Finance/Paid, request ditolak dengan pesan error yang jelas.
+

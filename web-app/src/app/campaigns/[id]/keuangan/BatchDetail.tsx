@@ -11,7 +11,7 @@ import {
 import { getLogicalStatus } from "@/utils/statusHelper";
 import { sumNum } from "@/utils/computed";
 import { useAuth } from "@/providers/AuthProvider";
-import { Check, X, Loader2, ArrowLeft, Send, Trash2, Pencil, Save, ChevronDown, ChevronRight, Download, Upload, Clock, UserCheck, ShieldCheck, History, ExternalLink, Link as LinkIcon } from "lucide-react";
+import { Check, X, Loader2, ArrowLeft, Send, Trash2, Pencil, Save, ChevronDown, ChevronRight, Download, Upload, Clock, UserCheck, ShieldCheck, History, ExternalLink, Link as LinkIcon, Lock } from "lucide-react";
 import { formatDateTime, formatUserWithRole } from "@/utils/formatters";
 import * as XLSX from "xlsx";
 
@@ -290,7 +290,10 @@ export function BatchDetail({ batch, creatorHistory, onBack, onRefresh, onRefres
   const handleDeleteItem = async (itemId: number) => {
     if (!confirm("Yakin ingin menghapus kreator ini dari batch?")) return;
     handleAction(itemId, async () => {
-      await deletePaymentItem(itemId);
+      const res = await deletePaymentItem(itemId);
+      if (res && res.success === false) {
+        throw new Error(res.error || "Gagal menghapus kreator");
+      }
     });
   };
 
@@ -333,12 +336,29 @@ export function BatchDetail({ batch, creatorHistory, onBack, onRefresh, onRefres
     };
 
     handleAction(editingItemId, async () => {
-      await updatePaymentItem(editingItemId, payload);
+      const res = await updatePaymentItem(editingItemId, payload);
+      if (res && res.success === false) {
+        throw new Error(res.error || "Gagal menyimpan perubahan tagihan.");
+      }
       setEditingItemId(null);
     });
   };
 
-  const canEditOrDelete = batch.status === 'draft' || batch.status === 'cancelled';
+  // Opsi A: PIC dapat edit / hapus item selama masih draft/cancelled, atau saat diajukan (pending_manager) SELAMA belum disetujui Manager
+  const canEditItem = (item: any) => {
+    if (batch.status === 'draft' || batch.status === 'cancelled') {
+      return true;
+    }
+    if (batch.status === 'pending_manager') {
+      const isApprovedByManager = 
+        item.manager_status === 'approved' || 
+        item.final_status === 'manager_approved' ||
+        getLogicalStatus(item) === 'manager_approved' ||
+        ['executive_1_approved', 'finance_selected', 'ready_to_pay', 'paid'].includes(item.final_status);
+      return !isApprovedByManager;
+    }
+    return false;
+  };
 
 
   const groupedItems = {
@@ -789,8 +809,8 @@ export function BatchDetail({ batch, creatorHistory, onBack, onRefresh, onRefres
                           </div>
                         )}
 
-                        {/* GENERAL EDIT & DELETE ACTIONS (For draft / testing) */}
-                        {canEditOrDelete && (
+                        {/* GENERAL EDIT & DELETE ACTIONS (Opsi A: PIC dapat edit / hapus selama belum disetujui Manager) */}
+                        {canEditItem(item) ? (
                           <div className="flex justify-center gap-2 mt-1">
                             <button onClick={() => handleOpenEdit(item)} disabled={loadingIds[item.id]} className="p-1.5 text-blue-500 hover:bg-blue-50 rounded" title="Edit Data Lengkap">
                               <Pencil className="w-4 h-4" />
@@ -799,7 +819,12 @@ export function BatchDetail({ batch, creatorHistory, onBack, onRefresh, onRefres
                               {loadingIds[item.id] ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
                             </button>
                           </div>
-                        )}
+                        ) : batch.status === 'pending_manager' && (item.manager_status === 'approved' || item.final_status === 'manager_approved') ? (
+                          <div className="flex items-center justify-center gap-1 text-[11px] text-slate-400 font-medium py-1" title="Terkunci: Sudah disetujui Manager">
+                            <Lock className="w-3.5 h-3.5 text-emerald-600" />
+                            <span className="text-emerald-700 font-semibold text-[10px]">Terkunci</span>
+                          </div>
+                        ) : null}
                       </div>
                     </td>
                   </tr>

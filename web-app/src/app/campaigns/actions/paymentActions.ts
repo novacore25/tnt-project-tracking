@@ -591,8 +591,46 @@ export async function updatePaymentItem(itemId: number, itemData: any) {
   const denied = await requireUserOrError();
   if (denied) return { success: false, error: denied.message } as any;
 
-  const itemRows = await db.execute(sql`SELECT campaign_creator_id, batch_id FROM payment_items WHERE id = ${itemId}`);
+  const itemRows = await db.execute(sql`
+    SELECT 
+      pi.id,
+      pi.campaign_creator_id, 
+      pi.batch_id, 
+      pi.manager_status, 
+      pi.final_status,
+      pb.status as batch_status,
+      pb.campaign_id
+    FROM payment_items pi
+    LEFT JOIN payment_batches pb ON pi.batch_id = pb.id
+    WHERE pi.id = ${itemId}
+  `);
   const item = (itemRows as any[])[0];
+
+  if (!item) {
+    return { success: false, error: 'Item pembayaran tidak ditemukan.' };
+  }
+
+  // Guard: Hanya boleh diedit jika batch masih draft, cancelled, atau pending_manager
+  const allowedBatchStatuses = ['draft', 'cancelled', 'pending_manager'];
+  if (!allowedBatchStatuses.includes(item.batch_status)) {
+    return { 
+      success: false, 
+      error: 'Batch sudah diproses lebih lanjut dan tagihan tidak dapat diubah lagi.' 
+    };
+  }
+
+  // Guard Opsi A: Jika item SUDAH disetujui Manager, dikunci permanen
+  const isManagerApproved = 
+    item.manager_status === 'approved' || 
+    item.final_status === 'manager_approved' || 
+    ['executive_1_approved', 'ready_to_pay', 'executive_approved', 'finance_selected', 'paid'].includes(item.final_status);
+
+  if (isManagerApproved) {
+    return { 
+      success: false, 
+      error: 'Tagihan sudah disetujui oleh Manager dan tidak dapat diedit lagi.' 
+    };
+  }
 
   let bankAccountId = itemData.bank_account_id ? Number(itemData.bank_account_id) : null;
   let bankName = itemData.metode_pembayaran ? String(itemData.metode_pembayaran).trim() : null;
@@ -663,13 +701,67 @@ export async function updatePaymentItem(itemId: number, itemData: any) {
       console.warn('Silent fallback for creator metadata update on updatePaymentItem:', e);
     }
   }
+
+  if (item.campaign_id) {
+    revalidatePath(`/campaigns/${item.campaign_id}/keuangan`);
+  }
+  revalidatePath('/budgeting');
+
+  return { success: true };
 }
 
 export async function deletePaymentItem(itemId: number) {
   const denied = await requireUserOrError();
   if (denied) return { success: false, error: denied.message } as any;
 
+  const itemRows = await db.execute(sql`
+    SELECT 
+      pi.id,
+      pi.batch_id, 
+      pi.manager_status, 
+      pi.final_status,
+      pb.status as batch_status,
+      pb.campaign_id
+    FROM payment_items pi
+    LEFT JOIN payment_batches pb ON pi.batch_id = pb.id
+    WHERE pi.id = ${itemId}
+  `);
+  const item = (itemRows as any[])[0];
+
+  if (!item) {
+    return { success: false, error: 'Item pembayaran tidak ditemukan.' };
+  }
+
+  // Guard: Hanya boleh dihapus jika batch masih draft, cancelled, atau pending_manager
+  const allowedBatchStatuses = ['draft', 'cancelled', 'pending_manager'];
+  if (!allowedBatchStatuses.includes(item.batch_status)) {
+    return { 
+      success: false, 
+      error: 'Batch sudah diproses lebih lanjut dan item tidak dapat dihapus.' 
+    };
+  }
+
+  // Guard Opsi A: Jika item SUDAH disetujui Manager, dikunci permanen
+  const isManagerApproved = 
+    item.manager_status === 'approved' || 
+    item.final_status === 'manager_approved' || 
+    ['executive_1_approved', 'ready_to_pay', 'executive_approved', 'finance_selected', 'paid'].includes(item.final_status);
+
+  if (isManagerApproved) {
+    return { 
+      success: false, 
+      error: 'Tagihan sudah disetujui oleh Manager dan tidak dapat dihapus.' 
+    };
+  }
+
   await db.execute(sql`DELETE FROM payment_items WHERE id = ${itemId}`);
+
+  if (item.campaign_id) {
+    revalidatePath(`/campaigns/${item.campaign_id}/keuangan`);
+  }
+  revalidatePath('/budgeting');
+
+  return { success: true };
 }
 
 export async function deletePaymentBatch(batchId: number) {
