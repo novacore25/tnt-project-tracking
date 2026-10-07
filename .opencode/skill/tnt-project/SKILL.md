@@ -1170,6 +1170,11 @@ Dua temuan penting terkait tampilan ratecard dan relasi data di `/creator-pool/[
    - `fetchCreatorProfile` kini mencari seluruh `associatedCreatorIds` (creatorId + ID mana pun yang punya username cocok dengan `aliasList`), sehingga seluruh campaign (`campaign_creators`), snapshot, catatan, kontak, dan ads tetap terhubung utuh meskipun kreator berganti username atau terdaftar dengan ID alias.
 3. **Syarat Muncul di Tab Kreator Belum Dibayar**:
    - Tab `Kreator Belum Dibayar` di `/campaigns/[id]/keuangan` hanya memuat kreator dengan `LOWER(approval) = 'approved'`. Kreator yang kolom Approval-nya masih strip (`-`) / pending sengaja tidak dimunculkan untuk mencegah pengajuan pembayaran ke kreator yang belum disetujui.
+4. **Sub-Breakdown Ratecard Belum Dibayar (7 Okt 2026)**:
+   - Card `Ratecard Belum Dibayar` di `/campaigns/[id]/keuangan` kini memecah sisa komitmen menjadi 2 sub-kartu mikro:
+     - `Belum Diajukan`: Murni antrean kreator yang belum dimasukkan ke batch pengajuan mana pun (`totalBelumDiajukanNominal`).
+     - `Sudah Diajukan`: Nominal kreator yang sedang berada di dalam proses batch berjalan (`pending_manager`, `pending_finance`, `ready_to_pay`) menunggu transfer (`totalPendingNominal`).
+   - Hubungan matematis dijaga konsisten: `Total Belum Dibayar = Belum Diajukan + Sudah Diajukan`.
 
 ---
 
