@@ -2664,4 +2664,14 @@ memberi informasi yang saling menguatkan, bukan noise.
 3. **Hasil Audit Performa Campaign 46 (SYB) - 7 Okt 2026:**
    - GMV Organik (Rp 75,4M / 2.336 order), GMV Ads (Rp 86,4M), Total Achievement (Rp 161,8M), Views (1.597.236 dari 496 video unik) **100% cocok dengan raw PostgreSQL**.
    - Tidak ada kebocoran produk asing (`0` order di luar SKU SYB), `0` kreator unmapped, `0` duplikat order ID se-DB (34.869 order unik), dan `0` duplikat video ID di campaign SYB.
+4. **Logika Listing & Seleksi:**
+   - Checkbox `Sisa ber-Video (Belum Approved)`: filter kreator belum approved (`cc.approval != 'approved'`) yang sudah memiliki video di tabel `videos` atau terdeteksi di `organic_videos`/`sales`.
+   - Checkbox `Unattributed (Sisa + GMV)`: filter kreator belum approved yang sudah menghasilkan penjualan (`s.gmv > 0`). Digunakan untuk menyelesaikan Unattributed GMV Gap.
+   - Badge `AUTO`: menandai kreator yang masuk otomatis dari laporan TikTok Partner Center (`added_by IS NULL` atau `tier = 'Auto-Detect'`), membedakannya dari kreator hasil scouting PIC internal.
+5. **Logika Live Room (Multi-Produk per Room):**
+   - Dalam TikTok CustomReport Live, 1 live room bisa berisi banyak produk sehingga diekspor dalam banyak baris.
+   - Perhitungan jumlah sesi live SELALU menggunakan `COUNT(DISTINCT content_uid)` dari tabel `organic_videos`.
+   - Angka sesi live murni dari `organic_videos` (Awareness Live) dan TIDAK PERNAH tercampur dengan data pesanan di tabel `sales`.
+   - Rujukan sesi lengkap: `docs/LOG-PERTEMUAN-2026-10-07.md`.
+
 
