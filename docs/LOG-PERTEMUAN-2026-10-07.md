@@ -190,3 +190,11 @@ Berdasarkan diskusi dan keputusan owner terkait alur review pembayaran kreator:
   * Campaign 56 (Zeluxe): Baris duplikat kosong dihapus, status `snhabibah_` di-upgrade menjadi `approved`. 3 video (128 views) kini resmi terhitung ke kreator dan tidak lagi berstatus "Belum Approved".
   * Campaign 54 (MD Glow): Baris duplikat dihapus, menyisakan 1 baris resmi `snhabibah_` dengan 3 video.
   * Campaign 57 (GHANISKIN): Ditautkan secara benar ke master `12339`.
+
+### D. Fitur UI: Manajemen Alias & Auto-Merge di Profil Kreator (`/creator-pool/[id]`)
+* **Tombol "Kelola Alias":** Ditambahkan di header profil kreator, berdampingan dengan badge "Username Sebelumnya".
+* **Modal Dialog Interaktif:**
+  1. **Daftar Alias Aktif:** Menampilkan username master (badge `Utama (Aktif)`) dan seluruh alias historis lengkap dengan catatan.
+  2. **Jadikan Utama (`setPrimaryCreatorAliasAction`):** Mengizinkan PIC mengubah username master TikTok tanpa kehilangan riwayat lama (username lama otomatis turun menjadi alias).
+  3. **Hapus Alias (`removeCreatorAliasAction`):** Menghapus alias jika terjadi salah ketik (username utama diproteksi dari penghapusan).
+  4. **Tambah Alias & Auto-Merge (`addCreatorAliasAction`):** Form input username baru/lama. Jika username tersebut sudah ada di sistem sebagai akun kreator tersendiri (misal hasil impor lama), sistem secara cerdas **menggabungkan (merge)** data `campaign_creators`, video, kontak, snapshot, dan penjualannya ke akun ini lalu menghapus akun master duplikatnya.

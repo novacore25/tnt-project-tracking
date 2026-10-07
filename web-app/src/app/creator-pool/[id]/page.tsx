@@ -8,7 +8,7 @@ import { formatAbbreviated } from "@/utils/formatters";
 
 
 
-import { ArrowLeft, UserPlus, Phone, CreditCard, Activity, ArrowUpDown, ChevronDown, ChevronRight, Edit, Save, Plus, X, Trash2, Check, Video, TrendingUp, DollarSign, Calendar, Users, Briefcase, ExternalLink, ArrowRight, TrendingDown, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, UserPlus, Phone, CreditCard, Activity, ArrowUpDown, ChevronDown, ChevronRight, Edit, Save, Plus, X, Trash2, Check, Video, TrendingUp, DollarSign, Calendar, Users, Briefcase, ExternalLink, ArrowRight, TrendingDown, AlertTriangle, CheckCircle2, Tag } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState, ReactNode, useEffect, useRef, useCallback, useMemo } from "react";
@@ -16,7 +16,7 @@ import React from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/Dialog";
 import { Button } from "@/components/ui/Button";
 import { Edit2 } from "lucide-react";
-import { fetchCreatorProfile } from "@/app/actions/creatorActions";
+import { fetchCreatorProfile, addCreatorAliasAction, removeCreatorAliasAction, setPrimaryCreatorAliasAction } from "@/app/actions/creatorActions";
 import { saveCreatorAddressBookAction, deleteCreatorAddressBookAction, fetchCreatorNotesAction } from "@/app/actions/databaseActions";
 import { useAuth } from "@/providers/AuthProvider";
 
@@ -358,7 +358,77 @@ export default function CreatorProfilePage() {
       window.location.reload();
       setSnapForm({ audience_age: '', level: '', gmv_30d: '', followers: '', tier: '', ratecard: '' });
     } catch (err: any) {
-      alert("Gagal update profil: " + e.message);
+      alert("Gagal update profil: " + err.message);
+    }
+  };
+
+  const [aliasModalOpen, setAliasModalOpen] = useState(false);
+  const [newAliasInput, setNewAliasInput] = useState('');
+  const [newAliasNotes, setNewAliasNotes] = useState('');
+  const [aliasBusy, setAliasBusy] = useState(false);
+
+  const handleAddAlias = async () => {
+    if (!creatorId || !newAliasInput.trim() || aliasBusy) return;
+    setAliasBusy(true);
+    try {
+      const res = await addCreatorAliasAction({
+        creatorId,
+        aliasUsername: newAliasInput.trim(),
+        notes: newAliasNotes.trim() || undefined,
+      });
+      if (!res.success) {
+        alert(res.error || 'Gagal menambahkan alias.');
+      } else {
+        alert(res.message || 'Alias berhasil ditambahkan.');
+        setNewAliasInput('');
+        setNewAliasNotes('');
+        await fetchCreatorData();
+      }
+    } catch (err: any) {
+      alert('Terjadi kesalahan: ' + (err?.message || String(err)));
+    } finally {
+      setAliasBusy(false);
+    }
+  };
+
+  const handleRemoveAlias = async (aliasUsername: string) => {
+    if (!confirm(`Yakin ingin menghapus alias @${aliasUsername}?`)) return;
+    setAliasBusy(true);
+    try {
+      const res = await removeCreatorAliasAction({
+        creatorId,
+        aliasUsername,
+      });
+      if (!res.success) {
+        alert(res.error || 'Gagal menghapus alias.');
+      } else {
+        await fetchCreatorData();
+      }
+    } catch (err: any) {
+      alert('Terjadi kesalahan: ' + (err?.message || String(err)));
+    } finally {
+      setAliasBusy(false);
+    }
+  };
+
+  const handleSetPrimaryAlias = async (aliasUsername: string) => {
+    if (!confirm(`Yakin ingin mengubah username utama menjadi @${aliasUsername}?\n\nUsername master dan link akun TikTok akan diperbarui ke @${aliasUsername}. Username lama tetap tersimpan sebagai alias.`)) return;
+    setAliasBusy(true);
+    try {
+      const res = await setPrimaryCreatorAliasAction({
+        creatorId,
+        aliasUsername,
+      });
+      if (!res.success) {
+        alert(res.error || 'Gagal mengubah username utama.');
+      } else {
+        alert(res.message || 'Username utama berhasil diperbarui.');
+        await fetchCreatorData();
+      }
+    } catch (err: any) {
+      alert('Terjadi kesalahan: ' + (err?.message || String(err)));
+    } finally {
+      setAliasBusy(false);
     }
   };
 
@@ -555,16 +625,27 @@ export default function CreatorProfilePage() {
                 <img src="/logo-tiktok-landscape-button.svg" alt="TikTok" className="h-[36px]" />
               </a>
             </div>
-            {localData?.aliases && localData.aliases.filter((a: any) => !a.is_primary).length > 0 && (
-              <div className="flex items-center gap-1.5 mt-1 text-xs text-slate-500 flex-wrap">
-                <span className="font-semibold text-slate-600">Username Sebelumnya:</span>
-                {localData.aliases.filter((a: any) => !a.is_primary).map((a: any, idx: number) => (
-                  <span key={idx} className="bg-slate-100 text-slate-700 font-medium px-2 py-0.5 rounded border border-slate-200" title={a.notes || undefined}>
-                    @{a.alias_username}
-                  </span>
-                ))}
-              </div>
-            )}
+            <div className="flex items-center gap-2 mt-1 flex-wrap">
+              {localData?.aliases && localData.aliases.filter((a: any) => !a.is_primary).length > 0 && (
+                <div className="flex items-center gap-1.5 text-xs text-slate-500 flex-wrap">
+                  <span className="font-semibold text-slate-600">Username Sebelumnya:</span>
+                  {localData.aliases.filter((a: any) => !a.is_primary).map((a: any, idx: number) => (
+                    <span key={idx} className="bg-slate-100 text-slate-700 font-medium px-2 py-0.5 rounded border border-slate-200" title={a.notes || undefined}>
+                      @{a.alias_username}
+                    </span>
+                  ))}
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={() => setAliasModalOpen(true)}
+                className="text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-2 py-0.5 rounded flex items-center gap-1 transition-colors"
+                title="Kelola riwayat username atau tambahkan alias baru"
+              >
+                <Tag className="w-3 h-3" />
+                Kelola Alias
+              </button>
+            </div>
             <p className="text-slate-500 mt-0.5">{creator.nama_asli || 'Nama asli belum diisi'}</p>
           </div>
         </div>
@@ -701,6 +782,135 @@ export default function CreatorProfilePage() {
                       Buka Listing <ArrowRight className="w-4 h-4" />
                     </Button>
                   </Link>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          {/* Dialog Kelola Username & Alias */}
+          <Dialog open={aliasModalOpen} onOpenChange={setAliasModalOpen}>
+            <DialogContent className="max-w-lg">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <Tag className="w-5 h-5 text-indigo-600" />
+                  Kelola Username & Alias (@{creator?.username})
+                </DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 py-2">
+                <p className="text-xs text-slate-500">
+                  Jika kreator mengganti username TikTok, daftarkan username baru/lama di sini. Semua data penjualan, video, dan live dari seluruh alias akan otomatis terhubung ke profil ini.
+                </p>
+
+                {/* Daftar Alias Terdaftar */}
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                    Daftar Username Terdaftar
+                  </label>
+                  <div className="border rounded-lg divide-y max-h-56 overflow-y-auto bg-slate-50/50">
+                    {/* Username Utama (Master) */}
+                    <div className="p-2.5 flex items-center justify-between bg-white text-sm">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-slate-800">@{creator?.username}</span>
+                        <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full border border-emerald-200">
+                          Utama (Aktif)
+                        </span>
+                      </div>
+                      <span className="text-xs text-slate-400">Akun Master</span>
+                    </div>
+
+                    {/* Alias-alias non-primary */}
+                    {localData?.aliases
+                      ?.filter((a: any) => a.alias_username.toLowerCase() !== creator?.username.toLowerCase() && !a.is_primary)
+                      .map((a: any, idx: number) => (
+                        <div key={idx} className="p-2.5 flex items-center justify-between bg-white text-sm hover:bg-slate-50 transition-colors">
+                          <div className="space-y-0.5 pr-2">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium text-slate-700">@{a.alias_username}</span>
+                              <span className="text-[10px] bg-slate-100 text-slate-600 font-medium px-1.5 py-0.5 rounded border border-slate-200">
+                                Alias
+                              </span>
+                            </div>
+                            {a.notes && <p className="text-xs text-slate-500">{a.notes}</p>}
+                          </div>
+                          <div className="flex items-center gap-1.5 flex-shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => handleSetPrimaryAlias(a.alias_username)}
+                              disabled={aliasBusy}
+                              className="text-xs text-indigo-600 hover:text-indigo-800 font-medium px-2 py-1 rounded hover:bg-indigo-50 border border-slate-200 hover:border-indigo-200 transition-colors"
+                              title="Jadikan sebagai username utama"
+                            >
+                              Jadikan Utama
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveAlias(a.alias_username)}
+                              disabled={aliasBusy}
+                              className="text-xs text-red-500 hover:text-red-700 p-1.5 rounded hover:bg-red-50 transition-colors"
+                              title="Hapus alias ini"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+
+                    {(!localData?.aliases || localData.aliases.filter((a: any) => !a.is_primary).length === 0) && (
+                      <div className="p-3 text-center text-xs text-slate-400">
+                        Belum ada username alias tambahan.
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Form Tambah Alias Baru */}
+                <div className="border-t pt-3 space-y-3">
+                  <label className="text-xs font-semibold text-slate-700 uppercase tracking-wider flex items-center gap-1">
+                    <Plus className="w-3.5 h-3.5" /> Tambah Username Alias
+                  </label>
+                  <div className="space-y-2">
+                    <div>
+                      <label className="text-xs text-slate-600 font-medium">Username TikTok</label>
+                      <div className="relative mt-1">
+                        <span className="absolute left-2.5 top-2 text-sm text-slate-400 font-medium">@</span>
+                        <input
+                          type="text"
+                          value={newAliasInput}
+                          onChange={(e) => setNewAliasInput(e.target.value)}
+                          placeholder="misal: snhabibah10"
+                          className="w-full pl-7 pr-3 py-1.5 text-sm border rounded-md focus:ring-1 focus:ring-indigo-500"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-xs text-slate-600 font-medium">Catatan (Opsional)</label>
+                      <input
+                        type="text"
+                        value={newAliasNotes}
+                        onChange={(e) => setNewAliasNotes(e.target.value)}
+                        placeholder="misal: Username lama sampai Maret 2026"
+                        className="w-full mt-1 px-3 py-1.5 text-sm border rounded-md focus:ring-1 focus:ring-indigo-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="bg-amber-50 border border-amber-200 rounded-md p-2.5 text-xs text-amber-800">
+                    💡 <strong>Otomatis Menggabungkan:</strong> Jika username yang dimasukkan sudah terdaftar sebagai kreator terpisah di database (misal dari impor file lama), sistem akan <strong>otomatis menggabungkan (merge)</strong> data campaign, video, dan penjualannya ke akun ini.
+                  </div>
+
+                  <div className="flex justify-end gap-2 pt-1">
+                    <Button variant="outline" onClick={() => setAliasModalOpen(false)}>
+                      Tutup
+                    </Button>
+                    <Button
+                      type="button"
+                      onClick={handleAddAlias}
+                      disabled={!newAliasInput.trim() || aliasBusy}
+                      className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white"
+                    >
+                      {aliasBusy ? 'Menyimpan...' : 'Simpan & Tautkan Alias'}
+                    </Button>
+                  </div>
                 </div>
               </div>
             </DialogContent>

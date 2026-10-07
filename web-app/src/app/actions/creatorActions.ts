@@ -586,4 +586,249 @@ export async function bulkAutoDetectCreatorsAction(usernames: string[]) {
   return (rows as unknown as any[]) || [];
 }
 
+export async function addCreatorAliasAction(params: {
+  creatorId: number;
+  aliasUsername: string;
+  notes?: string;
+}) {
+  const session = await auth();
+  if (!session?.user) {
+    return { success: false, error: 'Akses ditolak: Anda harus login terlebih dahulu.' };
+  }
+
+  const { creatorId, notes } = params;
+  const cleanAlias = params.aliasUsername.trim().toLowerCase().replace(/^@/, '');
+  if (!cleanAlias) {
+    return { success: false, error: 'Username alias tidak boleh kosong.' };
+  }
+
+  // 1. Cek apakah kreator target ada
+  const crRows = await db.execute(sql`SELECT id, username FROM creators WHERE id = ${creatorId}`);
+  const targetCreator = (crRows as any[])[0];
+  if (!targetCreator) {
+    return { success: false, error: 'Kreator tidak ditemukan.' };
+  }
+
+  if (targetCreator.username.toLowerCase() === cleanAlias) {
+    return { success: false, error: `@${cleanAlias} sudah merupakan username aktif kreator ini.` };
+  }
+
+  // 2. Cek apakah alias ini sudah terdaftar untuk kreator ini
+  const existingAlias = await db.execute(sql`
+    SELECT * FROM creator_aliases 
+    WHERE creator_id = ${creatorId} AND LOWER(alias_username) = ${cleanAlias}
+  `);
+  if ((existingAlias as any[]).length > 0) {
+    return { success: false, error: `@${cleanAlias} sudah terdaftar sebagai alias untuk kreator ini.` };
+  }
+
+  // 3. Cek apakah username ini terdaftar sebagai KREATOR LAIN di tabel creators
+  const otherCreatorRows = await db.execute(sql`
+    SELECT id, username FROM creators WHERE LOWER(username) = ${cleanAlias} AND id != ${creatorId}
+  `);
+  const otherCreator = (otherCreatorRows as any[])[0];
+
+  if (otherCreator) {
+    const otherId = Number(otherCreator.id);
+
+    // Relocate campaign_creators
+    const targetCcs = (await db.execute(sql`SELECT id, campaign_id, approval FROM campaign_creators WHERE creator_id = ${creatorId}`)) as any[];
+    const targetCcsMap = new Map<number, any>();
+    for (const cc of targetCcs) {
+      targetCcsMap.set(Number(cc.campaign_id), cc);
+    }
+
+    const otherCcs = (await db.execute(sql`SELECT id, campaign_id, approval FROM campaign_creators WHERE creator_id = ${otherId}`)) as any[];
+    for (const occ of otherCcs) {
+      const campId = Number(occ.campaign_id);
+      const match = targetCcsMap.get(campId);
+      if (match) {
+        // Pindahkan videos jika ada
+        await db.execute(sql`UPDATE videos SET campaign_creator_id = ${match.id} WHERE campaign_creator_id = ${occ.id}`);
+        // Jika baris kreator lain approved dan target belum approved, upgrade target
+        if (occ.approval === 'approved' && match.approval !== 'approved') {
+          await db.execute(sql`UPDATE campaign_creators SET approval = 'approved' WHERE id = ${match.id}`);
+        }
+        // Hapus baris duplikat dari kreator lama
+        await db.execute(sql`DELETE FROM campaign_creators WHERE id = ${occ.id}`);
+      } else {
+        // Alihkan baris campaign_creator ke targetCreator
+        await db.execute(sql`UPDATE campaign_creators SET creator_id = ${creatorId} WHERE id = ${occ.id}`);
+      }
+    }
+
+    // Alihkan child tables
+    await db.execute(sql`UPDATE creator_contacts SET creator_id = ${creatorId} WHERE creator_id = ${otherId}`);
+    await db.execute(sql`UPDATE creator_snapshots SET creator_id = ${creatorId} WHERE creator_id = ${otherId}`);
+    await db.execute(sql`UPDATE creator_niches SET creator_id = ${creatorId} WHERE creator_id = ${otherId}`);
+    await db.execute(sql`UPDATE creator_notes SET creator_id = ${creatorId} WHERE creator_id = ${otherId}`);
+    await db.execute(sql`UPDATE creator_address_book SET creator_id = ${creatorId} WHERE creator_id = ${otherId}`);
+    await db.execute(sql`UPDATE ads_performance SET creator_id = ${creatorId} WHERE creator_id = ${otherId}`);
+    await db.execute(sql`UPDATE ad_name_mapping SET creator_id = ${creatorId} WHERE creator_id = ${otherId}`).catch(() => {});
+    await db.execute(sql`UPDATE ads_name_mappings SET creator_id = ${creatorId} WHERE creator_id = ${otherId}`).catch(() => {});
+    await db.execute(sql`UPDATE creator_bank_accounts SET creator_id = ${creatorId} WHERE creator_id = ${otherId}`).catch(() => {});
+    await db.execute(sql`UPDATE creator_aliases SET creator_id = ${creatorId}, is_primary = false WHERE creator_id = ${otherId}`);
+
+    // Hapus record master kreator duplikat
+    await db.execute(sql`DELETE FROM creators WHERE id = ${otherId}`);
+
+    // Daftarkan/update alias di tabel creator_aliases
+    await db.execute(sql`
+      INSERT INTO creator_aliases (creator_id, alias_username, is_primary, notes)
+      VALUES (${creatorId}, ${cleanAlias}, false, ${notes || 'Hasil penggabungan akun duplikat'})
+      ON CONFLICT (alias_username) DO UPDATE
+      SET creator_id = ${creatorId}, is_primary = false, notes = EXCLUDED.notes
+    `);
+
+    // Audit log
+    await db.execute(sql`
+      INSERT INTO audit_logs (user_name, action, table_name, record_id, description)
+      VALUES (${session.user.name || session.user.email || 'System'}, 'MERGE_CREATOR_ALIAS', 'creators', ${creatorId.toString()},
+              ${`Menggabungkan akun duplikat @${cleanAlias} (ID: ${otherId}) ke @${targetCreator.username} (ID: ${creatorId}) dan menjadikannya alias.`})
+    `).catch(() => {});
+
+    revalidatePath(`/creator-pool/${creatorId}`);
+    revalidatePath('/creator-pool');
+    return {
+      success: true,
+      message: `Akun @${cleanAlias} (ID ${otherId}) berhasil digabungkan ke akun ini beserta seluruh data campaign dan videonya.`,
+    };
+  }
+
+  // 4. Jika bukan master kreator lain, cek apakah sudah jadi alias di kreator lain
+  const otherAliasRows = await db.execute(sql`
+    SELECT a.creator_id, c.username 
+    FROM creator_aliases a 
+    JOIN creators c ON a.creator_id = c.id 
+    WHERE LOWER(a.alias_username) = ${cleanAlias} AND a.creator_id != ${creatorId}
+  `);
+  const otherAlias = (otherAliasRows as any[])[0];
+  if (otherAlias) {
+    return {
+      success: false,
+      error: `Username @${cleanAlias} sudah terdaftar sebagai alias milik kreator lain (@${otherAlias.username}).`,
+    };
+  }
+
+  // 5. Simpan alias baru
+  await db.execute(sql`
+    INSERT INTO creator_aliases (creator_id, alias_username, is_primary, notes)
+    VALUES (${creatorId}, ${cleanAlias}, false, ${notes || null})
+    ON CONFLICT (alias_username) DO UPDATE
+    SET creator_id = ${creatorId}, is_primary = false, notes = EXCLUDED.notes
+  `);
+
+  await db.execute(sql`
+    INSERT INTO audit_logs (user_name, action, table_name, record_id, description)
+    VALUES (${session.user.name || session.user.email || 'System'}, 'ADD_CREATOR_ALIAS', 'creator_aliases', ${creatorId.toString()},
+            ${`Menambahkan alias @${cleanAlias} untuk kreator @${targetCreator.username}`})
+  `).catch(() => {});
+
+  revalidatePath(`/creator-pool/${creatorId}`);
+  revalidatePath('/creator-pool');
+  return { success: true, message: `Alias @${cleanAlias} berhasil ditambahkan.` };
+}
+
+export async function removeCreatorAliasAction(params: {
+  creatorId: number;
+  aliasUsername: string;
+}) {
+  const session = await auth();
+  if (!session?.user) {
+    return { success: false, error: 'Akses ditolak: Anda harus login.' };
+  }
+
+  const { creatorId } = params;
+  const cleanAlias = params.aliasUsername.trim().toLowerCase().replace(/^@/, '');
+
+  const row = await db.execute(sql`
+    SELECT * FROM creator_aliases 
+    WHERE creator_id = ${creatorId} AND LOWER(alias_username) = ${cleanAlias}
+  `);
+  const aliasRecord = (row as any[])[0];
+  if (!aliasRecord) {
+    return { success: false, error: 'Alias tidak ditemukan.' };
+  }
+
+  if (aliasRecord.is_primary) {
+    return { success: false, error: 'Tidak bisa menghapus username utama. Ganti username utama terlebih dahulu jika diperlukan.' };
+  }
+
+  await db.execute(sql`
+    DELETE FROM creator_aliases 
+    WHERE creator_id = ${creatorId} AND LOWER(alias_username) = ${cleanAlias}
+  `);
+
+  await db.execute(sql`
+    INSERT INTO audit_logs (user_name, action, table_name, record_id, description)
+    VALUES (${session.user.name || session.user.email || 'System'}, 'DELETE_CREATOR_ALIAS', 'creator_aliases', ${creatorId.toString()},
+            ${`Menghapus alias @${cleanAlias} dari kreator ID ${creatorId}`})
+  `).catch(() => {});
+
+  revalidatePath(`/creator-pool/${creatorId}`);
+  return { success: true, message: `Alias @${cleanAlias} berhasil dihapus.` };
+}
+
+export async function setPrimaryCreatorAliasAction(params: {
+  creatorId: number;
+  aliasUsername: string;
+}) {
+  const session = await auth();
+  if (!session?.user) {
+    return { success: false, error: 'Akses ditolak: Anda harus login.' };
+  }
+
+  const { creatorId } = params;
+  const cleanAlias = params.aliasUsername.trim().toLowerCase().replace(/^@/, '');
+
+  const crRows = await db.execute(sql`SELECT id, username FROM creators WHERE id = ${creatorId}`);
+  const targetCreator = (crRows as any[])[0];
+  if (!targetCreator) {
+    return { success: false, error: 'Kreator tidak ditemukan.' };
+  }
+
+  if (targetCreator.username.toLowerCase() === cleanAlias) {
+    return { success: true, message: `@${cleanAlias} sudah merupakan username utama.` };
+  }
+
+  const link_account = `https://www.tiktok.com/@${cleanAlias}`;
+
+  // 1. Jadikan semua alias saat ini non-primary
+  await db.execute(sql`UPDATE creator_aliases SET is_primary = false WHERE creator_id = ${creatorId}`);
+
+  // 2. Update master creators
+  await db.execute(sql`
+    UPDATE creators 
+    SET username = ${cleanAlias}, link_account = ${link_account}, last_updated_at = NOW() 
+    WHERE id = ${creatorId}
+  `);
+
+  // 3. Pastikan username baru terdaftar sebagai primary di creator_aliases
+  await db.execute(sql`
+    INSERT INTO creator_aliases (creator_id, alias_username, is_primary, notes)
+    VALUES (${creatorId}, ${cleanAlias}, true, 'Username utama aktif')
+    ON CONFLICT (alias_username) DO UPDATE
+    SET creator_id = ${creatorId}, is_primary = true
+  `);
+
+  // 4. Pastikan username lama tetap tercatat sebagai alias non-primary
+  await db.execute(sql`
+    INSERT INTO creator_aliases (creator_id, alias_username, is_primary, notes)
+    VALUES (${creatorId}, ${targetCreator.username}, false, 'Username sebelumnya')
+    ON CONFLICT (alias_username) DO UPDATE
+    SET creator_id = ${creatorId}, is_primary = false
+  `);
+
+  await db.execute(sql`
+    INSERT INTO audit_logs (user_name, action, table_name, record_id, description)
+    VALUES (${session.user.name || session.user.email || 'System'}, 'SET_PRIMARY_CREATOR_ALIAS', 'creators', ${creatorId.toString()},
+            ${`Mengubah username utama dari @${targetCreator.username} menjadi @${cleanAlias}`})
+  `).catch(() => {});
+
+  revalidatePath(`/creator-pool/${creatorId}`);
+  revalidatePath('/creator-pool');
+  return { success: true, message: `Username utama berhasil diubah menjadi @${cleanAlias}.` };
+}
+
+
 
