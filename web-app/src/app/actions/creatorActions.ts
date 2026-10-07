@@ -180,6 +180,10 @@ export async function fetchCreatorProfile(creatorId: number) {
     liveSessions,
     organicVideos,
     sales,
+    picContacts,
+    identities,
+    contracts,
+    bankAccounts,
   ] = await Promise.all([
     db.execute(sql`SELECT * FROM creator_snapshots WHERE creator_id IN ${sqlInList(associatedCreatorIds)} ORDER BY tanggal_update DESC, id DESC`).catch(() => []),
     db.execute(sql`SELECT * FROM creator_contacts WHERE creator_id IN ${sqlInList(associatedCreatorIds)} ORDER BY id ASC`).catch(() => []),
@@ -231,6 +235,17 @@ export async function fetchCreatorProfile(creatorId: number) {
       console.error('fetchCreatorProfile: query sales gagal untuk creator', creatorId, err);
       return [];
     }),
+
+    db.execute(sql`SELECT * FROM creator_pic_contacts WHERE creator_id IN ${sqlInList(associatedCreatorIds)} ORDER BY is_primary DESC, id DESC`).catch(() => []),
+    db.execute(sql`SELECT * FROM creator_identities WHERE creator_id IN ${sqlInList(associatedCreatorIds)} ORDER BY is_primary DESC, id DESC`).catch(() => []),
+    db.execute(sql`
+      SELECT cc.*, c.nama as campaign_nama 
+      FROM creator_contracts cc 
+      LEFT JOIN campaigns c ON cc.campaign_id = c.id 
+      WHERE cc.creator_id IN ${sqlInList(associatedCreatorIds)} 
+      ORDER BY cc.created_at DESC, cc.id DESC
+    `).catch(() => []),
+    db.execute(sql`SELECT * FROM creator_bank_accounts WHERE creator_id IN ${sqlInList(associatedCreatorIds)} ORDER BY is_primary DESC, id ASC`).catch(() => []),
   ]);
 
   const ccList = (ccs as unknown as any[]) || [];
@@ -267,6 +282,10 @@ export async function fetchCreatorProfile(creatorId: number) {
     liveSessions: liveList,
     liveProducts,
     organicVideos: (organicVideos as unknown as any[]) || [],
+    picContacts: (picContacts as unknown as any[]) || [],
+    identities: (identities as unknown as any[]) || [],
+    contracts: (contracts as unknown as any[]) || [],
+    bankAccounts: (bankAccounts as unknown as any[]) || [],
   };
 }
 
@@ -836,6 +855,157 @@ export async function setPrimaryCreatorAliasAction(params: {
   revalidatePath(`/creator-pool/${creatorId}`);
   revalidatePath('/creator-pool');
   return { success: true, message: `Username utama berhasil diubah menjadi @${cleanAlias}.` };
+}
+
+// ==========================================
+// CREATOR ADMIN MASTER CRUD ACTIONS
+// ==========================================
+
+export async function addCreatorPicContactAction(data: {
+  creatorId: number;
+  namaPic: string;
+  nomorWa: string;
+  isPrimary?: boolean;
+}) {
+  const session = await auth();
+  if (!session?.user?.id) return { success: false, error: 'Unauthorized' };
+
+  const cleanPic = data.namaPic.trim();
+  const cleanWa = data.nomorWa.trim();
+  if (!cleanPic || !cleanWa) return { success: false, error: 'Nama PIC dan No WA wajib diisi' };
+
+  if (data.isPrimary) {
+    await db.execute(sql`UPDATE creator_pic_contacts SET is_primary = false WHERE creator_id = ${data.creatorId}`).catch(() => {});
+  }
+
+  await db.execute(sql`
+    INSERT INTO creator_pic_contacts (creator_id, nama_pic, nomor_wa, is_primary)
+    VALUES (${data.creatorId}, ${cleanPic}, ${cleanWa}, ${Boolean(data.isPrimary)})
+    ON CONFLICT (creator_id, nama_pic, nomor_wa) DO UPDATE
+    SET is_primary = ${Boolean(data.isPrimary)}
+  `);
+
+  revalidatePath(`/creator-pool/${data.creatorId}`);
+  return { success: true, message: 'Kontak WA PIC berhasil disimpan.' };
+}
+
+export async function deleteCreatorPicContactAction(id: number, creatorId: number) {
+  const session = await auth();
+  if (!session?.user?.id) return { success: false, error: 'Unauthorized' };
+
+  await db.execute(sql`DELETE FROM creator_pic_contacts WHERE id = ${id} AND creator_id = ${creatorId}`);
+  revalidatePath(`/creator-pool/${creatorId}`);
+  return { success: true, message: 'Kontak berhasil dihapus.' };
+}
+
+export async function addCreatorIdentityAction(data: {
+  creatorId: number;
+  nik: string;
+  namaKtp?: string;
+  alamatKtp?: string;
+  linkKtp?: string;
+  isPrimary?: boolean;
+}) {
+  const session = await auth();
+  if (!session?.user?.id) return { success: false, error: 'Unauthorized' };
+
+  const cleanNik = data.nik.trim();
+  if (!cleanNik) return { success: false, error: 'NIK wajib diisi' };
+
+  if (data.isPrimary) {
+    await db.execute(sql`UPDATE creator_identities SET is_primary = false WHERE creator_id = ${data.creatorId}`).catch(() => {});
+  }
+
+  await db.execute(sql`
+    INSERT INTO creator_identities (creator_id, nik, nama_ktp, alamat_ktp, link_ktp, is_primary)
+    VALUES (${data.creatorId}, ${cleanNik}, ${data.namaKtp?.trim() || null}, ${data.alamatKtp?.trim() || null}, ${data.linkKtp?.trim() || null}, ${Boolean(data.isPrimary)})
+    ON CONFLICT (creator_id, nik) DO UPDATE
+    SET nama_ktp = COALESCE(EXCLUDED.nama_ktp, creator_identities.nama_ktp),
+        alamat_ktp = COALESCE(EXCLUDED.alamat_ktp, creator_identities.alamat_ktp),
+        link_ktp = COALESCE(EXCLUDED.link_ktp, creator_identities.link_ktp),
+        is_primary = ${Boolean(data.isPrimary)}
+  `);
+
+  revalidatePath(`/creator-pool/${data.creatorId}`);
+  return { success: true, message: 'Data KTP berhasil disimpan.' };
+}
+
+export async function deleteCreatorIdentityAction(id: number, creatorId: number) {
+  const session = await auth();
+  if (!session?.user?.id) return { success: false, error: 'Unauthorized' };
+
+  await db.execute(sql`DELETE FROM creator_identities WHERE id = ${id} AND creator_id = ${creatorId}`);
+  revalidatePath(`/creator-pool/${creatorId}`);
+  return { success: true, message: 'Data KTP berhasil dihapus.' };
+}
+
+export async function addCreatorContractAction(data: {
+  creatorId: number;
+  campaignId?: number;
+  judulKontrak?: string;
+  linkKontrak: string;
+}) {
+  const session = await auth();
+  if (!session?.user?.id) return { success: false, error: 'Unauthorized' };
+
+  const cleanLink = data.linkKontrak.trim();
+  if (!cleanLink) return { success: false, error: 'Link kontrak wajib diisi' };
+
+  await db.execute(sql`
+    INSERT INTO creator_contracts (creator_id, campaign_id, judul_kontrak, link_kontrak)
+    VALUES (${data.creatorId}, ${data.campaignId || null}, ${data.judulKontrak?.trim() || 'Dokumen Kontrak Kerjasama'}, ${cleanLink})
+  `);
+
+  revalidatePath(`/creator-pool/${data.creatorId}`);
+  return { success: true, message: 'Link kontrak berhasil disimpan.' };
+}
+
+export async function deleteCreatorContractAction(id: number, creatorId: number) {
+  const session = await auth();
+  if (!session?.user?.id) return { success: false, error: 'Unauthorized' };
+
+  await db.execute(sql`DELETE FROM creator_contracts WHERE id = ${id} AND creator_id = ${creatorId}`);
+  revalidatePath(`/creator-pool/${creatorId}`);
+  return { success: true, message: 'Kontrak berhasil dihapus.' };
+}
+
+export async function addCreatorBankAccountAction(data: {
+  creatorId: number;
+  bankName: string;
+  accountNumber: string;
+  accountHolder: string;
+  isPrimary?: boolean;
+}) {
+  const session = await auth();
+  if (!session?.user?.id) return { success: false, error: 'Unauthorized' };
+
+  const cleanBank = data.bankName.trim();
+  const cleanNum = data.accountNumber.trim();
+  const cleanHolder = data.accountHolder.trim();
+  if (!cleanBank || !cleanNum || !cleanHolder) return { success: false, error: 'Bank, nomor rekening, dan nama pemilik wajib diisi' };
+
+  if (data.isPrimary) {
+    await db.execute(sql`UPDATE creator_bank_accounts SET is_primary = false WHERE creator_id = ${data.creatorId}`).catch(() => {});
+  }
+
+  await db.execute(sql`
+    INSERT INTO creator_bank_accounts (creator_id, bank_name, account_number, account_holder, is_primary)
+    VALUES (${data.creatorId}, ${cleanBank}, ${cleanNum}, ${cleanHolder}, ${Boolean(data.isPrimary)})
+    ON CONFLICT (creator_id, bank_name, account_number) DO UPDATE
+    SET account_holder = ${cleanHolder}, is_primary = ${Boolean(data.isPrimary)}
+  `);
+
+  revalidatePath(`/creator-pool/${data.creatorId}`);
+  return { success: true, message: 'Rekening bank berhasil disimpan.' };
+}
+
+export async function deleteCreatorBankAccountAction(id: number, creatorId: number) {
+  const session = await auth();
+  if (!session?.user?.id) return { success: false, error: 'Unauthorized' };
+
+  await db.execute(sql`DELETE FROM creator_bank_accounts WHERE id = ${id} AND creator_id = ${creatorId}`);
+  revalidatePath(`/creator-pool/${creatorId}`);
+  return { success: true, message: 'Rekening bank berhasil dihapus.' };
 }
 
 

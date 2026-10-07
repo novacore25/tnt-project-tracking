@@ -184,6 +184,24 @@ export async function fetchUnpaidCreators(campaignId: number) {
               'id', cba.id, 'bank_name', cba.bank_name, 'account_number', cba.account_number, 'account_holder', cba.account_holder
             ))
             FROM creator_bank_accounts cba WHERE cba.creator_id = cr.id
+          ),
+          'creator_pic_contacts', (
+            SELECT json_agg(jsonb_build_object(
+              'id', cpc.id, 'nama_pic', cpc.nama_pic, 'nomor_wa', cpc.nomor_wa, 'is_primary', cpc.is_primary
+            ) ORDER BY cpc.is_primary DESC, cpc.id DESC)
+            FROM creator_pic_contacts cpc WHERE cpc.creator_id = cr.id
+          ),
+          'creator_identities', (
+            SELECT json_agg(jsonb_build_object(
+              'id', ci.id, 'nik', ci.nik, 'nama_ktp', ci.nama_ktp, 'alamat_ktp', ci.alamat_ktp, 'link_ktp', ci.link_ktp, 'is_primary', ci.is_primary
+            ) ORDER BY ci.is_primary DESC, ci.id DESC)
+            FROM creator_identities ci WHERE ci.creator_id = cr.id
+          ),
+          'creator_contracts', (
+            SELECT json_agg(jsonb_build_object(
+              'id', ccon.id, 'campaign_id', ccon.campaign_id, 'judul_kontrak', ccon.judul_kontrak, 'link_kontrak', ccon.link_kontrak
+            ) ORDER BY ccon.created_at DESC, ccon.id DESC)
+            FROM creator_contracts ccon WHERE ccon.creator_id = cr.id
           )
         ) as creators,
         (
@@ -253,8 +271,26 @@ export async function fetchApprovedCreatorsForBatch(campaignId: number) {
           'creator_bank_accounts', (
             SELECT json_agg(json_build_object(
               'id', cba.id, 'bank_name', cba.bank_name, 'account_number', cba.account_number, 'account_holder', cba.account_holder, 'is_primary', cba.is_primary
-            ))
+            ) ORDER BY cba.is_primary DESC, cba.id ASC)
             FROM creator_bank_accounts cba WHERE cba.creator_id = cr.id
+          ),
+          'creator_pic_contacts', (
+            SELECT json_agg(jsonb_build_object(
+              'id', cpc.id, 'nama_pic', cpc.nama_pic, 'nomor_wa', cpc.nomor_wa, 'is_primary', cpc.is_primary
+            ) ORDER BY cpc.is_primary DESC, cpc.id DESC)
+            FROM creator_pic_contacts cpc WHERE cpc.creator_id = cr.id
+          ),
+          'creator_identities', (
+            SELECT json_agg(jsonb_build_object(
+              'id', ci.id, 'nik', ci.nik, 'nama_ktp', ci.nama_ktp, 'alamat_ktp', ci.alamat_ktp, 'link_ktp', ci.link_ktp, 'is_primary', ci.is_primary
+            ) ORDER BY ci.is_primary DESC, ci.id DESC)
+            FROM creator_identities ci WHERE ci.creator_id = cr.id
+          ),
+          'creator_contracts', (
+            SELECT json_agg(jsonb_build_object(
+              'id', ccon.id, 'campaign_id', ccon.campaign_id, 'judul_kontrak', ccon.judul_kontrak, 'link_kontrak', ccon.link_kontrak
+            ) ORDER BY ccon.created_at DESC, ccon.id DESC)
+            FROM creator_contracts ccon WHERE ccon.creator_id = cr.id
           )
         ) as creators
       FROM campaign_creators cc
@@ -423,6 +459,47 @@ export async function getCreatorBankAccounts(creatorId: number) {
   return (rows as unknown as any[]) || [];
 }
 
+export async function getCreatorPicContacts(creatorId: number) {
+  try {
+    const rows = await db.execute(sql`
+      SELECT * FROM creator_pic_contacts 
+      WHERE creator_id = ${creatorId} 
+      ORDER BY is_primary DESC, id DESC
+    `);
+    return (rows as unknown as any[]) || [];
+  } catch {
+    return [];
+  }
+}
+
+export async function getCreatorIdentities(creatorId: number) {
+  try {
+    const rows = await db.execute(sql`
+      SELECT * FROM creator_identities 
+      WHERE creator_id = ${creatorId} 
+      ORDER BY is_primary DESC, id DESC
+    `);
+    return (rows as unknown as any[]) || [];
+  } catch {
+    return [];
+  }
+}
+
+export async function getCreatorContracts(creatorId: number) {
+  try {
+    const rows = await db.execute(sql`
+      SELECT cc.*, c.nama as campaign_nama
+      FROM creator_contracts cc
+      LEFT JOIN campaigns c ON cc.campaign_id = c.id
+      WHERE cc.creator_id = ${creatorId}
+      ORDER BY cc.created_at DESC, cc.id DESC
+    `);
+    return (rows as unknown as any[]) || [];
+  } catch {
+    return [];
+  }
+}
+
 export async function getSenderAccounts() {
   const rows = await db.execute(sql`SELECT * FROM sender_accounts ORDER BY id ASC`);
   return (rows as unknown as any[]) || [];
@@ -574,12 +651,47 @@ export async function addPaymentItem(batchId: number, itemData: any) {
       const ccRows = await db.execute(sql`SELECT creator_id FROM campaign_creators WHERE id = ${itemData.campaign_creator_id}`);
       const creatorId = (ccRows as any[])[0]?.creator_id;
       if (creatorId) {
+        // 1. Legacy update ke tabel creators (backward compatibility)
         if (itemData.nik) await db.execute(sql`UPDATE creators SET nik = ${itemData.nik} WHERE id = ${creatorId}`);
         if (itemData.link_ktp) await db.execute(sql`UPDATE creators SET link_ktp = ${itemData.link_ktp} WHERE id = ${creatorId}`);
         if (itemData.link_kontrak) await db.execute(sql`UPDATE creators SET link_kontrak = ${itemData.link_kontrak} WHERE id = ${creatorId}`);
         if (itemData.nama_wa_pic) await db.execute(sql`UPDATE creators SET nama_wa_pic = ${itemData.nama_wa_pic} WHERE id = ${creatorId}`);
         if (itemData.nomor_wa_dealing) await db.execute(sql`UPDATE creators SET nomor_wa_dealing = ${itemData.nomor_wa_dealing} WHERE id = ${creatorId}`);
         if (itemData.alamat_ktp) await db.execute(sql`UPDATE creators SET alamat_ktp = ${itemData.alamat_ktp} WHERE id = ${creatorId}`);
+
+        // 2. Master Relasional: creator_pic_contacts (Nama PIC + No WA sebagai satu kesatuan)
+        const cleanPic = itemData.nama_wa_pic ? String(itemData.nama_wa_pic).trim() : '';
+        const cleanWa = itemData.nomor_wa_dealing ? String(itemData.nomor_wa_dealing).trim() : '';
+        if (cleanPic && cleanWa) {
+          await db.execute(sql`
+            INSERT INTO creator_pic_contacts (creator_id, nama_pic, nomor_wa)
+            VALUES (${creatorId}, ${cleanPic}, ${cleanWa})
+            ON CONFLICT (creator_id, nama_pic, nomor_wa) DO NOTHING
+          `).catch(() => {});
+        }
+
+        // 3. Master Relasional: creator_identities (NIK, Link KTP, Alamat KTP)
+        const cleanNik = itemData.nik ? String(itemData.nik).trim() : '';
+        if (cleanNik) {
+          await db.execute(sql`
+            INSERT INTO creator_identities (creator_id, nik, link_ktp, alamat_ktp)
+            VALUES (${creatorId}, ${cleanNik}, ${itemData.link_ktp || null}, ${itemData.alamat_ktp || null})
+            ON CONFLICT (creator_id, nik) DO UPDATE SET
+              link_ktp = COALESCE(EXCLUDED.link_ktp, creator_identities.link_ktp),
+              alamat_ktp = COALESCE(EXCLUDED.alamat_ktp, creator_identities.alamat_ktp)
+          `).catch(() => {});
+        }
+
+        // 4. Master Relasional: creator_contracts (Link Kontrak GDrive)
+        const cleanKontrak = itemData.link_kontrak ? String(itemData.link_kontrak).trim() : '';
+        if (cleanKontrak) {
+          const batchRows = await db.execute(sql`SELECT campaign_id FROM payment_batches WHERE id = ${batchId}`).catch(() => []);
+          const cId = (batchRows as any[])[0]?.campaign_id || null;
+          await db.execute(sql`
+            INSERT INTO creator_contracts (creator_id, campaign_id, judul_kontrak, link_kontrak)
+            VALUES (${creatorId}, ${cId}, 'Kontrak Pengajuan Pembayaran', ${cleanKontrak})
+          `).catch(() => {});
+        }
       }
     } catch (e) {
       console.warn('Silent fallback for creator metadata update:', e);

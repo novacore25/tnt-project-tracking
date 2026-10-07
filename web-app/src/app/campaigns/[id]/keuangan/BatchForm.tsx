@@ -1,8 +1,11 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { createPaymentBatch, addPaymentItem, submitBatchToManager, getCreatorBankAccounts } from "../../actions/paymentActions";
-import { Loader2, Plus, Trash2, Save, Send, ArrowLeft, CheckCircle2, AlertCircle } from "lucide-react";
+import { 
+  createPaymentBatch, addPaymentItem, submitBatchToManager, 
+  getCreatorBankAccounts, getCreatorPicContacts, getCreatorIdentities, getCreatorContracts 
+} from "../../actions/paymentActions";
+import { Loader2, Plus, Trash2, Save, Send, ArrowLeft, CheckCircle2, AlertCircle, ExternalLink } from "lucide-react";
 import { formatRupiah } from "@/utils/formatters";
 import { sumNum } from "@/utils/computed";
 
@@ -38,7 +41,12 @@ export function BatchForm({
   
   const [selectedCreators, setSelectedCreators] = useState<any[]>([]);
   const [forms, setForms] = useState<Record<number, any>>({});
+  
+  // Master relation states cached per creatorId
   const [bankAccounts, setBankAccounts] = useState<Record<number, any[]>>({});
+  const [picContacts, setPicContacts] = useState<Record<number, any[]>>({});
+  const [identities, setIdentities] = useState<Record<number, any[]>>({});
+  const [contracts, setContracts] = useState<Record<number, any[]>>({});
   const [loadingBanks, setLoadingBanks] = useState<Record<number, boolean>>({});
 
   const [operationalItems, setOperationalItems] = useState<OperationalItem[]>([]);
@@ -68,16 +76,15 @@ export function BatchForm({
   const [draftRestored, setDraftRestored] = useState(false);
   const DRAFT_KEY = `tnt_batch_draft_${campaignId}`;
 
-  // 1. Restore draft on mount if not provided with initialItems
+  // 1. Restore draft on mount (selalu pulihkan jika ada data belum disubmit)
   useEffect(() => {
-    if (initialItems && initialItems.length > 0) return;
     try {
       const saved = localStorage.getItem(DRAFT_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed.batchLabel) setBatchLabel(parsed.batchLabel);
         if (parsed.forms && Object.keys(parsed.forms).length > 0) {
-          setForms(parsed.forms);
+          setForms(prev => ({ ...parsed.forms, ...prev }));
         }
         if (parsed.operationalItems && Array.isArray(parsed.operationalItems) && parsed.operationalItems.length > 0) {
           setOperationalItems(parsed.operationalItems);
@@ -85,7 +92,11 @@ export function BatchForm({
         if (parsed.selectedCreatorIds && Array.isArray(parsed.selectedCreatorIds) && creators.length > 0) {
           const matched = creators.filter(c => parsed.selectedCreatorIds.includes(c.id));
           if (matched.length > 0) {
-            setSelectedCreators(matched);
+            setSelectedCreators(prev => {
+              const existingIds = new Set(prev.map(p => p.id));
+              const added = matched.filter(m => !existingIds.has(m.id));
+              return [...prev, ...added];
+            });
             setDraftRestored(true);
           }
         } else if (parsed.operationalItems?.length > 0 || (parsed.forms && Object.keys(parsed.forms).length > 0)) {
@@ -95,11 +106,10 @@ export function BatchForm({
     } catch (e) {
       console.warn('Failed restoring batch draft:', e);
     }
-  }, [campaignId, creators]);
+  }, [campaignId, creators, DRAFT_KEY]);
 
-  // 2. Auto-save draft when state changes
+  // 2. Auto-save draft whenever state changes (AKTIF UNTUK SEMUA MODE, termasuk 100 kreator dari UnpaidCreatorsTab)
   useEffect(() => {
-    if (initialItems && initialItems.length > 0) return;
     try {
       if (selectedCreators.length > 0 || operationalItems.length > 0 || Object.keys(forms).length > 0) {
         const draftData = {
@@ -112,9 +122,9 @@ export function BatchForm({
         localStorage.setItem(DRAFT_KEY, JSON.stringify(draftData));
       }
     } catch (e) {
-      console.warn('Failed saving draft:', e);
+      console.warn('Failed saving draft to localStorage:', e);
     }
-  }, [batchLabel, selectedCreators, forms, operationalItems, campaignId]);
+  }, [batchLabel, selectedCreators, forms, operationalItems, campaignId, DRAFT_KEY]);
 
   const handleClearDraft = () => {
     try {
@@ -137,6 +147,35 @@ export function BatchForm({
     }
   }, [initialItems]);
 
+  useEffect(() => {
+    if (selectedCreators.length === 0) return;
+    selectedCreators.forEach(cc => {
+      const creatorId = cc.creator_id || cc.creators?.id;
+      if (!creatorId) return;
+
+      if (!bankAccounts[creatorId] && (!cc.creators?.creator_bank_accounts || cc.creators.creator_bank_accounts.length === 0)) {
+        getCreatorBankAccounts(creatorId).then(b => {
+          if (b && b.length > 0) setBankAccounts(prev => ({ ...prev, [creatorId]: b }));
+        }).catch(() => {});
+      }
+      if (!picContacts[creatorId] && (!cc.creators?.creator_pic_contacts || cc.creators.creator_pic_contacts.length === 0)) {
+        getCreatorPicContacts(creatorId).then(p => {
+          if (p && p.length > 0) setPicContacts(prev => ({ ...prev, [creatorId]: p }));
+        }).catch(() => {});
+      }
+      if (!identities[creatorId] && (!cc.creators?.creator_identities || cc.creators.creator_identities.length === 0)) {
+        getCreatorIdentities(creatorId).then(i => {
+          if (i && i.length > 0) setIdentities(prev => ({ ...prev, [creatorId]: i }));
+        }).catch(() => {});
+      }
+      if (!contracts[creatorId] && (!cc.creators?.creator_contracts || cc.creators.creator_contracts.length === 0)) {
+        getCreatorContracts(creatorId).then(c => {
+          if (c && c.length > 0) setContracts(prev => ({ ...prev, [creatorId]: c }));
+        }).catch(() => {});
+      }
+    });
+  }, [selectedCreators]);
+
   const handleToggleCreator = async (cc: any, isChecked: boolean, prefill?: any) => {
     if (!isChecked) {
       handleRemoveCreator(cc.id);
@@ -157,11 +196,30 @@ export function BatchForm({
     const initialBanks = cc.creators?.creator_bank_accounts || bankAccounts[creatorId] || [];
     const primaryBank = initialBanks.find((b: any) => b.is_primary) || initialBanks[0];
     
+    const initialPics = cc.creators?.creator_pic_contacts || picContacts[creatorId] || [];
+    const primaryPic = initialPics.find((p: any) => p.is_primary) || initialPics[0];
+
+    const initialIdens = cc.creators?.creator_identities || identities[creatorId] || [];
+    const primaryIden = initialIdens.find((i: any) => i.is_primary) || initialIdens[0];
+
+    const initialContracts = cc.creators?.creator_contracts || contracts[creatorId] || [];
+    const primaryContract = initialContracts[0];
+
     const defaultBankId = prefill?.bank_account_id || (primaryBank ? String(primaryBank.id) : '');
     const defaultMetode = prefill?.metode_pembayaran || (primaryBank ? primaryBank.bank_name : '');
     const defaultNomor = prefill?.nomor_rekening || (primaryBank ? primaryBank.account_number : '');
     const defaultPenerima = prefill?.nama_penerima || (primaryBank ? primaryBank.account_holder : (cc.creators?.nama_asli || ''));
     
+    const defaultPicId = prefill?.pic_contact_id || (primaryPic ? String(primaryPic.id) : '');
+    const defaultPicName = prefill?.nama_wa_pic || (primaryPic ? primaryPic.nama_pic : (cc.creators?.nama_wa_pic || ''));
+    const defaultPicWa = prefill?.nomor_wa_dealing || (primaryPic ? primaryPic.nomor_wa : (cc.creators?.nomor_wa_dealing || ''));
+
+    const defaultIdentityId = prefill?.identity_id || (primaryIden ? String(primaryIden.id) : '');
+    const defaultNik = prefill?.nik || (primaryIden ? primaryIden.nik : (cc.creators?.nik || ''));
+    const defaultLinkKtp = prefill?.link_ktp || (primaryIden ? primaryIden.link_ktp : (cc.creators?.link_ktp || ''));
+    const defaultAlamatKtp = prefill?.alamat_ktp || (primaryIden ? primaryIden.alamat_ktp : (cc.creators?.alamat_ktp || ''));
+    const defaultLinkKontrak = prefill?.link_kontrak || (primaryContract ? primaryContract.link_kontrak : (cc.creators?.link_kontrak || ''));
+
     setForms(prev => {
       if (prev[cc.id]) return prev;
       const history = creatorHistory[cc.id] || [];
@@ -181,47 +239,109 @@ export function BatchForm({
           metode_pembayaran: defaultMetode,
           nomor_rekening: defaultNomor,
           nama_penerima: defaultPenerima,
-          nama_wa_pic: prefill?.nama_wa_pic || cc.creators?.nama_wa_pic || '',
-          nomor_wa_dealing: prefill?.nomor_wa_dealing || cc.creators?.nomor_wa_dealing || '',
-          alamat_ktp: prefill?.alamat_ktp || cc.creators?.alamat_ktp || '',
-          nik: prefill?.nik || cc.creators?.nik || '',
-          link_ktp: prefill?.link_ktp || cc.creators?.link_ktp || '',
-          link_kontrak: prefill?.link_kontrak || cc.creators?.link_kontrak || '',
+          pic_contact_id: defaultPicId,
+          nama_wa_pic: defaultPicName,
+          nomor_wa_dealing: defaultPicWa,
+          identity_id: defaultIdentityId,
+          alamat_ktp: defaultAlamatKtp,
+          nik: defaultNik,
+          link_ktp: defaultLinkKtp,
+          link_kontrak: defaultLinkKontrak,
           notes_dari_pic: prefill?.notes_dari_pic || '',
         }
       };
     });
 
-    // Fetch bank accounts for this creator if not yet loaded
-    if (creatorId && (!bankAccounts[creatorId] || bankAccounts[creatorId].length === 0)) {
-      setLoadingBanks(prev => ({ ...prev, [creatorId]: true }));
-      try {
-        const banks = await getCreatorBankAccounts(creatorId);
-        setBankAccounts(prev => ({ ...prev, [creatorId]: banks }));
+    // Fetch master relations for this creator if not loaded
+    if (creatorId) {
+      if (!bankAccounts[creatorId] && (!cc.creators?.creator_bank_accounts || cc.creators.creator_bank_accounts.length === 0)) {
+        setLoadingBanks(prev => ({ ...prev, [creatorId]: true }));
+        getCreatorBankAccounts(creatorId).then(banks => {
+          setBankAccounts(prev => ({ ...prev, [creatorId]: banks }));
+          if (banks && banks.length > 0) {
+            const autoBank = banks.find((b: any) => b.is_primary) || banks[0];
+            setForms(prev => {
+              const cur = prev[cc.id];
+              if (cur && !cur.bank_account_id) {
+                return {
+                  ...prev,
+                  [cc.id]: {
+                    ...cur,
+                    bank_account_id: String(autoBank.id),
+                    metode_pembayaran: autoBank.bank_name,
+                    nomor_rekening: autoBank.account_number,
+                    nama_penerima: autoBank.account_holder || cur.nama_penerima || cc.creators?.nama_asli || ''
+                  }
+                };
+              }
+              return prev;
+            });
+          }
+        }).catch(err => console.error('Failed to load bank accounts', err))
+        .finally(() => setLoadingBanks(prev => ({ ...prev, [creatorId]: false })));
+      } else if (cc.creators?.creator_bank_accounts && !bankAccounts[creatorId]) {
+        setBankAccounts(prev => ({ ...prev, [creatorId]: cc.creators.creator_bank_accounts }));
+      }
 
-        if (banks && banks.length > 0) {
-          const autoBank = banks.find((b: any) => b.is_primary) || banks[0];
-          setForms(prev => {
-            const currentForm = prev[cc.id];
-            if (currentForm && !currentForm.bank_account_id) {
-              return {
-                ...prev,
-                [cc.id]: {
-                  ...currentForm,
-                  bank_account_id: String(autoBank.id),
-                  metode_pembayaran: autoBank.bank_name,
-                  nomor_rekening: autoBank.account_number,
-                  nama_penerima: autoBank.account_holder || currentForm.nama_penerima || cc.creators?.nama_asli || ''
-                }
-              };
-            }
-            return prev;
-          });
-        }
-      } catch (err) {
-        console.error('Failed to load bank accounts for creator', err);
-      } finally {
-        setLoadingBanks(prev => ({ ...prev, [creatorId]: false }));
+      if (!picContacts[creatorId] && (!cc.creators?.creator_pic_contacts || cc.creators.creator_pic_contacts.length === 0)) {
+        getCreatorPicContacts(creatorId).then(pics => {
+          setPicContacts(prev => ({ ...prev, [creatorId]: pics }));
+          if (pics && pics.length > 0) {
+            const autoPic = pics.find((p: any) => p.is_primary) || pics[0];
+            setForms(prev => {
+              const cur = prev[cc.id];
+              if (cur && !cur.pic_contact_id && !cur.nama_wa_pic) {
+                return {
+                  ...prev,
+                  [cc.id]: {
+                    ...cur,
+                    pic_contact_id: String(autoPic.id),
+                    nama_wa_pic: autoPic.nama_pic,
+                    nomor_wa_dealing: autoPic.nomor_wa
+                  }
+                };
+              }
+              return prev;
+            });
+          }
+        }).catch(err => console.error('Failed to load pic contacts', err));
+      } else if (cc.creators?.creator_pic_contacts && !picContacts[creatorId]) {
+        setPicContacts(prev => ({ ...prev, [creatorId]: cc.creators.creator_pic_contacts }));
+      }
+
+      if (!identities[creatorId] && (!cc.creators?.creator_identities || cc.creators.creator_identities.length === 0)) {
+        getCreatorIdentities(creatorId).then(idens => {
+          setIdentities(prev => ({ ...prev, [creatorId]: idens }));
+          if (idens && idens.length > 0) {
+            const autoIden = idens.find((i: any) => i.is_primary) || idens[0];
+            setForms(prev => {
+              const cur = prev[cc.id];
+              if (cur && !cur.identity_id && !cur.nik) {
+                return {
+                  ...prev,
+                  [cc.id]: {
+                    ...cur,
+                    identity_id: String(autoIden.id),
+                    nik: autoIden.nik,
+                    link_ktp: autoIden.link_ktp || cur.link_ktp || '',
+                    alamat_ktp: autoIden.alamat_ktp || cur.alamat_ktp || ''
+                  }
+                };
+              }
+              return prev;
+            });
+          }
+        }).catch(err => console.error('Failed to load identities', err));
+      } else if (cc.creators?.creator_identities && !identities[creatorId]) {
+        setIdentities(prev => ({ ...prev, [creatorId]: cc.creators.creator_identities }));
+      }
+
+      if (!contracts[creatorId] && (!cc.creators?.creator_contracts || cc.creators.creator_contracts.length === 0)) {
+        getCreatorContracts(creatorId).then(cons => {
+          setContracts(prev => ({ ...prev, [creatorId]: cons }));
+        }).catch(err => console.error('Failed to load contracts', err));
+      } else if (cc.creators?.creator_contracts && !contracts[creatorId]) {
+        setContracts(prev => ({ ...prev, [creatorId]: cc.creators.creator_contracts }));
       }
     }
   };
@@ -666,8 +786,13 @@ export function BatchForm({
           <div className="space-y-6">
             {selectedCreators.map((cc, idx) => {
               const f = forms[cc.id];
-              const banks = bankAccounts[cc.creator_id] || [];
-              const isBankLoading = loadingBanks[cc.creator_id];
+              if (!f) return null;
+              const creatorId = cc.creator_id || cc.creators?.id;
+              const banks = bankAccounts[creatorId] || cc.creators?.creator_bank_accounts || [];
+              const isBankLoading = loadingBanks[creatorId];
+              const pics = picContacts[creatorId] || cc.creators?.creator_pic_contacts || [];
+              const idens = identities[creatorId] || cc.creators?.creator_identities || [];
+              const contrs = contracts[creatorId] || cc.creators?.creator_contracts || [];
 
               return (
                 <div key={cc.id} className="border border-blue-100 rounded-xl overflow-hidden shadow-sm">
@@ -830,32 +955,78 @@ export function BatchForm({
                     {/* Data Administrasi */}
                     <div className="space-y-4">
                       {/* Section: Kontak WA PIC */}
-                      <div className="bg-slate-50 p-3.5 rounded-lg border border-slate-200 space-y-2.5">
+                      <div className="bg-slate-50 p-3.5 rounded-lg border border-slate-200 space-y-3">
                         <div className="flex items-center justify-between">
                           <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">
-                            Kontak WA PIC
+                            Kontak WA PIC (Dealing)
                           </span>
-                          <span className="text-[10px] text-slate-400">Tersimpan ke Master Kreator</span>
+                          <span className="text-[10px] text-blue-600 font-semibold bg-blue-50 px-2 py-0.5 rounded border border-blue-100">
+                            Nama & No WA Satu Kesatuan
+                          </span>
                         </div>
+
+                        {/* Dropdown Pilihan Kontak PIC Tersimpan */}
+                        <div>
+                          <label className="block text-xs font-medium text-slate-600 mb-1">Pilih Kontak PIC Tersimpan</label>
+                          <select
+                            className="w-full p-2 border border-slate-300 rounded text-sm outline-none focus:border-blue-500 bg-white font-medium text-slate-800"
+                            value={f.pic_contact_id || ''}
+                            onChange={e => {
+                              const selId = e.target.value;
+                              if (selId) {
+                                const foundPic = pics.find((p: any) => String(p.id) === String(selId));
+                                if (foundPic) {
+                                  setForms(prev => ({
+                                    ...prev,
+                                    [cc.id]: {
+                                      ...prev[cc.id],
+                                      pic_contact_id: selId,
+                                      nama_wa_pic: foundPic.nama_pic,
+                                      nomor_wa_dealing: foundPic.nomor_wa
+                                    }
+                                  }));
+                                }
+                              } else {
+                                setForms(prev => ({
+                                  ...prev,
+                                  [cc.id]: {
+                                    ...prev[cc.id],
+                                    pic_contact_id: '',
+                                    nama_wa_pic: '',
+                                    nomor_wa_dealing: ''
+                                  }
+                                }));
+                              }
+                            }}
+                          >
+                            <option value="">+ Tambah Kontak PIC Baru (Ketik Manual)</option>
+                            {pics.map((p: any) => (
+                              <option key={p.id} value={String(p.id)}>
+                                {p.nama_pic} - {p.nomor_wa} {p.is_primary ? '★ Utama' : ''}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
                         <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <label className="block text-xs font-medium text-slate-600 mb-1">No WA Dealing</label>
-                            <input 
-                              type="text" 
-                              placeholder="08xxxxxxxxxx"
-                              className="w-full p-2 border border-slate-300 rounded text-sm outline-none focus:border-blue-500" 
-                              value={f.nomor_wa_dealing} 
-                              onChange={e => handleChange(cc.id, 'nomor_wa_dealing', e.target.value)} 
-                            />
-                          </div>
                           <div>
                             <label className="block text-xs font-medium text-slate-600 mb-1">Nama Kontak WA PIC</label>
                             <input 
                               type="text" 
                               placeholder="Nama PIC / Admin Kreator"
-                              className="w-full p-2 border border-slate-300 rounded text-sm outline-none focus:border-blue-500" 
-                              value={f.nama_wa_pic} 
+                              className="w-full p-2 border border-slate-300 rounded text-sm outline-none focus:border-blue-500 bg-white" 
+                              value={f.nama_wa_pic || ''} 
                               onChange={e => handleChange(cc.id, 'nama_wa_pic', e.target.value)} 
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-slate-600 mb-1">No WA Dealing</label>
+                            <input 
+                              type="text" 
+                              placeholder="08xxxxxxxxxx"
+                              className="w-full p-2 border border-slate-300 rounded text-sm outline-none focus:border-blue-500 bg-white" 
+                              value={f.nomor_wa_dealing || ''} 
+                              onChange={e => handleChange(cc.id, 'nomor_wa_dealing', e.target.value)} 
                             />
                           </div>
                         </div>
@@ -871,6 +1042,51 @@ export function BatchForm({
                             Auto-sync Data Master
                           </span>
                         </div>
+
+                        {/* Dropdown Pilihan KTP Tersimpan */}
+                        <div>
+                          <label className="block text-xs font-medium text-slate-600 mb-1">Pilih Identitas KTP Tersimpan</label>
+                          <select
+                            className="w-full p-2 border border-slate-300 rounded text-sm outline-none focus:border-blue-500 bg-white font-medium text-slate-800"
+                            value={f.identity_id || ''}
+                            onChange={e => {
+                              const selId = e.target.value;
+                              if (selId) {
+                                const foundIden = idens.find((i: any) => String(i.id) === String(selId));
+                                if (foundIden) {
+                                  setForms(prev => ({
+                                    ...prev,
+                                    [cc.id]: {
+                                      ...prev[cc.id],
+                                      identity_id: selId,
+                                      nik: foundIden.nik,
+                                      link_ktp: foundIden.link_ktp || prev[cc.id]?.link_ktp || '',
+                                      alamat_ktp: foundIden.alamat_ktp || prev[cc.id]?.alamat_ktp || ''
+                                    }
+                                  }));
+                                }
+                              } else {
+                                setForms(prev => ({
+                                  ...prev,
+                                  [cc.id]: {
+                                    ...prev[cc.id],
+                                    identity_id: '',
+                                    nik: '',
+                                    link_ktp: '',
+                                    alamat_ktp: ''
+                                  }
+                                }));
+                              }
+                            }}
+                          >
+                            <option value="">+ Tambah KTP Baru (Ketik Manual)</option>
+                            {idens.map((i: any) => (
+                              <option key={i.id} value={String(i.id)}>
+                                NIK: {i.nik} {i.nama_ktp ? `(${i.nama_ktp})` : ''} {i.is_primary ? '★ Utama' : ''}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
                         
                         <div className="grid grid-cols-2 gap-3">
                           <div>
@@ -879,17 +1095,30 @@ export function BatchForm({
                               type="text" 
                               placeholder="16 digit NIK"
                               className="w-full p-2 border border-slate-300 rounded text-sm outline-none focus:border-blue-500" 
-                              value={f.nik} 
+                              value={f.nik || ''} 
                               onChange={e => handleChange(cc.id, 'nik', e.target.value)} 
                             />
                           </div>
                           <div>
-                            <label className="block text-xs font-medium text-slate-600 mb-1">Link KTP (GDrive)</label>
+                            <div className="flex items-center justify-between mb-1">
+                              <label className="block text-xs font-medium text-slate-600">Link KTP (GDrive)</label>
+                              {f.link_ktp && (
+                                <a
+                                  href={f.link_ktp.startsWith('http') ? f.link_ktp : `https://${f.link_ktp}`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-[10px] text-blue-600 hover:underline flex items-center gap-0.5"
+                                >
+                                  <span>Buka</span>
+                                  <ExternalLink className="w-2.5 h-2.5" />
+                                </a>
+                              )}
+                            </div>
                             <input 
                               type="text" 
                               placeholder="https://drive.google.com/..." 
                               className="w-full p-2 border border-slate-300 rounded text-sm outline-none focus:border-blue-500" 
-                              value={f.link_ktp} 
+                              value={f.link_ktp || ''} 
                               onChange={e => handleChange(cc.id, 'link_ktp', e.target.value)} 
                             />
                           </div>
@@ -899,22 +1128,57 @@ export function BatchForm({
                               type="text" 
                               placeholder="Alamat lengkap sesuai KTP"
                               className="w-full p-2 border border-slate-300 rounded text-sm outline-none focus:border-blue-500" 
-                              value={f.alamat_ktp} 
+                              value={f.alamat_ktp || ''} 
                               onChange={e => handleChange(cc.id, 'alamat_ktp', e.target.value)} 
                             />
                           </div>
-                          <div className="col-span-2 pt-1 border-t border-slate-100">
+                          
+                          {/* Section Kontrak GDrive */}
+                          <div className="col-span-2 pt-2 border-t border-slate-100">
                             <div className="flex items-center justify-between mb-1">
                               <label className="block text-xs font-bold text-indigo-900">Link Kontrak (GDrive) <span className="text-red-500">*</span></label>
                               <span className="text-[10px] text-indigo-600 font-medium">Wajib diisi per pengajuan</span>
                             </div>
-                            <input 
-                              type="text" 
-                              placeholder="https://drive.google.com/file/d/..." 
-                              className="w-full p-2 border border-indigo-200 bg-indigo-50/30 rounded text-sm outline-none focus:border-indigo-500 font-medium" 
-                              value={f.link_kontrak} 
-                              onChange={e => handleChange(cc.id, 'link_kontrak', e.target.value)} 
-                            />
+                            {contrs && contrs.length > 0 && (
+                              <div className="mb-2">
+                                <select
+                                  className="w-full p-2 border border-indigo-200 bg-indigo-50/50 rounded text-xs outline-none focus:border-indigo-500 text-indigo-900 font-medium"
+                                  value={contrs.some((c: any) => c.link_kontrak === f.link_kontrak) ? f.link_kontrak : ''}
+                                  onChange={e => {
+                                    if (e.target.value) {
+                                      handleChange(cc.id, 'link_kontrak', e.target.value);
+                                    }
+                                  }}
+                                >
+                                  <option value="">-- Pilih dari riwayat kontrak tersimpan --</option>
+                                  {contrs.map((c: any) => (
+                                    <option key={c.id} value={c.link_kontrak}>
+                                      {c.judul_kontrak || 'Kontrak Kerjasama'} ({new Date(c.created_at).toLocaleDateString('id-ID')})
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            )}
+                            <div className="flex items-center gap-2">
+                              <input 
+                                type="text" 
+                                placeholder="https://drive.google.com/file/d/..." 
+                                className="flex-1 p-2 border border-indigo-200 bg-indigo-50/20 rounded text-sm outline-none focus:border-indigo-500 font-medium" 
+                                value={f.link_kontrak || ''} 
+                                onChange={e => handleChange(cc.id, 'link_kontrak', e.target.value)} 
+                              />
+                              {f.link_kontrak && (
+                                <a
+                                  href={f.link_kontrak.startsWith('http') ? f.link_kontrak : `https://${f.link_kontrak}`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="p-2 border border-indigo-200 bg-white hover:bg-indigo-50 rounded text-indigo-600 transition-colors"
+                                  title="Buka Link Kontrak"
+                                >
+                                  <ExternalLink className="w-4 h-4" />
+                                </a>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </div>
