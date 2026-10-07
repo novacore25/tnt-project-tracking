@@ -250,6 +250,12 @@ export async function fetchApprovedCreatorsForBatch(campaignId: number) {
           'link_kontrak', cr.link_kontrak,
           'nama_wa_pic', cr.nama_wa_pic,
           'nomor_wa_dealing', cr.nomor_wa_dealing,
+          'creator_snapshots', (
+            SELECT json_agg(jsonb_build_object(
+              'id', cs.id, 'ratecard', cs.ratecard, 'tanggal_update', cs.tanggal_update
+            ))
+            FROM creator_snapshots cs WHERE cs.creator_id = cr.id
+          ),
           'creator_bank_accounts', (
             SELECT json_agg(json_build_object(
               'id', cba.id, 'bank_name', cba.bank_name, 'account_number', cba.account_number, 'account_holder', cba.account_holder, 'is_primary', cba.is_primary

@@ -2,7 +2,11 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { useDatabaseStore } from "@/store/useDatabaseStore";
-import { Loader2, Plus, ArrowRight, Wallet, Activity, CheckCircle2, Search, X, Check, Trash2, Pencil, StickyNote } from "lucide-react";
+import { 
+  Loader2, Plus, ArrowRight, Wallet, Activity, CheckCircle2, 
+  Search, X, Check, Trash2, Pencil, StickyNote, AlertTriangle, 
+  Clock, TrendingUp, Layers, ChevronRight, AlertCircle, ShieldAlert, ShieldCheck
+} from "lucide-react";
 import { useParams } from "next/navigation";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { useAuth } from "@/providers/AuthProvider";
@@ -11,7 +15,8 @@ import { BatchDetail } from "./BatchDetail";
 import { getPaymentBatches, getPaymentBatchDetail, fetchApprovedCreatorsForBatch } from "../../actions/paymentActions";
 import { CampaignCreatorMutationTab } from "@/components/CampaignCreatorMutationTab";
 import { UnpaidCreatorsTab } from "@/components/UnpaidCreatorsTab";
-import { formatDateTime, formatUserWithRole } from "@/utils/formatters";
+import { formatDateTime, formatUserWithRole, formatRupiah } from "@/utils/formatters";
+import { toNum, sumNum } from "@/utils/computed";
 
 type ViewState = 'list' | 'form' | 'detail' | 'mutasi_kreator' | 'unpaid_creators';
 
@@ -39,7 +44,7 @@ function CampaignKeuanganContent() {
   const [selectedBatch, setSelectedBatch] = useState<any>(null);
   const [isLoadingBatches, setIsLoadingBatches] = useState(true);
 
-  // Creators Data for Form
+  // Creators Data for Form & Financial Calculations
   const [creators, setCreators] = useState<any[]>([]);
   const [creatorHistory, setCreatorHistory] = useState<Record<number, any[]>>({});
   
@@ -49,40 +54,40 @@ function CampaignKeuanganContent() {
   const fetchData = useCallback(async () => {
     setIsLoadingBatches(true);
     try {
-      // Fetch batches
+      // 1. Fetch batches
       const data = await getPaymentBatches(campaignId);
       setBatches(data || []);
       
-      // Calculate Total Terpakai
+      // 2. Hitung Total Terpakai (Realisasi Kas Keluar Kreator Paid)
       let terpakai = 0;
       data?.forEach(b => {
         b.payment_items?.forEach((item: any) => {
           if (item.final_status === 'paid' && item.payment_type !== 'ads') {
-            const baseNominal = item.actual_transfer != null ? Number(item.actual_transfer) : Number(item.nominal || 0);
-            terpakai += baseNominal + Number(item.biaya_transfer || 0);
+            const baseNominal = item.actual_transfer != null ? toNum(item.actual_transfer) : toNum(item.nominal || 0);
+            terpakai += baseNominal + toNum(item.biaya_transfer || 0);
           }
         });
       });
       setTotalTerpakai(terpakai);
 
-      // Fetch approved creators for form (via server action to bypass RLS)
+      // 3. Fetch creators for campaign (bypass RLS)
       const ccData = await fetchApprovedCreatorsForBatch(campaignId);
 
-      const creatorHistory: Record<number, any[]> = {};
+      const historyMap: Record<number, any[]> = {};
       data?.forEach(b => {
         b.payment_items?.forEach((item: any) => {
           if (item.final_status !== 'rejected' && item.campaign_creator_id) {
-            if (!creatorHistory[item.campaign_creator_id]) {
-              creatorHistory[item.campaign_creator_id] = [];
+            if (!historyMap[item.campaign_creator_id]) {
+              historyMap[item.campaign_creator_id] = [];
             }
-            const baseNominal = item.actual_transfer != null ? Number(item.actual_transfer) : Number(item.nominal || 0);
-            creatorHistory[item.campaign_creator_id].push({
+            const baseNominal = item.actual_transfer != null ? toNum(item.actual_transfer) : toNum(item.nominal || 0);
+            historyMap[item.campaign_creator_id].push({
               id: item.id,
               batch_id: b.id,
               batch_label: b.batch_label,
               batch_status: b.status,
               date: b.created_at,
-              nominal: baseNominal + Number(item.biaya_transfer || 0),
+              nominal: baseNominal + toNum(item.biaya_transfer || 0),
               payment_type: item.payment_type,
               status: item.final_status
             });
@@ -91,7 +96,7 @@ function CampaignKeuanganContent() {
       });
 
       const filteredCreators = (ccData || []).map(cc => {
-        const history = creatorHistory[cc.id] || [];
+        const history = historyMap[cc.id] || [];
         const types = history.map(h => h.payment_type);
         const isFullyPaid = types.includes('100_akhir') || (types.includes('50_awal') && types.includes('50_akhir'));
         const pendingItem = history.find(h => 
@@ -103,11 +108,38 @@ function CampaignKeuanganContent() {
         );
         
         // Cek ratecard dari campaign_creators.price, jika 0/kosong fallback ke snapshot terbaru
-        let effectivePrice = Number(cc.price || 0);
+        let effectivePrice = toNum(cc.price || 0);
         if (!effectivePrice && cc.creators?.creator_snapshots?.length > 0) {
-          const validSnap = cc.creators.creator_snapshots.find((s: any) => Number(s.ratecard || 0) > 0);
+          const sortedSnaps = [...cc.creators.creator_snapshots].sort((a: any, b: any) => {
+            const tDiff = new Date(b.tanggal_update || 0).getTime() - new Date(a.tanggal_update || 0).getTime();
+            if (tDiff !== 0) return tDiff;
+            return (b.id || 0) - (a.id || 0);
+          });
+          const validSnap = sortedSnaps.find((s: any) => toNum(s.ratecard || 0) > 0);
           if (validSnap) {
-            effectivePrice = Number(validSnap.ratecard || 0);
+            effectivePrice = toNum(validSnap.ratecard || 0);
+          }
+        }
+
+        // Nominal yang sudah lunas dibayar (status 'paid')
+        const paidNominal = sumNum(history.filter(h => h.status === 'paid'), h => h.nominal);
+
+        // Nominal yang sedang diajukan dalam batch berjalan (pending)
+        const pendingNominal = sumNum(history.filter(h => 
+          h.status !== 'paid' && 
+          h.status !== 'rejected' && 
+          h.status !== 'cancelled' && 
+          h.batch_status !== 'paid' && 
+          h.batch_status !== 'cancelled'
+        ), h => h.nominal);
+
+        // Sisa komitmen ratecard yang belum dibayar
+        let unpaidNominal = 0;
+        if (!isFullyPaid && effectivePrice > 0) {
+          if (paidNominal > 0) {
+            unpaidNominal = Math.max(0, effectivePrice - paidNominal);
+          } else {
+            unpaidNominal = effectivePrice;
           }
         }
 
@@ -115,15 +147,18 @@ function CampaignKeuanganContent() {
           ...cc,
           price: effectivePrice,
           isFullyPaid,
+          paidNominal,
+          pendingNominal,
+          unpaidNominal,
           hasPendingPayment: !!pendingItem,
           pendingBatchLabel: pendingItem?.batch_label || ''
         };
       });
 
       setCreators(filteredCreators);
-      setCreatorHistory(creatorHistory);
+      setCreatorHistory(historyMap);
     } catch (err) {
-      console.error(err);
+      console.error("Gagal memuat data keuangan campaign:", err);
     } finally {
       setIsLoadingBatches(false);
     }
@@ -161,133 +196,395 @@ function CampaignKeuanganContent() {
       case 'cancelled': return <span className="px-2 py-1 bg-red-100 text-red-700 rounded text-xs font-bold uppercase">Dibatalkan</span>;
       default: return <span className="px-2 py-1 bg-slate-100 text-slate-600 rounded text-xs font-bold uppercase">{status}</span>;
     }
-  }
+  };
 
   if (!campaign) return null;
 
-  const budgetPlafon = Number(campaign.budget_creator_plafon || 0);
-  const sisaBudget = budgetPlafon - totalTerpakai;
-  const progressPercent = budgetPlafon > 0 ? Math.min((totalTerpakai / budgetPlafon) * 100, 100) : 0;
+  // ===================== KREATOR / ENDORSEMENT CALCULATIONS =====================
+  const budgetPlafon = toNum(campaign.budget_creator_plafon || 0);
+
+  // Hanya hitung komitmen untuk kreator yang berstatus APPROVED di campaign ini
+  const approvedCreators = creators.filter(c => (c.approval || '').toLowerCase() === 'approved');
+
+  // Total Ratecard Belum Dibayar (akumulasi sisa ratecard dari semua kreator approved yang belum lunas)
+  const totalRatecardBelumDibayar = sumNum(approvedCreators, c => c.unpaidNominal);
+
+  // Berapa dari ratecard belum dibayar yang saat ini sedang dalam proses batch (pending)
+  const totalPendingNominal = sumNum(approvedCreators, c => c.pendingNominal);
+
+  // Total Komitmen Keseluruhan (Realisasi Kas Paid + Sisa Ratecard Belum Dibayar)
+  const totalKomitmenKreator = totalTerpakai + totalRatecardBelumDibayar;
+
+  // Cek apakah komitmen melebihi plafon budget
+  const isOverBudget = budgetPlafon > 0 && totalKomitmenKreator > budgetPlafon;
+  const selisihOverBudget = isOverBudget ? totalKomitmenKreator - budgetPlafon : 0;
+  const sisaBudgetKomitmen = budgetPlafon - totalKomitmenKreator; // Sisa alokasi setelah seluruh komitmen terpenuhi
+  const sisaBudgetRealisasi = budgetPlafon - totalTerpakai; // Sisa plafon terhadap kas keluar saat ini
+
+  // Persentase Progress
+  const progressRealisasiPercent = budgetPlafon > 0 ? (totalTerpakai / budgetPlafon) * 100 : 0;
+  const progressKomitmenPercent = budgetPlafon > 0 ? (totalKomitmenKreator / budgetPlafon) * 100 : 0;
+  const progressBelumDibayarPercent = budgetPlafon > 0 ? (totalRatecardBelumDibayar / budgetPlafon) * 100 : 0;
+
+  // Creator Counts
+  const unpaidCreatorsCount = approvedCreators.filter(c => toNum(c.unpaidNominal) > 0).length;
+  const fullyPaidCreatorsCount = approvedCreators.filter(c => c.isFullyPaid || (toNum(c.price) > 0 && toNum(c.unpaidNominal) === 0)).length;
 
   // ===================== ADS CALCULATIONS =====================
-  const adsBudgetPlafon = Number(campaign.budget_ads_plafon || 0);
+  const adsBudgetPlafon = toNum(campaign.budget_ads_plafon || 0);
   let adsTerpakai = 0;
   batches.forEach(b => {
     b.payment_items?.forEach((item: any) => {
       if (item.final_status === 'paid' && item.payment_type === 'ads') {
-        const baseNominal = item.actual_transfer != null ? Number(item.actual_transfer) : Number(item.nominal || 0);
-        adsTerpakai += baseNominal + Number(item.biaya_transfer || 0);
+        const baseNominal = item.actual_transfer != null ? toNum(item.actual_transfer) : toNum(item.nominal || 0);
+        adsTerpakai += baseNominal + toNum(item.biaya_transfer || 0);
       }
     });
   });
   const adsSisa = adsBudgetPlafon - adsTerpakai;
-
-
+  const isAdsOverBudget = adsBudgetPlafon > 0 && adsTerpakai > adsBudgetPlafon;
+  const adsProgressPercent = adsBudgetPlafon > 0 ? Math.min((adsTerpakai / adsBudgetPlafon) * 100, 100) : 0;
 
   return (
-    <div className="space-y-[24px] pb-[80px]">
+    <div className="space-y-6 pb-20">
       {viewState !== 'detail' && (
         <>
-          {/* Summary Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-[24px]">
-            <div className="bg-slate-900 rounded-xl p-6 text-white shadow-sm">
-              <div className="flex justify-between items-start">
-                <div>
-                  <p className="text-slate-400 text-[13px] font-medium mb-[4px]">Budget Campaign</p>
-                  <h3 className="text-[24px] font-bold">Rp {budgetPlafon.toLocaleString()}</h3>
-                </div>
-                <Wallet className="w-8 h-8 text-slate-700" />
+          {/* ===================== SECTION 1: KEUANGAN KREATOR ===================== */}
+          <div className="space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                  <span>Anggaran Kreator &amp; Endorsement</span>
+                </h2>
+                <p className="text-xs text-slate-500">
+                  Ringkasan plafon budget, kas keluar riil, dan komitmen ratecard kreator approved
+                </p>
+              </div>
+
+              {/* Status Indicator Badge */}
+              <div className="shrink-0">
+                {isOverBudget ? (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-rose-100 text-rose-800 border border-rose-200 shadow-xs">
+                    <AlertTriangle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                    Over Budget +{formatRupiah(selisihOverBudget)}
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-xs">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                    Anggaran Terkendali (Sisa {formatRupiah(sisaBudgetKomitmen)})
+                  </span>
+                )}
               </div>
             </div>
-            <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
-              <div className="flex justify-between items-start">
+
+            {/* 4 KPI Cards for Creator */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Card 1: Plafon Budget Kreator */}
+              <div className="bg-white border border-slate-200/90 rounded-2xl p-5 shadow-xs hover:shadow-sm transition-all flex flex-col justify-between">
                 <div>
-                  <p className="text-slate-500 text-[13px] font-medium mb-[4px]">Pengeluaran Campaign (Paid)</p>
-                  <h3 className="text-[24px] font-bold text-slate-800">Rp {totalTerpakai.toLocaleString()}</h3>
+                  <div className="flex justify-between items-start">
+                    <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
+                      Plafon Budget Kreator
+                    </span>
+                    <div className="w-9 h-9 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center shrink-0">
+                      <Wallet className="w-4.5 h-4.5" />
+                    </div>
+                  </div>
+                  <h3 className="text-[22px] sm:text-[24px] font-extrabold text-slate-900 tracking-tight mt-1">
+                    Rp {budgetPlafon.toLocaleString('id-ID')}
+                  </h3>
                 </div>
-                <Activity className="w-8 h-8 text-slate-300" />
+                <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+                  <span>Alokasi maksimal</span>
+                  <span className="font-semibold text-slate-700">{approvedCreators.length} kreator approved</span>
+                </div>
+              </div>
+
+              {/* Card 2: Realisasi Terbayar (Paid) */}
+              <div className="bg-white border border-slate-200/90 rounded-2xl p-5 shadow-xs hover:shadow-sm transition-all flex flex-col justify-between">
+                <div>
+                  <div className="flex justify-between items-start">
+                    <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
+                      Realisasi Dibayar (Paid)
+                    </span>
+                    <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                      <CheckCircle2 className="w-4.5 h-4.5" />
+                    </div>
+                  </div>
+                  <h3 className="text-[22px] sm:text-[24px] font-extrabold text-slate-900 tracking-tight mt-1">
+                    Rp {totalTerpakai.toLocaleString('id-ID')}
+                  </h3>
+                </div>
+                <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
+                  <span className="text-emerald-700 font-semibold bg-emerald-50 px-2 py-0.5 rounded-md">
+                    {progressRealisasiPercent.toFixed(1)}% dari plafon
+                  </span>
+                  <span className="text-slate-500">Kas keluar riil</span>
+                </div>
+              </div>
+
+              {/* Card 3: Ratecard Belum Dibayar (New Card) */}
+              <div className="bg-white border border-slate-200/90 rounded-2xl p-5 shadow-xs hover:shadow-sm transition-all flex flex-col justify-between">
+                <div>
+                  <div className="flex justify-between items-start">
+                    <span className="text-[11px] font-bold text-amber-700 uppercase tracking-wider block">
+                      Ratecard Belum Dibayar
+                    </span>
+                    <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+                      <Clock className="w-4.5 h-4.5" />
+                    </div>
+                  </div>
+                  <h3 className="text-[22px] sm:text-[24px] font-extrabold text-amber-700 tracking-tight mt-1">
+                    Rp {totalRatecardBelumDibayar.toLocaleString('id-ID')}
+                  </h3>
+                </div>
+                <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
+                  <div className="text-slate-600 truncate mr-1">
+                    <span className="font-bold text-amber-800">{unpaidCreatorsCount}</span> kreator belum lunas
+                    {totalPendingNominal > 0 && (
+                      <span className="text-slate-400 block text-[10px]">
+                        ({formatRupiah(totalPendingNominal)} dalam batch)
+                      </span>
+                    )}
+                  </div>
+                  {hasAccess && (
+                    <button 
+                      onClick={() => setViewState('unpaid_creators')}
+                      className="text-[11px] font-bold text-blue-600 hover:text-blue-800 hover:underline shrink-0 flex items-center gap-0.5"
+                    >
+                      Lihat <ChevronRight className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Card 4: Total Komitmen & Status Plafon (Decision Card) */}
+              <div className={`rounded-2xl p-5 shadow-xs border transition-all flex flex-col justify-between ${
+                isOverBudget 
+                  ? 'bg-rose-50/70 border-rose-200 text-rose-950' 
+                  : 'bg-slate-900 border-slate-800 text-white'
+              }`}>
+                <div>
+                  <div className="flex justify-between items-start">
+                    <span className={`text-[11px] font-bold uppercase tracking-wider block ${
+                      isOverBudget ? 'text-rose-700' : 'text-slate-400'
+                    }`}>
+                      Total Komitmen Kreator
+                    </span>
+                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                      isOverBudget ? 'bg-rose-100 text-rose-700' : 'bg-slate-800 text-slate-300'
+                    }`}>
+                      {isOverBudget ? <AlertTriangle className="w-4.5 h-4.5" /> : <TrendingUp className="w-4.5 h-4.5" />}
+                    </div>
+                  </div>
+                  <h3 className={`text-[22px] sm:text-[24px] font-extrabold tracking-tight mt-1 ${
+                    isOverBudget ? 'text-rose-900' : 'text-white'
+                  }`}>
+                    Rp {totalKomitmenKreator.toLocaleString('id-ID')}
+                  </h3>
+                </div>
+
+                {/* Progress Bar & Status Footer */}
+                <div className="mt-3 pt-3 border-t border-slate-200/50">
+                  <div className="flex justify-between items-center text-[11px] mb-1 font-medium">
+                    <span className={isOverBudget ? 'text-rose-700' : 'text-slate-300'}>
+                      {progressKomitmenPercent.toFixed(1)}% Komitmen
+                    </span>
+                    <span className={`font-bold ${
+                      isOverBudget ? 'text-rose-700' : 'text-emerald-400'
+                    }`}>
+                      {isOverBudget ? `Over +${formatRupiah(selisihOverBudget)}` : `Sisa ${formatRupiah(sisaBudgetKomitmen)}`}
+                    </span>
+                  </div>
+                  <div className={`w-full h-2 rounded-full overflow-hidden flex ${
+                    isOverBudget ? 'bg-rose-200' : 'bg-slate-800'
+                  }`}>
+                    {/* Portion 1: Realisasi Kas Paid (Emerald) */}
+                    <div 
+                      className="bg-emerald-500 h-full transition-all duration-500" 
+                      style={{ width: `${Math.min(progressRealisasiPercent, 100)}%` }} 
+                      title={`Realisasi Paid: ${progressRealisasiPercent.toFixed(1)}%`}
+                    />
+                    {/* Portion 2: Komitmen Ratecard Belum Dibayar (Amber / Rose) */}
+                    <div 
+                      className={`${isOverBudget ? 'bg-rose-600' : 'bg-amber-400'} h-full transition-all duration-500`} 
+                      style={{ width: `${Math.min(progressBelumDibayarPercent, Math.max(0, 100 - progressRealisasiPercent))}%` }} 
+                      title={`Belum Dibayar: ${progressBelumDibayarPercent.toFixed(1)}%`}
+                    />
+                  </div>
+                </div>
               </div>
             </div>
-            <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-6 shadow-sm">
-              <div className="flex justify-between items-start">
-                <div>
-                  <p className="text-emerald-600 text-[13px] font-medium mb-[4px]">Sisa Budget Campaign</p>
-                  <h3 className="text-[24px] font-bold text-emerald-700">Rp {sisaBudget.toLocaleString()}</h3>
+
+            {/* Warning Banner if Over Budget */}
+            {isOverBudget && (
+              <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4 sm:p-5 flex items-start gap-3.5 shadow-xs">
+                <div className="w-9 h-9 rounded-xl bg-rose-100 text-rose-700 flex items-center justify-center shrink-0 mt-0.5">
+                  <AlertTriangle className="w-5 h-5 text-rose-600" />
                 </div>
-                <CheckCircle2 className="w-8 h-8 text-emerald-200" />
+                <div className="flex-1 min-w-0">
+                  <h4 className="text-sm font-bold text-rose-900 flex items-center gap-2">
+                    Perhatian: Total Komitmen Kreator Melebihi Plafon Budget!
+                  </h4>
+                  <p className="mt-1 text-xs text-rose-800 leading-relaxed">
+                    Total estimasi komitmen saat ini mencapai <strong>{formatRupiah(totalKomitmenKreator)}</strong> (Realisasi Kas Paid: <strong>{formatRupiah(totalTerpakai)}</strong> + Komitmen Ratecard Belum Dibayar: <strong>{formatRupiah(totalRatecardBelumDibayar)}</strong>). 
+                    Jumlah ini telah <strong className="text-rose-900 underline">melebihi Plafon Budget Kreator ({formatRupiah(budgetPlafon)})</strong> sebesar <strong className="text-rose-700 font-extrabold">{formatRupiah(selisihOverBudget)}</strong> ({progressKomitmenPercent.toFixed(1)}% dari plafon).
+                  </p>
+                  <div className="mt-2 text-[11px] text-rose-700 font-medium">
+                    💡 Disarankan untuk mengkoordinasikan penyesuaian plafon anggaran dengan manajer/brand, atau meninjau kembali negosiasi ratecard kreator sebelum menyetujui batch pembayaran baru.
+                  </div>
+                </div>
               </div>
+            )}
+          </div>
+
+          {/* ===================== SECTION 2: BUDGET TIKTOK ADS ===================== */}
+          <div className="space-y-3 pt-2">
+            <div>
+              <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                <span>Anggaran TikTok Ads</span>
+              </h2>
+              <p className="text-xs text-slate-500">
+                Plafon alokasi budget dan realisasi pengeluaran iklan TikTok Ads
+              </p>
             </div>
-            <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm flex flex-col justify-center">
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-xs font-semibold text-slate-500">Budget Campaign Terpakai</span>
-                <span className="text-xs font-bold text-slate-700">{progressPercent.toFixed(1)}%</span>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Card 1: Plafon Budget ADS */}
+              <div className="bg-white border border-slate-200/90 rounded-2xl p-5 shadow-xs hover:shadow-sm transition-all flex flex-col justify-between">
+                <div>
+                  <div className="flex justify-between items-start">
+                    <span className="text-[11px] font-bold text-indigo-700 uppercase tracking-wider block">
+                      Budget ADS (Plafon)
+                    </span>
+                    <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+                      <Layers className="w-4.5 h-4.5" />
+                    </div>
+                  </div>
+                  <h3 className="text-[22px] sm:text-[24px] font-extrabold text-slate-900 tracking-tight mt-1">
+                    Rp {adsBudgetPlafon.toLocaleString('id-ID')}
+                  </h3>
+                </div>
+                <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+                  <span>Alokasi kampanye iklan</span>
+                  <span className="font-semibold text-indigo-600">TikTok Ads</span>
+                </div>
               </div>
-              <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
-                <div className="bg-blue-500 h-full transition-all duration-500" style={{ width: `${progressPercent}%` }}></div>
+
+              {/* Card 2: ADS Terpakai (Paid) */}
+              <div className="bg-white border border-slate-200/90 rounded-2xl p-5 shadow-xs hover:shadow-sm transition-all flex flex-col justify-between">
+                <div>
+                  <div className="flex justify-between items-start">
+                    <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
+                      ADS Terpakai (Paid)
+                    </span>
+                    <div className="w-9 h-9 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center shrink-0">
+                      <Activity className="w-4.5 h-4.5" />
+                    </div>
+                  </div>
+                  <h3 className="text-[22px] sm:text-[24px] font-extrabold text-slate-900 tracking-tight mt-1">
+                    Rp {adsTerpakai.toLocaleString('id-ID')}
+                  </h3>
+                </div>
+                <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
+                  <span className="text-slate-600 font-semibold bg-slate-100 px-2 py-0.5 rounded-md">
+                    {adsProgressPercent.toFixed(1)}% terpakai
+                  </span>
+                  <span className="text-slate-500">Kas keluar iklan</span>
+                </div>
+              </div>
+
+              {/* Card 3: Sisa Budget ADS */}
+              <div className={`rounded-2xl p-5 shadow-xs border transition-all flex flex-col justify-between ${
+                adsSisa < 0 ? 'bg-red-50/70 border-red-200' : 'bg-emerald-50/50 border-emerald-200'
+              }`}>
+                <div>
+                  <div className="flex justify-between items-start">
+                    <span className={`text-[11px] font-bold uppercase tracking-wider block ${
+                      adsSisa < 0 ? 'text-red-700' : 'text-emerald-700'
+                    }`}>
+                      Sisa Budget ADS
+                    </span>
+                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                      adsSisa < 0 ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'
+                    }`}>
+                      <CheckCircle2 className="w-4.5 h-4.5" />
+                    </div>
+                  </div>
+                  <h3 className={`text-[22px] sm:text-[24px] font-extrabold tracking-tight mt-1 ${
+                    adsSisa < 0 ? 'text-red-700' : 'text-emerald-700'
+                  }`}>
+                    Rp {adsSisa.toLocaleString('id-ID')}
+                  </h3>
+                </div>
+                <div className="mt-3 pt-3 border-t border-slate-200/50 flex items-center justify-between text-xs font-semibold">
+                  <span className={adsSisa < 0 ? 'text-red-700' : 'text-emerald-700'}>
+                    {adsSisa < 0 ? '⚠️ Melebihi Plafon ADS' : '✓ Sisa Anggaran ADS Aman'}
+                  </span>
+                  <span className="text-slate-500 font-normal">
+                    {adsBudgetPlafon > 0 ? `${((adsSisa / adsBudgetPlafon) * 100).toFixed(1)}% tersisa` : '-'}
+                  </span>
+                </div>
               </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-[24px]">
-            <div className="bg-indigo-900 rounded-xl p-6 text-white shadow-sm">
-              <div className="flex justify-between items-start">
-                <div>
-                  <p className="text-indigo-300 text-[13px] font-medium mb-[4px]">Budget ADS (Plafon)</p>
-                  <h3 className="text-[24px] font-bold">Rp {adsBudgetPlafon.toLocaleString()}</h3>
-                </div>
-              </div>
-            </div>
-            <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
-              <div className="flex justify-between items-start">
-                <div>
-                  <p className="text-slate-500 text-[13px] font-medium mb-[4px]">ADS Terpakai (Paid)</p>
-                  <h3 className="text-[24px] font-bold text-slate-800">Rp {adsTerpakai.toLocaleString()}</h3>
-                </div>
-              </div>
-            </div>
-            <div className={`rounded-xl p-6 shadow-sm border ${adsSisa < 0 ? 'bg-red-50 border-red-100' : 'bg-emerald-50 border-emerald-100'}`}>
-              <div className="flex justify-between items-start">
-                <div>
-                  <p className={`text-[13px] font-medium mb-[4px] ${adsSisa < 0 ? 'text-red-600' : 'text-emerald-600'}`}>Sisa Budget ADS</p>
-                  <h3 className={`text-[24px] font-bold ${adsSisa < 0 ? 'text-red-700' : 'text-emerald-700'}`}>Rp {adsSisa.toLocaleString()}</h3>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex border-b border-slate-200">
+          {/* ===================== TABS NAVIGATION ===================== */}
+          <div className="flex border-b border-slate-200 pt-2">
             <button
               onClick={() => setViewState('list')}
-              className={`px-[24px] py-[12px] text-[13px] font-semibold border-b-2 transition-colors flex items-center gap-2 ${viewState === 'list' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-800'}`}
+              className={`px-5 py-3 text-[13px] font-semibold border-b-2 transition-colors flex items-center gap-2 ${
+                viewState === 'list' 
+                  ? 'border-blue-600 text-blue-600' 
+                  : 'border-transparent text-slate-500 hover:text-slate-800'
+              }`}
             >
               Daftar Batch Pembayaran
             </button>
             <button
               onClick={() => setViewState('mutasi_kreator')}
-              className={`px-[24px] py-[12px] text-[13px] font-semibold border-b-2 transition-colors flex items-center gap-2 ${viewState === 'mutasi_kreator' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-800'}`}
+              className={`px-5 py-3 text-[13px] font-semibold border-b-2 transition-colors flex items-center gap-2 ${
+                viewState === 'mutasi_kreator' 
+                  ? 'border-blue-600 text-blue-600' 
+                  : 'border-transparent text-slate-500 hover:text-slate-800'
+              }`}
             >
               Mutasi Kreator
             </button>
             {hasAccess && (
               <button
                 onClick={() => setViewState('unpaid_creators')}
-                className={`px-[24px] py-[12px] text-[13px] font-semibold border-b-2 transition-colors flex items-center gap-2 ${viewState === 'unpaid_creators' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-800'}`}
+                className={`px-5 py-3 text-[13px] font-semibold border-b-2 transition-colors flex items-center gap-2 ${
+                  viewState === 'unpaid_creators' 
+                    ? 'border-blue-600 text-blue-600' 
+                    : 'border-transparent text-slate-500 hover:text-slate-800'
+                }`}
               >
-                Kreator Belum Dibayar
+                <span>Kreator Belum Dibayar</span>
+                {unpaidCreatorsCount > 0 && (
+                  <span className="px-2 py-0.5 text-[11px] font-bold rounded-full bg-amber-100 text-amber-800">
+                    {unpaidCreatorsCount}
+                  </span>
+                )}
               </button>
             )}
             {hasAccess && (
               <button
                 onClick={() => setViewState('form')}
-                className={`px-[24px] py-[12px] text-[13px] font-semibold border-b-2 transition-colors flex items-center gap-2 ${viewState === 'form' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-800'}`}
+                className={`px-5 py-3 text-[13px] font-semibold border-b-2 transition-colors flex items-center gap-2 ${
+                  viewState === 'form' 
+                    ? 'border-blue-600 text-blue-600' 
+                    : 'border-transparent text-slate-500 hover:text-slate-800'
+                }`}
               >
+                <Plus className="w-4 h-4" />
                 Buat Pengajuan (Manual)
               </button>
             )}
           </div>
 
           {viewState === 'list' && (
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+            <div className="bg-white rounded-xl shadow-xs border border-slate-200 overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm">
                   <thead className="bg-slate-50 border-b border-slate-100 text-slate-600 font-medium">
@@ -313,12 +610,12 @@ function CampaignKeuanganContent() {
                         const totalDibayar = b.payment_items?.filter((i: any) => i.final_status === 'paid').length || 0;
                         const totalDitolak = b.payment_items?.filter((i: any) => i.final_status === 'rejected').length || 0;
                         const totalNominal = b.payment_items?.reduce((acc: number, cur: any) => {
-                          const base = cur.actual_transfer != null ? Number(cur.actual_transfer) : Number(cur.nominal || 0);
-                          return acc + base + Number(cur.biaya_transfer || 0);
+                          const base = cur.actual_transfer != null ? toNum(cur.actual_transfer) : toNum(cur.nominal || 0);
+                          return acc + base + toNum(cur.biaya_transfer || 0);
                         }, 0) || 0;
                         const nominalDibayar = b.payment_items?.filter((i: any) => i.final_status === 'paid').reduce((acc: number, cur: any) => {
-                          const base = cur.actual_transfer != null ? Number(cur.actual_transfer) : Number(cur.nominal || 0);
-                          return acc + base + Number(cur.biaya_transfer || 0);
+                          const base = cur.actual_transfer != null ? toNum(cur.actual_transfer) : toNum(cur.nominal || 0);
+                          return acc + base + toNum(cur.biaya_transfer || 0);
                         }, 0) || 0;
                         
                         return (
@@ -335,8 +632,8 @@ function CampaignKeuanganContent() {
                                 {totalDitolak > 0 && <span className="bg-red-100 text-red-700 px-2 py-0.5 rounded font-semibold w-full text-center">Ditolak: {totalDitolak}</span>}
                               </div>
                             </td>
-                            <td className="px-4 py-3 text-right font-bold text-slate-700">Rp {totalNominal.toLocaleString()}</td>
-                            <td className="px-4 py-3 text-right font-bold text-green-600">Rp {nominalDibayar.toLocaleString()}</td>
+                            <td className="px-4 py-3 text-right font-bold text-slate-700">Rp {totalNominal.toLocaleString('id-ID')}</td>
+                            <td className="px-4 py-3 text-right font-bold text-green-600">Rp {nominalDibayar.toLocaleString('id-ID')}</td>
                             <td className="px-4 py-3 text-center">{getBatchStatusBadge(b.status)}</td>
                             <td className="px-4 py-3 text-center">
                               <button onClick={() => handleViewDetail(b.id)} className="text-blue-600 hover:text-blue-800 font-semibold text-xs flex items-center justify-center gap-1 mx-auto bg-blue-50 px-3 py-1.5 rounded-full hover:bg-blue-100 transition-colors">
