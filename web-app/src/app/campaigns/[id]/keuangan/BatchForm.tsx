@@ -223,9 +223,11 @@ export function BatchForm({
     setForms(prev => {
       if (prev[cc.id]) return prev;
       const history = creatorHistory[cc.id] || [];
-      const types = history.map((h: any) => h.payment_type);
+      const paidTypes = history.filter((h: any) => h.status === 'paid').map((h: any) => h.payment_type);
+      const count50Awal = paidTypes.filter((t: string) => t === '50_awal').length;
+      const count50Akhir = paidTypes.filter((t: string) => t === '50_akhir').length;
       let defaultType = '100_akhir';
-      if (types.includes('50_awal')) defaultType = '50_akhir';
+      if (count50Awal > count50Akhir) defaultType = '50_akhir';
 
       return {
         ...prev,
@@ -485,12 +487,17 @@ export function BatchForm({
       
       const history = creatorHistory[cc.id] || [];
       const paidTypes = history.filter((h: any) => h.status === 'paid').map((h: any) => h.payment_type);
+      const count50Awal = paidTypes.filter((t: string) => t === '50_awal').length;
+      const count50Akhir = paidTypes.filter((t: string) => t === '50_akhir').length;
 
-      if (f.payment_type === '50_awal' && paidTypes.includes('50_awal')) {
-        return `Kreator @${cc.creators?.username} sudah dibayar DP 50% Awal. Harap pilih Pelunasan 50% Akhir!`;
-      }
-      if (f.payment_type === '100_akhir' && paidTypes.includes('50_awal')) {
-        return `Kreator @${cc.creators?.username} sudah menerima DP 50% Awal. Tidak dapat memilih 100% Akhir (pilih Pelunasan 50% Akhir)!`;
+      if (count50Awal > count50Akhir) {
+        if (f.payment_type !== '50_akhir') {
+          return `Kreator @${cc.creators?.username} memiliki DP 50% Awal yang belum dilunasi. Harap pilih Pelunasan 50% Akhir!`;
+        }
+      } else {
+        if (f.payment_type === '50_akhir') {
+          return `Kreator @${cc.creators?.username} tidak memiliki termin DP 50% Awal yang aktif. Harap pilih 100% Akhir atau DP 50% Awal!`;
+        }
       }
 
       if (!f.bank_account_id) {
@@ -729,7 +736,7 @@ export function BatchForm({
                 ) : (
                   filteredCreators.map(c => {
                     const isSelected = !!selectedCreators.find(s => s.id === c.id);
-                    const isDisabled = c.isFullyPaid || c.hasPendingPayment;
+                    const isDisabled = c.hasPendingPayment;
                     return (
                       <tr key={c.id} className={`hover:bg-slate-50 ${isSelected ? 'bg-blue-50/50' : ''} ${c.hasPendingPayment ? 'bg-amber-50/20' : ''}`}>
                         <td className="px-4 py-2 text-center">
@@ -752,20 +759,27 @@ export function BatchForm({
                           )}
                           {(() => {
                             const history = creatorHistory[c.id] || [];
-                            const types = history.map((h: any) => h.payment_type);
-                            const has50Awal = types.includes('50_awal');
-                            const has50Akhir = types.includes('50_akhir');
-                            const has100 = types.includes('100_akhir');
-                            const totalPaid = history.filter((h: any) => h.status === 'paid').reduce((s: number, h: any) => s + Number(h.nominal || 0), 0);
+                            const paidItems = history.filter((h: any) => h.status === 'paid');
+                            const paidTypes = paidItems.map((h: any) => h.payment_type);
+                            const count50Awal = paidTypes.filter((t: string) => t === '50_awal').length;
+                            const count50Akhir = paidTypes.filter((t: string) => t === '50_akhir').length;
+                            const hasPending50 = count50Awal > count50Akhir;
+                            const totalPaid = paidItems.reduce((s: number, h: any) => s + Number(h.nominal || 0), 0);
                             const remaining = Math.max(0, Number(c.price || 0) - totalPaid);
 
-                            if (c.isFullyPaid || has100 || (has50Awal && has50Akhir)) {
-                              return <span className="text-xs font-semibold text-orange-700 bg-orange-100 px-2 py-0.5 rounded-full">Ratecard Lunas</span>;
-                            }
-                            if (has50Awal && !has50Akhir) {
+                            if (hasPending50) {
                               return (
                                 <span className="text-[11px] font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-full">
                                   Termin 1 Terbayar: {formatRupiah(totalPaid)} • Kurang: {formatRupiah(remaining)} (Termin 2)
+                                </span>
+                              );
+                            }
+
+                            if (totalPaid > 0) {
+                              return (
+                                <span className="text-xs font-semibold text-emerald-800 bg-emerald-100 border border-emerald-200 px-2.5 py-0.5 rounded-full inline-flex items-center gap-1.5" title="Kreator ini sudah lunas. Dapat diajukan kembali untuk kerjasama repeat / order tambahan.">
+                                  <span>Ratecard Lunas: {formatRupiah(totalPaid)}</span>
+                                  <span className="text-[10px] text-emerald-600 font-bold uppercase tracking-wider">(Bisa Diajukan Lagi)</span>
                                 </span>
                               );
                             }
@@ -814,32 +828,43 @@ export function BatchForm({
                           <label className="block text-xs font-medium text-slate-600 mb-1">Tipe Pembayaran</label>
                           {(() => {
                             const history = creatorHistory[cc.id] || [];
-                            const paidTypes = history.filter((h: any) => h.status === 'paid').map((h: any) => h.payment_type);
-                            const hasPaid50Awal = paidTypes.includes('50_awal');
+                            const paidItems = history.filter((h: any) => h.status === 'paid');
+                            const paidTypes = paidItems.map((h: any) => h.payment_type);
+                            const count50Awal = paidTypes.filter((t: string) => t === '50_awal').length;
+                            const count50Akhir = paidTypes.filter((t: string) => t === '50_akhir').length;
+                            const hasPending50 = count50Awal > count50Akhir;
+                            const totalPaid = paidItems.reduce((s: number, h: any) => s + Number(h.nominal || 0), 0);
+
                             return (
-                              <select 
-                                className="w-full p-2 border border-slate-300 rounded text-sm outline-none focus:border-blue-500" 
-                                value={f.payment_type} 
-                                onChange={e => handleChange(cc.id, 'payment_type', e.target.value)}
-                              >
-                                <option value="100_akhir" disabled={hasPaid50Awal}>
-                                  {hasPaid50Awal ? "100% Akhir (Sudah ada DP 50%)" : "100% Akhir"}
-                                </option>
-                                <option value="50_awal" disabled={hasPaid50Awal}>
-                                  {hasPaid50Awal ? "DP 50% Awal (Sudah Dibayar)" : "DP 50% Awal"}
-                                </option>
-                                <option value="50_akhir">Pelunasan 50% Akhir</option>
-                                <option value="ads">Top Up ADS</option>
-                                <option value="crm">Biaya CRM</option>
-                                <option value="lion">Ongkir Lion Parcel</option>
-                                <option value="reward_affiliate">Bonus Reward Affiliate</option>
-                                <option value="boost_awareness">Boost Awareness</option>
-                              </select>
+                              <>
+                                <select 
+                                  className="w-full p-2 border border-slate-300 rounded text-sm outline-none focus:border-blue-500" 
+                                  value={f.payment_type} 
+                                  onChange={e => handleChange(cc.id, 'payment_type', e.target.value)}
+                                >
+                                  <option value="100_akhir" disabled={hasPending50}>
+                                    {hasPending50 ? "100% Akhir (Menunggu Pelunasan DP 50%)" : "100% Akhir"}
+                                  </option>
+                                  <option value="50_awal" disabled={hasPending50}>
+                                    {hasPending50 ? "DP 50% Awal (Menunggu Pelunasan DP 50%)" : "DP 50% Awal"}
+                                  </option>
+                                  <option value="50_akhir" disabled={!hasPending50}>
+                                    {!hasPending50 ? "Pelunasan 50% Akhir (Tidak ada DP aktif)" : "Pelunasan 50% Akhir"}
+                                  </option>
+                                  <option value="ads">Top Up ADS</option>
+                                  <option value="crm">Biaya CRM</option>
+                                  <option value="lion">Ongkir Lion Parcel</option>
+                                  <option value="reward_affiliate">Bonus Reward Affiliate</option>
+                                  <option value="boost_awareness">Boost Awareness</option>
+                                </select>
+                                {totalPaid > 0 && !hasPending50 && (
+                                  <p className="text-[10px] text-emerald-800 mt-1 font-medium bg-emerald-50 p-1.5 rounded border border-emerald-200">
+                                    ✓ Pernah lunas Rp {totalPaid.toLocaleString('id-ID')}. Pengajuan ini untuk order / kerjasama repeat.
+                                  </p>
+                                )}
+                              </>
                             );
                           })()}
-                          {creatorHistory[cc.id]?.some((h: any) => h.payment_type === f.payment_type) && (
-                            <p className="text-[10px] text-orange-700 mt-1 font-medium bg-orange-50 p-1 rounded border border-orange-100">⚠️ Sudah pernah diajukan sebelumnya.</p>
-                          )}
                         </div>
                         <div>
                           <label className="block text-xs font-medium text-slate-600 mb-1">Ratecard Awal</label>

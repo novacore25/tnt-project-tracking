@@ -29,8 +29,12 @@ export function UnpaidCreatorsTab({ campaignId, onSuccess }: { campaignId: numbe
       
       const processed = (data || []).map(cc => {
         const history = cc.payment_items || [];
+        const paidItems = history.filter((h: any) => (h.final_status || h.status) === 'paid');
+        const paidNominal = sumNum(paidItems, (h: any) => h.nominal);
+        const paidTypes = paidItems.map((h: any) => h.payment_type);
         const paidOrPendingTypes = history.filter((h: any) => h.final_status !== 'rejected' && h.final_status !== 'cancelled').map((h: any) => h.payment_type);
-        const isFullyPaid = paidOrPendingTypes.includes('100_akhir') || (paidOrPendingTypes.includes('50_awal') && paidOrPendingTypes.includes('50_akhir'));
+        const count50Awal = paidTypes.filter((t: string) => t === '50_awal').length;
+        const count50Akhir = paidTypes.filter((t: string) => t === '50_akhir').length;
         
         // Find latest snapshot for GMV/Followers and Ratecard
         const snapshots = cc.creators?.creator_snapshots || [];
@@ -43,9 +47,8 @@ export function UnpaidCreatorsTab({ campaignId, onSuccess }: { campaignId: numbe
         // Ratecard khusus campaign ini SELALU murni dari cc.price (sesuai yang di-input di Listing)
         const effectivePrice = toNum(cc.price || 0);
 
-        // Hitung nominal yang sudah dibayar (jika ada termin sebelumnya)
-        const paidItems = history.filter((h: any) => (h.final_status || h.status) === 'paid');
-        const paidNominal = sumNum(paidItems, (h: any) => h.nominal);
+        const hasFinishedTermin = paidTypes.includes('100_akhir') || (count50Awal > 0 && count50Awal === count50Akhir);
+        const isFullyPaid = hasFinishedTermin && (effectivePrice === 0 || paidNominal >= effectivePrice);
 
         // Sisa nominal yang belum dibayar
         let unpaidNominal = 0;
@@ -171,8 +174,10 @@ export function UnpaidCreatorsTab({ campaignId, onSuccess }: { campaignId: numbe
       const latestBank = banks.length > 0 ? banks[banks.length - 1] : null;
       
       // Determine next payment type
-      let nextPaymentType = '';
-      if (cc.paidOrPendingTypes.includes('50_awal')) {
+      const count50Awal = (cc.paidOrPendingTypes || []).filter((t: string) => t === '50_awal').length;
+      const count50Akhir = (cc.paidOrPendingTypes || []).filter((t: string) => t === '50_akhir').length;
+      let nextPaymentType = '100_akhir';
+      if (count50Awal > count50Akhir) {
         nextPaymentType = '50_akhir';
       }
       

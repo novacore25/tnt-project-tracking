@@ -134,8 +134,20 @@ function CampaignKeuanganContent() {
 
       const filteredCreators = (ccData || []).map(cc => {
         const history = historyMap[cc.id] || [];
-        const types = history.map(h => h.payment_type);
-        const isFullyPaid = types.includes('100_akhir') || (types.includes('50_awal') && types.includes('50_akhir'));
+        const paidItems = history.filter(h => h.status === 'paid');
+        const paidTypes = paidItems.map(h => h.payment_type);
+        const count50Awal = paidTypes.filter(t => t === '50_awal').length;
+        const count50Akhir = paidTypes.filter(t => t === '50_akhir').length;
+        
+        // Ratecard untuk campaign ini SELALU murni dari campaign_creators.price (sesuai yang di-input di Listing)
+        const effectivePrice = toNum(cc.price || 0);
+
+        // Nominal yang sudah lunas dibayar (status 'paid')
+        const paidNominal = sumNum(paidItems, h => h.nominal);
+
+        const hasFinishedTermin = paidTypes.includes('100_akhir') || (count50Awal > 0 && count50Awal === count50Akhir);
+        const isFullyPaid = hasFinishedTermin && (effectivePrice === 0 || paidNominal >= effectivePrice);
+
         const pendingItem = history.find(h => 
           h.status !== 'paid' && 
           h.status !== 'rejected' && 
@@ -143,12 +155,6 @@ function CampaignKeuanganContent() {
           h.batch_status !== 'paid' && 
           h.batch_status !== 'cancelled'
         );
-        
-        // Ratecard untuk campaign ini SELALU murni dari campaign_creators.price (sesuai yang di-input di Listing)
-        const effectivePrice = toNum(cc.price || 0);
-
-        // Nominal yang sudah lunas dibayar (status 'paid')
-        const paidNominal = sumNum(history.filter(h => h.status === 'paid'), h => h.nominal);
 
         // Nominal yang sedang diajukan dalam batch berjalan (pending)
         const pendingNominal = sumNum(history.filter(h => 

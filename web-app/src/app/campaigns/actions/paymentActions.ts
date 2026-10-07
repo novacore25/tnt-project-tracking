@@ -590,26 +590,27 @@ export async function addPaymentItem(batchId: number, itemData: any) {
 
     const reqType = itemData.payment_type || '100_akhir';
 
-    // 1. Prevent if creator is already fully paid
-    const isFullyPaid = paidTypes.includes('100_akhir') || (paidTypes.includes('50_awal') && paidTypes.includes('50_akhir'));
-    if (isFullyPaid) {
-      throw new Error(`Kreator ini sudah lunas (Ratecard lunas), tidak dapat diajukan pembayaran lagi.`);
-    }
-
-    // 2. Prevent if creator has an active pending payment in another batch
+    // 1. Cegah jika kreator masih memiliki pengajuan aktif di batch lain yang belum selesai (pending)
     if (pendingItems.length > 0) {
       const activeBatch = pendingItems[0].batch_label;
-      throw new Error(`Kreator ini masih memiliki pengajuan aktif di batch "${activeBatch}". Tunggu hingga selesai dibayar sebelum mengajukan termin berikutnya.`);
+      throw new Error(`Kreator ini masih memiliki pengajuan aktif di batch "${activeBatch}". Tunggu hingga selesai diproses sebelum mengajukan pembayaran berikutnya.`);
     }
 
-    // 3. Double claim prevention for termin 1
-    if (reqType === '50_awal' && paidTypes.includes('50_awal')) {
-      throw new Error(`DP 50% Awal sudah pernah dibayar untuk kreator ini. Silakan ajukan Pelunasan 50% Akhir.`);
+    // 2. Logika Termin Berpasangan (Pairing Logic):
+    // Hitung jumlah DP 50% Awal vs Pelunasan 50% Akhir yang sudah berstatus 'paid'
+    const count50Awal = paidTypes.filter(t => t === '50_awal').length;
+    const count50Akhir = paidTypes.filter(t => t === '50_akhir').length;
+
+    // Jika masih ada termin DP 50% Awal yang belum dilunasi, pembayaran berikutnya WAJIB 50% Akhir
+    if (count50Awal > count50Akhir) {
+      if (reqType !== '50_akhir') {
+        throw new Error(`Kreator ini memiliki termin DP 50% Awal yang belum dilunasi. Pengajuan berikutnya harus berupa Pelunasan 50% Akhir.`);
+      }
     }
 
-    // 4. If DP 50% already paid, don't allow 100% Akhir (must be 50% Akhir)
-    if (reqType === '100_akhir' && paidTypes.includes('50_awal')) {
-      throw new Error(`Kreator ini sudah menerima DP 50% Awal. Pengajuan berikutnya harus berupa Pelunasan 50% Akhir.`);
+    // Jika seluruh termin sebelumnya sudah lunas/seimbang, tidak boleh memilih 50% Akhir tanpa adanya DP 50% Awal
+    if (count50Awal === count50Akhir && reqType === '50_akhir') {
+      throw new Error(`Tidak dapat memilih Pelunasan 50% Akhir karena tidak ada termin DP 50% Awal yang menggantung untuk kreator ini.`);
     }
   }
 
@@ -700,126 +701,166 @@ export async function addPaymentItem(batchId: number, itemData: any) {
 }
 
 export async function updatePaymentItem(itemId: number, itemData: any) {
-  const denied = await requireUserOrError();
-  if (denied) return { success: false, error: denied.message } as any;
+  try {
+    const denied = await requireUserOrError();
+    if (denied) return { success: false, error: denied.message } as any;
 
-  const itemRows = await db.execute(sql`
-    SELECT 
-      pi.id,
-      pi.campaign_creator_id, 
-      pi.batch_id, 
-      pi.manager_status, 
-      pi.final_status,
-      pb.status as batch_status,
-      pb.campaign_id
-    FROM payment_items pi
-    LEFT JOIN payment_batches pb ON pi.batch_id = pb.id
-    WHERE pi.id = ${itemId}
-  `);
-  const item = (itemRows as any[])[0];
+    const itemRows = await db.execute(sql`
+      SELECT 
+        pi.id,
+        pi.campaign_creator_id, 
+        pi.batch_id, 
+        pi.manager_status, 
+        pi.final_status,
+        pb.status as batch_status,
+        pb.campaign_id
+      FROM payment_items pi
+      LEFT JOIN payment_batches pb ON pi.batch_id = pb.id
+      WHERE pi.id = ${itemId}
+    `);
+    const item = (itemRows as any[])[0];
 
-  if (!item) {
-    return { success: false, error: 'Item pembayaran tidak ditemukan.' };
-  }
+    if (!item) {
+      return { success: false, error: 'Item pembayaran tidak ditemukan.' };
+    }
 
-  // Guard: Hanya boleh diedit jika batch masih draft, cancelled, atau pending_manager
-  const allowedBatchStatuses = ['draft', 'cancelled', 'pending_manager'];
-  if (!allowedBatchStatuses.includes(item.batch_status)) {
-    return { 
-      success: false, 
-      error: 'Batch sudah diproses lebih lanjut dan tagihan tidak dapat diubah lagi.' 
-    };
-  }
+    // Guard: Hanya boleh diedit jika batch masih draft, cancelled, atau pending_manager
+    const allowedBatchStatuses = ['draft', 'cancelled', 'pending_manager'];
+    if (!allowedBatchStatuses.includes(item.batch_status)) {
+      return { 
+        success: false, 
+        error: 'Batch sudah diproses lebih lanjut dan tagihan tidak dapat diubah lagi.' 
+      };
+    }
 
-  // Guard Opsi A: Jika item SUDAH disetujui Manager, dikunci permanen
-  const isManagerApproved = 
-    item.manager_status === 'approved' || 
-    item.final_status === 'manager_approved' || 
-    ['executive_1_approved', 'ready_to_pay', 'executive_approved', 'finance_selected', 'paid'].includes(item.final_status);
+    // Guard Opsi A: Jika item SUDAH disetujui Manager, dikunci permanen
+    const isManagerApproved = 
+      item.manager_status === 'approved' || 
+      item.final_status === 'manager_approved' || 
+      ['executive_1_approved', 'ready_to_pay', 'executive_approved', 'finance_selected', 'paid'].includes(item.final_status);
 
-  if (isManagerApproved) {
-    return { 
-      success: false, 
-      error: 'Tagihan sudah disetujui oleh Manager dan tidak dapat diedit lagi.' 
-    };
-  }
+    if (isManagerApproved) {
+      return { 
+        success: false, 
+        error: 'Tagihan sudah disetujui oleh Manager dan tidak dapat diedit lagi.' 
+      };
+    }
 
-  let bankAccountId = itemData.bank_account_id ? Number(itemData.bank_account_id) : null;
-  let bankName = itemData.metode_pembayaran ? String(itemData.metode_pembayaran).trim() : null;
-  let bankNumber = itemData.nomor_rekening ? String(itemData.nomor_rekening).trim() : null;
-  let bankHolder = itemData.nama_penerima ? String(itemData.nama_penerima).trim() : null;
+    let bankAccountId = itemData.bank_account_id ? Number(itemData.bank_account_id) : null;
+    let bankName = itemData.metode_pembayaran ? String(itemData.metode_pembayaran).trim() : null;
+    let bankNumber = itemData.nomor_rekening ? String(itemData.nomor_rekening).trim() : null;
+    let bankHolder = itemData.nama_penerima ? String(itemData.nama_penerima).trim() : null;
 
-  if (item?.campaign_creator_id && bankName && bankNumber && !bankAccountId) {
-    const ccRows = await db.execute(sql`SELECT creator_id FROM campaign_creators WHERE id = ${item.campaign_creator_id}`);
-    const ccData = (ccRows as any[])[0];
-    if (ccData?.creator_id) {
-      const existBank = await db.execute(sql`
-        SELECT id FROM creator_bank_accounts 
-        WHERE creator_id = ${ccData.creator_id} AND LOWER(bank_name) = LOWER(${bankName}) AND account_number = ${bankNumber}
-        LIMIT 1
-      `);
-      const existing = (existBank as any[])[0];
-      if (existing) {
-        bankAccountId = existing.id;
-      } else {
-        try {
-          const insBank = await db.execute(sql`
-            INSERT INTO creator_bank_accounts (creator_id, bank_name, account_number, account_holder)
-            VALUES (${ccData.creator_id}, ${bankName}, ${bankNumber}, ${bankHolder || ''})
-            RETURNING id
-          `);
-          if ((insBank as any[])[0]?.id) bankAccountId = (insBank as any[])[0].id;
-        } catch (e) {
-          console.warn('Could not insert new bank on update:', e);
+    if (item?.campaign_creator_id && bankName && bankNumber && !bankAccountId) {
+      const ccRows = await db.execute(sql`SELECT creator_id FROM campaign_creators WHERE id = ${item.campaign_creator_id}`);
+      const ccData = (ccRows as any[])[0];
+      if (ccData?.creator_id) {
+        const existBank = await db.execute(sql`
+          SELECT id FROM creator_bank_accounts 
+          WHERE creator_id = ${ccData.creator_id} AND LOWER(bank_name) = LOWER(${bankName}) AND account_number = ${bankNumber}
+          LIMIT 1
+        `);
+        const existing = (existBank as any[])[0];
+        if (existing) {
+          bankAccountId = existing.id;
+        } else {
+          try {
+            const insBank = await db.execute(sql`
+              INSERT INTO creator_bank_accounts (creator_id, bank_name, account_number, account_holder)
+              VALUES (${ccData.creator_id}, ${bankName}, ${bankNumber}, ${bankHolder || ''})
+              RETURNING id
+            `);
+            if ((insBank as any[])[0]?.id) bankAccountId = (insBank as any[])[0].id;
+          } catch (e) {
+            console.warn('Could not insert new bank on update:', e);
+          }
         }
       }
     }
-  }
 
-  await db.execute(sql`
-    UPDATE payment_items
-    SET 
-      payment_type = COALESCE(${itemData.payment_type}, payment_type),
-      nominal = COALESCE(${itemData.nominal !== undefined ? Number(itemData.nominal) : null}, nominal),
-      ratecard_awal = COALESCE(${itemData.ratecard_awal !== undefined ? Number(itemData.ratecard_awal) : null}, ratecard_awal),
-      biaya_transfer = COALESCE(${itemData.biaya_transfer !== undefined ? Number(itemData.biaya_transfer) : null}, biaya_transfer),
-      bank_account_id = COALESCE(${bankAccountId}, bank_account_id),
-      metode_pembayaran = COALESCE(${bankName}, metode_pembayaran),
-      nomor_rekening = COALESCE(${bankNumber}, nomor_rekening),
-      nama_penerima = COALESCE(${bankHolder}, nama_penerima),
-      notes = COALESCE(${itemData.notes || itemData.notes_dari_pic}, notes),
-      nama_wa_pic = COALESCE(${itemData.nama_wa_pic}, nama_wa_pic),
-      nomor_wa_dealing = COALESCE(${itemData.nomor_wa_dealing}, nomor_wa_dealing),
-      alamat_ktp = COALESCE(${itemData.alamat_ktp}, alamat_ktp),
-      nik = COALESCE(${itemData.nik}, nik),
-      link_ktp = COALESCE(${itemData.link_ktp}, link_ktp),
-      link_kontrak = COALESCE(${itemData.link_kontrak}, link_kontrak)
-    WHERE id = ${itemId}
-  `);
+    const safePaymentType = itemData.payment_type !== undefined ? itemData.payment_type : null;
+    const safeNominal = (itemData.nominal !== undefined && itemData.nominal !== null && !isNaN(Number(itemData.nominal))) ? Number(itemData.nominal) : null;
+    const safeRatecard = (itemData.ratecard_awal !== undefined && itemData.ratecard_awal !== null && !isNaN(Number(itemData.ratecard_awal))) ? Number(itemData.ratecard_awal) : null;
+    const safeBiayaTransfer = (itemData.biaya_transfer !== undefined && itemData.biaya_transfer !== null && !isNaN(Number(itemData.biaya_transfer))) ? Number(itemData.biaya_transfer) : null;
+    const safeBankAccountId = bankAccountId ?? null;
+    const safeBankName = bankName ?? null;
+    const safeBankNumber = bankNumber ?? null;
+    const safeBankHolder = bankHolder ?? null;
+    const safeNotes = itemData.notes !== undefined ? itemData.notes : (itemData.notes_dari_pic !== undefined ? itemData.notes_dari_pic : null);
+    const safeNamaPic = itemData.nama_wa_pic !== undefined ? itemData.nama_wa_pic : null;
+    const safeNomorPic = itemData.nomor_wa_dealing !== undefined ? itemData.nomor_wa_dealing : null;
+    const safeAlamatKtp = itemData.alamat_ktp !== undefined ? itemData.alamat_ktp : null;
+    const safeNik = itemData.nik !== undefined ? itemData.nik : null;
+    const safeLinkKtp = itemData.link_ktp !== undefined ? itemData.link_ktp : null;
+    const safeLinkKontrak = itemData.link_kontrak !== undefined ? itemData.link_kontrak : null;
 
-  if (item?.campaign_creator_id) {
-    try {
-      const ccRows = await db.execute(sql`SELECT creator_id FROM campaign_creators WHERE id = ${item.campaign_creator_id}`);
-      const creatorId = (ccRows as any[])[0]?.creator_id;
-      if (creatorId) {
-        if (itemData.nik !== undefined) await db.execute(sql`UPDATE creators SET nik = ${itemData.nik} WHERE id = ${creatorId}`);
-        if (itemData.link_ktp !== undefined) await db.execute(sql`UPDATE creators SET link_ktp = ${itemData.link_ktp} WHERE id = ${creatorId}`);
-        if (itemData.link_kontrak !== undefined) await db.execute(sql`UPDATE creators SET link_kontrak = ${itemData.link_kontrak} WHERE id = ${creatorId}`);
-        if (itemData.nama_wa_pic !== undefined) await db.execute(sql`UPDATE creators SET nama_wa_pic = ${itemData.nama_wa_pic} WHERE id = ${creatorId}`);
-        if (itemData.nomor_wa_dealing !== undefined) await db.execute(sql`UPDATE creators SET nomor_wa_dealing = ${itemData.nomor_wa_dealing} WHERE id = ${creatorId}`);
-        if (itemData.alamat_ktp !== undefined) await db.execute(sql`UPDATE creators SET alamat_ktp = ${itemData.alamat_ktp} WHERE id = ${creatorId}`);
+    await db.execute(sql`
+      UPDATE payment_items
+      SET 
+        payment_type = COALESCE(${safePaymentType}, payment_type),
+        nominal = COALESCE(${safeNominal}, nominal),
+        ratecard_awal = COALESCE(${safeRatecard}, ratecard_awal),
+        biaya_transfer = COALESCE(${safeBiayaTransfer}, biaya_transfer),
+        bank_account_id = COALESCE(${safeBankAccountId}, bank_account_id),
+        metode_pembayaran = COALESCE(${safeBankName}, metode_pembayaran),
+        nomor_rekening = COALESCE(${safeBankNumber}, nomor_rekening),
+        nama_penerima = COALESCE(${safeBankHolder}, nama_penerima),
+        notes = COALESCE(${safeNotes}, notes),
+        nama_wa_pic = COALESCE(${safeNamaPic}, nama_wa_pic),
+        nomor_wa_dealing = COALESCE(${safeNomorPic}, nomor_wa_dealing),
+        alamat_ktp = COALESCE(${safeAlamatKtp}, alamat_ktp),
+        nik = COALESCE(${safeNik}, nik),
+        link_ktp = COALESCE(${safeLinkKtp}, link_ktp),
+        link_kontrak = COALESCE(${safeLinkKontrak}, link_kontrak)
+      WHERE id = ${itemId}
+    `);
+
+    if (item?.campaign_creator_id) {
+      try {
+        const ccRows = await db.execute(sql`SELECT creator_id FROM campaign_creators WHERE id = ${item.campaign_creator_id}`);
+        const creatorId = (ccRows as any[])[0]?.creator_id;
+        if (creatorId) {
+          // Sync ke master PIC
+          if (safeNamaPic && safeNomorPic) {
+            await db.execute(sql`
+              INSERT INTO creator_pic_contacts (creator_id, nama_pic, nomor_wa)
+              VALUES (${creatorId}, ${String(safeNamaPic).trim()}, ${String(safeNomorPic).trim()})
+              ON CONFLICT (creator_id, nama_pic, nomor_wa) DO NOTHING
+            `);
+          }
+          // Sync ke master Identitas
+          if (safeNik && String(safeNik).trim() !== '' && String(safeNik).trim() !== '-') {
+            await db.execute(sql`
+              INSERT INTO creator_identities (creator_id, nik, nama_ktp, alamat_ktp, link_ktp)
+              VALUES (${creatorId}, ${String(safeNik).trim()}, ${safeBankHolder || ''}, ${safeAlamatKtp || ''}, ${safeLinkKtp || ''})
+              ON CONFLICT (creator_id, nik) DO UPDATE SET
+                alamat_ktp = COALESCE(EXCLUDED.alamat_ktp, creator_identities.alamat_ktp),
+                link_ktp = COALESCE(EXCLUDED.link_ktp, creator_identities.link_ktp)
+            `);
+          }
+          // Sync ke master Kontrak
+          if (safeLinkKontrak && String(safeLinkKontrak).trim() !== '' && String(safeLinkKontrak).trim() !== '-') {
+            await db.execute(sql`
+              INSERT INTO creator_contracts (creator_id, campaign_id, link_kontrak)
+              VALUES (${creatorId}, ${item.campaign_id ? Number(item.campaign_id) : null}, ${String(safeLinkKontrak).trim()})
+            `);
+          }
+        }
+      } catch (e) {
+        console.warn('Silent fallback for creator metadata update on updatePaymentItem:', e);
       }
-    } catch (e) {
-      console.warn('Silent fallback for creator metadata update on updatePaymentItem:', e);
     }
-  }
 
-  if (item.campaign_id) {
-    revalidatePath(`/campaigns/${item.campaign_id}/keuangan`);
-  }
-  revalidatePath('/budgeting');
+    if (item.campaign_id) {
+      revalidatePath(`/campaigns/${item.campaign_id}/keuangan`);
+    }
+    revalidatePath('/budgeting');
 
-  return { success: true };
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error in updatePaymentItem:', err);
+    return { success: false, error: err.message || 'Gagal menyimpan perubahan tagihan.' };
+  }
 }
 
 export async function deletePaymentItem(itemId: number) {
