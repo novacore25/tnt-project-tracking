@@ -346,6 +346,11 @@ export default function CreatorProfilePage() {
   const [activeCcId, setActiveCcId] = useState<number | null>(null);
   const [videoOpen, setVideoOpen] = useState(false);
 
+  const [aliasModalOpen, setAliasModalOpen] = useState(false);
+  const [newAliasInput, setNewAliasInput] = useState('');
+  const [newAliasNotes, setNewAliasNotes] = useState('');
+  const [aliasBusy, setAliasBusy] = useState(false);
+
   if (isLoading) return <div className="p-8 text-center text-slate-500">Memuat data kreator...</div>;
   if (!creator) return <div className="p-8 text-center">Creator tidak ditemukan.</div>;
 
@@ -370,11 +375,6 @@ export default function CreatorProfilePage() {
       alert("Gagal update profil: " + err.message);
     }
   };
-
-  const [aliasModalOpen, setAliasModalOpen] = useState(false);
-  const [newAliasInput, setNewAliasInput] = useState('');
-  const [newAliasNotes, setNewAliasNotes] = useState('');
-  const [aliasBusy, setAliasBusy] = useState(false);
 
   const handleAddAlias = async () => {
     if (!creatorId || !newAliasInput.trim() || aliasBusy) return;
