@@ -2648,3 +2648,20 @@ sebelum migration pertama jalan (§3.45). Urutan yang benar:
 
 Dan kalau migration gagal, **baca error-nya sebagai data**. 10 kegagalan itu semuanya
 memberi informasi yang saling menguatkan, bukan noise.
+
+---
+
+### 10d. Pemetaan Raw TikTok vs Tabel Videos PIC & Audit Performa (7 Okt 2026)
+
+1. **Pemetaan File Raw TikTok:**
+   - `affiliate_orders_*.xlsx` -> Tab **Input Penjualan > Organik Sales** -> Tabel **`sales`** (kunci: `order_id`).
+   - `CustomReport_*_Video_*.xlsx` -> Tab **Input Penjualan > Awareness Video** -> Tabel **`organic_videos`** (`content_type = 'Video'`, kunci: `(content_uid, product_id)`).
+   - `CustomReport_*_Live_*.xlsx` -> Tab **Input Penjualan > Awareness Live** -> Tabel **`organic_videos`** (`content_type = 'Livestream'`, kunci: `(content_uid, product_id)`).
+2. **Pemisahan Kerjaan Manual PIC:**
+   - Import video manual PIC disimpan di tabel **`videos`** (terikat ke `campaign_creators`).
+   - Reset/pembersihan data TikTok Partner Center **HANYA** menyentuh `sales` dan `organic_videos`. Tabel `videos` **DILARANG DIHAPUS** agar hasil kerja PIC tetap utuh.
+   - Status 'Terkoneksi' di menu video adalah hasil pencocokan dinamis `videos.content_uid` ke `organic_videos` / `sales`.
+3. **Hasil Audit Performa Campaign 46 (SYB) - 7 Okt 2026:**
+   - GMV Organik (Rp 75,4M / 2.336 order), GMV Ads (Rp 86,4M), Total Achievement (Rp 161,8M), Views (1.597.236 dari 496 video unik) **100% cocok dengan raw PostgreSQL**.
+   - Tidak ada kebocoran produk asing (`0` order di luar SKU SYB), `0` kreator unmapped, `0` duplikat order ID se-DB (34.869 order unik), dan `0` duplikat video ID di campaign SYB.
+
