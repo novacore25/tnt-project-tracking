@@ -200,3 +200,50 @@ Berdasarkan diskusi dan keputusan owner terkait alur review pembayaran kreator:
   4. **Tambah Alias & Auto-Merge (`addCreatorAliasAction`):** Form input username baru/lama. Jika username tersebut sudah ada di sistem sebagai akun kreator tersendiri (misal hasil impor lama), sistem secara cerdas **menggabungkan (merge)** data `campaign_creators`, video, kontak, snapshot, dan penjualannya ke akun ini lalu menghapus akun master duplikatnya.
   5. **Perbaikan Client Render Crash:** Menambahkan memo `nonPrimaryAliases` yang aman dari null pointer (`?.filter().map()` sebelumnya rawan `TypeError: Cannot read properties of undefined (reading 'map')` jika `localData.aliases` undefined). Menambahkan juga file error boundary `web-app/src/app/creator-pool/[id]/error.tsx` untuk menangkap runtime exception dengan tampilan informatif.
   6. **Perbaikan React Error #310 ("Rendered more hooks than during the previous render"):** Memindahkan 4 hook `useState` modal alias (`aliasModalOpen`, `newAliasInput`, `newAliasNotes`, `aliasBusy`) ke bagian paling atas komponen sebelum early return `if (isLoading) return ...`. Sebelumnya hook tersebut dideklarasikan setelah baris return awal sehingga jumlah hook berubah saat render kedua selesai memuat data.
+
+---
+
+## 7. Peningkatan Fitur Keuangan: Auto-Save Local Storage Anti-Hilang & Master Legalitas Kreator
+
+### A. Latar Belakang Masalah
+1. **Risiko Kehilangan Data saat Input Batch Massal:**
+   PIC sering kali memilih 50–100 kreator di tab *Kreator Belum Dibayar* lalu mengisi data administrasi (kontak WA, link KTP, link kontrak GDrive, rekening). Jika tab browser tidak sengaja ter-refresh atau tertutup, seluruh input yang sudah diisi hilang karena guard `initialItems` membypass sistem draft.
+2. **Kebutuhan Relasional untuk Data Legalitas & PIC Dealing:**
+   - Satu kreator dapat memiliki lebih dari satu kontak PIC/admin dealing, lebih dari satu KTP, beberapa rekening bank, dan berbagai riwayat kontrak di campaign berbeda.
+   - Kontak WA PIC harus berupa satu kesatuan yang sinkron antara **Nama PIC** dan **Nomor WhatsApp Dealing**.
+   - PIC membutuhkan dropdown untuk memilih data yang sudah pernah diisi sebelumnya, baik di form pengajuan batch maupun di profil kreator.
+
+### B. Eksekusi Skema Database & Backfill (Migration `20261008010000`)
+* File migration: `web-app/supabase/migrations/20261008010000_create_creator_admin_master_tables.sql`
+* Dijalankan di PostgreSQL VPS Coolify (`db_tnt_project_system`).
+* **Tabel Baru:**
+  1. `creator_pic_contacts` (id, creator_id, nama_pic, nomor_wa, is_primary, created_at, UNIQUE(creator_id, nama_pic, nomor_wa))
+  2. `creator_identities` (id, creator_id, nik, nama_ktp, alamat_ktp, link_ktp, is_primary, created_at, UNIQUE(creator_id, nik))
+  3. `creator_contracts` (id, creator_id, campaign_id, judul_kontrak, link_kontrak, created_at)
+* **Hasil Backfill Otomatis Data Historis:**
+  - **154 baris** kontak PIC terisi dari master `creators` dan riwayat `payment_items`.
+  - **401 baris** data identitas KTP terisi dari master `creators` dan riwayat `payment_items`.
+  - **503 baris** dokumen kontrak GDrive terisi dari riwayat pengajuan `payment_items`.
+
+### C. Implementasi Auto-Save Anti-Hilang (`BatchForm.tsx` & `page.tsx`)
+1. **Auto-Save Kontinu ke Local Storage:**
+   - Menyimpan seluruh field yang diisi (`batchLabel`, `selectedCreatorIds`, `forms` per creator ID, dan `operationalItems`) secara instan ke kunci `tnt_batch_draft_${campaignId}`.
+   - Menghapus guard lama yang membypass penyimpanan saat batch dibuka via `initialItems`.
+   - Draft otomatis terhapus hanya saat batch berhasil disubmit ke server (`localStorage.removeItem`).
+2. **Deteksi & Notifikasi Draft di Halaman Keuangan:**
+   - Tombol tab "Buat Pengajuan (Manual)" kini memiliki badge `Draft (X item)`.
+   - Banner peringatan di atas daftar batch: *"Tersimpan draft pengajuan pembayaran yang belum disubmit (X item)"* lengkap dengan tombol **"Lanjutkan Pengisian"** dan **"Hapus"**.
+
+### D. UI Dropdown Relasional di Form Pengajuan Batch (`BatchForm.tsx`)
+1. **Dropdown Kontak WA PIC (Dealing):** Menampilkan opsi kontak tersimpan `Nama PIC - No WA (★ Utama)` atau `+ Tambah Kontak PIC Baru (Ketik Manual)`. Nilai otomatis sinkron antara Nama PIC dan No WA.
+2. **Dropdown Identitas KTP:** Menampilkan opsi `NIK (Nama KTP) (★ Utama)` atau `+ Tambah KTP Baru (Ketik Manual)`. Otomatis mengisi NIK, Link KTP GDrive, dan Alamat KTP.
+3. **Dropdown Saran Kontrak GDrive:** Memberikan rekomendasi link kontrak terdahulu kreator bersangkutan dengan tombol test klik langsung (`ExternalLink`) untuk membuka file GDrive di tab baru.
+4. **Auto-Fetch Relasi Cerdas:** `useEffect` otomatis memuat data rekening, kontak PIC, KTP, dan kontrak untuk setiap kreator yang dipilih/dipulihkan dari local storage.
+
+### E. Card "Data Legalitas & Administrasi" di Profil Kreator (`/creator-pool/[id]`)
+* Menambahkan card interaktif di sidebar kiri profil kreator:
+  - **Kontak WA PIC (Dealing):** Daftar nomor dealing + Dialog modal tambah kontak baru & tombol hapus.
+  - **Identitas KTP:** Daftar KTP + NIK + Alamat + Link GDrive + Dialog modal tambah KTP & tombol hapus.
+  - **Rekening Transfer Bank:** Daftar bank/e-wallet + No rekening + Nama pemilik + Dialog modal tambah rekening & tombol hapus.
+  - **Dokumen Kontrak Kerjasama:** Daftar judul kontrak + label campaign + link GDrive + Dialog modal tambah kontrak & tombol hapus.
+* Seluruh aksi terhubung langsung ke Server Actions di `creatorActions.ts` dan otomatis memperbarui tampilan tanpa reload halaman.
