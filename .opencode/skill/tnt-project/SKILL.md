@@ -1158,8 +1158,18 @@ $xl.Visible = $false; $xl.DisplayAlerts = $false
 $wb = $xl.Workbooks.Open($path, 0, $true)   # read-only
 ```
 
-Tersedia di mesin ini (Excel 16.0) dan **jauh lebih andal** daripada parse XML di
-dalam zip xlsx.
+### 3.59 Profil Kreator: Sinkronisasi ID Alias & Fallback Ratecard Nego Terakhir (7 Okt 2026)
+
+Dua temuan penting terkait tampilan ratecard dan relasi data di `/creator-pool/[id]`:
+1. **Ratecard Master vs Ratecard Campaign**:
+   - Card box `Ratecard` di header profil kreator membaca dari `creator_snapshots.ratecard` (ratecard master).
+   - Di listing campaign, harga yang diinput tersimpan di `campaign_creators.price` (ratecard khusus campaign).
+   - Jika kreator belum memiliki snapshot ratecard master, card atas menampilkan `-` (kosong), meskipun di bawahnya (`Riwayat Nego Campaign` & `Rekam Jejak`) harganya sudah ada (contoh: `@aliabdulazizzzz` Rp 1.300.000).
+   - **Solusi**: Card `Ratecard` profil otomatis fallback ke ratecard negosiasi terakhir (`localData.ccs[0].price`) dengan label `(Nego Terakhir)` jika master snapshot kosong.
+2. **Kreator Alias & Relasi Campaign**:
+   - `fetchCreatorProfile` kini mencari seluruh `associatedCreatorIds` (creatorId + ID mana pun yang punya username cocok dengan `aliasList`), sehingga seluruh campaign (`campaign_creators`), snapshot, catatan, kontak, dan ads tetap terhubung utuh meskipun kreator berganti username atau terdaftar dengan ID alias.
+3. **Syarat Muncul di Tab Kreator Belum Dibayar**:
+   - Tab `Kreator Belum Dibayar` di `/campaigns/[id]/keuangan` hanya memuat kreator dengan `LOWER(approval) = 'approved'`. Kreator yang kolom Approval-nya masih strip (`-`) / pending sengaja tidak dimunculkan untuk mencegah pengajuan pembayaran ke kreator yang belum disetujui.
 
 ---
 
