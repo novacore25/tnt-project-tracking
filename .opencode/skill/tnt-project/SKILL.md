@@ -415,6 +415,13 @@ Sudah dihapus 1 Okt 2026. Kalau ketemu lagi di file lain, itu sisa kode mati.
 
 ---
 
+### 3.33 Ratecard campaign SELALU murni dari campaign_creators.price (Listing), JANGAN fallback ke creator_snapshots (7 Okt 2026)
+Ratecard seorang kreator adalah spesifik per campaign (hasil negosiasi campaign tersebut).
+Sumber kebenaran tunggal ratecard campaign adalah **campaign_creators.price** (kolom Price (Rp) di menu Listing).
+- Jika price = 0 (misal kreator Barter), maka ratecard untuk campaign tersebut adalah **Rp 0** (bukan hutang bayar).
+- **JANGAN PERNAH** fallback effectivePrice = cc.price || snapshot.ratecard. Snapshot ratecard adalah data historis/global dari pool yang sering berisi angka lama/typo (misal Rp 140.000.000 pada @ignvrlatfaf_).
+- Fallback ke snapshot sempat membuat kreator Barter ber-ratecard Rp 0 muncul di tab *Kreator Belum Dibayar* senilai Rp 140.000.000, dan menggelembungkan total komitmen campaign 42 hingga Rp 1,5 Miliar. Diperbaiki 7 Okt 2026.
+
 ## 4. Peta Otorisasi (yang SEHARUSNYA ada, dan yang tidak)
 
 **Hanya 2 dari 22 modul `'use server'` yang punya guard otentikasi efektif:**
