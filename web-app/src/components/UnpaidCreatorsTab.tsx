@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Loader2, Video, Search, ChevronRight, PlayCircle, AlertCircle, CheckSquare, Square, Radio, CheckCircle2 } from 'lucide-react';
 import { fetchUnpaidCreators } from '../app/campaigns/actions/paymentActions';
 import { BatchForm } from '../app/campaigns/[id]/keuangan/BatchForm';
+import { sumNum, toNum } from '@/utils/computed';
 
 export function UnpaidCreatorsTab({ campaignId, onSuccess }: { campaignId: number, onSuccess: () => void }) {
   const [creators, setCreators] = useState<any[]>([]);
@@ -40,7 +41,21 @@ export function UnpaidCreatorsTab({ campaignId, onSuccess }: { campaignId: numbe
         });
         const latestSnapshot = sortedSnaps[0] || { followers: 0, gmv_30d: 0, ratecard: 0 };
         // Ratecard khusus campaign ini SELALU murni dari cc.price (sesuai yang di-input di Listing)
-        const effectivePrice = Number(cc.price || 0);
+        const effectivePrice = toNum(cc.price || 0);
+
+        // Hitung nominal yang sudah dibayar (jika ada termin sebelumnya)
+        const paidItems = history.filter((h: any) => (h.final_status || h.status) === 'paid');
+        const paidNominal = sumNum(paidItems, (h: any) => h.nominal);
+
+        // Sisa nominal yang belum dibayar
+        let unpaidNominal = 0;
+        if (!isFullyPaid && effectivePrice > 0) {
+          if (paidNominal > 0) {
+            unpaidNominal = Math.max(0, effectivePrice - paidNominal);
+          } else {
+            unpaidNominal = effectivePrice;
+          }
+        }
         
         // Content types (for display badges)
         const rawContentType = (cc.content_type || '').toLowerCase();
@@ -80,6 +95,8 @@ export function UnpaidCreatorsTab({ campaignId, onSuccess }: { campaignId: numbe
         return {
           ...cc,
           price: effectivePrice,
+          paidNominal,
+          unpaidNominal,
           isFullyPaid,
           hasVideo,
           hasLive,
@@ -91,7 +108,7 @@ export function UnpaidCreatorsTab({ campaignId, onSuccess }: { campaignId: numbe
           disableReason,
           paidOrPendingTypes
         };
-      }).filter(cc => !cc.isFullyPaid && (cc.price || 0) > 0); // Only show those who are NOT fully paid AND have a ratecard > 0
+      }).filter(cc => !cc.isFullyPaid && (toNum(cc.unpaidNominal) > 0 || toNum(cc.price) > 0));
 
       const historyMap: Record<number, any[]> = {};
       (data || []).forEach((cc: any) => {
@@ -194,33 +211,80 @@ export function UnpaidCreatorsTab({ campaignId, onSuccess }: { campaignId: numbe
 
   const allEligibleCount = filteredCreators.filter(c => c.canSubmit).length;
 
+  const selectedCreators = useMemo(() => {
+    return creators.filter(c => selectedIds.has(c.id));
+  }, [creators, selectedIds]);
+
+  const selectedNominal = useMemo(() => {
+    return sumNum(selectedCreators, c => c.unpaidNominal ?? c.price ?? 0);
+  }, [selectedCreators]);
+
+  const totalAllUnpaidNominal = useMemo(() => {
+    return sumNum(creators, c => c.unpaidNominal ?? c.price ?? 0);
+  }, [creators]);
+
   return (
     <div className="space-y-4 pb-12">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-white p-4 rounded-xl shadow-sm border border-slate-200">
         <div>
           <h2 className="text-lg font-bold text-slate-800">Daftar Kreator Belum Dibayar</h2>
           <p className="text-sm text-slate-500">Pilih kreator dengan ratecard valid dan data profil lengkap (Followers &amp; GMV) untuk diajukan pembayarannya.</p>
         </div>
-        <button
-          disabled={selectedIds.size === 0}
-          onClick={handleAjukanPembayaran}
-          className="btn btn-primary whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          Ajukan Pembayaran ({selectedIds.size})
-        </button>
+
+        <div className="flex flex-wrap items-center gap-4 bg-slate-50 border border-slate-200/80 rounded-xl p-2.5 px-4 self-stretch lg:self-auto justify-between lg:justify-end">
+          <div className="text-right">
+            <div className="text-[11px] text-slate-500 font-medium">
+              {selectedIds.size > 0 ? (
+                <span>Total Ratecard Diajukan ({selectedIds.size} Kreator)</span>
+              ) : (
+                <span>Total Seluruh List Belum Dibayar ({creators.length} Kreator)</span>
+              )}
+            </div>
+            <div className="text-lg font-extrabold text-blue-700 leading-tight">
+              Rp {Math.round(selectedIds.size > 0 ? selectedNominal : totalAllUnpaidNominal).toLocaleString('id-ID')}
+            </div>
+            {selectedIds.size > 0 && (
+              <div className="text-[11px] text-slate-400 mt-0.5">
+                Total Seluruh List: <span className="font-semibold text-slate-600">Rp {Math.round(totalAllUnpaidNominal).toLocaleString('id-ID')}</span> ({creators.length} kreator)
+              </div>
+            )}
+          </div>
+
+          <div className="h-9 w-px bg-slate-200 hidden sm:block" />
+
+          <button
+            disabled={selectedIds.size === 0}
+            onClick={handleAjukanPembayaran}
+            className="btn btn-primary whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed shadow-sm flex items-center gap-2 py-2 px-4 text-sm font-semibold"
+          >
+            <span>Ajukan Pembayaran</span>
+            <span className="bg-white/25 px-2 py-0.5 rounded-full text-xs font-bold">
+              {selectedIds.size}
+            </span>
+          </button>
+        </div>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-        <div className="p-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center gap-4">
-          <div className="relative flex-1 max-w-md">
+        <div className="p-3 px-4 border-b border-slate-200 bg-slate-50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+          <div className="relative flex-1 max-w-md w-full">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input 
               type="text" 
               placeholder="Cari username kreator..."
-              className="w-full pl-9 pr-4 py-2 border border-slate-300 rounded-lg text-sm outline-none focus:border-blue-500 transition-colors"
+              className="w-full pl-9 pr-4 py-2 border border-slate-300 rounded-lg text-sm outline-none focus:border-blue-500 transition-colors bg-white"
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
             />
+          </div>
+          <div className="flex items-center gap-2.5 text-xs text-slate-500 flex-wrap">
+            <span>
+              Siap Diajukan: <strong className="text-emerald-700 font-bold">{allEligibleCount}</strong> dari {creators.length}
+            </span>
+            <span>•</span>
+            <span>
+              Terpilih: <strong className="text-blue-700 font-bold">{selectedIds.size}</strong> ({selectedIds.size > 0 ? `Rp ${Math.round(selectedNominal).toLocaleString('id-ID')}` : 'Rp 0'})
+            </span>
           </div>
         </div>
         
@@ -290,7 +354,12 @@ export function UnpaidCreatorsTab({ campaignId, onSuccess }: { campaignId: numbe
                         Rp {cc.gmv.toLocaleString()}
                       </td>
                       <td className="px-4 py-3 text-right font-bold text-slate-700">
-                        Rp {(Number(cc.price) || 0).toLocaleString()}
+                        Rp {Math.round(toNum(cc.unpaidNominal ?? cc.price)).toLocaleString('id-ID')}
+                        {toNum(cc.paidNominal) > 0 && (
+                          <span className="text-[10px] text-slate-400 block font-normal">
+                            Sisa dari Rp {Math.round(toNum(cc.price)).toLocaleString('id-ID')}
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-center">
                         {cc.canSubmit ? (
@@ -324,6 +393,43 @@ export function UnpaidCreatorsTab({ campaignId, onSuccess }: { campaignId: numbe
                 })
               )}
             </tbody>
+            <tfoot className="bg-slate-100/80 border-t-2 border-slate-200 text-slate-700 font-semibold text-xs">
+              <tr>
+                <td className="px-4 py-3 text-center">
+                  {selectedIds.size > 0 ? (
+                    <span className="text-blue-700 font-bold">{selectedIds.size}</span>
+                  ) : (
+                    '-'
+                  )}
+                </td>
+                <td className="px-4 py-3 font-bold text-slate-800">
+                  {selectedIds.size > 0 ? (
+                    <span>Total Terpilih ({selectedIds.size} dari {filteredCreators.length} Kreator)</span>
+                  ) : (
+                    <span>Total Seluruh ({filteredCreators.length} Kreator)</span>
+                  )}
+                </td>
+                <td className="px-4 py-3 text-center">-</td>
+                <td className="px-4 py-3 text-right">
+                  {selectedIds.size > 0 
+                    ? sumNum(selectedCreators, c => c.followers).toLocaleString('id-ID')
+                    : sumNum(filteredCreators, c => c.followers).toLocaleString('id-ID')}
+                </td>
+                <td className="px-4 py-3 text-right text-slate-800 font-bold">
+                  Rp {Math.round(selectedIds.size > 0 
+                    ? sumNum(selectedCreators, c => c.gmv) 
+                    : sumNum(filteredCreators, c => c.gmv)).toLocaleString('id-ID')}
+                </td>
+                <td className="px-4 py-3 text-right text-blue-700 font-bold text-sm">
+                  Rp {Math.round(selectedIds.size > 0 
+                    ? selectedNominal 
+                    : sumNum(filteredCreators, c => c.unpaidNominal ?? c.price)).toLocaleString('id-ID')}
+                </td>
+                <td className="px-4 py-3 text-center text-slate-500 font-normal">
+                  {selectedIds.size > 0 ? `${selectedIds.size} terpilih siap diajukan` : `${allEligibleCount} siap diajukan`}
+                </td>
+              </tr>
+            </tfoot>
           </table>
         </div>
       </div>
