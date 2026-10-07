@@ -43,6 +43,7 @@ export default function CampaignPerformaClient({ campaignId }: { campaignId: num
   const [fastVideoCountsData, setFastVideoCountsData] = useState<{ approved: number; pending: number; livestream: number } | null>(null);
   const [masterConcepts, setMasterConcepts] = useState<any[]>([]);
   const [selectedConcept, setSelectedConcept] = useState<any>(null);
+  const [aliasMap, setAliasMap] = useState<Record<string, string>>({});
 
   // Filter Creator State from Global Context
   const { appliedFilterType, appliedFilterUsernames } = useCampaignFilter();
@@ -88,6 +89,24 @@ export default function CampaignPerformaClient({ campaignId }: { campaignId: num
         }
       }
 
+      // Build alias-to-primary mapping so old usernames resolve to the current active username
+      const aliasToPrimaryMap = new Map<string, string>();
+      const aliasObj: Record<string, string> = {};
+      for (const a of (res.creatorAliases || [])) {
+        if (a.alias && a.primary_username) {
+          aliasToPrimaryMap.set(a.alias.toLowerCase(), a.primary_username.toLowerCase());
+          aliasObj[a.alias.toLowerCase()] = a.primary_username.toLowerCase();
+        }
+      }
+      setAliasMap(aliasObj);
+
+      // Also ensure any alias of an approved creator is recognized as approved
+      for (const a of (res.creatorAliases || [])) {
+        if (a.alias && a.primary_username && approvedUsernames.has(a.primary_username.toLowerCase())) {
+          approvedUsernames.add(a.alias.toLowerCase());
+        }
+      }
+
       const skuSet = new Set<string>(skuList);
       const perfMap = new Map<string, any>();
 
@@ -114,12 +133,13 @@ export default function CampaignPerformaClient({ campaignId }: { campaignId: num
       if (currentHasSkus) {
         salesData.forEach((s: any) => {
           if (!s.product_id || !skuSet.has(s.product_id)) return;
-          const u = (s.creator_username || '').toLowerCase();
+          const rawU = (s.creator_username || '').toLowerCase();
+          const u = aliasToPrimaryMap.get(rawU) || rawU;
           const gmv = Number(s.gmv || 0);
           const qty = Number(s.quantity || 0);
           const cType = (s.content_type || '').toLowerCase();
 
-          if (approvedUsernames.has(u)) {
+          if (approvedUsernames.has(rawU) || approvedUsernames.has(u)) {
             calcOrganicGmv += gmv;
             const perf = getOrCreatePerf(u);
             perf.gmv_organic += gmv;
@@ -144,9 +164,12 @@ export default function CampaignPerformaClient({ campaignId }: { campaignId: num
           const uid = v.content_uid;
           if (!uid) return;
 
+          const rawCreator = (v.creator_username || '').toLowerCase();
+          const mappedCreator = aliasToPrimaryMap.get(rawCreator) || rawCreator;
+
           if (!orgUidMap.has(uid)) {
             orgUidMap.set(uid, {
-              creator: (v.creator_username || '').toLowerCase(),
+              creator: mappedCreator,
               views: Number(v.video_views || 0),
               likes: Number(v.video_likes || 0),
               contentType: (v.content_type || 'video').toLowerCase()
@@ -355,9 +378,11 @@ export default function CampaignPerformaClient({ campaignId }: { campaignId: num
         // sama. Versi lama memakai `===` sehingga video dari sales tidak ikut
         // terhitung di TOTAL VT, padahal GMV-nya sudah terhitung (yang pakai
         // toLowerCase). Akibatnya GMV dan TOTAL VT tidak konsisten.
-        const autoSalesVideos = videoGmvData?.filter((v: any) =>
-          String(v.creator_username || '').toLowerCase() === usernameLower
-        ) || [];
+        const autoSalesVideos = videoGmvData?.filter((v: any) => {
+          const rawV = String(v.creator_username || '').toLowerCase();
+          const mappedV = aliasMap[rawV] || rawV;
+          return mappedV === usernameLower;
+        }) || [];
         const dbVideos = currentHasSkus ? (cc.videos || []).filter((v: any) => {
           if (campaignSkuIds.size > 0 && v.sku_id && !campaignSkuIds.has(v.sku_id)) return false;
           return true;

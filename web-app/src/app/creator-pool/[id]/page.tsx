@@ -51,6 +51,7 @@ export default function CreatorProfilePage() {
     liveSessions: any[];
     liveProducts: any[];
     organicVideos: any[];
+    aliases?: any[];
   } | null>(null);
 
   const fetchCreatorData = useCallback(async () => {
@@ -554,7 +555,17 @@ export default function CreatorProfilePage() {
                 <img src="/logo-tiktok-landscape-button.svg" alt="TikTok" className="h-[36px]" />
               </a>
             </div>
-            <p className="text-slate-500">{creator.nama_asli || 'Nama asli belum diisi'}</p>
+            {localData?.aliases && localData.aliases.filter((a: any) => !a.is_primary).length > 0 && (
+              <div className="flex items-center gap-1.5 mt-1 text-xs text-slate-500 flex-wrap">
+                <span className="font-semibold text-slate-600">Username Sebelumnya:</span>
+                {localData.aliases.filter((a: any) => !a.is_primary).map((a: any, idx: number) => (
+                  <span key={idx} className="bg-slate-100 text-slate-700 font-medium px-2 py-0.5 rounded border border-slate-200" title={a.notes || undefined}>
+                    @{a.alias_username}
+                  </span>
+                ))}
+              </div>
+            )}
+            <p className="text-slate-500 mt-0.5">{creator.nama_asli || 'Nama asli belum diisi'}</p>
           </div>
         </div>
         <div className="ml-auto flex gap-2">

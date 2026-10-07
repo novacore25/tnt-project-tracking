@@ -157,3 +157,36 @@ Berdasarkan diskusi dan keputusan owner terkait alur review pembayaran kreator:
      * **UI (`BatchDetail.tsx`):** Tombol Edit (pensil) dan Hapus (tong sampah) hanya muncul jika `canEditItem(item)` bernilai true (belum disetujui Manager). Item yang sudah disetujui menampilkan ikon gembok `Terkunci`.
      * **Server Action (`paymentActions.ts`):** `updatePaymentItem` dan `deletePaymentItem` memvalidasi status batch dan item secara ketat di database. Jika item sudah berstatus disetujui atau batch telah melaju ke tahap Executive/Finance/Paid, request ditolak dengan pesan error yang jelas.
 
+
+---
+
+## 5. Solusi Multi-Handle Kreator (Pergantian Username TikTok) & Kasus Nyata `snhabibah`
+
+### A. Masalah & Latar Belakang
+* Tim operasional melaporkan ketidakcocokan data kreator: `@snhabibah10` dan `@snhabibah_` adalah kreator yang sama yang berganti username TikTok.
+* Akibat pergantian handle ini:
+  1. Di **Campaign 56 (Zeluxe)**: PIC meng-approve `@snhabibah10` (0 video), sementara 3 video terupload masuk di baris `@snhabibah_` yang statusnya `not_approved`. Dampaknya: 3 video tersebut tertahan di section *Sisa ber-Video (Belum Approved)* dan GMV-nya dianggap Unattributed.
+  2. Di **Campaign 54 (MD Glow)**: Muncul 2 baris terpisah untuk satu kreator yang sama (`snhabibah10` dan `snhabibah_`), keduanya berstatus `approved`.
+  3. Data cadangan manual Januari–Maret mencatat username lama, sedangkan data API/impor terbaru mencatat username baru.
+
+### B. Solusi Arsitektur
+1. **Tabel Master `creator_aliases`:**
+   * Menyimpan mapping `creator_id` ke seluruh `alias_username` yang pernah dipakai (baik username aktif `is_primary = true` maupun username historis `is_primary = false`).
+   * Unique constraint pada `LOWER(alias_username)`.
+2. **Integritas Raw Data TikTok:**
+   * Tabel `sales`, `organic_videos`, dan `live_sessions` **TIDAK diubah** demi menjaga integritas data audit trail TikTok asli.
+3. **Penyatuan Logika di Frontend & Backend:**
+   * `campaignPageActions.ts`: Mengambil relasi `creator_aliases` saat memuat data halaman performa.
+   * `PerformaClient.tsx`: Memetakan seluruh alias ke username utama (`aliasToPrimaryMap`). Otomatis menyatukan sales, GMV, dan views video organik/live dari username lama ke baris kreator username baru.
+   * `creatorActions.ts` (`fetchCreatorProfile`): Query performa kreator membaca semua varian alias melalui `WHERE LOWER(creator_username) IN (aliasList)`.
+   * `databaseActions.ts` (`updateCreatorAction`): Jika PIC/admin mengedit username kreator di profil, sistem otomatis mencatat username lama ke tabel `creator_aliases` sebagai alias non-primary.
+   * `/creator-pool/[id]`: Menampilkan username aktif di judul profil, disertai badge "Username Sebelumnya" untuk seluruh alias historis.
+
+### C. Eksekusi Migration VPS & Pembersihan Data `snhabibah`
+* Migration file: `20261008000000_create_creator_aliases_and_merge_snhabibah.sql` telah dijalankan di PostgreSQL VPS (`db_tnt_project_system`).
+* **Hasil Penggabungan:**
+  * ID master `12339` (`snhabibah_`) kini memiliki 3 alias terdaftar: `snhabibah_` (primary), `snhabibah10`, dan `snhabibah10_`.
+  * Duplikat master kreator ID `21835` dan `22814` dihapus bersih.
+  * Campaign 56 (Zeluxe): Baris duplikat kosong dihapus, status `snhabibah_` di-upgrade menjadi `approved`. 3 video (128 views) kini resmi terhitung ke kreator dan tidak lagi berstatus "Belum Approved".
+  * Campaign 54 (MD Glow): Baris duplikat dihapus, menyisakan 1 baris resmi `snhabibah_` dengan 3 video.
+  * Campaign 57 (GHANISKIN): Ditautkan secara benar ke master `12339`.

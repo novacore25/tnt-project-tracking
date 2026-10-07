@@ -130,6 +130,12 @@ export async function updateCreatorAction(id: number, updates: any) {
   const denied = await requireUserOrError();
   if (denied) return { success: false, error: denied.message } as any;
   try {
+    let oldUsername: string | null = null;
+    if (updates.username !== undefined) {
+      const cr = await db.execute(sql`SELECT username FROM creators WHERE id = ${id}`);
+      oldUsername = (cr as any[])[0]?.username || null;
+    }
+
     const sets: any[] = [];
     if (updates.username !== undefined) sets.push(sql`username = ${updates.username}`);
     if (updates.nama_asli !== undefined || updates.nama_lengkap !== undefined) {
@@ -156,6 +162,24 @@ export async function updateCreatorAction(id: number, updates: any) {
       WHERE id = ${id}
       RETURNING *
     `) as any[];
+
+    if (updates.username !== undefined && result && oldUsername && String(updates.username).toLowerCase() !== oldUsername.toLowerCase()) {
+      try {
+        await db.execute(sql`UPDATE creator_aliases SET is_primary = false WHERE creator_id = ${id}`);
+        await db.execute(sql`
+          INSERT INTO creator_aliases (creator_id, alias_username, is_primary, notes)
+          VALUES (${id}, ${oldUsername}, false, 'Username lama sebelum diganti')
+          ON CONFLICT (alias_username) DO NOTHING
+        `);
+        await db.execute(sql`
+          INSERT INTO creator_aliases (creator_id, alias_username, is_primary, notes)
+          VALUES (${id}, ${updates.username}, true, 'Username aktif')
+          ON CONFLICT (alias_username) DO UPDATE SET is_primary = true, creator_id = ${id}
+        `);
+      } catch (aliasErr) {
+        console.warn('Silent fallback for creator_aliases update on updateCreatorAction:', aliasErr);
+      }
+    }
 
     return { success: true, data: result };
   } catch (err: any) {

@@ -149,6 +149,17 @@ export async function fetchCreatorProfile(creatorId: number) {
   const creator = (crRows as any[])[0];
   if (!creator) return null;
 
+  const aliasRows = await db.execute(sql`
+    SELECT LOWER(alias_username) as alias, alias_username, is_primary, notes 
+    FROM creator_aliases 
+    WHERE creator_id = ${creatorId}
+  `).catch(() => []) as any[];
+
+  const aliasList = (aliasRows as any[]).map(a => a.alias).filter(Boolean);
+  if (!aliasList.includes(creator.username.toLowerCase())) {
+    aliasList.push(creator.username.toLowerCase());
+  }
+
   const [
     snapshots,
     contacts,
@@ -181,7 +192,7 @@ export async function fetchCreatorProfile(creatorId: number) {
     db.execute(sql`
       SELECT DISTINCT ON (content_uid) *
       FROM organic_videos
-      WHERE LOWER(creator_username) = LOWER(${creator.username})
+      WHERE LOWER(creator_username) IN ${sqlInList(aliasList)}
       ORDER BY content_uid, created_at DESC, id DESC
     `).catch((err) => {
       console.error('fetchCreatorProfile: query organic_videos gagal:', err);
@@ -192,7 +203,7 @@ export async function fetchCreatorProfile(creatorId: number) {
     db.execute(sql`
       SELECT DISTINCT ON (livestream_room_id) *
       FROM live_sessions
-      WHERE LOWER(creator_username) = LOWER(${creator.username})
+      WHERE LOWER(creator_username) IN ${sqlInList(aliasList)}
       ORDER BY livestream_room_id, start_time DESC, id DESC
     `).catch((err) => {
       console.error('fetchCreatorProfile: query live_sessions gagal:', err);
@@ -205,7 +216,7 @@ export async function fetchCreatorProfile(creatorId: number) {
     // hasil query ini kosong. Error sengaja dicatat, tidak lagi diam-diam.
     db.execute(sql`
       SELECT * FROM sales
-      WHERE LOWER(creator_username) = LOWER(${creator.username})
+      WHERE LOWER(creator_username) IN ${sqlInList(aliasList)}
       ORDER BY tanggal DESC
       LIMIT 5000
     `).catch((err) => {
@@ -234,6 +245,7 @@ export async function fetchCreatorProfile(creatorId: number) {
 
   return {
     creator,
+    aliases: (aliasRows as any[]) || [],
     snapshots: (snapshots as unknown as any[]) || [],
     contacts: (contacts as unknown as any[]) || [],
     creatorNiches: (creatorNiches as unknown as any[]) || [],

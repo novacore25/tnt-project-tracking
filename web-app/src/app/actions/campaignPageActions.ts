@@ -347,7 +347,7 @@ export async function fetchDailyPerformancePageDataAction(campaignId: number) {
 // ============================================================
 export async function fetchPerformaPageFullDataAction(campaignId: number) {
   try {
-    const [campaignRes, conceptsRes, skusRes, ccRes, vidRes, salesRes, adsRes, orgRes] = await Promise.all([
+    const [campaignRes, conceptsRes, skusRes, ccRes, vidRes, salesRes, adsRes, orgRes, aliasesRes] = await Promise.all([
       db.execute(sql`SELECT * FROM campaigns WHERE id = ${campaignId} LIMIT 1`) as Promise<any[]>,
       db.execute(sql`
         SELECT cc.*, sk.nama_produk
@@ -391,6 +391,12 @@ export async function fetchPerformaPageFullDataAction(campaignId: number) {
         FROM organic_videos
         WHERE campaign_id = ${campaignId}
            OR (product_id IS NOT NULL AND product_id IN (SELECT product_id FROM skus WHERE campaign_id = ${campaignId} AND product_id IS NOT NULL))
+      `).catch(() => []) as Promise<any[]>,
+      db.execute(sql`
+        SELECT ca.creator_id, LOWER(ca.alias_username) as alias, c.username as primary_username
+        FROM creator_aliases ca
+        JOIN creators c ON ca.creator_id = c.id
+        WHERE ca.creator_id IN (SELECT creator_id FROM campaign_creators WHERE campaign_id = ${campaignId})
       `).catch(() => []) as Promise<any[]>
     ]);
 
@@ -402,6 +408,7 @@ export async function fetchPerformaPageFullDataAction(campaignId: number) {
     const sales = salesRes || [];
     const ads = adsRes || [];
     const organicVideos = orgRes || [];
+    const creatorAliases = aliasesRes || [];
 
     // Map videos
     const videosByCcId = new Map<number, any[]>();
@@ -432,7 +439,8 @@ export async function fetchPerformaPageFullDataAction(campaignId: number) {
       videos,
       sales,
       ads,
-      organicVideos
+      organicVideos,
+      creatorAliases
     };
   } catch (err: any) {
     console.error('fetchPerformaPageFullDataAction error:', err);
