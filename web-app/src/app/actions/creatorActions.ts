@@ -160,6 +160,14 @@ export async function fetchCreatorProfile(creatorId: number) {
     aliasList.push(creator.username.toLowerCase());
   }
 
+  const matchingCreatorRows = await db.execute(sql`
+    SELECT id FROM creators WHERE id = ${creatorId} OR LOWER(username) IN ${sqlInList(aliasList)}
+  `).catch(() => []) as any[];
+  const associatedCreatorIds = Array.from(new Set([
+    creatorId,
+    ...(matchingCreatorRows as any[]).map(r => Number(r.id)).filter(n => !isNaN(n))
+  ]));
+
   const [
     snapshots,
     contacts,
@@ -173,13 +181,13 @@ export async function fetchCreatorProfile(creatorId: number) {
     organicVideos,
     sales,
   ] = await Promise.all([
-    db.execute(sql`SELECT * FROM creator_snapshots WHERE creator_id = ${creatorId} ORDER BY tanggal_update DESC, id DESC`).catch(() => []),
-    db.execute(sql`SELECT * FROM creator_contacts WHERE creator_id = ${creatorId} ORDER BY id ASC`).catch(() => []),
-    db.execute(sql`SELECT * FROM creator_niches WHERE creator_id = ${creatorId} ORDER BY peringkat ASC`).catch(() => []),
-    db.execute(sql`SELECT * FROM creator_notes WHERE creator_id = ${creatorId} ORDER BY created_at DESC`).catch(() => []),
-    db.execute(sql`SELECT * FROM campaign_creators WHERE creator_id = ${creatorId} ORDER BY created_at DESC`).catch(() => []),
-    db.execute(sql`SELECT * FROM ads_performance WHERE creator_id = ${creatorId} ORDER BY tanggal DESC`).catch(() => []),
-    db.execute(sql`SELECT * FROM creator_address_book WHERE creator_id = ${creatorId} ORDER BY id DESC`).catch(() => []),
+    db.execute(sql`SELECT * FROM creator_snapshots WHERE creator_id IN ${sqlInList(associatedCreatorIds)} ORDER BY tanggal_update DESC, id DESC`).catch(() => []),
+    db.execute(sql`SELECT * FROM creator_contacts WHERE creator_id IN ${sqlInList(associatedCreatorIds)} ORDER BY id ASC`).catch(() => []),
+    db.execute(sql`SELECT * FROM creator_niches WHERE creator_id IN ${sqlInList(associatedCreatorIds)} ORDER BY peringkat ASC`).catch(() => []),
+    db.execute(sql`SELECT * FROM creator_notes WHERE creator_id IN ${sqlInList(associatedCreatorIds)} ORDER BY created_at DESC`).catch(() => []),
+    db.execute(sql`SELECT * FROM campaign_creators WHERE creator_id IN ${sqlInList(associatedCreatorIds)} ORDER BY created_at DESC`).catch(() => []),
+    db.execute(sql`SELECT * FROM ads_performance WHERE creator_id IN ${sqlInList(associatedCreatorIds)} ORDER BY tanggal DESC`).catch(() => []),
+    db.execute(sql`SELECT * FROM creator_address_book WHERE creator_id IN ${sqlInList(associatedCreatorIds)} ORDER BY id DESC`).catch(() => []),
     db.execute(sql`SELECT * FROM audit_logs WHERE table_name = 'creators' AND record_id = ${creatorId.toString()} ORDER BY created_at DESC LIMIT 100`).catch(() => []),
     // organic_videos memuat satu baris per (content_uid, tanggal import). Video
     // yang sama bisa muncul puluhan baris (terverifikasi 1 Okt 2026: satu

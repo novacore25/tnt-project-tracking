@@ -88,6 +88,15 @@ export default function CreatorProfilePage() {
     ratecard: acc.ratecard ?? curr.ratecard,
     gmv_30d: acc.gmv_30d ?? curr.gmv_30d,
   }), { followers: null, tier: null, audience_age: null, level: null, ratecard: null, gmv_30d: null } as any);
+
+  const latestCampaignPrice = useMemo(() => {
+    if (!localData?.ccs || localData.ccs.length === 0) return null;
+    const sortedCcs = [...localData.ccs].sort((a: any, b: any) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+    const found = sortedCcs.find((c: any) => c.price !== null && c.price !== undefined);
+    return found ? toNum(found.price) : null;
+  }, [localData?.ccs]);
+
+  const effectiveRatecard = mergedProfile.ratecard != null ? toNum(mergedProfile.ratecard) : latestCampaignPrice;
   
   const tier = mergedProfile.tier || 'Unknown';
   
@@ -999,7 +1008,12 @@ export default function CreatorProfilePage() {
                 </div>
                 <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 flex flex-col justify-center items-center text-center">
                   <p className="text-sm text-slate-500 mb-1">Ratecard</p>
-                  <p className="font-bold text-lg">{mergedProfile.ratecard === 0 ? 'Barter' : (mergedProfile.ratecard ? `Rp ${mergedProfile.ratecard.toLocaleString()}` : '-')}</p>
+                  <p className="font-bold text-lg">
+                    {effectiveRatecard === 0 ? 'Barter' : (effectiveRatecard ? `Rp ${Math.round(toNum(effectiveRatecard)).toLocaleString('id-ID')}` : '-')}
+                  </p>
+                  {mergedProfile.ratecard == null && latestCampaignPrice !== null && (
+                    <span className="text-[10px] text-slate-400 mt-0.5">(Nego Terakhir)</span>
+                  )}
                 </div>
               </div>
 
@@ -1011,11 +1025,12 @@ export default function CreatorProfilePage() {
                       .sort((a: any, b: any) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
                       .map((cc: any) => {
                       const campaign = campaigns.find(c => c.id === cc.campaign_id);
+                      const priceNum = toNum(cc.price);
                       return (
                         <div key={cc.id} className="flex justify-between items-center text-sm p-2 border border-slate-100 rounded-lg bg-slate-50">
                           <span className="font-medium text-slate-700">{campaign?.nama || `Campaign #${cc.campaign_id}`}</span>
                           <span className="font-bold text-slate-900">
-                            {cc.price === 0 ? 'Barter' : (cc.price ? `Rp ${Number(cc.price).toLocaleString()}` : 'Belum Set')}
+                            {priceNum === 0 ? 'Barter' : (priceNum > 0 ? `Rp ${Math.round(priceNum).toLocaleString('id-ID')}` : 'Belum Set')}
                           </span>
                         </div>
                       )
