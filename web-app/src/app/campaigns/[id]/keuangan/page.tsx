@@ -201,6 +201,9 @@ function CampaignKeuanganContent() {
   // Berapa dari ratecard belum dibayar yang saat ini sedang dalam proses batch (pending)
   const totalPendingNominal = sumNum(approvedCreators, c => c.pendingNominal);
 
+  // Ratecard yang belum diajukan sama sekali ke dalam batch apa pun (murni antrean)
+  const totalBelumDiajukanNominal = Math.max(0, totalRatecardBelumDibayar - totalPendingNominal);
+
   // Total Komitmen Keseluruhan (Realisasi Kas Paid + Sisa Ratecard Belum Dibayar)
   const totalKomitmenKreator = totalTerpakai + totalRatecardBelumDibayar;
 
@@ -217,6 +220,8 @@ function CampaignKeuanganContent() {
 
   // Creator Counts
   const unpaidCreatorsCount = approvedCreators.filter(c => toNum(c.unpaidNominal) > 0).length;
+  const pendingCreatorsCount = approvedCreators.filter(c => toNum(c.pendingNominal) > 0).length;
+  const unsubmittedCreatorsCount = approvedCreators.filter(c => toNum(c.unpaidNominal) > toNum(c.pendingNominal)).length;
   const fullyPaidCreatorsCount = approvedCreators.filter(c => c.isFullyPaid || (toNum(c.price) > 0 && toNum(c.unpaidNominal) === 0)).length;
 
   // ===================== ADS CALCULATIONS =====================
@@ -312,7 +317,7 @@ function CampaignKeuanganContent() {
                 </div>
               </div>
 
-              {/* Card 3: Ratecard Belum Dibayar (New Card) */}
+              {/* Card 3: Ratecard Belum Dibayar (Komitmen Berjalan & Rincian Pengajuan) */}
               <div className="bg-white border border-slate-200/90 rounded-2xl p-5 shadow-xs hover:shadow-sm transition-all flex flex-col justify-between">
                 <div>
                   <div className="flex justify-between items-start">
@@ -326,23 +331,47 @@ function CampaignKeuanganContent() {
                   <h3 className="text-[22px] sm:text-[24px] font-extrabold text-amber-700 tracking-tight mt-1">
                     Rp {totalRatecardBelumDibayar.toLocaleString('id-ID')}
                   </h3>
-                </div>
-                <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
-                  <div className="text-slate-600 truncate mr-1">
+                  <div className="text-[11px] text-slate-500 mt-0.5">
                     <span className="font-bold text-amber-800">{unpaidCreatorsCount}</span> kreator belum lunas
-                    {totalPendingNominal > 0 && (
-                      <span className="text-slate-400 block text-[10px]">
-                        ({formatRupiah(totalPendingNominal)} dalam batch)
-                      </span>
-                    )}
                   </div>
+                </div>
+
+                {/* Sub-Breakdown: Belum Diajukan vs Sudah Diajukan */}
+                <div className="mt-3 pt-2.5 border-t border-slate-100 space-y-1.5">
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    {/* 1. Belum Diajukan (Antrean) */}
+                    <div className="bg-amber-50/70 border border-amber-100/90 rounded-lg p-2">
+                      <div className="text-[10px] font-semibold text-amber-800 uppercase tracking-wider flex items-center justify-between">
+                        <span>Belum Diajukan</span>
+                        <span className="text-amber-600 font-bold">{unsubmittedCreatorsCount}</span>
+                      </div>
+                      <div className="font-bold text-amber-900 text-xs sm:text-[13px] mt-0.5 truncate" title={`Rp ${totalBelumDiajukanNominal.toLocaleString('id-ID')}`}>
+                        Rp {totalBelumDiajukanNominal.toLocaleString('id-ID')}
+                      </div>
+                    </div>
+
+                    {/* 2. Sudah Diajukan (Dalam Batch) */}
+                    <div className="bg-blue-50/70 border border-blue-100/90 rounded-lg p-2">
+                      <div className="text-[10px] font-semibold text-blue-800 uppercase tracking-wider flex items-center justify-between">
+                        <span>Sudah Diajukan</span>
+                        <span className="text-blue-600 font-bold">{pendingCreatorsCount}</span>
+                      </div>
+                      <div className="font-bold text-blue-900 text-xs sm:text-[13px] mt-0.5 truncate" title={`Rp ${totalPendingNominal.toLocaleString('id-ID')}`}>
+                        Rp {totalPendingNominal.toLocaleString('id-ID')}
+                      </div>
+                    </div>
+                  </div>
+
                   {hasAccess && (
-                    <button 
-                      onClick={() => setViewState('unpaid_creators')}
-                      className="text-[11px] font-bold text-blue-600 hover:text-blue-800 hover:underline shrink-0 flex items-center gap-0.5"
-                    >
-                      Lihat <ChevronRight className="w-3 h-3" />
-                    </button>
+                    <div className="flex justify-between items-center text-[11px] pt-0.5">
+                      <span className="text-[10px] text-slate-400">Dalam proses batch berjalan</span>
+                      <button 
+                        onClick={() => setViewState('unpaid_creators')}
+                        className="font-bold text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-0.5"
+                      >
+                        Buka Antrean <ChevronRight className="w-3 h-3" />
+                      </button>
+                    </div>
                   )}
                 </div>
               </div>
