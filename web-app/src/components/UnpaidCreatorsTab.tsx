@@ -39,8 +39,8 @@ export function UnpaidCreatorsTab({ campaignId, onSuccess }: { campaignId: numbe
           return (b.id || 0) - (a.id || 0);
         });
         const latestSnapshot = sortedSnaps[0] || { followers: 0, gmv_30d: 0, ratecard: 0 };
-        const validSnap = sortedSnaps.find((s: any) => Number(s.ratecard || 0) > 0);
-        const effectivePrice = Number(cc.price || 0) || Number(validSnap?.ratecard || 0);
+        // Ratecard khusus campaign ini SELALU murni dari cc.price (sesuai yang di-input di Listing)
+        const effectivePrice = Number(cc.price || 0);
         
         // Content types (for display badges)
         const rawContentType = (cc.content_type || '').toLowerCase();

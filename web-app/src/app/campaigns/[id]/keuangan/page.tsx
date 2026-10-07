@@ -107,19 +107,8 @@ function CampaignKeuanganContent() {
           h.batch_status !== 'cancelled'
         );
         
-        // Cek ratecard dari campaign_creators.price, jika 0/kosong fallback ke snapshot terbaru
-        let effectivePrice = toNum(cc.price || 0);
-        if (!effectivePrice && cc.creators?.creator_snapshots?.length > 0) {
-          const sortedSnaps = [...cc.creators.creator_snapshots].sort((a: any, b: any) => {
-            const tDiff = new Date(b.tanggal_update || 0).getTime() - new Date(a.tanggal_update || 0).getTime();
-            if (tDiff !== 0) return tDiff;
-            return (b.id || 0) - (a.id || 0);
-          });
-          const validSnap = sortedSnaps.find((s: any) => toNum(s.ratecard || 0) > 0);
-          if (validSnap) {
-            effectivePrice = toNum(validSnap.ratecard || 0);
-          }
-        }
+        // Ratecard untuk campaign ini SELALU murni dari campaign_creators.price (sesuai yang di-input di Listing)
+        const effectivePrice = toNum(cc.price || 0);
 
         // Nominal yang sudah lunas dibayar (status 'paid')
         const paidNominal = sumNum(history.filter(h => h.status === 'paid'), h => h.nominal);
