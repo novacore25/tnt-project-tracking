@@ -8,7 +8,7 @@ import { formatAbbreviated } from "@/utils/formatters";
 
 
 
-import { ArrowLeft, UserPlus, Phone, CreditCard, Activity, ArrowUpDown, ChevronDown, ChevronRight, Edit, Save, Plus, X, Trash2, Check, Video, TrendingUp, DollarSign, Calendar, Users, Briefcase, ExternalLink, ArrowRight, TrendingDown, AlertTriangle, CheckCircle2, Tag } from "lucide-react";
+import { ArrowLeft, UserPlus, Phone, CreditCard, Activity, ArrowUpDown, ChevronDown, ChevronRight, Edit, Save, Plus, X, Trash2, Check, Video, TrendingUp, DollarSign, Calendar, Users, Briefcase, ExternalLink, ArrowRight, TrendingDown, AlertTriangle, CheckCircle2 } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState, ReactNode, useEffect, useRef, useCallback, useMemo } from "react";
@@ -100,6 +100,15 @@ export default function CreatorProfilePage() {
 
   const notes = localData?.notes?.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()) || [];
   
+  const nonPrimaryAliases = useMemo(() => {
+    const list = Array.isArray(localData?.aliases) ? localData.aliases : [];
+    const activeUsername = (creator?.username || '').toLowerCase();
+    return list.filter((a: any) => {
+      const aliasName = (a?.alias_username || '').toLowerCase();
+      return Boolean(aliasName && aliasName !== activeUsername && !a?.is_primary);
+    });
+  }, [localData?.aliases, creator?.username]);
+
   // States
   const [tiktokEmbedOpen, setTiktokEmbedOpen] = useState(true);
   const tiktokRef = useRef<HTMLDivElement>(null);
@@ -626,10 +635,10 @@ export default function CreatorProfilePage() {
               </a>
             </div>
             <div className="flex items-center gap-2 mt-1 flex-wrap">
-              {localData?.aliases && localData.aliases.filter((a: any) => !a.is_primary).length > 0 && (
+              {nonPrimaryAliases.length > 0 && (
                 <div className="flex items-center gap-1.5 text-xs text-slate-500 flex-wrap">
                   <span className="font-semibold text-slate-600">Username Sebelumnya:</span>
-                  {localData.aliases.filter((a: any) => !a.is_primary).map((a: any, idx: number) => (
+                  {nonPrimaryAliases.map((a: any, idx: number) => (
                     <span key={idx} className="bg-slate-100 text-slate-700 font-medium px-2 py-0.5 rounded border border-slate-200" title={a.notes || undefined}>
                       @{a.alias_username}
                     </span>
@@ -642,7 +651,7 @@ export default function CreatorProfilePage() {
                 className="text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-2 py-0.5 rounded flex items-center gap-1 transition-colors"
                 title="Kelola riwayat username atau tambahkan alias baru"
               >
-                <Tag className="w-3 h-3" />
+                <Users className="w-3 h-3" />
                 Kelola Alias
               </button>
             </div>
@@ -792,8 +801,8 @@ export default function CreatorProfilePage() {
             <DialogContent className="max-w-lg">
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2">
-                  <Tag className="w-5 h-5 text-indigo-600" />
-                  Kelola Username & Alias (@{creator?.username})
+                  <Users className="w-5 h-5 text-indigo-600" />
+                  Kelola Username & Alias (@{creator?.username || ''})
                 </DialogTitle>
               </DialogHeader>
               <div className="space-y-4 py-2">
@@ -810,7 +819,7 @@ export default function CreatorProfilePage() {
                     {/* Username Utama (Master) */}
                     <div className="p-2.5 flex items-center justify-between bg-white text-sm">
                       <div className="flex items-center gap-2">
-                        <span className="font-semibold text-slate-800">@{creator?.username}</span>
+                        <span className="font-semibold text-slate-800">@{creator?.username || ''}</span>
                         <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full border border-emerald-200">
                           Utama (Aktif)
                         </span>
@@ -819,43 +828,41 @@ export default function CreatorProfilePage() {
                     </div>
 
                     {/* Alias-alias non-primary */}
-                    {localData?.aliases
-                      ?.filter((a: any) => a.alias_username.toLowerCase() !== creator?.username.toLowerCase() && !a.is_primary)
-                      .map((a: any, idx: number) => (
-                        <div key={idx} className="p-2.5 flex items-center justify-between bg-white text-sm hover:bg-slate-50 transition-colors">
-                          <div className="space-y-0.5 pr-2">
-                            <div className="flex items-center gap-2">
-                              <span className="font-medium text-slate-700">@{a.alias_username}</span>
-                              <span className="text-[10px] bg-slate-100 text-slate-600 font-medium px-1.5 py-0.5 rounded border border-slate-200">
-                                Alias
-                              </span>
-                            </div>
-                            {a.notes && <p className="text-xs text-slate-500">{a.notes}</p>}
+                    {nonPrimaryAliases.map((a: any, idx: number) => (
+                      <div key={idx} className="p-2.5 flex items-center justify-between bg-white text-sm hover:bg-slate-50 transition-colors">
+                        <div className="space-y-0.5 pr-2">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-slate-700">@{a.alias_username}</span>
+                            <span className="text-[10px] bg-slate-100 text-slate-600 font-medium px-1.5 py-0.5 rounded border border-slate-200">
+                              Alias
+                            </span>
                           </div>
-                          <div className="flex items-center gap-1.5 flex-shrink-0">
-                            <button
-                              type="button"
-                              onClick={() => handleSetPrimaryAlias(a.alias_username)}
-                              disabled={aliasBusy}
-                              className="text-xs text-indigo-600 hover:text-indigo-800 font-medium px-2 py-1 rounded hover:bg-indigo-50 border border-slate-200 hover:border-indigo-200 transition-colors"
-                              title="Jadikan sebagai username utama"
-                            >
-                              Jadikan Utama
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveAlias(a.alias_username)}
-                              disabled={aliasBusy}
-                              className="text-xs text-red-500 hover:text-red-700 p-1.5 rounded hover:bg-red-50 transition-colors"
-                              title="Hapus alias ini"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
+                          {a.notes && <p className="text-xs text-slate-500">{a.notes}</p>}
                         </div>
-                      ))}
+                        <div className="flex items-center gap-1.5 flex-shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => handleSetPrimaryAlias(a.alias_username)}
+                            disabled={aliasBusy}
+                            className="text-xs text-indigo-600 hover:text-indigo-800 font-medium px-2 py-1 rounded hover:bg-indigo-50 border border-slate-200 hover:border-indigo-200 transition-colors"
+                            title="Jadikan sebagai username utama"
+                          >
+                            Jadikan Utama
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveAlias(a.alias_username)}
+                            disabled={aliasBusy}
+                            className="text-xs text-red-500 hover:text-red-700 p-1.5 rounded hover:bg-red-50 transition-colors"
+                            title="Hapus alias ini"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
 
-                    {(!localData?.aliases || localData.aliases.filter((a: any) => !a.is_primary).length === 0) && (
+                    {nonPrimaryAliases.length === 0 && (
                       <div className="p-3 text-center text-xs text-slate-400">
                         Belum ada username alias tambahan.
                       </div>
