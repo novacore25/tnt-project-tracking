@@ -46,6 +46,18 @@ type SkuInfo = { id: string; name: string };
 type CreatorGMV = { username: string; gmv: number };
 type CreatorAwareness = { username: string; views: number; likes: number; count: number };
 
+export type InvalidRowDetail = {
+  rowNumber: number;
+  orderId: string;
+  creatorUsername: string;
+  productName: string;
+  productId: string;
+  gmv: number;
+  quantity: number;
+  tanggal: string;
+  issue: string;
+};
+
 type PreviewStats = {
   totalRows: number;
   validRows: number;
@@ -63,6 +75,7 @@ type PreviewStats = {
   missingCampaignRows: number;
   missingCreatorRows: number;
   campaignBreakdown: { name: string; gmv: number; videos: number; live: number }[];
+  invalidRows?: InvalidRowDetail[];
 };
 
 export default function OrganicImport({ mode = 'sales' }: { mode?: 'sales' | 'video' | 'live' }) {
@@ -71,6 +84,8 @@ export default function OrganicImport({ mode = 'sales' }: { mode?: 'sales' | 'vi
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState({ current: 0, total: 0 });
   const [previewPage, setPreviewPage] = useState(1);
+  const [skipIncompleteRows, setSkipIncompleteRows] = useState(true);
+  const [showInvalidRowsTable, setShowInvalidRowsTable] = useState(false);
   
   // ================= COLUMN MAPPING STATES =================
   const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
@@ -281,8 +296,9 @@ export default function OrganicImport({ mode = 'sales' }: { mode?: 'sales' | 'vi
     }
   };
 
-  const generatePreview = async () => {
+  const generatePreview = async (overrideSkipIncomplete?: boolean) => {
     setLoading(true);
+    const shouldSkip = overrideSkipIncomplete !== undefined ? overrideSkipIncomplete : skipIncompleteRows;
     // We already parsed the data and have mapping
     const data = parsedData;
     const isSalesFormat = mode === 'sales';
@@ -307,7 +323,7 @@ export default function OrganicImport({ mode = 'sales' }: { mode?: 'sales' | 'vi
 
     localCampaigns.forEach(c => {
       if (c.tiktok_campaign_ids && c.tiktok_campaign_ids.length > 0) {
-        c.tiktok_campaign_ids.forEach(tid => {
+        c.tiktok_campaign_ids.forEach((tid: string) => {
           if (!tiktokToCampaigns[tid]) tiktokToCampaigns[tid] = [];
           tiktokToCampaigns[tid].push(c.id);
         });
@@ -338,6 +354,7 @@ export default function OrganicImport({ mode = 'sales' }: { mode?: 'sales' | 'vi
     let totalAwarenessLikes = 0;
     let missingCampaignRows = 0;
     let missingCreatorRows = 0;
+    const invalidRowsList: InvalidRowDetail[] = [];
     
     const uniqueCreators = new Set<string>();
     const creatorGmvMap = new Map<string, number>();
@@ -407,7 +424,8 @@ export default function OrganicImport({ mode = 'sales' }: { mode?: 'sales' | 'vi
       }
     };
 
-    for (const row of validRows) {
+    for (let rowIndex = 0; rowIndex < validRows.length; rowIndex++) {
+      const row = validRows[rowIndex];
       let isRefund = false;
       let rawProductId = '';
       let productName = '';
@@ -455,6 +473,9 @@ export default function OrganicImport({ mode = 'sales' }: { mode?: 'sales' | 'vi
         
         const rawUsername = row[columnMapping['creator_username']]?.toString().trim() || '';
         creatorUsername = rawUsername.replace('@', '').toLowerCase();
+        if (creatorUsername === '-' || creatorUsername === '--' || creatorUsername === 'n/a' || creatorUsername === 'null' || creatorUsername === 'undefined') {
+          creatorUsername = '';
+        }
         
         contentUid = row[columnMapping['content_id']]?.toString().trim() || '';
         contentType = row[columnMapping['content_type']]?.toString().trim() || 'Video';
@@ -483,6 +504,9 @@ export default function OrganicImport({ mode = 'sales' }: { mode?: 'sales' | 'vi
         shopCode = row[columnMapping['shop_code']]?.toString().trim() || '';
         const rawUsername = row[columnMapping['creator_username']]?.toString().trim() || '';
         creatorUsername = rawUsername.replace('@', '').toLowerCase();
+        if (creatorUsername === '-' || creatorUsername === '--' || creatorUsername === 'n/a' || creatorUsername === 'null' || creatorUsername === 'undefined') {
+          creatorUsername = '';
+        }
         contentUid = row[columnMapping['content_uid']]?.toString().trim() || '';
         tanggal = parseTikTokDate(row[columnMapping['post_time']]?.toString().trim() || '');
         contentType = 'Livestream';
@@ -504,6 +528,9 @@ export default function OrganicImport({ mode = 'sales' }: { mode?: 'sales' | 'vi
         shopCode = row[columnMapping['shop_code']]?.toString().trim() || '';
         const rawUsername = row[columnMapping['creator_username']]?.toString().trim() || '';
         creatorUsername = rawUsername.replace('@', '').toLowerCase();
+        if (creatorUsername === '-' || creatorUsername === '--' || creatorUsername === 'n/a' || creatorUsername === 'null' || creatorUsername === 'undefined') {
+          creatorUsername = '';
+        }
         contentUid = row[columnMapping['content_uid']]?.toString().trim() || '';
         tanggal = parseTikTokDate(row[columnMapping['post_time']]?.toString().trim() || '');
         contentType = 'Video';
@@ -514,6 +541,40 @@ export default function OrganicImport({ mode = 'sales' }: { mode?: 'sales' | 'vi
         durationStr = row[columnMapping['duration_str']]?.toString().trim() || '';
         const rpmStr = row[columnMapping['video_product_rpm']]?.toString() || '0';
         videoProductRpm = Math.round(parseFloat(rpmStr.replace(/[^0-9.-]+/g, '')) || 0);
+      }
+
+      // Verifikasi kelengkapan satu baris (Order ID + Creator Username + Product)
+      const orderIdRaw = row[columnMapping['order_id']]?.toString().trim() || '';
+      const isOrderMissingOrTotal = !orderIdRaw || orderIdRaw.toLowerCase().includes('total') || orderIdRaw.toLowerCase().includes('summary');
+      const isCreatorMissing = !creatorUsername;
+
+      let rowIssue = '';
+      if (isSalesFormat) {
+        if (isCreatorMissing) rowIssue = 'Username Kreator Kosong';
+        else if (isOrderMissingOrTotal) rowIssue = 'Order ID Kosong / Baris Total';
+      } else {
+        if (isCreatorMissing) rowIssue = 'Username Kreator Kosong';
+        else if (!contentUid || contentUid === '-') rowIssue = 'Content / Video UID Kosong';
+      }
+
+      if (rowIssue) {
+        missingCreatorRows++;
+        invalidRowsList.push({
+          rowNumber: rowIndex + 2, // header di row 1
+          orderId: orderIdRaw || '(Kosong)',
+          creatorUsername: creatorUsername ? `@${creatorUsername}` : '(Kosong)',
+          productName: productName || 'Unknown Product',
+          productId: rawProductId || '-',
+          gmv: gmv,
+          quantity: quantity,
+          tanggal: tanggal,
+          issue: rowIssue
+        });
+
+        // JIKA shouldSkip AKTIF: JANGAN MASUKKAN BARIS INI KE PAYLOAD & JANGAN HITUNG GMV-NYA
+        if (shouldSkip) {
+          continue; // Lewati baris ini sepenuhnya dari payload import & perhitungan GMV!
+        }
       }
 
       // SMART ROUTING: Hierarchy 1: Product ID (Absolute Priority) -> Hierarchy 2: Campaign ID Fallback
@@ -665,7 +726,8 @@ export default function OrganicImport({ mode = 'sales' }: { mode?: 'sales' | 'vi
       dateRange: dateRangeStr,
       missingCampaignRows,
       missingCreatorRows,
-      campaignBreakdown: Array.from(campaignBreakdownMap.entries()).map(([name, data]) => ({ name, ...data })).sort((a, b) => b.gmv - a.gmv || b.videos - a.videos)
+      campaignBreakdown: Array.from(campaignBreakdownMap.entries()).map(([name, data]) => ({ name, ...data })).sort((a, b) => b.gmv - a.gmv || b.videos - a.videos),
+      invalidRows: invalidRowsList
     });
     setStep(2);
     setLoading(false);
@@ -897,14 +959,113 @@ export default function OrganicImport({ mode = 'sales' }: { mode?: 'sales' | 'vi
             )}
             
             {stats.missingCreatorRows > 0 && (
-              <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-start gap-4 shadow-sm shadow-red-100">
-                <AlertCircle className="w-6 h-6 text-red-600 shrink-0 mt-1" />
-                <div>
-                  <h4 className="font-bold text-red-900 mb-1">Peringatan: Creator Username Kosong!</h4>
-                  <p className="text-sm text-red-800">
-                    Ditemukan <b>{stats.missingCreatorRows} baris</b> data yang tidak memiliki Username Kreator. Data ini tidak akan masuk ke performa kreator manapun.
-                  </p>
+              <div className="bg-red-50 border border-red-200 rounded-xl p-5 shadow-sm shadow-red-100 space-y-4">
+                <div className="flex items-start gap-4">
+                  <AlertCircle className="w-6 h-6 text-red-600 shrink-0 mt-1" />
+                  <div className="flex-1">
+                    <h4 className="font-bold text-red-900 text-base mb-1">
+                      Verifikasi Integritas Baris: Ditemukan {stats.missingCreatorRows} Baris Tidak Lengkap!
+                    </h4>
+                    <p className="text-sm text-red-800 leading-relaxed">
+                      Sesuai standar akurasi pelacakan, setiap transaksi penjualan wajib memiliki <strong>Username Kreator + Order ID + Produk</strong> yang lengkap. 
+                      Baris tanpa kreator tidak dapat diatribusikan dan berpotensi berupa baris footer/subtotal Excel.
+                    </p>
+                  </div>
                 </div>
+
+                {/* Kontrol Opsi Lewati & Tombol Pratinjau */}
+                <div className="bg-white/90 border border-red-200 rounded-lg p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+                  <label className="flex items-center gap-2.5 cursor-pointer text-xs sm:text-sm font-medium text-slate-800 select-none">
+                    <input
+                      type="checkbox"
+                      checked={skipIncompleteRows}
+                      onChange={(e) => {
+                        const nextVal = e.target.checked;
+                        setSkipIncompleteRows(nextVal);
+                        generatePreview(nextVal);
+                      }}
+                      className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer"
+                    />
+                    <span>
+                      Otomatis lewati (skip) <b>{stats.missingCreatorRows} baris cacat</b> ini saat import (Sangat Direkomendasikan agar data 100% akurat)
+                    </span>
+                  </label>
+                  
+                  {stats.invalidRows && stats.invalidRows.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowInvalidRowsTable(!showInvalidRowsTable)}
+                      className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 shrink-0 self-start sm:self-center bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1 rounded transition-colors"
+                    >
+                      {showInvalidRowsTable ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                      {showInvalidRowsTable ? 'Tutup Pratinjau' : `Pratinjau ${stats.invalidRows.length} Baris Bermasalah`}
+                    </button>
+                  )}
+                </div>
+
+                {/* Tabel Pratinjau Baris Bermasalah */}
+                {showInvalidRowsTable && stats.invalidRows && stats.invalidRows.length > 0 && (
+                  <div className="bg-white rounded-lg border border-red-200 overflow-hidden text-xs shadow-inner animate-in fade-in duration-200">
+                    <div className="bg-red-100/60 px-3 py-2 border-b border-red-200 font-semibold text-red-900 flex items-center justify-between">
+                      <span className="flex items-center gap-1.5">
+                        <AlertCircle className="w-3.5 h-3.5 text-red-600" />
+                        Pratinjau Detail Baris yang Tidak Lengkap
+                      </span>
+                      <span className="text-[11px] font-normal text-red-700">
+                        Status: <b>{skipIncompleteRows ? 'Dilewati / Ditolak (Tidak Diimpor)' : 'Akan Dipaksa Diimpor'}</b>
+                      </span>
+                    </div>
+                    <div className="overflow-x-auto max-h-60">
+                      <table className="w-full text-left">
+                        <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold text-[11px]">
+                          <tr>
+                            <th className="p-2.5 w-24">Excel Baris</th>
+                            <th className="p-2.5">Order ID</th>
+                            <th className="p-2.5">Kreator</th>
+                            <th className="p-2.5">Produk / ID</th>
+                            <th className="p-2.5 text-right">Qty</th>
+                            <th className="p-2.5 text-right">GMV (Rp)</th>
+                            <th className="p-2.5">Diagnosa Masalah</th>
+                            <th className="p-2.5 text-center">Tindakan</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 text-[11px]">
+                          {stats.invalidRows.map((inv, idx) => (
+                            <tr key={idx} className="hover:bg-red-50/40 transition-colors">
+                              <td className="p-2.5 font-mono font-bold text-slate-700">Baris #{inv.rowNumber}</td>
+                              <td className="p-2.5 font-mono text-slate-900 font-medium">{inv.orderId}</td>
+                              <td className="p-2.5">
+                                <span className="px-2 py-0.5 rounded bg-rose-100 text-rose-700 font-bold font-mono text-[10px]">
+                                  {inv.creatorUsername}
+                                </span>
+                              </td>
+                              <td className="p-2.5 font-sans max-w-[180px] truncate" title={inv.productName}>
+                                <div className="truncate font-medium text-slate-800">{inv.productName}</div>
+                                <div className="text-[10px] text-slate-400 font-mono">{inv.productId}</div>
+                              </td>
+                              <td className="p-2.5 text-right font-medium text-slate-700">{inv.quantity}</td>
+                              <td className="p-2.5 text-right font-bold text-slate-900 font-mono">
+                                Rp {inv.gmv.toLocaleString('id-ID')}
+                              </td>
+                              <td className="p-2.5 font-medium text-rose-700">{inv.issue}</td>
+                              <td className="p-2.5 text-center">
+                                {skipIncompleteRows ? (
+                                  <span className="inline-flex px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-semibold text-[10px]">
+                                    Dilewati (Skip)
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex px-2 py-0.5 rounded bg-rose-100 text-rose-800 font-semibold text-[10px]">
+                                    Akan Diimpor
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
