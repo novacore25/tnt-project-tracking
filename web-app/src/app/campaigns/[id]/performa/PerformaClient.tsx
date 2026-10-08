@@ -1118,7 +1118,7 @@ export default function CampaignPerformaClient({ campaignId }: { campaignId: num
                 Rp {revenuePerActiveCreator.toLocaleString()}
               </h4>
               <p className="text-[11px] text-text-soft mt-[2px]">
-                Dari {activeApprovedCreatorsCount} kreator upload video
+                Rata-rata performa omzet per kreator aktif
               </p>
             </div>
             <div className="p-[10px] bg-blue-50 text-blue-600 rounded-[10px]"><Users className="w-5 h-5" /></div>

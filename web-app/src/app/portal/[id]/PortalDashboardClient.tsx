@@ -939,7 +939,7 @@ export default function PortalDashboardClient({ data, campaignId }: { data: any,
                         Rp {(metrics?.revenuePerActiveCreator || 0).toLocaleString()}
                       </h4>
                       <p className="text-[11px] text-slate-500 mt-[2px]">
-                        Dihitung dari {metrics?.activeCreatorsCount || 0} kreator yang sudah upload video
+                        Rata-rata performa omzet per kreator aktif
                       </p>
                     </div>
                     <div className="p-[10px] bg-blue-50 text-blue-600 rounded-[10px]"><Users className="w-5 h-5" /></div>

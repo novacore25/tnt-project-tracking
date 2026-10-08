@@ -45,3 +45,16 @@ Atas arahan user untuk kebutuhan presentasi klien:
 - Leaderboard Top 10 Creator interaktif 4 pilar di Portal Brand dan Internal Dashboard.
 - Winning Concept Showcase dengan link TikTok VT asli.
 - Validasi build: npm run build sukses 100% tanpa error.
+
+## 4. Penyelarasan Metrik Portal Brand vs Internal Dashboard (Pemisahan Livestream & Resolusi Alias Kreator)
+
+- **Audit Discrepancy Metrik Campaign 41 (MS GLOW):**
+  1. **Like Engagement Rate (409.92% vs 2.25%)**:
+     - *Akar Masalah*: Di `portalActions.ts`, akumulasi `calcTotalViews` & `calcTotalLikes` dieksekusi untuk semua jenis konten termasuk livestream. Campaign 41 memiliki 1 sesi live dengan 5,2 juta likes, sehingga likes di portal melonjak ke 5.238.148 likes dan Like ER menjadi 409.92%. Sedangkan di internal, likes live tidak dimasukkan ke total likes awareness video (12.758 likes / 566K views = 2.25%).
+     - *Solusi*: Akumulasi views dan likes video di `portalActions.ts` diisolasi hanya untuk konten non-livestream (`!isLive`).
+  2. **Revenue per Active Creator (Rp 172.578 vs Rp 176.736 | 170 vs 166 kreator)**:
+     - *Akar Masalah*: Di internal, alias kreator dipetakan lewat tabel `creator_aliases`. Di portal brand sebelumnya belum ada lookup alias, sehingga 4 alias username dihitung sebagai kreator terpisah (170 kreator vs 166 kreator di internal).
+     - *Solusi*: Ditambahkan query `creator_aliases` di `portalActions.ts` dan pemetaan `aliasToPrimaryMap` pada data penjualan dan video organik.
+  3. **Penyempurnaan Subtitle Card UI**:
+     - Subtitle kartu "Revenue per Active Creator" di Portal Brand (`PortalDashboardClient.tsx`) dan Internal (`PerformaClient.tsx`) diubah menjadi *"Rata-rata performa omzet per kreator aktif"* (menghilangkan penyebutan eksplisit jumlah kreator yang sudah upload video).
+- **Validasi Teknis**: `next build` lolos 100% dalam 10.2 detik tanpa error.

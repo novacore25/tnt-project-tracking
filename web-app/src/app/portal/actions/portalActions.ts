@@ -63,7 +63,8 @@ export async function getPortalData(campaignId: number) {
     samplesRes,
     schedulesRes,
     liveSessionsRes,
-    conceptsRes
+    conceptsRes,
+    aliasesRes
   ] = await Promise.all([
     // 1. SKUs
     db.execute(sql`
@@ -125,6 +126,7 @@ export async function getPortalData(campaignId: number) {
       SELECT tanggal, gmv, quantity, creator_username, content_uid, content_type, product_id, sku_id
       FROM sales
       WHERE campaign_id = ${campaignId}
+         OR (product_id IS NOT NULL AND product_id IN (SELECT product_id FROM skus WHERE campaign_id = ${campaignId} AND product_id IS NOT NULL))
     `).catch(err => {
       console.error('Error fetching sales:', err);
       return [];
@@ -135,6 +137,7 @@ export async function getPortalData(campaignId: number) {
       SELECT id, content_uid, post_time, content_type, creator_username, video_views, video_likes, product_id, raw_data, duration_str
       FROM organic_videos
       WHERE campaign_id = ${campaignId}
+         OR (product_id IS NOT NULL AND product_id IN (SELECT product_id FROM skus WHERE campaign_id = ${campaignId} AND product_id IS NOT NULL))
     `).catch(err => {
       console.error('Error fetching organic_videos:', err);
       return [];
@@ -214,6 +217,17 @@ export async function getPortalData(campaignId: number) {
     `).catch(err => {
       console.error('Error fetching campaign_concepts:', err);
       return [];
+    }) as Promise<any[]>,
+
+    // 11. Creator Aliases
+    db.execute(sql`
+      SELECT ca.creator_id, LOWER(ca.alias_username) as alias, c.username as primary_username
+      FROM creator_aliases ca
+      JOIN creators c ON ca.creator_id = c.id
+      WHERE ca.creator_id IN (SELECT creator_id FROM campaign_creators WHERE campaign_id = ${campaignId})
+    `).catch(err => {
+      console.error('Error fetching creator_aliases:', err);
+      return [];
     }) as Promise<any[]>
   ]);
 
@@ -227,6 +241,7 @@ export async function getPortalData(campaignId: number) {
   const schedulesData = (schedulesRes as any[]) || [];
   const liveSessions = (liveSessionsRes as any[]) || [];
   const conceptsData = (conceptsRes as any[]) || [];
+  const creatorAliasesData = (aliasesRes as any[]) || [];
 
   const skuList = skusData.map((s: any) => String(s.product_id || '').trim()).filter(Boolean);
   const skuSet = new Set<string>(skuList);
@@ -245,6 +260,21 @@ export async function getPortalData(campaignId: number) {
       }
     }
   });
+
+  // Build alias-to-primary mapping so old usernames resolve to the current active username
+  const aliasToPrimaryMap = new Map<string, string>();
+  for (const a of creatorAliasesData) {
+    if (a.alias && a.primary_username) {
+      aliasToPrimaryMap.set(String(a.alias).toLowerCase().trim(), String(a.primary_username).toLowerCase().trim());
+    }
+  }
+
+  // Also ensure any alias of an approved creator is recognized as approved
+  for (const a of creatorAliasesData) {
+    if (a.alias && a.primary_username && approvedUsernames.has(String(a.primary_username).toLowerCase().trim())) {
+      approvedUsernames.add(String(a.alias).toLowerCase().trim());
+    }
+  }
 
   // Fast In-Memory Map of Creator Performance
   const creatorPerfMap = new Map<string, {
@@ -283,7 +313,8 @@ export async function getPortalData(campaignId: number) {
       const pidStr = String(s.product_id || '').trim();
       if (!skuSet.has(pidStr)) return;
 
-      const u = (s.creator_username || '').toLowerCase().trim();
+      const rawU = (s.creator_username || '').toLowerCase().trim();
+      const u = aliasToPrimaryMap.get(rawU) || rawU;
       const gmv = Number(s.gmv || 0);
       const qty = Number(s.quantity || 0);
       const cType = (s.content_type || '').toLowerCase();
@@ -309,7 +340,7 @@ export async function getPortalData(campaignId: number) {
         });
       }
 
-      if (approvedUsernames.has(u)) {
+      if (approvedUsernames.has(rawU) || approvedUsernames.has(u)) {
         calcOrganicGmv += gmv;
         totalItemsSold += qty;
         const perf = getOrCreatePerf(u);
@@ -330,7 +361,7 @@ export async function getPortalData(campaignId: number) {
       if (s.tanggal) {
         const monthStr = String(s.tanggal).substring(0, 7);
         if (!monthlyMap[monthStr]) monthlyMap[monthStr] = { gmvOrganic: 0, gmvAds: 0, videos: new Set(), videoCreators: new Set(), liveSessions: new Set() };
-        if (approvedUsernames.has(u)) {
+        if (approvedUsernames.has(rawU) || approvedUsernames.has(u)) {
           monthlyMap[monthStr].gmvOrganic += gmv;
         }
       }
@@ -348,13 +379,15 @@ export async function getPortalData(campaignId: number) {
       const uid = v.content_uid ? String(v.content_uid).trim() : '';
       if (!uid) return;
 
+      const rawCreator = (v.creator_username || '').toLowerCase().trim();
+      const mappedCreator = aliasToPrimaryMap.get(rawCreator) || rawCreator;
       const views = Number(v.video_views || 0);
       const likes = Number(v.video_likes || 0);
       const cType = (v.content_type || 'video').toLowerCase();
 
       if (!orgUidMap.has(uid)) {
         orgUidMap.set(uid, {
-          creator: (v.creator_username || '').toLowerCase().trim(),
+          creator: mappedCreator,
           views,
           likes,
           contentType: cType,
@@ -377,23 +410,24 @@ export async function getPortalData(campaignId: number) {
   const calcApprovedOrgVideoUids = new Set<string>();
 
   for (const [uid, v] of orgUidMap.entries()) {
-    if (v.contentType !== 'livestream' && v.contentType !== 'live') {
+    const isLive = v.contentType === 'livestream' || v.contentType === 'live';
+    if (!isLive) {
       calcUniqueVideos++;
       calcApprovedOrgVideoUids.add(uid);
+      calcTotalViews += v.views;
+      calcTotalLikes += v.likes;
     } else {
       calcUniqueLivestreams++;
     }
-    calcTotalViews += v.views;
-    calcTotalLikes += v.likes;
 
     if (v.creator) {
       const perf = getOrCreatePerf(v.creator);
-      perf.video_views += v.views;
-      perf.video_likes += v.likes;
-      if (v.contentType === 'livestream' || v.contentType === 'live') {
-        perf.live_uids.add(uid);
-      } else {
+      if (!isLive) {
+        perf.video_views += v.views;
+        perf.video_likes += v.likes;
         perf.video_uids.add(uid);
+      } else {
+        perf.live_uids.add(uid);
       }
     }
 
