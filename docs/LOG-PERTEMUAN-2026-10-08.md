@@ -219,3 +219,23 @@ Atas arahan user untuk kebutuhan presentasi klien:
 - **Hasil Verifikasi**:
   - `tsc --noEmit` & `npm run build` selesai 100% tanpa error (Turbopack, ~6.5 detik).
   - UI konsisten, elegan, dan siap digunakan oleh brand klien.
+
+## 15. Revisi Portal Brand: Split 2 Kolom (Top 10 Kiri & Winning Product Kanan) & Listing Kreator Approved-Only
+
+- **Permintaan Revisi User**:
+  1. Bagian **🏆 Top 10 Creator Performance** dan **🏆 Winning Product Performance & Creator Showcase** dijadikan **satu baris dua kolom berdampingan**:
+     - **Kolom Kiri**: `🏆 Top 10 Creator Performance` (dengan tab filter 4 pilar).
+     - **Kolom Kanan**: `🏆 Winning Product Performance & Creator Showcase` (dengan accordion bertingkat 3 level).
+  2. Pengecekan tab **Daftar Listing Kreator** di Portal Brand (`/portal/[id]/dashboard` tab Listing Kreator):
+     - Memastikan data akurat seperti di internal.
+     - **HANYA menampilkan kreator yang berstatus `approved`** (kreator pending/alternate tidak ditampilkan ke brand klien).
+- **Implementasi**:
+  1. `PortalDashboardClient.tsx`:
+     - Membungkus Top 10 Creator dan Winning Product dalam grid responsif 2 kolom: `grid grid-cols-1 xl:grid-cols-2 gap-6 items-start`.
+     - Filter `filteredListing` diperketat dengan kondisi `cc.approval === 'approved'`, sehingga hanya kreator approved yang tampil di tabel dan pagination.
+     - Export Excel Sheet 2 ("Listing Kreator") juga difilter `cc.approval === 'approved'` untuk konsistensi data unduhan.
+     - Header kartu Listing diperjelas menjadi *"Daftar Listing Kreator (Approved)"*.
+- **Hasil Verifikasi**:
+  - `npm run build` berhasil 100% (Turbopack, 14.3s).
+  - Data listing terverifikasi akurat dan hanya menampilkan kreator approved.
+
