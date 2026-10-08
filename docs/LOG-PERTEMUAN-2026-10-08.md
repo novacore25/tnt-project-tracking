@@ -190,3 +190,32 @@ Atas arahan user untuk kebutuhan presentasi klien:
 - **Hasil Verifikasi**:
   - `npm run build` sukses 100% (Turbopack, 13.5s).
   - Dokumentasi walkthrough dicatat di `walkthrough_split_winning_concept_dan_winning_product.md`.
+
+## 14. Portal Brand: Penyatuan Baris Metrik (4 Kolom) & Winning Product Performance & Creator Showcase (Full Width 1 Kolom)
+
+- **Latar Belakang & Permintaan User**:
+  - Menerapkan fitur Winning Product ke **Portal Brand** (`/portal/[id]/dashboard`) dengan konsep visual UI portal brand.
+  - Kartu **Total Item Sold** disatukan menjadi 1 baris bersama dengan:
+    1. **Total Item Sold**
+    2. **Revenue per Active Creator**
+    3. **Revenue per Video**
+    4. **Like Engagement Rate (ER)**
+    dalam layout responsif 4 kolom (`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4`).
+  - Bagian **Top 5 Product ID by GMV** digantikan dengan:
+    **🏆 Winning Product Performance & Creator Showcase** yang berukuran satu baris dan satu kolom penuh (`w-full`).
+  - Menerapkan **accordion bertingkat 3 level**:
+    - **Level 1 (Produk)**: Rank (`#1` emas), Nama Produk, Product ID, Total Kreator, Total VT, Items Sold pcs, Total GMV produk, dan tombol toggle accordion.
+    - **Level 2 (Kreator)**: Inisial avatar, `@username` (tautan TikTok), Tier badge, Items Sold pcs, GMV Produk, Views, dan tombol toggle accordion VT.
+    - **Level 3 (Video VT)**: Tautan TikTok "Buka VT", UID, Badge master konsep jika terhubung (`Konsep #X • Judul`), Tanggal posting, Views, Likes (ER%), GPM, dan GMV Video.
+- **Implementasi**:
+  1. `portalActions.ts`:
+     - Menghitung agregasi hierarkis `winningProducts` di server-side (berdasarkan data `skus`, `concepts`, `sales`, `organic_videos`, `manualVideos`, dan alias mapping).
+     - Menghormati aturan portal brand: menyembunyikan status `not_approved` dan mengutamakan kreator approved/pending/alternate.
+     - Menyertakan `winningProducts` dalam return object `getPortalData()`.
+  2. `PortalDashboardClient.tsx`:
+     - Menambahkan state `expandedProducts` dan `expandedProductCreators` untuk interaktivitas accordion multi-level.
+     - Menggabungkan kartu `Total Item Sold` ke baris metrik rata-rata/produktivitas dalam grid 4 kolom.
+     - Menggantikan tabel lama Top 5 Product ID dengan kontainer full-width bertema portal brand: `🏆 Winning Product Performance & Creator Showcase`.
+- **Hasil Verifikasi**:
+  - `tsc --noEmit` & `npm run build` selesai 100% tanpa error (Turbopack, ~6.5 detik).
+  - UI konsisten, elegan, dan siap digunakan oleh brand klien.

@@ -892,6 +892,211 @@ export async function getPortalData(campaignId: number) {
     })
     .sort((a, b) => b.total_gmv - a.total_gmv || b.total_views - a.total_views);
 
+  // 12. Winning Products Performance & Creator Showcase
+  const conceptsMapByNo = new Map<string, any>();
+  (conceptsData || []).forEach((c: any) => {
+    const cNo = String(c.no_konsep || '').trim();
+    if (cNo) conceptsMapByNo.set(cNo, c);
+  });
+
+  const creatorInfoMap = new Map<string, { username: string; tier: string; approval: string }>();
+  (rawCc || []).forEach((cc: any) => {
+    const u = (cc.username || '').toLowerCase().trim();
+    if (u) {
+      creatorInfoMap.set(u, {
+        username: cc.username,
+        tier: cc.snapshot_tier || cc.tier || 'Nano',
+        approval: cc.approval || 'approved'
+      });
+    }
+  });
+
+  const creatorDbVideosMap = new Map<string, any[]>();
+  (manualVideos || []).forEach((v: any) => {
+    const u = (v.creator_username || '').toLowerCase().trim();
+    if (!u) return;
+    if (!creatorDbVideosMap.has(u)) creatorDbVideosMap.set(u, []);
+    creatorDbVideosMap.get(u)!.push(v);
+  });
+
+  const winningProducts = (skusData || [])
+    .map((sku: any) => {
+      const pId = String(sku.product_id || '').trim();
+      const skuDbId = sku.id;
+      const namaProduk = sku.nama_produk || pId;
+
+      let prodTotalGmv = 0;
+      let prodItemsSold = 0;
+
+      const creatorSales = new Map<string, { gmv: number; itemsSold: number; uidGmv: Map<string, number> }>();
+      (salesData || []).forEach((s: any) => {
+        if (String(s.product_id || '').trim() !== pId) return;
+        const gmv = Number(s.gmv || 0);
+        const qty = Number(s.quantity || 0);
+        prodTotalGmv += gmv;
+        prodItemsSold += qty;
+
+        const rawU = (s.creator_username || '').toLowerCase().trim();
+        const u = aliasToPrimaryMap.get(rawU) || rawU;
+        if (!u) return;
+
+        if (!creatorSales.has(u)) {
+          creatorSales.set(u, { gmv: 0, itemsSold: 0, uidGmv: new Map() });
+        }
+        const cs = creatorSales.get(u)!;
+        cs.gmv += gmv;
+        cs.itemsSold += qty;
+
+        const uid = String(s.content_uid || '').replace(/^video_/, '').trim();
+        if (uid) {
+          cs.uidGmv.set(uid, (cs.uidGmv.get(uid) || 0) + gmv);
+        }
+      });
+
+      const creatorOrganicVideos = new Map<string, Map<string, any>>();
+      (organicVideos || []).forEach((ov: any) => {
+        if (String(ov.product_id || '').trim() !== pId) return;
+        const isLive = String(ov.content_type || '').toLowerCase().includes('live');
+        if (isLive) return;
+
+        const uid = String(ov.content_uid || '').replace(/^video_/, '').trim();
+        if (!uid) return;
+
+        const rawU = (ov.creator_username || '').toLowerCase().trim();
+        const u = aliasToPrimaryMap.get(rawU) || rawU;
+        if (!u) return;
+
+        if (!creatorOrganicVideos.has(u)) {
+          creatorOrganicVideos.set(u, new Map());
+        }
+        const uVids = creatorOrganicVideos.get(u)!;
+        const views = Number(ov.video_views || 0);
+        const likes = Number(ov.video_likes || 0);
+
+        if (!uVids.has(uid)) {
+          uVids.set(uid, {
+            content_uid: uid,
+            views,
+            likes,
+            post_time: ov.post_time,
+          });
+        } else {
+          const cur = uVids.get(uid)!;
+          cur.views = Math.max(cur.views, views);
+          cur.likes = Math.max(cur.likes, likes);
+          if (!cur.post_time && ov.post_time) cur.post_time = ov.post_time;
+        }
+      });
+
+      const allProductUsernames = new Set<string>([
+        ...creatorSales.keys(),
+        ...creatorOrganicVideos.keys()
+      ]);
+
+      for (const [u, dbVids] of creatorDbVideosMap.entries()) {
+        const hasThisSku = dbVids.some((v: any) => v.sku_id === skuDbId);
+        if (hasThisSku) allProductUsernames.add(u);
+      }
+
+      const creatorsList: any[] = [];
+      let prodTotalVt = 0;
+      let prodTotalViews = 0;
+
+      for (const u of allProductUsernames) {
+        const cInfo = creatorInfoMap.get(u) || { username: u, tier: 'Nano', approval: 'approved' };
+        const cSale = creatorSales.get(u) || { gmv: 0, itemsSold: 0, uidGmv: new Map() };
+        const orgVids = creatorOrganicVideos.get(u) || new Map<string, any>();
+        const dbVids = (creatorDbVideosMap.get(u) || []).filter((v: any) => {
+          if (v.sku_id && v.sku_id === skuDbId) return true;
+          const uid = String(v.content_uid || v.link_video?.match(/video\/(\d+)/i)?.[1] || '').replace(/^video_/, '').trim();
+          return uid && orgVids.has(uid);
+        });
+
+        const videoMap = new Map<string, any>();
+
+        for (const [uid, ov] of orgVids.entries()) {
+          const vidGmv = cSale.uidGmv.get(uid) || 0;
+          const gpm = ov.views > 0 ? (vidGmv / ov.views) * 1000 : 0;
+          const er = ov.views > 0 ? (ov.likes / ov.views) * 100 : 0;
+
+          const matchedDbVid = dbVids.find((dv: any) => {
+            const dvUid = String(dv.content_uid || dv.link_video?.match(/video\/(\d+)/i)?.[1] || '').replace(/^video_/, '').trim();
+            return dvUid === uid;
+          });
+          const cNo = matchedDbVid?.concept ? String(matchedDbVid.concept) : null;
+          const conceptObj = cNo ? conceptsMapByNo.get(cNo) : null;
+
+          videoMap.set(uid, {
+            id: matchedDbVid?.id || `org_${uid}`,
+            content_uid: uid,
+            link_video: matchedDbVid?.link_video || `https://www.tiktok.com/@${cInfo.username}/video/${uid}`,
+            views: ov.views,
+            likes: ov.likes,
+            er: Number(er.toFixed(2)),
+            gmv: vidGmv,
+            gpm: Math.round(gpm),
+            concept_no: cNo,
+            concept_title: conceptObj?.judul_konsep || null,
+            post_time: ov.post_time || matchedDbVid?.created_at || null,
+          });
+        }
+
+        for (const dv of dbVids) {
+          const uid = String(dv.content_uid || dv.link_video?.match(/video\/(\d+)/i)?.[1] || '').replace(/^video_/, '').trim();
+          const key = uid || `db_${dv.id}`;
+          if (!videoMap.has(key)) {
+            const vidGmv = uid ? (cSale.uidGmv.get(uid) || 0) : 0;
+            const cNo = dv.concept ? String(dv.concept) : null;
+            const conceptObj = cNo ? conceptsMapByNo.get(cNo) : null;
+
+            videoMap.set(key, {
+              id: dv.id,
+              content_uid: uid,
+              link_video: dv.link_video || (uid ? `https://www.tiktok.com/@${cInfo.username}/video/${uid}` : ''),
+              views: 0,
+              likes: 0,
+              er: 0,
+              gmv: vidGmv,
+              gpm: 0,
+              concept_no: cNo,
+              concept_title: conceptObj?.judul_konsep || null,
+              post_time: dv.created_at || null,
+            });
+          }
+        }
+
+        const cVideos = Array.from(videoMap.values()).sort((a, b) => (b.gmv - a.gmv) || (b.views - a.views));
+        const cViews = cVideos.reduce((sum, v) => sum + (v.views || 0), 0);
+        prodTotalViews += cViews;
+        prodTotalVt += cVideos.length;
+
+        creatorsList.push({
+          username: cInfo.username,
+          tier: cInfo.tier,
+          gmv: cSale.gmv,
+          itemsSold: cSale.itemsSold,
+          totalVt: cVideos.length,
+          totalViews: cViews,
+          videos: cVideos,
+        });
+      }
+
+      creatorsList.sort((a, b) => (b.gmv - a.gmv) || (b.totalViews - a.totalViews));
+
+      return {
+        id: sku.id,
+        product_id: pId,
+        nama_produk: namaProduk,
+        total_gmv: prodTotalGmv,
+        items_sold: prodItemsSold,
+        total_creators: creatorsList.length,
+        total_vt: prodTotalVt,
+        total_views: prodTotalViews,
+        creators: creatorsList,
+      };
+    })
+    .sort((a, b) => (b.total_gmv - a.total_gmv) || (b.items_sold - a.items_sold));
+
   return {
     authenticated: true,
     campaign,
@@ -967,7 +1172,8 @@ export async function getPortalData(campaignId: number) {
       byER: top10ByER,
       byItemsSold: top10ByItemsSold
     },
-    winningConcepts
+    winningConcepts,
+    winningProducts
   };
 }
 

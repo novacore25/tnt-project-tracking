@@ -76,11 +76,20 @@ export default function PortalDashboardClient({ data, campaignId }: { data: any,
   const [videoFilterView, setVideoFilterView] = useState<'creator' | 'video'>('creator');
   const [isVideoFiltering, setIsVideoFiltering] = useState(false);
 
-  // New States: Top 10 Leaderboard & Winning Concepts
+  // New States: Top 10 Leaderboard, Winning Concepts, & Winning Products
   const [top10Tab, setTop10Tab] = useState<'gmv' | 'views' | 'er' | 'itemsSold'>('gmv');
   const [expandedConcepts, setExpandedConcepts] = useState<Record<number, boolean>>({});
   const toggleConceptExpand = (no: number) => {
     setExpandedConcepts(prev => ({ ...prev, [no]: !prev[no] }));
+  };
+
+  const [expandedProducts, setExpandedProducts] = useState<Record<string, boolean>>({});
+  const [expandedProductCreators, setExpandedProductCreators] = useState<Record<string, boolean>>({});
+  const toggleProductExpand = (productId: string) => {
+    setExpandedProducts(prev => ({ ...prev, [productId]: !prev[productId] }));
+  };
+  const toggleProductCreatorExpand = (key: string) => {
+    setExpandedProductCreators(prev => ({ ...prev, [key]: !prev[key] }));
   };
 
   // Reset video page and show loading effect when filters change
@@ -111,7 +120,7 @@ export default function PortalDashboardClient({ data, campaignId }: { data: any,
     campaign, summary, ccData: approvalList, samples, schedules, videos, skus, 
     rpc, fastCountsData, fastVideoCountsData, initialTotalAdsGmv, 
     totalSales, totalAwareness, salesPerProduct, totalItemsSold,
-    metrics, top10Creators, winningConcepts
+    metrics, top10Creators, winningConcepts, winningProducts
   } = data;
   
   const isAwareness = campaign?.tipe_campaign === 'awareness' || campaign?.tipe_campaign === 'gmv_awareness';
@@ -867,68 +876,28 @@ export default function PortalDashboardClient({ data, campaignId }: { data: any,
               </div>
             </div>
               
-            {/* Total Item Sold + Top 5 Product ID */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-[24px]">
-                {/* Total Item Sold Card */}
-                <div className="bg-gradient-to-br from-amber-50 to-yellow-100/50 border border-amber-100 rounded-xl overflow-hidden p-[24px] shadow-sm">
+              {/* === SECTION: PERFORMANCE METRICS (Item Sold + Ratios & Productivity) === */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-[20px]">
+                {/* 1. Total Item Sold Card */}
+                <div className="bg-white border border-slate-200 rounded-xl p-[20px] shadow-sm flex flex-col justify-between">
                   <div className="flex justify-between items-start">
                     <div>
-                      <p className="text-[13px] font-medium text-amber-800">Total Item Sold</p>
-                      <h3 className="text-[32px] font-bold mt-[8px] text-amber-900">{(totalItemsSold || 0).toLocaleString()} <span className="text-[16px] font-normal text-amber-700">pcs</span></h3>
-                      <p className="text-[11px] text-amber-700/70 mt-[4px]">Total produk fisik terjual via link video</p>
+                      <p className="text-[12px] font-medium text-slate-500">Total Item Sold</p>
+                      <h4 className="text-[22px] font-bold mt-[6px] text-amber-900">
+                        {(totalItemsSold || 0).toLocaleString()} <span className="text-[14px] font-normal text-amber-700">pcs</span>
+                      </h4>
+                      <p className="text-[11px] text-slate-500 mt-[2px]">Total produk fisik terjual via link video</p>
                     </div>
-                    <div className="p-[12px] bg-white text-amber-600 rounded-[12px] shadow-sm"><ShoppingCart className="w-6 h-6" /></div>
+                    <div className="p-[10px] bg-amber-50 text-amber-600 rounded-[10px]"><ShoppingCart className="w-5 h-5" /></div>
                   </div>
-                  <div className="mt-[20px] pt-[14px] border-t border-amber-200/60 flex items-center justify-between text-[11px]">
-                    <span className="text-amber-800 font-medium">Conversion Rate: <strong className="font-bold text-amber-950">{metrics?.conversionRate ?? 0}%</strong></span>
-                    <span className="text-amber-800 font-medium">Sales-to-Likes: <strong className="font-bold text-amber-950">{metrics?.salesToLikesRatio ?? 0}%</strong></span>
+                  <div className="mt-[14px] pt-[10px] border-t border-slate-100 flex items-center justify-between text-[10px]">
+                    <span className="text-slate-500">CR: <strong className="font-bold text-slate-700">{metrics?.conversionRate ?? 0}%</strong></span>
+                    <span className="text-slate-500">StL: <strong className="font-bold text-slate-700">{metrics?.salesToLikesRatio ?? 0}%</strong></span>
                   </div>
                 </div>
 
-                {/* Top 5 Product ID by GMV */}
-                <div className="md:col-span-2 bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-                  <div className="border-b border-slate-200 bg-slate-50/50 p-[16px]">
-                    <h3 className="font-bold flex items-center gap-[8px] text-slate-800">
-                      <BarChart3 className="w-5 h-5 text-blue-600" /> Top 5 Product ID by GMV
-                    </h3>
-                    <p className="text-[12px] text-slate-500 mt-1">Produk dengan pencapaian GMV tertinggi di campaign ini</p>
-                  </div>
-                  <div className="overflow-x-auto">
-                    <Table className="w-full text-[13px]">
-                      <TableHeader className="bg-white border-b border-slate-200">
-                        <TableRow className="hover:bg-transparent">
-                          <TableHead className="py-[12px] w-8 text-center">#</TableHead>
-                          <TableHead className="py-[12px]">Product ID</TableHead>
-                          <TableHead className="py-[12px]">Nama Produk</TableHead>
-                          <TableHead className="py-[12px] text-center">Items Sold</TableHead>
-                          <TableHead className="py-[12px] text-right">GMV</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {(salesPerProduct || []).length === 0 ? (
-                          <TableRow>
-                            <TableCell colSpan={5} className="text-center py-[24px] text-slate-500">Belum ada data penjualan produk.</TableCell>
-                          </TableRow>
-                        ) : (
-                          (salesPerProduct || []).slice(0, 5).map((p: any, idx: number) => (
-                            <TableRow key={p.product_id} className="transition-all duration-300 hover:bg-slate-50">
-                              <TableCell className="text-center font-bold text-slate-400">{idx + 1}</TableCell>
-                              <TableCell className="font-mono text-[12px] text-blue-600">{p.product_id}</TableCell>
-                              <TableCell className="font-medium text-slate-700">{p.nama_produk}</TableCell>
-                              <TableCell className="text-center font-bold">{(p.items_sold || 0).toLocaleString()} pcs</TableCell>
-                              <TableCell className="text-right font-bold text-green-700">Rp {(p.gmv || 0).toLocaleString()}</TableCell>
-                            </TableRow>
-                          ))
-                        )}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </div>
-              </div>
-
-              {/* === SECTION: PERFORMANCE METRICS (Average & Productivity) === */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-[24px]">
-                <div className="bg-white border border-slate-200 rounded-xl p-[20px] shadow-sm">
+                {/* 2. Revenue per Active Creator */}
+                <div className="bg-white border border-slate-200 rounded-xl p-[20px] shadow-sm flex flex-col justify-between">
                   <div className="flex justify-between items-start">
                     <div>
                       <p className="text-[12px] font-medium text-slate-500">Revenue per Active Creator</p>
@@ -943,7 +912,8 @@ export default function PortalDashboardClient({ data, campaignId }: { data: any,
                   </div>
                 </div>
 
-                <div className="bg-white border border-slate-200 rounded-xl p-[20px] shadow-sm">
+                {/* 3. Revenue per Video */}
+                <div className="bg-white border border-slate-200 rounded-xl p-[20px] shadow-sm flex flex-col justify-between">
                   <div className="flex justify-between items-start">
                     <div>
                       <p className="text-[12px] font-medium text-slate-500">Revenue per Video</p>
@@ -958,7 +928,8 @@ export default function PortalDashboardClient({ data, campaignId }: { data: any,
                   </div>
                 </div>
 
-                <div className="bg-white border border-slate-200 rounded-xl p-[20px] shadow-sm">
+                {/* 4. Like Engagement Rate (ER) */}
+                <div className="bg-white border border-slate-200 rounded-xl p-[20px] shadow-sm flex flex-col justify-between">
                   <div className="flex justify-between items-start">
                     <div>
                       <p className="text-[12px] font-medium text-slate-500">Like Engagement Rate (ER)</p>
@@ -971,6 +942,227 @@ export default function PortalDashboardClient({ data, campaignId }: { data: any,
                     </div>
                     <div className="p-[10px] bg-rose-50 text-rose-500 rounded-[10px]"><Activity className="w-5 h-5" /></div>
                   </div>
+                </div>
+              </div>
+
+              {/* === SECTION: WINNING PRODUCTS PERFORMANCE & CREATOR SHOWCASE === */}
+              <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+                <div className="border-b border-slate-200 bg-slate-50/50 p-[16px]">
+                  <h3 className="font-bold flex items-center gap-[8px] text-slate-800 text-[16px]">
+                    🏆 Winning Product Performance & Creator Showcase
+                  </h3>
+                  <p className="text-[12px] text-slate-500 mt-1">
+                    Rincian produk terlaris, daftar kreator yang menautkan produk, dan performa video VT terkait
+                  </p>
+                </div>
+
+                <div className="p-[16px] space-y-3">
+                  {(!winningProducts || winningProducts.length === 0) ? (
+                    <div className="text-center py-8 text-slate-400 text-[13px]">
+                      Belum ada produk SKU yang terdaftar pada campaign ini.
+                    </div>
+                  ) : (
+                    winningProducts.map((prod: any, pIdx: number) => {
+                      const isProdExpanded = !!expandedProducts[prod.product_id];
+                      const isTop1 = pIdx === 0 && prod.total_gmv > 0;
+
+                      return (
+                        <div key={prod.product_id || pIdx} className="border border-slate-200 rounded-xl overflow-hidden hover:border-slate-300 transition-colors bg-white">
+                          {/* Level 1: Header Produk */}
+                          <div 
+                            onClick={() => toggleProductExpand(prod.product_id)}
+                            className={`p-3.5 transition-colors cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                              isTop1 ? 'bg-amber-50/60 hover:bg-amber-100/50' : 'bg-slate-50/70 hover:bg-slate-100/60'
+                            }`}
+                          >
+                            <div className="flex items-start sm:items-center gap-2.5 min-w-0">
+                              <span className={`w-7 h-7 rounded-lg font-bold flex items-center justify-center text-xs shrink-0 ${
+                                isTop1 
+                                  ? 'bg-amber-200 text-amber-900 border border-amber-300 shadow-sm' 
+                                  : 'bg-slate-200 text-slate-700'
+                              }`}>
+                                #{pIdx + 1}
+                              </span>
+                              <div className="min-w-0">
+                                <h4 className="font-bold text-slate-800 text-[13px] truncate" title={prod.nama_produk}>
+                                  {prod.nama_produk}
+                                </h4>
+                                <div className="flex flex-wrap items-center gap-2 mt-0.5 text-[10px] text-slate-500">
+                                  <span className="font-mono text-slate-500">ID: {prod.product_id}</span>
+                                  <span>• {prod.total_creators} Kreator</span>
+                                  <span>• {prod.total_vt} VT</span>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-3 sm:gap-4 shrink-0 justify-between sm:justify-end">
+                              <div className="text-left sm:text-right">
+                                <p className="text-[10px] text-slate-400">Sold</p>
+                                <p className="text-[12px] font-bold text-amber-800">
+                                  {prod.items_sold.toLocaleString()} pcs
+                                </p>
+                              </div>
+                              <div className="text-left sm:text-right">
+                                <p className="text-[10px] text-slate-400">Total GMV</p>
+                                <p className="text-[13px] font-bold text-emerald-700">
+                                  Rp {prod.total_gmv.toLocaleString()}
+                                </p>
+                              </div>
+                              <button className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-[11px] font-medium flex items-center gap-1 text-slate-700 transition-colors shadow-xs shrink-0">
+                                {isProdExpanded ? (
+                                  <>Tutup <ChevronUp className="w-3.5 h-3.5 text-slate-500" /></>
+                                ) : (
+                                  <>Kreator ({prod.creators?.length || 0}) <ChevronDown className="w-3.5 h-3.5 text-slate-500" /></>
+                                )}
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Level 2: List Kreator */}
+                          {isProdExpanded && (
+                            <div className="p-3 bg-slate-50/40 border-t border-slate-200 space-y-2.5">
+                              {(!prod.creators || prod.creators.length === 0) ? (
+                                <p className="text-[11px] text-slate-400 py-1">Belum ada kreator yang menautkan produk ini.</p>
+                              ) : (
+                                prod.creators.map((cr: any) => {
+                                  const crKey = `${prod.product_id}_${cr.username}`;
+                                  const isCrExpanded = !!expandedProductCreators[crKey];
+
+                                  return (
+                                    <div key={cr.username} className="border border-slate-200 rounded-lg overflow-hidden bg-white shadow-2xs">
+                                      <div 
+                                        onClick={() => toggleProductCreatorExpand(crKey)}
+                                        className="p-2.5 hover:bg-slate-50 transition-colors cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-2"
+                                      >
+                                        <div className="flex items-center gap-2 min-w-0">
+                                          <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-[10px] font-bold shrink-0">
+                                            {cr.username.charAt(0).toUpperCase()}
+                                          </div>
+                                          <div className="min-w-0">
+                                            <a
+                                              href={`https://www.tiktok.com/@${cr.username}`}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              className="text-[12px] font-bold text-blue-600 hover:underline flex items-center gap-1 truncate"
+                                              onClick={(e) => e.stopPropagation()}
+                                            >
+                                              @{cr.username}
+                                              <ExternalLink className="w-2.5 h-2.5 text-slate-400" />
+                                            </a>
+                                          </div>
+                                          <span className="px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 text-[10px] font-medium shrink-0">
+                                            {cr.tier || 'Nano'}
+                                          </span>
+                                        </div>
+
+                                        <div className="flex items-center gap-3 shrink-0 text-xs justify-between sm:justify-end">
+                                          <div className="text-left sm:text-right">
+                                            <span className="text-[10px] text-slate-400 block">Sold</span>
+                                            <span className="font-semibold text-slate-700 text-[11px]">{cr.itemsSold.toLocaleString()} pcs</span>
+                                          </div>
+                                          <div className="text-left sm:text-right">
+                                            <span className="text-[10px] text-slate-400 block">GMV Produk</span>
+                                            <span className="font-bold text-emerald-600 text-[12px]">Rp {cr.gmv.toLocaleString()}</span>
+                                          </div>
+                                          <div className="text-left sm:text-right">
+                                            <span className="text-[10px] text-slate-400 block">Views</span>
+                                            <span className="font-medium text-slate-600 text-[11px]">{cr.totalViews.toLocaleString()}</span>
+                                          </div>
+                                          <button className="px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-[10px] font-semibold flex items-center gap-1 text-slate-700 shrink-0">
+                                            {isCrExpanded ? (
+                                              <>Tutup VT <ChevronUp className="w-3 h-3" /></>
+                                            ) : (
+                                              <>VT ({cr.videos?.length || 0}) <ChevronDown className="w-3 h-3" /></>
+                                            )}
+                                          </button>
+                                        </div>
+                                      </div>
+
+                                      {/* Level 3: List Video VT Kreator */}
+                                      {isCrExpanded && (
+                                        <div className="p-3 bg-slate-50 border-t border-slate-100 space-y-2">
+                                          {(!cr.videos || cr.videos.length === 0) ? (
+                                            <p className="text-[11px] text-slate-400 py-1">Belum ada video VT yang tercatat untuk kreator ini pada produk ini.</p>
+                                          ) : (
+                                            <div className="space-y-1.5">
+                                              {cr.videos.map((vid: any, vIdx: number) => (
+                                                <div 
+                                                  key={vid.id || vIdx}
+                                                  className="p-2.5 bg-white border border-slate-200 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 hover:border-slate-300 transition-colors shadow-2xs"
+                                                >
+                                                  <div className="flex items-start sm:items-center gap-2 min-w-0">
+                                                    <a
+                                                      href={vid.link_video || '#'}
+                                                      target="_blank"
+                                                      rel="noopener noreferrer"
+                                                      className={`p-1.5 rounded-md flex items-center justify-center shrink-0 ${
+                                                        vid.link_video ? 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100' : 'bg-slate-100 text-slate-400 pointer-events-none'
+                                                      }`}
+                                                      title={vid.link_video ? "Buka Video TikTok" : "Belum ada link"}
+                                                    >
+                                                      <ExternalLink className="w-3.5 h-3.5" />
+                                                    </a>
+                                                    <div className="min-w-0">
+                                                      <div className="flex items-center gap-1.5 flex-wrap">
+                                                        <span className="text-[11px] font-mono text-slate-500">
+                                                          UID: {vid.content_uid ? vid.content_uid.slice(-6) : '-'}
+                                                        </span>
+                                                        {vid.concept_no && (
+                                                          <span className="px-1.5 py-0.2 rounded bg-indigo-50 text-indigo-700 text-[10px] font-semibold border border-indigo-100" title={vid.concept_title || undefined}>
+                                                            Konsep #{vid.concept_no} {vid.concept_title ? `• ${vid.concept_title}` : ''}
+                                                          </span>
+                                                        )}
+                                                        {vid.post_time && (
+                                                          <span className="text-[10px] text-slate-400">
+                                                            • {formatDateTimeShort(vid.post_time)}
+                                                          </span>
+                                                        )}
+                                                      </div>
+                                                    </div>
+                                                  </div>
+
+                                                  <div className="flex items-center gap-3 shrink-0 text-xs justify-between sm:justify-end">
+                                                    <div className="text-left sm:text-right">
+                                                      <span className="text-[10px] text-slate-400 block">Views (ER)</span>
+                                                      <span className="font-semibold text-slate-700 text-[11px]">
+                                                        {vid.views.toLocaleString()} <span className="text-[10px] text-rose-500">({vid.er}%)</span>
+                                                      </span>
+                                                    </div>
+                                                    <div className="text-left sm:text-right">
+                                                      <span className="text-[10px] text-slate-400 block">GPM</span>
+                                                      <span className="font-medium text-purple-700 text-[11px]">Rp {vid.gpm.toLocaleString()}</span>
+                                                    </div>
+                                                    <div className="text-left sm:text-right">
+                                                      <span className="text-[10px] text-slate-400 block">GMV Video</span>
+                                                      <span className="font-bold text-emerald-700 text-[12px]">Rp {vid.gmv.toLocaleString()}</span>
+                                                    </div>
+                                                    {vid.link_video && (
+                                                      <a
+                                                        href={vid.link_video}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="px-2 py-1 rounded bg-blue-50 text-blue-600 hover:bg-blue-100 text-[10px] font-bold flex items-center gap-1 transition-colors shrink-0"
+                                                      >
+                                                        Buka VT <ExternalLink className="w-2.5 h-2.5" />
+                                                      </a>
+                                                    )}
+                                                  </div>
+                                                </div>
+                                              ))}
+                                            </div>
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
                 </div>
               </div>
 
