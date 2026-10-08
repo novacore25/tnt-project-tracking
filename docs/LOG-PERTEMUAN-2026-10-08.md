@@ -71,3 +71,14 @@ Atas arahan user untuk kebutuhan presentasi klien:
      - Ditambahkan informasi badge **`X Kreator Aktif (VT / Live)`** berdampingan dengan jumlah approved dan pending.
      - Diterapkan pada Internal Dashboard (`/campaigns/[id]/performa`) dan Brand Portal (`/portal/[id]/dashboard`).
 - **Validasi Build**: `next build` selesai 100% dalam 6.9 detik tanpa error.
+
+## 6. Penegasan Kreator Aktif (Approved Only) & Penambahan Breakdown "Belum Aktif"
+
+- **Penegasan Kriteria**:
+  - Kreator aktif disempurnakan **HANYA untuk status `approved` murni** (`approval === 'approved'`), tidak menyertakan status `alternate`.
+  - Formula: `c.approval === 'approved' && ((c.totalVt || 0) > 0 || (c.totalLive || 0) > 0)`.
+- **Penambahan Metrik "Belum Aktif"**:
+  - Dihitung dari `Approved - Aktif`.
+  - Card "Pencapaian Target Creator" kini menampilkan: `Total Approved`, `X Aktif`, dan `Y Belum Aktif`.
+  - Diterapkan sinkron pada Internal Dashboard (`PerformaClient.tsx`) dan Brand Portal (`PortalDashboardClient.tsx` & `portalActions.ts`).
+- **Validasi Build**: `next build` selesai 100% tanpa error dalam 13.8 detik.

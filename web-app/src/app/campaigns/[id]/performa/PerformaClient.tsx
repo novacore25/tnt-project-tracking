@@ -707,9 +707,10 @@ export default function CampaignPerformaClient({ campaignId }: { campaignId: num
   // Performance Ratios & Metrics
   const totalItemsSold = creatorStats.reduce((sum, c) => sum + (c.itemsSold || 0), 0);
   const activeApprovedCreatorsCount = creatorStats.filter(c => 
-    (c.approval === 'approved' || c.approval === 'alternate') && 
+    c.approval === 'approved' && 
     ((Number(c.totalVt) || 0) > 0 || (Number(c.totalLive) || 0) > 0)
   ).length;
+  const inactiveApprovedCreatorsCount = Math.max(0, totalApprovedCreators - activeApprovedCreatorsCount);
   const revenuePerActiveCreator = activeApprovedCreatorsCount > 0 ? Math.round(totalOrganic / activeApprovedCreatorsCount) : 0;
   const revenuePerVideo = totalApprovedVideos > 0 ? Math.round(totalOrganic / totalApprovedVideos) : 0;
   const likeER = totalCampaignViews > 0 ? Number(((totalCampaignLikes / totalCampaignViews) * 100).toFixed(2)) : 0;
@@ -831,9 +832,12 @@ export default function CampaignPerformaClient({ campaignId }: { campaignId: num
                     <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200">kreator approved</span>
                   </h3>
                   <div className="flex flex-wrap items-center gap-2 text-[12px] mt-[8px]">
-                    <span className="flex items-center gap-1.5 font-semibold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-md">
+                    <span className="flex items-center gap-1.5 font-semibold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-md" title="Kreator approved yang telah membuat VT dan/atau Live">
                       <Users className="w-3.5 h-3.5 text-blue-600" />
-                      {activeApprovedCreatorsCount} Kreator Aktif (VT / Live)
+                      {activeApprovedCreatorsCount} Aktif
+                    </span>
+                    <span className="flex items-center gap-1.5 font-medium text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md" title="Kreator approved yang belum upload VT atau Live">
+                      {inactiveApprovedCreatorsCount} Belum Aktif
                     </span>
                     <span className="text-slate-300">·</span>
                     <span className="text-text-soft text-[11px]">

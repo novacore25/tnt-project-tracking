@@ -2739,3 +2739,8 @@ memberi informasi yang saling menguatkan, bukan noise.
    - **Kriteria Kreator Aktif**: Kreator approved/alternate yang telah menghasilkan konten baik itu video (`total_vt > 0`) ATAU sesi live (`total_livestreams > 0`), maupun keduanya (`isActive = total_vt > 0 || total_live > 0`). Hal ini mengakomodasi tipe kreator *live-only*, *video-only*, dan *hybrid* (live + video).
    - **Revenue per Active Creator**: Pembagi kini mencakup seluruh kreator aktif (video atau live), sehingga omzet terbagi adil terhadap seluruh kreator yang benar-benar aktif berkontribusi.
    - **Card Pencapaian Target Creator**: Ditambahkan badge indikator **`X Kreator Aktif (VT / Live)`** berdampingan dengan jumlah kreator approved dan pending di Internal Dashboard dan Brand Portal.
+
+7. **Penegasan Status Kreator Aktif (Hanya Kreator Approved):**
+   - **Koreksi Status**: Kreator Aktif **HANYA** dihitung dari kreator yang berstatus `approved` (`c.approval === 'approved'`), BUKAN termasuk `alternate` atau lainnya. Status alternate/pending yang sudah memiliki video/live dapat di-approve terlebih dahulu oleh PIC lewat filter listing.
+   - **Metrik Belum Aktif**: Menghitung `inactiveApprovedCreatorsCount` = `totalApprovedCreators - activeApprovedCreatorsCount`.
+   - **Tampilan Card Pencapaian Target Creator**: Menampilkan rincian status: `X Aktif` (badge biru) dan `Y Belum Aktif` (badge kuning), sehingga perbandingan produktivitas kreator terlihat transparan dan jelas bagi tim maupun brand klien.

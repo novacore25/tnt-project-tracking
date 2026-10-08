@@ -760,10 +760,11 @@ export async function getPortalData(campaignId: number) {
 
   // 9. Performance Ratios & Metrics
   const activeApprovedCreators = enrichedCcData.filter((c: any) => 
-    (c.approval === 'approved' || c.approval === 'alternate') && 
+    c.approval === 'approved' && 
     ((Number(c.total_vt) || 0) > 0 || (Number(c.total_livestreams) || 0) > 0)
   );
   const activeCreatorsCount = activeApprovedCreators.length;
+  const inactiveCreatorsCount = Math.max(0, approvedCreatorsCount - activeCreatorsCount);
   const totalApprovedVtCount = allApprovedVideoIds.size;
 
   const revenuePerActiveCreator = activeCreatorsCount > 0 ? Math.round(calcOrganicGmv / activeCreatorsCount) : 0;
@@ -928,6 +929,7 @@ export async function getPortalData(campaignId: number) {
       approved: approvedCreatorsCount,
       pending: pendingCreatorsCount,
       active: activeCreatorsCount,
+      inactive: inactiveCreatorsCount,
       // Kreator pending yang punya minimal satu video pending. Bukan
       // hardcoded 0 seperti sebelumnya. `pendingCreatorsWithVideoUids`
       // diisi di blok 3b.
@@ -950,6 +952,7 @@ export async function getPortalData(campaignId: number) {
     // NEW PERFORMANCE METRICS & CONCEPTS
     metrics: {
       activeCreatorsCount,
+      inactiveCreatorsCount,
       totalApprovedVtCount,
       revenuePerActiveCreator,
       revenuePerVideo,
