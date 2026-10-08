@@ -419,10 +419,6 @@ export async function getTikTokSyncHistoryAction(limit: number = 5) {
   }
 }
 
-function sqlInList(items: (string | number)[]) {
-  const { sql } = require('drizzle-orm');
-  return sql`(${sql.join(items.map(x => sql`${x}`), sql`, `)})`;
-}
 
 /**
  * Get staged orders from tiktok_sync_sales_staging
