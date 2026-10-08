@@ -169,3 +169,24 @@ Atas arahan user untuk kebutuhan presentasi klien:
 - **Status & Verifikasi**:
   - `npm run build` berhasil 100% (Turbopack, 8.1s).
   - Tampilan visual rapi dan informatif di seluruh tab tampilan Video.
+
+## 13. Split 2 Kolom Showcase: Winning Concept (Kiri) & Winning Product (Kanan) dengan Accordion Bertingkat
+
+- **Latar Belakang & Permintaan User**:
+  - Pada halaman Performa Campaign (`/campaigns/[id]/performa`), bagian *💡 Winning Concept Performance & VT Showcase* dirasa terlalu lebar jika memenuhi satu baris penuh.
+  - User meminta bagian ini di-split menjadi 2 kolom:
+    - **Kolom 1 (Kiri)**: Winning Concept Performance & VT Showcase.
+    - **Kolom 2 (Kanan)**: Winning Product Performance.
+    - Pada Winning Product, diterapkan accordion bertingkat: **Produk → Kreator → Video VT**.
+- **Implementasi**:
+  1. `PerformaClient.tsx`:
+     - Menghitung agregasi in-memory hierarkis `winningProducts` berdasarkan `res.skus`, `res.concepts`, `salesData`, `orgVidsData`, dan `localCreators.videos`.
+     - Produk diurutkan berdasarkan `total_gmv` tertinggi (`#1` Winning Product).
+     - Level 1: Rangkuman produk (Nama, SKU ID, Total GMV, Items Sold, jumlah kreator, jumlah VT) + tombol accordion.
+     - Level 2: Daftar kreator yang menjual produk tersebut (Tier, Sold pcs, GMV Produk, Views, jumlah VT) + tombol accordion.
+     - Level 3: Rincian video VT produk (Link TikTok, Tanggal Post, Konsep yang digunakan, GMV Video, GPM, Views, Likes, ER%).
+  2. Responsive Grid (`xl:grid-cols-2`):
+     - Berdampingan di layar desktop besar, otomatis bertumpuk 1 kolom di layar tablet/mobile.
+- **Hasil Verifikasi**:
+  - `npm run build` sukses 100% (Turbopack, 13.5s).
+  - Dokumentasi walkthrough dicatat di `walkthrough_split_winning_concept_dan_winning_product.md`.

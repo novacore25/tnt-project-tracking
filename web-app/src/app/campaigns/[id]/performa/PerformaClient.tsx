@@ -1,11 +1,12 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { TrendingUp, BarChart3, Activity, ArrowUpDown, ChevronDown, ChevronRight, ChevronUp, Edit2, Check, X, Loader2, Eye, Users, PlaySquare, Download, ShoppingCart, ExternalLink } from "lucide-react";
+import { TrendingUp, BarChart3, Activity, ArrowUpDown, ChevronDown, ChevronRight, ChevronUp, Edit2, Check, X, Loader2, Eye, Users, PlaySquare, Download, ShoppingCart, ExternalLink, Package, Trophy, PlayCircle } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { exportToCSV } from "@/utils/exportCsv";
 import { normalizeKurs } from "@/utils/computed";
+import { formatDate } from "@/utils/formatters";
 import { useAuth } from "@/providers/AuthProvider";
 import { useCampaignFilter } from "@/providers/CampaignFilterProvider";
 import { fetchPerformaPageFullDataAction, updateAdsPerformanceKursAction } from "@/app/actions/campaignPageActions";
@@ -50,6 +51,19 @@ export default function CampaignPerformaClient({ campaignId }: { campaignId: num
   const [expandedConcepts, setExpandedConcepts] = useState<Record<number, boolean>>({});
   const toggleConceptExpand = (no: number) => {
     setExpandedConcepts(prev => ({ ...prev, [no]: !prev[no] }));
+  };
+
+  // Winning Products Showcase States
+  const [winningProducts, setWinningProducts] = useState<any[]>([]);
+  const [expandedProducts, setExpandedProducts] = useState<Record<string, boolean>>({});
+  const [expandedProductCreators, setExpandedProductCreators] = useState<Record<string, boolean>>({});
+
+  const toggleProductExpand = (productId: string) => {
+    setExpandedProducts(prev => ({ ...prev, [productId]: !prev[productId] }));
+  };
+
+  const toggleProductCreatorExpand = (key: string) => {
+    setExpandedProductCreators(prev => ({ ...prev, [key]: !prev[key] }));
   };
 
   // Filter Creator State from Global Context
@@ -498,6 +512,210 @@ export default function CampaignPerformaClient({ campaignId }: { campaignId: num
           totalLive: 0
         });
       }
+
+      // 4. Calculate Winning Products with Creators and Videos Hierarchy
+      const conceptsMapByNo = new Map<string, any>();
+      (res.concepts || []).forEach((c: any) => {
+        conceptsMapByNo.set(String(c.no_konsep), c);
+      });
+
+      const creatorInfoMap = new Map<string, any>();
+      const creatorDbVideosMap = new Map<string, any[]>();
+
+      (ccData || []).forEach((cc: any) => {
+        const u = (cc.creators?.username || '').toLowerCase().trim();
+        if (!u) return;
+        creatorInfoMap.set(u, {
+          username: cc.creators?.username || u,
+          tier: cc.tier || 'Nano',
+          approval: cc.approval,
+        });
+
+        const vids = cc.videos || [];
+        if (!creatorDbVideosMap.has(u)) {
+          creatorDbVideosMap.set(u, []);
+        }
+        creatorDbVideosMap.get(u)!.push(...vids);
+      });
+
+      const calculatedWinningProducts = (res.skus || []).map((sku: any) => {
+        const pId = String(sku.product_id || '').trim();
+        const skuDbId = sku.id;
+        const namaProduk = sku.nama_produk || `Produk ${pId}`;
+
+        const creatorSales = new Map<string, { gmv: number; itemsSold: number; uidGmv: Map<string, number> }>();
+        let prodTotalGmv = 0;
+        let prodItemsSold = 0;
+
+        (salesData || []).forEach((s: any) => {
+          if (String(s.product_id || '').trim() !== pId) return;
+          const gmv = Number(s.gmv || 0);
+          const qty = Number(s.quantity || 0);
+          prodTotalGmv += gmv;
+          prodItemsSold += qty;
+
+          const rawU = (s.creator_username || '').toLowerCase().trim();
+          const u = aliasToPrimaryMap.get(rawU) || rawU;
+          if (!u) return;
+
+          if (!creatorSales.has(u)) {
+            creatorSales.set(u, { gmv: 0, itemsSold: 0, uidGmv: new Map() });
+          }
+          const cs = creatorSales.get(u)!;
+          cs.gmv += gmv;
+          cs.itemsSold += qty;
+
+          const uid = String(s.content_uid || '').replace(/^video_/, '').trim();
+          if (uid) {
+            cs.uidGmv.set(uid, (cs.uidGmv.get(uid) || 0) + gmv);
+          }
+        });
+
+        const creatorOrganicVideos = new Map<string, Map<string, any>>();
+        (orgVidsData || []).forEach((ov: any) => {
+          if (String(ov.product_id || '').trim() !== pId) return;
+          const isLive = String(ov.content_type || '').toLowerCase().includes('live');
+          if (isLive) return;
+
+          const uid = String(ov.content_uid || '').replace(/^video_/, '').trim();
+          if (!uid) return;
+
+          const rawU = (ov.creator_username || '').toLowerCase().trim();
+          const u = aliasToPrimaryMap.get(rawU) || rawU;
+          if (!u) return;
+
+          if (!creatorOrganicVideos.has(u)) {
+            creatorOrganicVideos.set(u, new Map());
+          }
+          const uVids = creatorOrganicVideos.get(u)!;
+          const views = Number(ov.video_views || 0);
+          const likes = Number(ov.video_likes || 0);
+
+          if (!uVids.has(uid)) {
+            uVids.set(uid, {
+              content_uid: uid,
+              views,
+              likes,
+              post_time: ov.post_time,
+            });
+          } else {
+            const cur = uVids.get(uid)!;
+            cur.views = Math.max(cur.views, views);
+            cur.likes = Math.max(cur.likes, likes);
+            if (!cur.post_time && ov.post_time) cur.post_time = ov.post_time;
+          }
+        });
+
+        const allProductUsernames = new Set<string>([
+          ...creatorSales.keys(),
+          ...creatorOrganicVideos.keys()
+        ]);
+
+        for (const [u, dbVids] of creatorDbVideosMap.entries()) {
+          const hasThisSku = dbVids.some((v: any) => v.sku_id === skuDbId);
+          if (hasThisSku) allProductUsernames.add(u);
+        }
+
+        const creatorsList: any[] = [];
+        let prodTotalVt = 0;
+        let prodTotalViews = 0;
+
+        for (const u of allProductUsernames) {
+          const cInfo = creatorInfoMap.get(u) || { username: u, tier: 'Nano', approval: 'approved' };
+          const cSale = creatorSales.get(u) || { gmv: 0, itemsSold: 0, uidGmv: new Map() };
+          const orgVids = creatorOrganicVideos.get(u) || new Map<string, any>();
+          const dbVids = (creatorDbVideosMap.get(u) || []).filter((v: any) => {
+            if (v.sku_id && v.sku_id === skuDbId) return true;
+            const uid = String(v.content_uid || v.link_video?.match(/video\/(\d+)/i)?.[1] || '').replace(/^video_/, '').trim();
+            return uid && orgVids.has(uid);
+          });
+
+          const videoMap = new Map<string, any>();
+
+          for (const [uid, ov] of orgVids.entries()) {
+            const vidGmv = cSale.uidGmv.get(uid) || 0;
+            const gpm = ov.views > 0 ? (vidGmv / ov.views) * 1000 : 0;
+            const er = ov.views > 0 ? (ov.likes / ov.views) * 100 : 0;
+
+            const matchedDbVid = dbVids.find((dv: any) => {
+              const dvUid = String(dv.content_uid || dv.link_video?.match(/video\/(\d+)/i)?.[1] || '').replace(/^video_/, '').trim();
+              return dvUid === uid;
+            });
+            const cNo = matchedDbVid?.concept ? String(matchedDbVid.concept) : null;
+            const conceptObj = cNo ? conceptsMapByNo.get(cNo) : null;
+
+            videoMap.set(uid, {
+              id: matchedDbVid?.id || `org_${uid}`,
+              content_uid: uid,
+              link_video: matchedDbVid?.link_video || `https://www.tiktok.com/@${cInfo.username}/video/${uid}`,
+              views: ov.views,
+              likes: ov.likes,
+              er: Number(er.toFixed(2)),
+              gmv: vidGmv,
+              gpm: Math.round(gpm),
+              concept_no: cNo,
+              concept_title: conceptObj?.judul_konsep || null,
+              post_time: ov.post_time || matchedDbVid?.created_at || null,
+            });
+          }
+
+          for (const dv of dbVids) {
+            const uid = String(dv.content_uid || dv.link_video?.match(/video\/(\d+)/i)?.[1] || '').replace(/^video_/, '').trim();
+            const key = uid || `db_${dv.id}`;
+            if (!videoMap.has(key)) {
+              const vidGmv = uid ? (cSale.uidGmv.get(uid) || 0) : 0;
+              const cNo = dv.concept ? String(dv.concept) : null;
+              const conceptObj = cNo ? conceptsMapByNo.get(cNo) : null;
+
+              videoMap.set(key, {
+                id: dv.id,
+                content_uid: uid,
+                link_video: dv.link_video || (uid ? `https://www.tiktok.com/@${cInfo.username}/video/${uid}` : ''),
+                views: 0,
+                likes: 0,
+                er: 0,
+                gmv: vidGmv,
+                gpm: 0,
+                concept_no: cNo,
+                concept_title: conceptObj?.judul_konsep || null,
+                post_time: dv.created_at || null,
+              });
+            }
+          }
+
+          const cVideos = Array.from(videoMap.values()).sort((a, b) => (b.gmv - a.gmv) || (b.views - a.views));
+          const cViews = cVideos.reduce((sum, v) => sum + (v.views || 0), 0);
+          prodTotalViews += cViews;
+          prodTotalVt += cVideos.length;
+
+          creatorsList.push({
+            username: cInfo.username,
+            tier: cInfo.tier,
+            gmv: cSale.gmv,
+            itemsSold: cSale.itemsSold,
+            totalVt: cVideos.length,
+            totalViews: cViews,
+            videos: cVideos,
+          });
+        }
+
+        creatorsList.sort((a, b) => (b.gmv - a.gmv) || (b.totalViews - a.totalViews));
+
+        return {
+          id: sku.id,
+          product_id: pId,
+          nama_produk: namaProduk,
+          total_gmv: prodTotalGmv,
+          items_sold: prodItemsSold,
+          total_creators: creatorsList.length,
+          total_vt: prodTotalVt,
+          total_views: prodTotalViews,
+          creators: creatorsList,
+        };
+      });
+
+      calculatedWinningProducts.sort((a, b) => (b.total_gmv - a.total_gmv) || (b.items_sold - a.items_sold));
+      setWinningProducts(calculatedWinningProducts);
 
       setBaseCreatorStats(computedStats);
   };
@@ -1279,125 +1497,340 @@ export default function CampaignPerformaClient({ campaignId }: { campaignId: num
         </div>
       </div>
 
-      {/* === WINNING CONCEPTS SHOWCASE === */}
-      <div className="ccard !p-0">
-        <div className="border-b border-line bg-slate-50/50 p-[16px]">
-          <h3 className="font-bold flex items-center gap-[8px] text-[16px]">
-            💡 Winning Concept Performance & VT Showcase
-          </h3>
-          <p className="text-[12px] text-text-soft mt-1">
-            Evaluasi performa master brief konsep konten, penjualan, serta tautan video TikTok langsung
-          </p>
-        </div>
+      {/* === 2-COLUMN SHOWCASE: WINNING CONCEPTS & WINNING PRODUCTS === */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
+        {/* === KOLOM 1: WINNING CONCEPTS SHOWCASE === */}
+        <div className="ccard !p-0 flex flex-col">
+          <div className="border-b border-line bg-slate-50/50 p-[16px]">
+            <h3 className="font-bold flex items-center gap-[8px] text-[15px]">
+              💡 Winning Concept Performance & VT Showcase
+            </h3>
+            <p className="text-[12px] text-text-soft mt-1">
+              Evaluasi performa master brief konsep konten, penjualan, serta tautan video TikTok langsung
+            </p>
+          </div>
 
-        <div className="p-[16px] space-y-4">
-          {(!winningConcepts || winningConcepts.length === 0) ? (
-            <div className="text-center py-8 text-text-soft text-[13px]">
-              Belum ada master konsep yang dikaitkan ke video pada campaign ini.
-            </div>
-          ) : (
-            winningConcepts.map((item: any, idx: number) => {
-              const cNo = item.concept?.no_konsep || idx + 1;
-              const isExpanded = !!expandedConcepts[cNo];
+          <div className="p-[16px] space-y-3">
+            {(!winningConcepts || winningConcepts.length === 0) ? (
+              <div className="text-center py-8 text-text-soft text-[13px]">
+                Belum ada master konsep yang dikaitkan ke video pada campaign ini.
+              </div>
+            ) : (
+              winningConcepts.map((item: any, idx: number) => {
+                const cNo = item.concept?.no_konsep || idx + 1;
+                const isExpanded = !!expandedConcepts[cNo];
 
-              return (
-                <div key={cNo} className="border border-line rounded-xl overflow-hidden hover:border-slate-300 transition-colors">
-                  <div 
-                    onClick={() => toggleConceptExpand(cNo)}
-                    className="p-4 bg-slate-50/70 hover:bg-slate-100/60 transition-colors cursor-pointer flex flex-col md:flex-row md:items-center justify-between gap-4"
-                  >
-                    <div className="flex items-start md:items-center gap-3">
-                      <span className="w-8 h-8 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-700 font-bold flex items-center justify-center text-sm shrink-0">
-                        #{cNo}
-                      </span>
-                      <div>
-                        <h4 className="font-bold text-text text-[14px]">
-                          {item.concept?.judul_konsep || `Konsep #${cNo}`}
-                        </h4>
-                        <div className="flex flex-wrap items-center gap-2 mt-1 text-[11px] text-text-soft">
-                          {item.concept?.tier && (
-                            <span className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 font-medium">
-                              Tier: {item.concept.tier}
-                            </span>
-                          )}
-                          {item.concept?.nama_produk && (
-                            <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-700">
-                              Produk: {item.concept.nama_produk}
-                            </span>
-                          )}
-                          <span>{item.total_vt} VT Terkait</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-4 md:gap-6 flex-wrap">
-                      <div className="text-left md:text-right">
-                        <p className="text-[11px] text-text-soft">Views & Like ER</p>
-                        <p className="text-[13px] font-bold text-text">
-                          {item.total_views.toLocaleString()} <span className="text-[11px] font-normal text-rose-600">({item.er}%)</span>
-                        </p>
-                      </div>
-                      <div className="text-left md:text-right">
-                        <p className="text-[11px] text-text-soft">Items Sold</p>
-                        <p className="text-[13px] font-bold text-amber-800">
-                          {item.items_sold.toLocaleString()} pcs
-                        </p>
-                      </div>
-                      <div className="text-left md:text-right">
-                        <p className="text-[11px] text-text-soft">Total GMV</p>
-                        <p className="text-[14px] font-bold text-emerald-700">
-                          Rp {item.total_gmv.toLocaleString()}
-                        </p>
-                      </div>
-                      <button className="px-3 py-1.5 rounded-lg border border-line bg-white hover:bg-slate-50 text-[12px] font-medium flex items-center gap-1.5 text-text transition-colors shadow-sm">
-                        {isExpanded ? (
-                          <>Tutup VT <ChevronUp className="w-3.5 h-3.5" /></>
-                        ) : (
-                          <>Lihat VT ({item.videos?.length || 0}) <ChevronDown className="w-3.5 h-3.5" /></>
-                        )}
-                      </button>
-                    </div>
-                  </div>
-
-                  {isExpanded && (
-                    <div className="p-4 bg-white border-t border-line">
-                      {(!item.videos || item.videos.length === 0) ? (
-                        <p className="text-[12px] text-text-soft py-2">Belum ada video dengan link untuk konsep ini.</p>
-                      ) : (
-                        <div className="space-y-2">
-                          <p className="text-[11px] font-bold uppercase tracking-wider text-text-soft mb-2">
-                            Daftar Video TikTok yang Memakai Konsep Ini:
-                          </p>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                            {item.videos.map((vid: any, vIdx: number) => (
-                              <div 
-                                key={vid.id || vIdx}
-                                className="p-3 border border-line rounded-lg bg-slate-50/50 hover:bg-slate-50 flex items-center justify-between gap-3 transition-colors"
-                              >
-                                <div className="min-w-0">
-                                  <p className="text-[12px] font-bold text-text truncate">
-                                    @{vid.creator_username}
-                                  </p>
-                                </div>
-                                <a
-                                  href={vid.link_video}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="shrink-0 px-2.5 py-1.5 rounded bg-blue-50 text-blue-600 hover:bg-blue-100 text-[11px] font-bold flex items-center gap-1 transition-colors"
-                                >
-                                  Buka VT <ExternalLink className="w-3 h-3" />
-                                </a>
-                              </div>
-                            ))}
+                return (
+                  <div key={cNo} className="border border-line rounded-xl overflow-hidden hover:border-slate-300 transition-colors bg-white">
+                    <div 
+                      onClick={() => toggleConceptExpand(cNo)}
+                      className="p-3.5 bg-slate-50/70 hover:bg-slate-100/60 transition-colors cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                    >
+                      <div className="flex items-start sm:items-center gap-2.5 min-w-0">
+                        <span className="w-7 h-7 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-700 font-bold flex items-center justify-center text-xs shrink-0">
+                          #{cNo}
+                        </span>
+                        <div className="min-w-0">
+                          <h4 className="font-bold text-text text-[13px] truncate">
+                            {item.concept?.judul_konsep || `Konsep #${cNo}`}
+                          </h4>
+                          <div className="flex flex-wrap items-center gap-1.5 mt-0.5 text-[10px] text-text-soft">
+                            {item.concept?.tier && (
+                              <span className="px-1.5 py-0.2 rounded bg-blue-50 text-blue-700 font-medium">
+                                Tier: {item.concept.tier}
+                              </span>
+                            )}
+                            {item.concept?.nama_produk && (
+                              <span className="px-1.5 py-0.2 rounded bg-slate-100 text-slate-700 truncate max-w-[150px]">
+                                {item.concept.nama_produk}
+                              </span>
+                            )}
+                            <span>• {item.total_vt} VT</span>
                           </div>
                         </div>
-                      )}
+                      </div>
+
+                      <div className="flex items-center gap-3 sm:gap-4 shrink-0 justify-between sm:justify-end">
+                        <div className="text-left sm:text-right">
+                          <p className="text-[10px] text-text-soft">Views (ER)</p>
+                          <p className="text-[12px] font-bold text-text">
+                            {item.total_views.toLocaleString()} <span className="text-[10px] font-normal text-rose-600">({item.er}%)</span>
+                          </p>
+                        </div>
+                        <div className="text-left sm:text-right">
+                          <p className="text-[10px] text-text-soft">Sold</p>
+                          <p className="text-[12px] font-bold text-amber-800">
+                            {item.items_sold.toLocaleString()} pcs
+                          </p>
+                        </div>
+                        <div className="text-left sm:text-right">
+                          <p className="text-[10px] text-text-soft">Total GMV</p>
+                          <p className="text-[13px] font-bold text-emerald-700">
+                            Rp {item.total_gmv.toLocaleString()}
+                          </p>
+                        </div>
+                        <button className="p-1.5 rounded-lg border border-line bg-white hover:bg-slate-50 text-[11px] font-medium flex items-center gap-1 text-text transition-colors shadow-sm shrink-0">
+                          {isExpanded ? (
+                            <ChevronUp className="w-4 h-4 text-slate-500" />
+                          ) : (
+                            <ChevronDown className="w-4 h-4 text-slate-500" />
+                          )}
+                        </button>
+                      </div>
                     </div>
-                  )}
-                </div>
-              );
-            })
-          )}
+
+                    {isExpanded && (
+                      <div className="p-3 bg-white border-t border-line">
+                        {(!item.videos || item.videos.length === 0) ? (
+                          <p className="text-[11px] text-text-soft py-1">Belum ada video dengan link untuk konsep ini.</p>
+                        ) : (
+                          <div className="space-y-1.5">
+                            <p className="text-[10px] font-bold uppercase tracking-wider text-text-soft">
+                              Daftar Video TikTok yang Memakai Konsep Ini:
+                            </p>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                              {item.videos.map((vid: any, vIdx: number) => (
+                                <div 
+                                  key={vid.id || vIdx}
+                                  className="p-2.5 border border-line rounded-lg bg-slate-50/50 hover:bg-slate-50 flex items-center justify-between gap-2 transition-colors"
+                                >
+                                  <div className="min-w-0">
+                                    <p className="text-[11px] font-bold text-text truncate">
+                                      @{vid.creator_username}
+                                    </p>
+                                  </div>
+                                  <a
+                                    href={vid.link_video}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="shrink-0 px-2 py-1 rounded bg-blue-50 text-blue-600 hover:bg-blue-100 text-[10px] font-bold flex items-center gap-1 transition-colors"
+                                  >
+                                    Buka VT <ExternalLink className="w-3 h-3" />
+                                  </a>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+
+        {/* === KOLOM 2: WINNING PRODUCTS SHOWCASE === */}
+        <div className="ccard !p-0 flex flex-col">
+          <div className="border-b border-line bg-slate-50/50 p-[16px]">
+            <h3 className="font-bold flex items-center gap-[8px] text-[15px]">
+              🏆 Winning Product Performance & Creator Showcase
+            </h3>
+            <p className="text-[12px] text-text-soft mt-1">
+              Rincian produk terlaris, daftar kreator yang menautkan produk, dan performa video VT terkait
+            </p>
+          </div>
+
+          <div className="p-[16px] space-y-3">
+            {(!winningProducts || winningProducts.length === 0) ? (
+              <div className="text-center py-8 text-text-soft text-[13px]">
+                Belum ada produk SKU yang terdaftar pada campaign ini.
+              </div>
+            ) : (
+              winningProducts.map((prod: any, pIdx: number) => {
+                const isProdExpanded = !!expandedProducts[prod.product_id];
+                const isTop1 = pIdx === 0 && prod.total_gmv > 0;
+
+                return (
+                  <div key={prod.product_id || pIdx} className="border border-line rounded-xl overflow-hidden hover:border-slate-300 transition-colors bg-white">
+                    {/* Level 1: Header Produk */}
+                    <div 
+                      onClick={() => toggleProductExpand(prod.product_id)}
+                      className={`p-3.5 transition-colors cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                        isTop1 ? 'bg-amber-50/60 hover:bg-amber-100/50' : 'bg-slate-50/70 hover:bg-slate-100/60'
+                      }`}
+                    >
+                      <div className="flex items-start sm:items-center gap-2.5 min-w-0">
+                        <span className={`w-7 h-7 rounded-lg font-bold flex items-center justify-center text-xs shrink-0 ${
+                          isTop1 
+                            ? 'bg-amber-200 text-amber-900 border border-amber-300 shadow-sm' 
+                            : 'bg-slate-200 text-slate-700'
+                        }`}>
+                          #{pIdx + 1}
+                        </span>
+                        <div className="min-w-0">
+                          <h4 className="font-bold text-text text-[13px] truncate" title={prod.nama_produk}>
+                            {prod.nama_produk}
+                          </h4>
+                          <div className="flex flex-wrap items-center gap-2 mt-0.5 text-[10px] text-text-soft">
+                            <span className="font-mono text-slate-500">ID: {prod.product_id}</span>
+                            <span>• {prod.total_creators} Kreator</span>
+                            <span>• {prod.total_vt} VT</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-3 sm:gap-4 shrink-0 justify-between sm:justify-end">
+                        <div className="text-left sm:text-right">
+                          <p className="text-[10px] text-text-soft">Sold</p>
+                          <p className="text-[12px] font-bold text-amber-800">
+                            {prod.items_sold.toLocaleString()} pcs
+                          </p>
+                        </div>
+                        <div className="text-left sm:text-right">
+                          <p className="text-[10px] text-text-soft">Total GMV</p>
+                          <p className="text-[13px] font-bold text-emerald-700">
+                            Rp {prod.total_gmv.toLocaleString()}
+                          </p>
+                        </div>
+                        <button className="px-2.5 py-1.5 rounded-lg border border-line bg-white hover:bg-slate-50 text-[11px] font-medium flex items-center gap-1 text-text transition-colors shadow-sm shrink-0">
+                          {isProdExpanded ? (
+                            <>Tutup <ChevronUp className="w-3.5 h-3.5 text-slate-500" /></>
+                          ) : (
+                            <>Kreator ({prod.creators?.length || 0}) <ChevronDown className="w-3.5 h-3.5 text-slate-500" /></>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Level 2: List Kreator */}
+                    {isProdExpanded && (
+                      <div className="p-3 bg-slate-50/40 border-t border-line space-y-2.5">
+                        {(!prod.creators || prod.creators.length === 0) ? (
+                          <p className="text-[11px] text-text-soft py-1">Belum ada kreator yang menautkan produk ini.</p>
+                        ) : (
+                          prod.creators.map((cr: any) => {
+                            const crKey = `${prod.product_id}_${cr.username}`;
+                            const isCrExpanded = !!expandedProductCreators[crKey];
+
+                            return (
+                              <div key={cr.username} className="border border-slate-200 rounded-lg overflow-hidden bg-white shadow-xs">
+                                <div 
+                                  onClick={() => toggleProductCreatorExpand(crKey)}
+                                  className="p-2.5 hover:bg-slate-50 transition-colors cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-2"
+                                >
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-[10px] font-bold shrink-0">
+                                      {cr.username.charAt(0).toUpperCase()}
+                                    </div>
+                                    <div className="min-w-0">
+                                      <p className="text-[12px] font-bold text-slate-800 truncate">
+                                        @{cr.username}
+                                      </p>
+                                    </div>
+                                    <span className="px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 text-[10px] font-medium shrink-0">
+                                      {cr.tier || 'Nano'}
+                                    </span>
+                                  </div>
+
+                                  <div className="flex items-center gap-3 shrink-0 text-xs justify-between sm:justify-end">
+                                    <div className="text-left sm:text-right">
+                                      <span className="text-[10px] text-slate-400 block">Sold</span>
+                                      <span className="font-semibold text-slate-700 text-[11px]">{cr.itemsSold.toLocaleString()} pcs</span>
+                                    </div>
+                                    <div className="text-left sm:text-right">
+                                      <span className="text-[10px] text-slate-400 block">GMV Produk</span>
+                                      <span className="font-bold text-emerald-600 text-[12px]">Rp {cr.gmv.toLocaleString()}</span>
+                                    </div>
+                                    <div className="text-left sm:text-right">
+                                      <span className="text-[10px] text-slate-400 block">Views</span>
+                                      <span className="font-medium text-slate-600 text-[11px]">{cr.totalViews.toLocaleString()}</span>
+                                    </div>
+                                    <button className="px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-[10px] font-semibold flex items-center gap-1 text-slate-700 shrink-0">
+                                      {isCrExpanded ? (
+                                        <>Tutup VT <ChevronUp className="w-3 h-3" /></>
+                                      ) : (
+                                        <>VT ({cr.videos?.length || 0}) <ChevronDown className="w-3 h-3" /></>
+                                      )}
+                                    </button>
+                                  </div>
+                                </div>
+
+                                {/* Level 3: List Video VT Kreator */}
+                                {isCrExpanded && (
+                                  <div className="p-3 bg-slate-50 border-t border-slate-100 space-y-2">
+                                    {(!cr.videos || cr.videos.length === 0) ? (
+                                      <p className="text-[11px] text-slate-400 py-1">Belum ada video VT yang tercatat untuk kreator ini pada produk ini.</p>
+                                    ) : (
+                                      <div className="space-y-1.5">
+                                        {cr.videos.map((vid: any, vIdx: number) => (
+                                          <div 
+                                            key={vid.id || vIdx}
+                                            className="p-2.5 bg-white border border-slate-200 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 hover:border-slate-300 transition-colors shadow-2xs"
+                                          >
+                                            <div className="flex items-start sm:items-center gap-2 min-w-0">
+                                              <a
+                                                href={vid.link_video || '#'}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className={`p-1.5 rounded-md flex items-center justify-center shrink-0 ${
+                                                  vid.link_video ? 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100' : 'bg-slate-100 text-slate-400 pointer-events-none'
+                                                }`}
+                                                title={vid.link_video ? "Buka Video TikTok" : "Belum ada link"}
+                                              >
+                                                <ExternalLink className="w-3.5 h-3.5" />
+                                              </a>
+                                              <div className="min-w-0">
+                                                <div className="flex items-center gap-1.5 flex-wrap">
+                                                  <span className="text-[11px] font-mono text-slate-500">
+                                                    UID: {vid.content_uid ? vid.content_uid.slice(-6) : '-'}
+                                                  </span>
+                                                  {vid.concept_no && (
+                                                    <span className="px-1.5 py-0.2 rounded bg-indigo-50 text-indigo-700 text-[10px] font-semibold border border-indigo-100" title={vid.concept_title || undefined}>
+                                                      Konsep #{vid.concept_no} {vid.concept_title ? `• ${vid.concept_title}` : ''}
+                                                    </span>
+                                                  )}
+                                                  {vid.post_time && (
+                                                    <span className="text-[10px] text-slate-400">
+                                                      • {formatDate(vid.post_time)}
+                                                    </span>
+                                                  )}
+                                                </div>
+                                              </div>
+                                            </div>
+
+                                            <div className="flex items-center gap-3 shrink-0 text-xs justify-between sm:justify-end">
+                                              <div className="text-left sm:text-right">
+                                                <span className="text-[9px] text-slate-400 block">GMV Video</span>
+                                                <span className="font-bold text-emerald-600 text-[11px]">Rp {vid.gmv.toLocaleString()}</span>
+                                              </div>
+                                              {vid.gpm > 0 && (
+                                                <div className="text-left sm:text-right hidden sm:block">
+                                                  <span className="text-[9px] text-slate-400 block">GPM</span>
+                                                  <span className="font-medium text-indigo-600 text-[10px] bg-indigo-50 px-1 py-0.2 rounded border border-indigo-100">
+                                                    Rp {vid.gpm.toLocaleString()}
+                                                  </span>
+                                                </div>
+                                              )}
+                                              <div className="text-left sm:text-right">
+                                                <span className="text-[9px] text-slate-400 block">Views (ER)</span>
+                                                <span className="font-medium text-slate-700 text-[11px]">
+                                                  {vid.views.toLocaleString()} <span className="text-[10px] text-rose-500 font-normal">({vid.er}%)</span>
+                                                </span>
+                                              </div>
+                                              <div className="text-left sm:text-right">
+                                                <span className="text-[9px] text-slate-400 block">Likes</span>
+                                                <span className="font-medium text-slate-600 text-[11px]">{vid.likes.toLocaleString()}</span>
+                                              </div>
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
         </div>
       </div>
 
