@@ -422,6 +422,16 @@ Sumber kebenaran tunggal ratecard campaign adalah **campaign_creators.price** (k
 - **JANGAN PERNAH** fallback effectivePrice = cc.price || snapshot.ratecard. Snapshot ratecard adalah data historis/global dari pool yang sering berisi angka lama/typo (misal Rp 140.000.000 pada @ignvrlatfaf_).
 - Fallback ke snapshot sempat membuat kreator Barter ber-ratecard Rp 0 muncul di tab *Kreator Belum Dibayar* senilai Rp 140.000.000, dan menggelembungkan total komitmen campaign 42 hingga Rp 1,5 Miliar. Diperbaiki 7 Okt 2026.
 
+### 3.34 Video Organik Auto-Generate & Sinkronisasi Total VT (8 Okt 2026)
+Video dari laporan organik TikTok (`organic_videos`) dan penjualan (`sales`) kini otomatis di-generate menjadi slot video dengan ID `auto_${uid}` di `videoActions.ts` (`getInternalVideoData`), `listing/page.tsx`, dan `creator-pool/[id]/page.tsx` jika belum diinput manual oleh PIC di tabel `videos`:
+- **Scoping Ketat**: Hanya mencakup video yang cocok dengan `campaign_id` atau SKU campaign (`product_id`), dan username kreator yang cocok secara case-insensitive tanpa simbol `@`.
+- **Eksklusi Livestream**: Wajib menyaring `content_type NOT IN ('live', 'livestream')`. Livestream tidak boleh masuk sebagai video.
+- **Dedup Terjamin**: UIDs yang sudah ada di tabel `videos` (melalui `content_uid` atau digit di `link_video`) tidak akan pernah dibuatkan duplikat.
+- **Zero GMV Tetap Masuk**: Video awareness dengan Rp 0 penjualan tetap masuk dan link TikTok `https://www.tiktok.com/@username/video/${uid}` tetap dibentuk.
+- **Creator Pool & Rekam Jejak**: Perhitungan `totalVtCount` dan list `combinedVideos` wajib memeriksa `campaignSales` dan `campaignOrganicVideos`, tidak boleh hanya salah satu. Metrik views mengambil nilai tertinggi dari kedua sumber agar video awareness tidak menampilkan 0 views.
+
+---
+
 ## 4. Peta Otorisasi (yang SEHARUSNYA ada, dan yang tidak)
 
 **Hanya 2 dari 22 modul `'use server'` yang punya guard otentikasi efektif:**
