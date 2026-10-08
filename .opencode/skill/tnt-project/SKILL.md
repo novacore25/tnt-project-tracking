@@ -2742,5 +2742,13 @@ memberi informasi yang saling menguatkan, bukan noise.
 
 7. **Penegasan Status Kreator Aktif (Hanya Kreator Approved):**
    - **Koreksi Status**: Kreator Aktif **HANYA** dihitung dari kreator yang berstatus `approved` (`c.approval === 'approved'`), BUKAN termasuk `alternate` atau lainnya. Status alternate/pending yang sudah memiliki video/live dapat di-approve terlebih dahulu oleh PIC lewat filter listing.
-   - **Metrik Belum Aktif**: Menghitung `inactiveApprovedCreatorsCount` = `totalApprovedCreators - activeApprovedCreatorsCount`.
-   - **Tampilan Card Pencapaian Target Creator**: Menampilkan rincian status: `X Aktif` (badge biru) dan `Y Belum Aktif` (badge kuning), sehingga perbandingan produktivitas kreator terlihat transparan dan jelas bagi tim maupun brand klien.
+   - **Metrik Belum Aktif (Internal)**: Menghitung `inactiveApprovedCreatorsCount` = `totalApprovedCreators - activeApprovedCreatorsCount`.
+   - **Tampilan Card Pencapaian Target Creator**:
+     - **Internal (`PerformaClient.tsx`)**: Menampilkan rincian: `Total Approved`, `X Aktif` (badge biru), `Y Belum Aktif` (badge kuning), dan `Z pending`.
+     - **Portal Brand (`PortalDashboardClient.tsx`)**: Menampilkan **hanya kreator approved murni** (`totalApprovedCreators kreator approved`), tanpa badge aktif/belum aktif/pending untuk menjaga tampilan tetap bersih bagi klien dan menghindari pertanyaan sensitif.
+
+8. **Filter Keaktifan Konten & Ekspor Excel di Menu Listing (`/campaigns/[id]/listing`):**
+   - **Kriteria Konten**: Video manual yang diinput PIC di tabel `videos` (baik yang sudah terhubung report TikTok maupun yang belum terhubung, asalkan ada link video atau content_uid) **100% DIANGGAP SEBAGAI KONTEN KREATOR**.
+   - **Sumber Konten Komprehensif**: Diperiksa via SQL subquery pada 3 tabel: `videos`, `organic_videos`, dan `sales` (memuat `content_uid`).
+   - **UI Filter Listing**: Tersedia checkbox `Belum Aktif (0 Konten)` dan `Kreator Aktif (Ada VT/Live)` pada toolbar filter listing dan terhubung dengan `Reset Filter`.
+   - **Modal Export Excel**: Memungkinkan PIC memilih status creator (misal `Approved`) sekaligus opsi keaktifan konten (`Hanya Kreator Belum Aktif (0 Konten)`) untuk mengunduh daftar kreator approved yang belum membuat konten lengkap dengan nomor WhatsApp untuk keperluan reminder/blasting.

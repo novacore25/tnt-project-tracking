@@ -432,11 +432,13 @@ function CampaignListingContent() {
   const [filterUnattributed, setFilterUnattributed] = useState(false);
   const [filterConcept, setFilterConcept] = useState<string>('');
   const [filterActionDate, setFilterActionDate] = useState<string>('');
+  const [filterActiveContent, setFilterActiveContent] = useState<'all' | 'active' | 'inactive'>('all');
   const [staffProfiles, setStaffProfiles] = useState<{id: string, nama: string}[]>([]);
 
   // Export Modal State
   const [showExportModal, setShowExportModal] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [exportActiveFilter, setExportActiveFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [exportSelection, setExportSelection] = useState({
     approved: true,
     not_approved: true,
@@ -1129,6 +1131,7 @@ function CampaignListingContent() {
         notesFilter: filterNotes || undefined,
         pendingWithVideoFilter: filterPendingWithVideo || undefined,
         unattributedFilter: filterUnattributed || undefined,
+        activeContentFilter: filterActiveContent !== 'all' ? filterActiveContent : undefined,
       });
 
       if (currentFetchId !== fetchIdRef.current) return;
@@ -1249,12 +1252,12 @@ function CampaignListingContent() {
          setIsLoading(false);
       }
     }
-  }, [campaignId, filterType, statusFilter, debouncedSearch, sortConfig, filterTier, filterLevel, filterNiche, filterAddedBy, filterActionBy, filterPendingWithVideo, filterUnattributed, filterContentType, filterNotes, filterConcept, filterActionDate]);
+  }, [campaignId, filterType, statusFilter, debouncedSearch, sortConfig, filterTier, filterLevel, filterNiche, filterAddedBy, filterActionBy, filterPendingWithVideo, filterUnattributed, filterContentType, filterNotes, filterConcept, filterActionDate, filterActiveContent]);
 
   useEffect(() => {
     setPage(0);
     fetchListing(0, true);
-  }, [campaignId, filterType, statusFilter, debouncedSearch, sortConfig, filterTier, filterLevel, filterNiche, filterAddedBy, filterActionBy, filterPendingWithVideo, filterUnattributed, filterContentType, filterNotes, filterConcept, filterActionDate]);
+  }, [campaignId, filterType, statusFilter, debouncedSearch, sortConfig, filterTier, filterLevel, filterNiche, filterAddedBy, filterActionBy, filterPendingWithVideo, filterUnattributed, filterContentType, filterNotes, filterConcept, filterActionDate, filterActiveContent]);
 
   const handleLoadMore = () => {
     const next = page + 1;
@@ -1670,7 +1673,11 @@ function CampaignListingContent() {
         return;
       }
 
-      const exportRes = await fetchExportCampaignCreatorsAction(campaignId, selectedStatuses);
+      const exportRes = await fetchExportCampaignCreatorsAction(
+        campaignId, 
+        selectedStatuses,
+        exportActiveFilter !== 'all' ? exportActiveFilter : undefined
+      );
       if (!exportRes.success) {
         alert("Gagal mengambil data ekspor: " + exportRes.error);
         setIsExporting(false);
@@ -2122,6 +2129,28 @@ function CampaignListingContent() {
             />
             <span className="font-medium whitespace-nowrap">Unattributed (Sisa + GMV)</span>
           </label>
+          <label className={`flex items-center gap-2 text-sm px-3 py-1.5 rounded-lg border cursor-pointer transition-colors ${filterActiveContent === 'inactive' ? 'bg-amber-100 border-amber-300 text-amber-900 font-semibold shadow-sm' : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'}`}>
+            <input 
+              type="checkbox" 
+              checked={filterActiveContent === 'inactive'}
+              onChange={(e) => {
+                setFilterActiveContent(e.target.checked ? 'inactive' : 'all');
+              }}
+              className="rounded border-slate-300 text-amber-600 focus:ring-amber-500"
+            />
+            <span className="whitespace-nowrap">Belum Aktif (0 Konten)</span>
+          </label>
+          <label className={`flex items-center gap-2 text-sm px-3 py-1.5 rounded-lg border cursor-pointer transition-colors ${filterActiveContent === 'active' ? 'bg-emerald-100 border-emerald-300 text-emerald-900 font-semibold shadow-sm' : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'}`}>
+            <input 
+              type="checkbox" 
+              checked={filterActiveContent === 'active'}
+              onChange={(e) => {
+                setFilterActiveContent(e.target.checked ? 'active' : 'all');
+              }}
+              className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+            />
+            <span className="whitespace-nowrap">Kreator Aktif (Ada VT/Live)</span>
+          </label>
           {selectedCreators.size > 0 && (
             <button 
               onClick={handleUncheckAll}
@@ -2132,7 +2161,7 @@ function CampaignListingContent() {
               Uncheck All ({selectedCreators.size})
             </button>
           )}
-          {(statusFilter !== 'all' || filterTier || filterLevel || filterNiche || filterAddedBy || filterActionBy || filterPendingWithVideo || filterUnattributed || filterContentType || filterConcept || filterActionDate) && (
+          {(statusFilter !== 'all' || filterTier || filterLevel || filterNiche || filterAddedBy || filterActionBy || filterPendingWithVideo || filterUnattributed || filterContentType || filterConcept || filterActionDate || filterActiveContent !== 'all') && (
             <button 
               onClick={() => {
                 setStatusFilter('all');
@@ -2146,6 +2175,7 @@ function CampaignListingContent() {
                 setFilterContentType('');
                 setFilterConcept('');
                 setFilterActionDate('');
+                setFilterActiveContent('all');
               }} 
               className="btn btn-outline text-red-500 border-red-200 hover:bg-red-50 flex-1 md:flex-none"
             >
@@ -3102,6 +3132,48 @@ function CampaignListingContent() {
                     </span>
                   </label>
                 ))}
+              </div>
+
+              <div className="pt-3 border-t border-slate-100">
+                <p className="text-sm font-medium text-slate-700 mb-2">Filter Keaktifan Konten (VT / Live):</p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <label className={`flex items-center gap-2 p-2.5 rounded-lg border cursor-pointer text-sm transition-colors ${exportActiveFilter === 'all' ? 'bg-blue-50 border-blue-300 text-blue-900 font-medium' : 'border-slate-200 hover:bg-slate-50 text-slate-700'}`}>
+                    <input 
+                      type="radio" 
+                      name="exportActiveFilter"
+                      value="all"
+                      checked={exportActiveFilter === 'all'}
+                      onChange={() => setExportActiveFilter('all')}
+                      disabled={isExporting}
+                      className="text-blue-600 focus:ring-blue-500"
+                    />
+                    <span>Semua Kreator</span>
+                  </label>
+                  <label className={`flex items-center gap-2 p-2.5 rounded-lg border cursor-pointer text-sm transition-colors ${exportActiveFilter === 'inactive' ? 'bg-amber-50 border-amber-300 text-amber-900 font-medium' : 'border-slate-200 hover:bg-slate-50 text-slate-700'}`}>
+                    <input 
+                      type="radio" 
+                      name="exportActiveFilter"
+                      value="inactive"
+                      checked={exportActiveFilter === 'inactive'}
+                      onChange={() => setExportActiveFilter('inactive')}
+                      disabled={isExporting}
+                      className="text-amber-600 focus:ring-amber-500"
+                    />
+                    <span>Belum Aktif (0 Konten)</span>
+                  </label>
+                  <label className={`flex items-center gap-2 p-2.5 rounded-lg border cursor-pointer text-sm transition-colors ${exportActiveFilter === 'active' ? 'bg-emerald-50 border-emerald-300 text-emerald-900 font-medium' : 'border-slate-200 hover:bg-slate-50 text-slate-700'}`}>
+                    <input 
+                      type="radio" 
+                      name="exportActiveFilter"
+                      value="active"
+                      checked={exportActiveFilter === 'active'}
+                      onChange={() => setExportActiveFilter('active')}
+                      disabled={isExporting}
+                      className="text-emerald-600 focus:ring-emerald-500"
+                    />
+                    <span>Aktif (Ada VT/Live)</span>
+                  </label>
+                </div>
               </div>
 
               {isExporting && (

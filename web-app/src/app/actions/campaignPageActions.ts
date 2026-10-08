@@ -1649,12 +1649,13 @@ export async function fetchListingPagePaginatedAction(params: {
   notesFilter?: string;
   pendingWithVideoFilter?: boolean;
   unattributedFilter?: boolean;
+  activeContentFilter?: 'all' | 'active' | 'inactive';
 }) {
   const {
     campaignId, pageNum, pageSize = 100,
     statusFilter, tierFilter, levelFilter, nicheFilter, addedByFilter, actionByFilter,
     contentTypeFilter, conceptFilter, search, actionDateFilter,
-    notesFilter, pendingWithVideoFilter, unattributedFilter
+    notesFilter, pendingWithVideoFilter, unattributedFilter, activeContentFilter
   } = params;
   const offset = pageNum * pageSize;
   const conditions: any[] = [sql`cc.campaign_id = ${campaignId}`];
@@ -1720,6 +1721,53 @@ export async function fetchListingPagePaginatedAction(params: {
             AND LOWER(s.creator_username) = LOWER(c.username) 
             AND s.gmv > 0
         )
+      )
+    )`);
+  }
+  if (activeContentFilter === 'active') {
+    conditions.push(sql`(
+      EXISTS (
+        SELECT 1 FROM videos v 
+        WHERE v.campaign_creator_id = cc.id 
+          AND (
+            (v.link_video IS NOT NULL AND v.link_video != '') 
+            OR (v.content_uid IS NOT NULL AND v.content_uid != '')
+          )
+      )
+      OR EXISTS (
+        SELECT 1 FROM organic_videos ov 
+        WHERE ov.campaign_id = cc.campaign_id 
+          AND LOWER(ov.creator_username) = LOWER(c.username)
+      )
+      OR EXISTS (
+        SELECT 1 FROM sales s 
+        WHERE s.campaign_id = cc.campaign_id 
+          AND LOWER(s.creator_username) = LOWER(c.username) 
+          AND s.content_uid IS NOT NULL 
+          AND s.content_uid != ''
+      )
+    )`);
+  } else if (activeContentFilter === 'inactive') {
+    conditions.push(sql`(
+      NOT EXISTS (
+        SELECT 1 FROM videos v 
+        WHERE v.campaign_creator_id = cc.id 
+          AND (
+            (v.link_video IS NOT NULL AND v.link_video != '') 
+            OR (v.content_uid IS NOT NULL AND v.content_uid != '')
+          )
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM organic_videos ov 
+        WHERE ov.campaign_id = cc.campaign_id 
+          AND LOWER(ov.creator_username) = LOWER(c.username)
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM sales s 
+        WHERE s.campaign_id = cc.campaign_id 
+          AND LOWER(s.creator_username) = LOWER(c.username) 
+          AND s.content_uid IS NOT NULL 
+          AND s.content_uid != ''
       )
     )`);
   }
@@ -1922,9 +1970,68 @@ export async function insertCreatorsAndCcAction(campaignId: number, creatorPaylo
 // ============================================================
 // EXPORT (All creators data)
 // ============================================================
-export async function fetchExportCampaignCreatorsAction(campaignId: number, statuses: string[]) {
+export async function fetchExportCampaignCreatorsAction(
+  campaignId: number, 
+  statuses: string[],
+  activeContentFilter?: 'all' | 'active' | 'inactive'
+) {
   if (!statuses || statuses.length === 0) return { success: true, data: [] };
   try {
+    const conditions = [
+      sql`cc.campaign_id = ${campaignId}`,
+      sql`cc.approval IN ${sqlInList(statuses)}`
+    ];
+
+    if (activeContentFilter === 'active') {
+      conditions.push(sql`(
+        EXISTS (
+          SELECT 1 FROM videos v 
+          WHERE v.campaign_creator_id = cc.id 
+            AND (
+              (v.link_video IS NOT NULL AND v.link_video != '') 
+              OR (v.content_uid IS NOT NULL AND v.content_uid != '')
+            )
+        )
+        OR EXISTS (
+          SELECT 1 FROM organic_videos ov 
+          WHERE ov.campaign_id = cc.campaign_id 
+            AND LOWER(ov.creator_username) = LOWER(c.username)
+        )
+        OR EXISTS (
+          SELECT 1 FROM sales s 
+          WHERE s.campaign_id = cc.campaign_id 
+            AND LOWER(s.creator_username) = LOWER(c.username) 
+            AND s.content_uid IS NOT NULL 
+            AND s.content_uid != ''
+        )
+      )`);
+    } else if (activeContentFilter === 'inactive') {
+      conditions.push(sql`(
+        NOT EXISTS (
+          SELECT 1 FROM videos v 
+          WHERE v.campaign_creator_id = cc.id 
+            AND (
+              (v.link_video IS NOT NULL AND v.link_video != '') 
+              OR (v.content_uid IS NOT NULL AND v.content_uid != '')
+            )
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM organic_videos ov 
+          WHERE ov.campaign_id = cc.campaign_id 
+            AND LOWER(ov.creator_username) = LOWER(c.username)
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM sales s 
+          WHERE s.campaign_id = cc.campaign_id 
+            AND LOWER(s.creator_username) = LOWER(c.username) 
+            AND s.content_uid IS NOT NULL 
+            AND s.content_uid != ''
+        )
+      )`);
+    }
+
+    const whereClause = sql`WHERE ${sql.join(conditions, sql` AND `)}`;
+
     const data = await db.execute(sql`
       SELECT 
         cc.*,
@@ -1935,8 +2042,7 @@ export async function fetchExportCampaignCreatorsAction(campaignId: number, stat
       LEFT JOIN creators c ON cc.creator_id = c.id
       LEFT JOIN creator_contacts ct ON ct.creator_id = cc.creator_id
       LEFT JOIN creator_snapshots cs ON cs.creator_id = cc.creator_id
-      WHERE cc.campaign_id = ${campaignId}
-        AND cc.approval IN ${sqlInList(statuses)}
+      ${whereClause}
       GROUP BY cc.id, c.username, c.nama_asli, c.link_account
       ORDER BY cc.id DESC
     `) as any[];

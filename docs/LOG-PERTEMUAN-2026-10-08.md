@@ -72,13 +72,38 @@ Atas arahan user untuk kebutuhan presentasi klien:
      - Diterapkan pada Internal Dashboard (`/campaigns/[id]/performa`) dan Brand Portal (`/portal/[id]/dashboard`).
 - **Validasi Build**: `next build` selesai 100% dalam 6.9 detik tanpa error.
 
-## 6. Penegasan Kreator Aktif (Approved Only) & Penambahan Breakdown "Belum Aktif"
+## 6. Penegasan Kreator Aktif (Approved Only) & Penambahan Breakdown "Belum Aktif" di Internal
 
 - **Penegasan Kriteria**:
   - Kreator aktif disempurnakan **HANYA untuk status `approved` murni** (`approval === 'approved'`), tidak menyertakan status `alternate`.
   - Formula: `c.approval === 'approved' && ((c.totalVt || 0) > 0 || (c.totalLive || 0) > 0)`.
 - **Penambahan Metrik "Belum Aktif"**:
   - Dihitung dari `Approved - Aktif`.
-  - Card "Pencapaian Target Creator" kini menampilkan: `Total Approved`, `X Aktif`, dan `Y Belum Aktif`.
-  - Diterapkan sinkron pada Internal Dashboard (`PerformaClient.tsx`) dan Brand Portal (`PortalDashboardClient.tsx` & `portalActions.ts`).
-- **Validasi Build**: `next build` selesai 100% tanpa error dalam 13.8 detik.
+  - Card "Pencapaian Target Creator" internal dashboard (`PerformaClient.tsx`) menampilkan: `Total Approved`, `X Aktif`, `Y Belum Aktif`, dan `Z pending`.
+
+## 7. Penyederhanaan Portal Brand (Tampilan Bersih Approved Only)
+
+- **Kebijakan & UX Brand**:
+  - Di **Portal Brand** (`/portal/[id]/dashboard`), brand klien tidak perlu melihat status breakdown teknis yang memicu pertanyaan (seperti jumlah belum aktif atau pending).
+  - Card "Pencapaian Target Creator" di `PortalDashboardClient.tsx` disederhanakan murni menampilkan: `totalApprovedCreators kreator approved`.
+
+## 8. Filter Keaktifan Konten di Menu Listing & Modal Export Excel
+
+- **Sumber Data Keaktifan Konten**:
+  - Terverifikasi bahwa inputan video manual dari tabel `videos` (baik yang sudah terhubung TikTok maupun yang belum terhubung) **100% DIANGGAP SEBAGAI KONTEN KREATOR**.
+  - Eksistensi konten dicek secara komprehensif pada 3 tabel:
+    1. `videos`: `link_video IS NOT NULL` ATAU `content_uid IS NOT NULL` (milik kreator via `campaign_creator_id`).
+    2. `organic_videos`: username kreator cocok dan memiliki data konten video/live di campaign bersangkutan.
+    3. `sales`: username cocok dan memiliki order dengan `content_uid` di campaign bersangkutan.
+- **Implementasi Fitur Filter & Export**:
+  1. **Backend Server Action (`campaignPageActions.ts`)**:
+     - `fetchListingPagePaginatedAction`: Menambahkan parameter `activeContentFilter?: 'all' | 'active' | 'inactive'` dengan subquery `EXISTS` dan `NOT EXISTS` di SQL query.
+     - `fetchExportCampaignCreatorsAction`: Menambahkan parameter `activeContentFilter` yang sama sehingga ekspor database memfilter langsung di level PostgreSQL.
+  2. **UI Menu Listing (`listing/page.tsx`)**:
+     - Menambahkan checkbox **`Belum Aktif (0 Konten)`** (badge kuning) dan **`Kreator Aktif (Ada VT/Live)`** (badge hijau) pada baris multi-dimensional filter.
+     - Terintegrasi dengan tombol `Reset Filter`.
+  3. **Modal Export Excel (`listing/page.tsx`)**:
+     - Menambahkan opsi radio filter keaktifan: `Semua Kreator`, `Hanya Kreator Belum Aktif (0 Konten)`, dan `Hanya Kreator Aktif (Ada VT / Live)`.
+     - Memberikan PIC fleksibilitas untuk memilih tab status `Approved` + mencentang `Belum Aktif (0 Konten)`, lalu mengunduh spreadsheet Excel lengkap dengan nomor WhatsApp untuk keperluan reminder dan blasting tindak lanjut kreator.
+- **Validasi Build**: `next build` selesai 100% tanpa error dalam 5.6 detik.
+
