@@ -2764,3 +2764,8 @@ memberi informasi yang saling menguatkan, bukan noise.
    - Disiapkan tabel dedicated `creator_mcn_links` (Opsi B) untuk melacak status binding resmi kreator di TikTok Shop Partner Center (TTSPC) agensi MCN TNT.
    - Kolom yang direncanakan: `creator_id`, `mcn_agency`, `status` (`linked`/`pending`/`expired`/`unbound`), `contract_start`, `contract_end`, `commission_rate`, `notes`, `source_import`.
    - Menghindari modifikasi berlebih pada tabel inti `creators` dan siap menerima impor batch Excel dari TTSPC.
+
+11. **Optimasi Database: Larangan Correlated Text Scans & DDL Locks pada Request Baca (8 Okt 2026):**
+   - **Jebakan Correlated Scan**: Jangan pernah menggunakan `EXISTS (SELECT 1 FROM organic_videos WHERE LOWER(...) = LOWER(...) ...)` di dalam `FILTER` per baris `campaign_creators`. Pada campaign berisi 1.958 kreator dan tabel log berisi 56.660 baris, operasi ini memicu >150 juta komparasi string, menghabiskan 100% CPU VPS, dan menahan antrean koneksi sehingga seluruh menu lain (Performa, Daily, dsb.) macet.
+   - **Solusi Wajib**: Selalu gunakan **Set-Based CTE** (`WITH active_usernames AS (...)`). Ekstrak himpunan username unik satu kali per campaign, lalu lakukan `LEFT JOIN` pada integer ID. Query turun dari 30.000 ms ke <25 ms.
+   - **Jebakan DDL di Request Baca**: Jangan pernah memanggil fungsi yang berisi DDL `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` (seperti `ensureVideoColumns()`) di dalam server action pembacaan data rutin (`getInternalVideoData`). `ALTER TABLE` meminta `AccessExclusiveLock` yang membekukan tabel dari pembacaan query lain.

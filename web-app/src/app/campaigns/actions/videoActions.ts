@@ -2,11 +2,9 @@
 
 import { db, sqlInList } from '@/db';
 import { sql } from 'drizzle-orm';
-import { ensureVideoColumns } from '@/app/actions/campaignPageActions';
 
 export async function getInternalVideoData(campaignId: number, searchKeyword: string = '') {
   try {
-    await ensureVideoColumns();
 
     const whereConditions = [
       sql`cc.campaign_id = ${campaignId}`,

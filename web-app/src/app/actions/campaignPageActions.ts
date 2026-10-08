@@ -1433,59 +1433,59 @@ export async function commitBulkImportVideosAction(
 export async function fetchCampaignCreatorCountsAction(campaignId: number) {
   try {
     const rows = await db.execute(sql`
+      WITH active_usernames AS (
+        SELECT DISTINCT LOWER(creator_username) as uname
+        FROM organic_videos
+        WHERE campaign_id = ${campaignId}
+           OR (product_id IS NOT NULL AND product_id IN (
+             SELECT product_id FROM skus WHERE campaign_id = ${campaignId} AND product_id IS NOT NULL
+           ))
+        UNION
+        SELECT DISTINCT LOWER(creator_username) as uname
+        FROM sales
+        WHERE content_uid IS NOT NULL AND content_uid != ''
+          AND (
+            campaign_id = ${campaignId}
+            OR (product_id IS NOT NULL AND product_id IN (
+              SELECT product_id FROM skus WHERE campaign_id = ${campaignId} AND product_id IS NOT NULL
+            ))
+          )
+      ),
+      active_video_ccs AS (
+        SELECT DISTINCT v.campaign_creator_id as id
+        FROM videos v
+        JOIN campaign_creators cc ON v.campaign_creator_id = cc.id
+        WHERE cc.campaign_id = ${campaignId}
+          AND (
+            (v.link_video IS NOT NULL AND v.link_video != '')
+            OR (v.content_uid IS NOT NULL AND v.content_uid != '')
+          )
+      ),
+      active_cc_ids AS (
+        SELECT id FROM active_video_ccs
+        UNION
+        SELECT cc.id
+        FROM campaign_creators cc
+        JOIN creators c ON cc.creator_id = c.id
+        WHERE cc.campaign_id = ${campaignId}
+          AND (
+            LOWER(c.username) IN (SELECT uname FROM active_usernames)
+            OR EXISTS (
+              SELECT 1 FROM creator_aliases ca 
+              WHERE ca.creator_id = c.id 
+                AND LOWER(ca.alias_username) IN (SELECT uname FROM active_usernames)
+            )
+          )
+      )
       SELECT
         COUNT(*) FILTER (WHERE cc.approval = 'approved') as approved,
         COUNT(*) FILTER (WHERE cc.approval = 'pending') as pending,
         COUNT(*) FILTER (WHERE cc.approval = 'alternate') as alternate,
         COUNT(*) FILTER (WHERE cc.approval = 'not_approved') as not_approved,
         COUNT(*) as total,
-        COUNT(*) FILTER (
-          WHERE cc.approval = 'approved' AND (
-            EXISTS (
-              SELECT 1 FROM videos v 
-              WHERE v.campaign_creator_id = cc.id 
-                AND (
-                  (v.link_video IS NOT NULL AND v.link_video != '') 
-                  OR (v.content_uid IS NOT NULL AND v.content_uid != '')
-                )
-            )
-            OR EXISTS (
-              SELECT 1 FROM organic_videos ov 
-              WHERE (
-                ov.campaign_id = cc.campaign_id 
-                OR (ov.product_id IS NOT NULL AND ov.product_id IN (
-                  SELECT product_id FROM skus WHERE campaign_id = cc.campaign_id AND product_id IS NOT NULL
-                ))
-              )
-              AND (
-                LOWER(ov.creator_username) = LOWER(c.username)
-                OR EXISTS (
-                  SELECT 1 FROM creator_aliases ca 
-                  WHERE ca.creator_id = c.id AND LOWER(ov.creator_username) = LOWER(ca.alias_username)
-                )
-              )
-            )
-            OR EXISTS (
-              SELECT 1 FROM sales s 
-              WHERE (
-                s.campaign_id = cc.campaign_id 
-                OR (s.product_id IS NOT NULL AND s.product_id IN (
-                  SELECT product_id FROM skus WHERE campaign_id = cc.campaign_id AND product_id IS NOT NULL
-                ))
-              )
-              AND s.content_uid IS NOT NULL AND s.content_uid != ''
-              AND (
-                LOWER(s.creator_username) = LOWER(c.username)
-                OR EXISTS (
-                  SELECT 1 FROM creator_aliases ca 
-                  WHERE ca.creator_id = c.id AND LOWER(s.creator_username) = LOWER(ca.alias_username)
-                )
-              )
-            )
-          )
-        ) as active_approved
+        COUNT(*) FILTER (WHERE cc.approval = 'approved' AND acc.id IS NOT NULL) as active_approved
       FROM campaign_creators cc
-      LEFT JOIN creators c ON cc.creator_id = c.id
+      LEFT JOIN active_cc_ids acc ON cc.id = acc.id
       WHERE cc.campaign_id = ${campaignId}
     `) as any[];
     const r = rows[0] || {};
@@ -1787,17 +1787,16 @@ export async function fetchListingPagePaginatedAction(params: {
             OR (v.content_uid IS NOT NULL AND v.content_uid != '')
           )
       )
-      OR EXISTS (
-        SELECT 1 FROM organic_videos ov 
-        WHERE ov.campaign_id = cc.campaign_id 
-          AND LOWER(ov.creator_username) = LOWER(c.username)
+      OR LOWER(c.username) IN (
+        SELECT DISTINCT LOWER(ov.creator_username) 
+        FROM organic_videos ov 
+        WHERE ov.campaign_id = ${campaignId}
       )
-      OR EXISTS (
-        SELECT 1 FROM sales s 
-        WHERE s.campaign_id = cc.campaign_id 
-          AND LOWER(s.creator_username) = LOWER(c.username) 
-          AND s.content_uid IS NOT NULL 
-          AND s.content_uid != ''
+      OR LOWER(c.username) IN (
+        SELECT DISTINCT LOWER(s.creator_username) 
+        FROM sales s 
+        WHERE s.campaign_id = ${campaignId} 
+          AND s.content_uid IS NOT NULL AND s.content_uid != ''
       )
     )`);
   } else if (activeContentFilter === 'inactive') {
@@ -1810,17 +1809,16 @@ export async function fetchListingPagePaginatedAction(params: {
             OR (v.content_uid IS NOT NULL AND v.content_uid != '')
           )
       )
-      AND NOT EXISTS (
-        SELECT 1 FROM organic_videos ov 
-        WHERE ov.campaign_id = cc.campaign_id 
-          AND LOWER(ov.creator_username) = LOWER(c.username)
+      AND LOWER(c.username) NOT IN (
+        SELECT DISTINCT LOWER(ov.creator_username) 
+        FROM organic_videos ov 
+        WHERE ov.campaign_id = ${campaignId}
       )
-      AND NOT EXISTS (
-        SELECT 1 FROM sales s 
-        WHERE s.campaign_id = cc.campaign_id 
-          AND LOWER(s.creator_username) = LOWER(c.username) 
-          AND s.content_uid IS NOT NULL 
-          AND s.content_uid != ''
+      AND LOWER(c.username) NOT IN (
+        SELECT DISTINCT LOWER(s.creator_username) 
+        FROM sales s 
+        WHERE s.campaign_id = ${campaignId} 
+          AND s.content_uid IS NOT NULL AND s.content_uid != ''
       )
     )`);
   }
@@ -2045,17 +2043,16 @@ export async function fetchExportCampaignCreatorsAction(
               OR (v.content_uid IS NOT NULL AND v.content_uid != '')
             )
         )
-        OR EXISTS (
-          SELECT 1 FROM organic_videos ov 
-          WHERE ov.campaign_id = cc.campaign_id 
-            AND LOWER(ov.creator_username) = LOWER(c.username)
+        OR LOWER(c.username) IN (
+          SELECT DISTINCT LOWER(ov.creator_username) 
+          FROM organic_videos ov 
+          WHERE ov.campaign_id = ${campaignId}
         )
-        OR EXISTS (
-          SELECT 1 FROM sales s 
-          WHERE s.campaign_id = cc.campaign_id 
-            AND LOWER(s.creator_username) = LOWER(c.username) 
-            AND s.content_uid IS NOT NULL 
-            AND s.content_uid != ''
+        OR LOWER(c.username) IN (
+          SELECT DISTINCT LOWER(s.creator_username) 
+          FROM sales s 
+          WHERE s.campaign_id = ${campaignId} 
+            AND s.content_uid IS NOT NULL AND s.content_uid != ''
         )
       )`);
     } else if (activeContentFilter === 'inactive') {
@@ -2068,17 +2065,16 @@ export async function fetchExportCampaignCreatorsAction(
               OR (v.content_uid IS NOT NULL AND v.content_uid != '')
             )
         )
-        AND NOT EXISTS (
-          SELECT 1 FROM organic_videos ov 
-          WHERE ov.campaign_id = cc.campaign_id 
-            AND LOWER(ov.creator_username) = LOWER(c.username)
+        AND LOWER(c.username) NOT IN (
+          SELECT DISTINCT LOWER(ov.creator_username) 
+          FROM organic_videos ov 
+          WHERE ov.campaign_id = ${campaignId}
         )
-        AND NOT EXISTS (
-          SELECT 1 FROM sales s 
-          WHERE s.campaign_id = cc.campaign_id 
-            AND LOWER(s.creator_username) = LOWER(c.username) 
-            AND s.content_uid IS NOT NULL 
-            AND s.content_uid != ''
+        AND LOWER(c.username) NOT IN (
+          SELECT DISTINCT LOWER(s.creator_username) 
+          FROM sales s 
+          WHERE s.campaign_id = ${campaignId} 
+            AND s.content_uid IS NOT NULL AND s.content_uid != ''
         )
       )`);
     }
