@@ -2752,3 +2752,15 @@ memberi informasi yang saling menguatkan, bukan noise.
    - **Sumber Konten Komprehensif**: Diperiksa via SQL subquery pada 3 tabel: `videos`, `organic_videos`, dan `sales` (memuat `content_uid`).
    - **UI Filter Listing**: Tersedia checkbox `Belum Aktif (0 Konten)` dan `Kreator Aktif (Ada VT/Live)` pada toolbar filter listing dan terhubung dengan `Reset Filter`.
    - **Modal Export Excel**: Memungkinkan PIC memilih status creator (misal `Approved`) sekaligus opsi keaktifan konten (`Hanya Kreator Belum Aktif (0 Konten)`) untuk mengunduh daftar kreator approved yang belum membuat konten lengkap dengan nomor WhatsApp untuk keperluan reminder/blasting.
+
+9. **Layout Negative Space Card Approved di Menu Listing (`listing/page.tsx`):**
+   - **Tampilan Berdampingan**: Angka total Approved (misal `1162`) diletakkan di sebelah kiri, sementara area kanan (negative space) diisi dengan dua badge bertumpuk:
+     - Badge biru dengan icon user: `X Aktif`
+     - Badge amber/oranye: `Y Belum Aktif`
+   - **Interaktivitas Instan**: Mengklik salah satu badge otomatis memfilter daftar kreator ke status tersebut (`filterActiveContent = 'active'` atau `'inactive'`).
+   - Di bawahnya tetap terdapat kapsul breakdown tier (Nano, Micro, Macro, Mega).
+
+10. **Catatan Perencanaan: Status Kreator Linked MCN Agency (`creator_mcn_links`):**
+   - Disiapkan tabel dedicated `creator_mcn_links` (Opsi B) untuk melacak status binding resmi kreator di TikTok Shop Partner Center (TTSPC) agensi MCN TNT.
+   - Kolom yang direncanakan: `creator_id`, `mcn_agency`, `status` (`linked`/`pending`/`expired`/`unbound`), `contract_start`, `contract_end`, `commission_rate`, `notes`, `source_import`.
+   - Menghindari modifikasi berlebih pada tabel inti `creators` dan siap menerima impor batch Excel dari TTSPC.

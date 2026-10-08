@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useDatabaseStore } from "@/store/useDatabaseStore";
 import { getCreatorType, getJenisKerjasama } from "@/utils/computed";
 import { formatAbbreviated, formatRupiah } from "@/utils/formatters";
-import { ChevronDown, ChevronRight, ChevronLeft, Edit2, Check, X, Loader2, Trash2, Download, ArrowUp, ArrowDown, ArrowUpDown, Plus, AlertCircle, CheckCircle2, Save, Filter, GitMerge } from "lucide-react";
+import { ChevronDown, ChevronRight, ChevronLeft, Edit2, Check, X, Loader2, Trash2, Download, ArrowUp, ArrowDown, ArrowUpDown, Plus, AlertCircle, CheckCircle2, Save, Filter, GitMerge, Users } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -515,7 +515,15 @@ function CampaignListingContent() {
   }, [campaignId, listingData]);
 
   // Counts State
-  const [counts, setCounts] = useState({ approved: 0, pending: 0, alternate: 0, not_approved: 0, all: 0 });
+  const [counts, setCounts] = useState<{
+    approved: number;
+    pending: number;
+    alternate: number;
+    not_approved: number;
+    all: number;
+    activeApproved?: number;
+    inactiveApproved?: number;
+  }>({ approved: 0, pending: 0, alternate: 0, not_approved: 0, all: 0, activeApproved: 0, inactiveApproved: 0 });
   const [recapLoadingProgress, setRecapLoadingProgress] = useState<number | null>(null);
   const [tierCounts, setTierCounts] = useState<Record<string, Record<string, number>>>({
     all: { Nano: 0, Micro: 0, Macro: 0, Mega: 0 },
@@ -926,6 +934,8 @@ function CampaignListingContent() {
             alternate: Number(res.alternate || 0),
             not_approved: Number(res.not_approved || 0),
             all: Number(res.total || 0),
+            activeApproved: Number(res.activeApproved || 0),
+            inactiveApproved: Number(res.inactiveApproved || 0),
           });
           hasRpcSucceeded = true;
         }
@@ -1013,7 +1023,7 @@ function CampaignListingContent() {
          else if (row.approval === 'alternate') alternate++;
          else if (row.approval === 'not_approved') not_approved++;
       }
-      setCounts({ approved, pending, alternate, not_approved, all: finalDataToCount.length });
+      setCounts(prev => ({ ...prev, approved, pending, alternate, not_approved, all: finalDataToCount.length }));
     }
 
     setRawRecapData(deduplicatedData);
@@ -2199,7 +2209,42 @@ function CampaignListingContent() {
         </div>
         <div className={`metric cursor-pointer ${statusFilter === 'approved' ? 'ring-2 ring-green-500 bg-green-50/50' : ''}`} onClick={() => setStatusFilter('approved')}>
           <div className="mlbl text-green-700">Approved</div>
-          <div className="mval text-green-700">{counts.approved}</div>
+          <div className="flex items-center justify-between gap-2 my-1">
+            <div className="mval text-green-700 !mb-0">{counts.approved}</div>
+            <div className="flex flex-col items-end gap-1 text-[11px] leading-tight">
+              <span 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setStatusFilter('approved');
+                  setFilterActiveContent(prev => prev === 'active' ? 'all' : 'active');
+                }}
+                className={`inline-flex items-center gap-1.5 font-semibold px-2 py-0.5 rounded-full border transition-all cursor-pointer ${
+                  filterActiveContent === 'active' && statusFilter === 'approved'
+                    ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                    : 'text-blue-700 bg-blue-50 border-blue-200 hover:bg-blue-100'
+                }`}
+                title="Filter kreator approved yang aktif (ada VT/Live)"
+              >
+                <Users className="w-3 h-3" />
+                <span>{counts.activeApproved ?? 0} Aktif</span>
+              </span>
+              <span 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setStatusFilter('approved');
+                  setFilterActiveContent(prev => prev === 'inactive' ? 'all' : 'inactive');
+                }}
+                className={`inline-flex items-center gap-1.5 font-medium px-2 py-0.5 rounded-full border transition-all cursor-pointer ${
+                  filterActiveContent === 'inactive' && statusFilter === 'approved'
+                    ? 'bg-amber-600 text-white border-amber-600 shadow-sm'
+                    : 'text-amber-800 bg-amber-50 border-amber-200 hover:bg-amber-100'
+                }`}
+                title="Filter kreator approved yang belum aktif (0 konten)"
+              >
+                <span>{counts.inactiveApproved ?? 0} Belum Aktif</span>
+              </span>
+            </div>
+          </div>
           {renderTierCapsules('approved', 'text-green-600 border-green-200', 'bg-green-700 text-white border-green-700')}
         </div>
         <div className={`metric cursor-pointer ${statusFilter === 'pending' ? 'ring-2 ring-orange-400 bg-orange-50/50' : ''}`} onClick={() => setStatusFilter('pending')}>

@@ -1434,21 +1434,74 @@ export async function fetchCampaignCreatorCountsAction(campaignId: number) {
   try {
     const rows = await db.execute(sql`
       SELECT
-        COUNT(*) FILTER (WHERE approval = 'approved') as approved,
-        COUNT(*) FILTER (WHERE approval = 'pending') as pending,
-        COUNT(*) FILTER (WHERE approval = 'alternate') as alternate,
-        COUNT(*) FILTER (WHERE approval = 'not_approved') as not_approved,
-        COUNT(*) as total
-      FROM campaign_creators WHERE campaign_id = ${campaignId}
+        COUNT(*) FILTER (WHERE cc.approval = 'approved') as approved,
+        COUNT(*) FILTER (WHERE cc.approval = 'pending') as pending,
+        COUNT(*) FILTER (WHERE cc.approval = 'alternate') as alternate,
+        COUNT(*) FILTER (WHERE cc.approval = 'not_approved') as not_approved,
+        COUNT(*) as total,
+        COUNT(*) FILTER (
+          WHERE cc.approval = 'approved' AND (
+            EXISTS (
+              SELECT 1 FROM videos v 
+              WHERE v.campaign_creator_id = cc.id 
+                AND (
+                  (v.link_video IS NOT NULL AND v.link_video != '') 
+                  OR (v.content_uid IS NOT NULL AND v.content_uid != '')
+                )
+            )
+            OR EXISTS (
+              SELECT 1 FROM organic_videos ov 
+              WHERE (
+                ov.campaign_id = cc.campaign_id 
+                OR (ov.product_id IS NOT NULL AND ov.product_id IN (
+                  SELECT product_id FROM skus WHERE campaign_id = cc.campaign_id AND product_id IS NOT NULL
+                ))
+              )
+              AND (
+                LOWER(ov.creator_username) = LOWER(c.username)
+                OR EXISTS (
+                  SELECT 1 FROM creator_aliases ca 
+                  WHERE ca.creator_id = c.id AND LOWER(ov.creator_username) = LOWER(ca.alias_username)
+                )
+              )
+            )
+            OR EXISTS (
+              SELECT 1 FROM sales s 
+              WHERE (
+                s.campaign_id = cc.campaign_id 
+                OR (s.product_id IS NOT NULL AND s.product_id IN (
+                  SELECT product_id FROM skus WHERE campaign_id = cc.campaign_id AND product_id IS NOT NULL
+                ))
+              )
+              AND s.content_uid IS NOT NULL AND s.content_uid != ''
+              AND (
+                LOWER(s.creator_username) = LOWER(c.username)
+                OR EXISTS (
+                  SELECT 1 FROM creator_aliases ca 
+                  WHERE ca.creator_id = c.id AND LOWER(s.creator_username) = LOWER(ca.alias_username)
+                )
+              )
+            )
+          )
+        ) as active_approved
+      FROM campaign_creators cc
+      LEFT JOIN creators c ON cc.creator_id = c.id
+      WHERE cc.campaign_id = ${campaignId}
     `) as any[];
     const r = rows[0] || {};
+    const approved = Number(r.approved || 0);
+    const activeApproved = Number(r.active_approved || 0);
+    const inactiveApproved = Math.max(0, approved - activeApproved);
+
     return {
       success: true,
-      approved: Number(r.approved || 0),
+      approved,
       pending: Number(r.pending || 0),
       alternate: Number(r.alternate || 0),
       not_approved: Number(r.not_approved || 0),
-      total: Number(r.total || 0)
+      total: Number(r.total || 0),
+      activeApproved,
+      inactiveApproved
     };
   } catch (err: any) {
     return { success: false, error: err.message };

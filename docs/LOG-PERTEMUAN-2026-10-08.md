@@ -107,3 +107,26 @@ Atas arahan user untuk kebutuhan presentasi klien:
      - Memberikan PIC fleksibilitas untuk memilih tab status `Approved` + mencentang `Belum Aktif (0 Konten)`, lalu mengunduh spreadsheet Excel lengkap dengan nomor WhatsApp untuk keperluan reminder dan blasting tindak lanjut kreator.
 - **Validasi Build**: `next build` selesai 100% tanpa error dalam 5.6 detik.
 
+## 9. Penyempurnaan Card Approved di Menu Listing (Negative Space Layout)
+
+- **Permintaan User**:
+  - Pada kartu **Approved** di toolbar status listing (`/campaigns/[id]/listing`), memanfaatkan area kosong (negative space) di sebelah kanan angka total Approved (misal `1162`) untuk menampilkan 2 baris breakdown:
+    - Baris atas: `X Aktif` (badge pill biru dengan ikon user)
+    - Baris bawah: `Y Belum Aktif` (badge pill amber/oranye)
+- **Implementasi**:
+  1. `fetchCampaignCreatorCountsAction` (`campaignPageActions.ts`):
+     - Diperluas dengan subquery PostgreSQL untuk menghitung langsung `active_approved` dan `inactive_approved` secara real-time.
+  2. UI Card (`listing/page.tsx`):
+     - Didesain berdampingan dalam container flex: angka utama `1162` di kiri, dan dua baris badge `Aktif` / `Belum Aktif` bertumpuk di kanan.
+     - Setiap badge dibuat interaktif: mengklik badge `Aktif` atau `Belum Aktif` langsung memicu filter daftar kreator sesuai status tersebut secara instan!
+
+## 10. Catatan Rencana: Status Kreator Linked (MCN Agency TNT)
+
+- **Latar Belakang**:
+  - Kebutuhan menandai kreator yang terikat resmi (bound/linked) ke agensi MCN TNT di TikTok Shop Partner Center (TTSPC).
+- **Rekomendasi Desain & Kesepakatan**:
+  - Dibuatkan tabel master terpisah: `creator_mcn_links` (Opsi B).
+  - Menyimpan: `creator_id`, `mcn_agency`, `status` (`linked`, `pending`, `expired`, `unbound`), `contract_start`, `contract_end`, `commission_rate`, `notes`, dan `source_import`.
+  - Disiapkan modul batch import Excel/CSV unduhan resmi dari TikTok Partner Center untuk pendaftaran massal kreator roster MCN.
+  - Detail rancangan tersimpan di `rencana_status_kreator_linked_dan_import_mcn.md`.
+
