@@ -554,7 +554,9 @@ export async function runTikTokAutoSync(options?: TikTokAutoSyncOptions): Promis
         matchedCampaign = internalCampaigns.find(ic => {
           if (!ic.nama_campaign) return false;
           const cleanCampName = ic.nama_campaign.toLowerCase().trim();
-          return cleanCampName === cleanTapName || cleanTapName.includes(cleanCampName) || cleanCampName.includes(cleanTapName);
+          // HANYA exact match nama campaign (100% identik), JANGAN gunakan substring .includes()
+          // agar tidak salah memetakan campaign yang memiliki kata serupa
+          return cleanCampName === cleanTapName;
         });
       }
 
@@ -761,42 +763,85 @@ export async function runTikTokAutoSync(options?: TikTokAutoSyncOptions): Promis
     emitProgress({
       stage: 'saving',
       percent: 85,
-      message: 'Menyimpan data penjualan & konten ke database...',
+      message: 'Menyimpan data pesanan ke tabel staging (aman & terisolasi)...',
       salesCount: salesRowsToInsert.length,
-      videosCount: videoRowsToInsert.length
+      videosCount: 0
     });
 
-    // 6. EXECUTE BULK UPSERT — mirror persis flow manual import:
-    //    Sales   → tabel `sales`          (same as tab Organik Sales)
-    //    Videos  → tabel `organic_videos` (same as tab Awareness Video / Awareness Live)
-    //
-    // CATATAN: organic_videos tidak menerima campaign_id = NULL (NOT NULL constraint).
-    // Video yang belum terpetakan ke campaign akan dilewati untuk organic_videos
-    // TAPI tetap disimpan sebagai referensi melalui sales.content_uid.
-    const videoRowsMapped = videoRowsToInsert.filter((v: any) => v.campaign_id != null);
-    const videoRowsUnmapped = videoRowsToInsert.filter((v: any) => v.campaign_id == null);
+    // 6. EXECUTE BULK UPSERT KE TABEL STAGING (tiktok_sync_sales_staging)
+    //    Tabel raw utama (`sales` & `organic_videos`) TIDAK LAGI disentuh langsung oleh auto-sync.
+    //    Semua order OpenAPI masuk ke staging dengan status 'pending', sehingga data raw tetap steril
+    //    dan user dapat me-review serta memilih kapan menerapkannya ke tabel utama.
+    const batchId = `sync_${Date.now()}`;
+    if (salesRowsToInsert.length > 0) {
+      const stagingTuples = salesRowsToInsert.map(row => {
+        const rawClean = JSON.stringify(row.raw_data || {}).replace(/\\u0000/g, '');
+        const rowDate = (row.tanggal && !isNaN(new Date(row.tanggal).getTime()))
+          ? new Date(row.tanggal).toISOString()
+          : new Date().toISOString();
+        const uname = (row.creator_username && String(row.creator_username).trim())
+          ? String(row.creator_username).trim().toLowerCase()
+          : null;
 
-    if (videoRowsUnmapped.length > 0) {
-      console.log(`[TikTok AutoSync] ${videoRowsUnmapped.length} video rows skipped (no campaign mapping) - will be re-mapped after syncAllUnmappedGlobal`);
-    }
+        return sql`(
+          ${String(row.order_id).trim()},
+          ${row.product_id ? String(row.product_id).trim() : null},
+          ${row.raw_data?.sku?.sku_id ? String(row.raw_data.sku.sku_id).trim() : null},
+          ${row.campaign_id || null},
+          ${uname},
+          ${row.content_uid ? String(row.content_uid).trim() : null},
+          ${rowDate}::timestamptz,
+          ${Number(row.price) || 0},
+          ${Number(row.quantity) || 1},
+          ${Number(row.gmv) || 0},
+          ${row.is_refund ? true : false},
+          ${row.content_type || 'video'},
+          ${row.order_status || null},
+          ${row.commission_rate || null},
+          ${row.attribution_type || 'TAP'},
+          ${row.tiktok_campaign_id ? String(row.tiktok_campaign_id).trim() : null},
+          ${batchId},
+          'pending',
+          ${rawClean}::jsonb
+        )`;
+      });
 
-    if (salesRowsToInsert.length > 0 || videoRowsMapped.length > 0) {
-      // isVideoMode=true agar step Auto Populate videos table (tab video) juga berjalan
-      await executeSalesImportChunkAction(salesRowsToInsert, videoRowsMapped, true);
+      // Insert ke staging dengan ON CONFLICT (order_id, product_id)
+      await db.execute(sql`
+        INSERT INTO tiktok_sync_sales_staging (
+          order_id, product_id, sku_id, campaign_id, creator_username, content_uid,
+          tanggal, price, quantity, gmv, is_refund, content_type, order_status,
+          commission_rate, attribution_type, tiktok_campaign_id, sync_batch_id, sync_status, raw_data
+        ) VALUES ${sql.join(stagingTuples, sql`, `)}
+        ON CONFLICT (order_id, product_id) DO UPDATE SET
+          campaign_id = COALESCE(EXCLUDED.campaign_id, tiktok_sync_sales_staging.campaign_id),
+          creator_username = COALESCE(EXCLUDED.creator_username, tiktok_sync_sales_staging.creator_username),
+          content_uid = COALESCE(EXCLUDED.content_uid, tiktok_sync_sales_staging.content_uid),
+          tanggal = EXCLUDED.tanggal,
+          price = EXCLUDED.price,
+          quantity = EXCLUDED.quantity,
+          gmv = EXCLUDED.gmv,
+          is_refund = EXCLUDED.is_refund,
+          content_type = EXCLUDED.content_type,
+          order_status = EXCLUDED.order_status,
+          commission_rate = EXCLUDED.commission_rate,
+          sync_batch_id = EXCLUDED.sync_batch_id,
+          raw_data = EXCLUDED.raw_data
+      `);
+
       totalSalesCount = salesRowsToInsert.length;
-      totalVideosCount = videoRowsMapped.length;
+      totalVideosCount = 0;
     }
 
     emitProgress({
       stage: 'mapping',
-      percent: 92,
-      message: 'Menghubungkan kreator & produk ke kampanye internal...',
+      percent: 95,
+      message: 'Menyelesaikan penyimpanan data staging...',
       salesCount: totalSalesCount,
-      videosCount: totalVideosCount
+      videosCount: 0
     });
 
-    // 7. RUN GLOBAL AUTO-MAPPER
-    const unmappedRes = await syncAllUnmappedGlobal();
+    const unmappedRes = { totalSales: 0 };
 
     // 8. UPDATE LAST_SYNCED_AT & LOG
     const durationMs = Date.now() - startTime;

@@ -7,12 +7,13 @@ import { UploadCloud, CheckCircle2, AlertTriangle, FileSpreadsheet, Lock } from 
 import * as xlsx from 'xlsx';
 
 import OrganicImport from './OrganicImport';
+import TikTokStagingReview from './TikTokStagingReview';
 import { useAuth } from '@/providers/AuthProvider';
 import { LiveSyncModal } from '@/components/LiveSyncModal';
 import { TikTokSyncControlCard } from '@/components/TikTokSyncControlCard';
 
 export default function InputPenjualanPage() {
-  const [activeTab, setActiveTab] = useState<'organik_sales' | 'awareness_video' | 'awareness_live' | 'live'>('organik_sales');
+  const [activeTab, setActiveTab] = useState<'organik_sales' | 'awareness_video' | 'awareness_live' | 'live' | 'review_sync'>('organik_sales');
   const { profile } = useAuth();
   
   const isManager = profile?.role === 'manager' || profile?.role === 'executive';
@@ -34,6 +35,18 @@ export default function InputPenjualanPage() {
         >
           Organik Sales
           {activeTab === 'organik_sales' && (
+            <span className="absolute bottom-0 left-0 w-full h-0.5 bg-indigo-600 rounded-t-full" />
+          )}
+        </button>
+        <button
+          className={`pb-4 px-4 font-medium text-sm transition-colors relative flex items-center gap-1.5 ${activeTab === 'review_sync' ? 'text-indigo-600 font-semibold' : 'text-slate-500 hover:text-slate-700'}`}
+          onClick={() => setActiveTab('review_sync')}
+        >
+          <span>Review Auto-Sync API</span>
+          <span className="px-1.5 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-200 text-[10px] font-semibold rounded-full">
+            Staging
+          </span>
+          {activeTab === 'review_sync' && (
             <span className="absolute bottom-0 left-0 w-full h-0.5 bg-indigo-600 rounded-t-full" />
           )}
         </button>
@@ -68,6 +81,10 @@ export default function InputPenjualanPage() {
 
       {activeTab === 'organik_sales' && (
         <OrganicImport mode="sales" />
+      )}
+
+      {activeTab === 'review_sync' && (
+        <TikTokStagingReview />
       )}
 
       {activeTab === 'awareness_video' && (

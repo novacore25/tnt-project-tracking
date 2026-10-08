@@ -1,6 +1,7 @@
 'use server';
 
 import { exchangeTikTokAuthCode, callTikTokShopApi, TIKTOK_CONFIG } from '@/utils/tiktokShopApi';
+import { sqlInList } from '@/db';
 
 export async function exchangeAuthCodeAction(authCode: string) {
   try {
@@ -415,5 +416,224 @@ export async function getTikTokSyncHistoryAction(limit: number = 5) {
     return (rows as any[]) || [];
   } catch (error: any) {
     return [];
+  }
+}
+
+function sqlInList(items: (string | number)[]) {
+  const { sql } = require('drizzle-orm');
+  return sql`(${sql.join(items.map(x => sql`${x}`), sql`, `)})`;
+}
+
+/**
+ * Get staged orders from tiktok_sync_sales_staging
+ */
+export async function getTikTokSyncStagingAction(params?: {
+  status?: 'pending' | 'applied' | 'ignored';
+  limit?: number;
+  offset?: number;
+  search?: string;
+}) {
+  try {
+    const { db } = await import('@/db');
+    const { sql } = await import('drizzle-orm');
+
+    const statusFilter = params?.status || 'pending';
+    const limit = Math.min(params?.limit || 50, 100);
+    const offset = Math.max(params?.offset || 0, 0);
+    const search = params?.search?.trim();
+
+    let whereClause = sql`s.sync_status = ${statusFilter}`;
+    if (search) {
+      const searchPattern = `%${search}%`;
+      whereClause = sql`${whereClause} AND (
+        s.order_id ILIKE ${searchPattern} OR
+        s.creator_username ILIKE ${searchPattern} OR
+        s.product_id ILIKE ${searchPattern} OR
+        c.nama ILIKE ${searchPattern}
+      )`;
+    }
+
+    const rows = await db.execute(sql`
+      SELECT 
+        s.id,
+        s.order_id,
+        s.product_id,
+        s.sku_id,
+        s.campaign_id,
+        s.creator_username,
+        s.content_uid,
+        s.tanggal,
+        s.price,
+        s.quantity,
+        s.gmv,
+        s.is_refund,
+        s.content_type,
+        s.order_status,
+        s.commission_rate,
+        s.attribution_type,
+        s.sync_batch_id,
+        s.sync_status,
+        s.created_at,
+        s.applied_at,
+        c.nama as campaign_nama
+      FROM tiktok_sync_sales_staging s
+      LEFT JOIN campaigns c ON c.id = s.campaign_id
+      WHERE ${whereClause}
+      ORDER BY s.tanggal DESC NULLS LAST, s.id DESC
+      LIMIT ${limit} OFFSET ${offset}
+    `);
+
+    const countRows = await db.execute(sql`
+      SELECT 
+        count(*) as total_count,
+        COALESCE(sum(gmv), 0) as total_gmv,
+        COALESCE(sum(quantity), 0) as total_qty,
+        count(*) FILTER (WHERE campaign_id IS NOT NULL) as mapped_count,
+        count(*) FILTER (WHERE campaign_id IS NULL) as unmapped_count
+      FROM tiktok_sync_sales_staging
+      WHERE sync_status = ${statusFilter}
+    `);
+
+    return {
+      success: true,
+      items: (rows as any[]) || [],
+      summary: (countRows as any[])[0] || {
+        total_count: 0,
+        total_gmv: 0,
+        total_qty: 0,
+        mapped_count: 0,
+        unmapped_count: 0
+      }
+    };
+  } catch (error: any) {
+    return { success: false, items: [], summary: { total_count: 0, total_gmv: 0, total_qty: 0 }, error: error.message };
+  }
+}
+
+/**
+ * Apply staged orders from staging table to main 'sales' table
+ */
+export async function applyTikTokSyncStagingAction(orderIds?: string[]) {
+  try {
+    const { requireUser } = await import('@/lib/guards');
+    await requireUser();
+
+    const { db } = await import('@/db');
+    const { sql } = await import('drizzle-orm');
+
+    // Ambil baris staging yang pending
+    const whereClause = orderIds && orderIds.length > 0
+      ? sql`sync_status = 'pending' AND order_id IN ${sqlInList(orderIds)}`
+      : sql`sync_status = 'pending'`;
+
+    const stagingRows: any[] = await db.execute(sql`
+      SELECT * FROM tiktok_sync_sales_staging
+      WHERE ${whereClause}
+    `);
+
+    if (stagingRows.length === 0) {
+      return { success: true, count: 0, message: 'Tidak ada data pending untuk diterapkan.' };
+    }
+
+    // Persiapkan tuple untuk insert ke sales
+    const salesTuples = stagingRows.map(r => {
+      const rawClean = JSON.stringify(r.raw_data || {}).replace(/\\u0000/g, '');
+      const rowDate = (r.tanggal && !isNaN(new Date(r.tanggal).getTime()))
+        ? new Date(r.tanggal).toISOString()
+        : new Date().toISOString();
+      const uname = (r.creator_username && String(r.creator_username).trim())
+        ? String(r.creator_username).trim().toLowerCase()
+        : null;
+
+      return sql`(
+        ${String(r.order_id).trim()},
+        ${r.sku_id || null},
+        ${r.campaign_id || null},
+        ${uname},
+        ${r.content_uid ? String(r.content_uid).trim() : null},
+        ${r.product_id ? String(r.product_id).trim() : null},
+        ${rowDate}::timestamptz,
+        ${Number(r.price) || 0},
+        ${Number(r.quantity) || 1},
+        ${Number(r.gmv) || 0},
+        ${r.is_refund ? true : false},
+        ${r.content_type || 'video'},
+        ${r.order_status || null},
+        ${r.commission_rate || null},
+        ${r.attribution_type || 'TAP'},
+        ${r.tiktok_campaign_id ? String(r.tiktok_campaign_id).trim() : null},
+        ${rawClean}::jsonb
+      )`;
+    });
+
+    await db.transaction(async (tx) => {
+      // 1. Upsert ke tabel sales utama
+      await tx.execute(sql`
+        INSERT INTO sales (
+          order_id, sku_id, campaign_id, creator_username, content_uid, product_id,
+          tanggal, price, quantity, gmv, is_refund, content_type, order_status,
+          commission_rate, attribution_type, tiktok_campaign_id, raw_data
+        ) VALUES ${sql.join(salesTuples, sql`, `)}
+        ON CONFLICT (order_id) DO UPDATE SET
+          sku_id = COALESCE(EXCLUDED.sku_id, sales.sku_id),
+          campaign_id = COALESCE(EXCLUDED.campaign_id, sales.campaign_id),
+          creator_username = COALESCE(EXCLUDED.creator_username, sales.creator_username),
+          content_uid = COALESCE(EXCLUDED.content_uid, sales.content_uid),
+          product_id = COALESCE(EXCLUDED.product_id, sales.product_id),
+          tanggal = EXCLUDED.tanggal,
+          price = EXCLUDED.price,
+          quantity = EXCLUDED.quantity,
+          gmv = EXCLUDED.gmv,
+          is_refund = EXCLUDED.is_refund,
+          content_type = EXCLUDED.content_type,
+          order_status = EXCLUDED.order_status,
+          commission_rate = EXCLUDED.commission_rate,
+          attribution_type = EXCLUDED.attribution_type,
+          tiktok_campaign_id = EXCLUDED.tiktok_campaign_id,
+          raw_data = EXCLUDED.raw_data
+      `);
+
+      // 2. Tandai baris di staging sebagai 'applied'
+      const appliedIds = stagingRows.map(r => r.id);
+      await tx.execute(sql`
+        UPDATE tiktok_sync_sales_staging
+        SET sync_status = 'applied',
+            applied_at = NOW()
+        WHERE id IN ${sqlInList(appliedIds)}
+      `);
+    });
+
+    return { 
+      success: true, 
+      count: stagingRows.length, 
+      message: `Berhasil menerapkan ${stagingRows.length} order dari staging ke tabel sales utama!` 
+    };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Clear or discard pending staging records
+ */
+export async function clearTikTokSyncStagingAction(mode: 'pending' | 'applied' | 'all' = 'pending') {
+  try {
+    const { requireUser } = await import('@/lib/guards');
+    await requireUser();
+
+    const { db } = await import('@/db');
+    const { sql } = await import('drizzle-orm');
+
+    if (mode === 'all') {
+      await db.execute(sql`DELETE FROM tiktok_sync_sales_staging`);
+    } else if (mode === 'applied') {
+      await db.execute(sql`DELETE FROM tiktok_sync_sales_staging WHERE sync_status = 'applied'`);
+    } else {
+      await db.execute(sql`DELETE FROM tiktok_sync_sales_staging WHERE sync_status = 'pending'`);
+    }
+
+    return { success: true };
+  } catch (error: any) {
+    return { success: false, error: error.message };
   }
 }
