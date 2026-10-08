@@ -62,7 +62,8 @@ export async function getPortalData(campaignId: number) {
     adsRes,
     samplesRes,
     schedulesRes,
-    liveSessionsRes
+    liveSessionsRes,
+    conceptsRes
   ] = await Promise.all([
     // 1. SKUs
     db.execute(sql`
@@ -201,6 +202,18 @@ export async function getPortalData(campaignId: number) {
     `).catch(err => {
       console.error('Error fetching live_sessions:', err);
       return [];
+    }) as Promise<any[]>,
+
+    // 10. Campaign Concepts (Master Konsep)
+    db.execute(sql`
+      SELECT cc.*, sk.nama_produk
+      FROM campaign_concepts cc
+      LEFT JOIN skus sk ON cc.sku_id = sk.id
+      WHERE cc.campaign_id = ${campaignId}
+      ORDER BY cc.no_konsep ASC
+    `).catch(err => {
+      console.error('Error fetching campaign_concepts:', err);
+      return [];
     }) as Promise<any[]>
   ]);
 
@@ -213,6 +226,7 @@ export async function getPortalData(campaignId: number) {
   const samplesData = (samplesRes as any[]) || [];
   const schedulesData = (schedulesRes as any[]) || [];
   const liveSessions = (liveSessionsRes as any[]) || [];
+  const conceptsData = (conceptsRes as any[]) || [];
 
   const skuList = skusData.map((s: any) => String(s.product_id || '').trim()).filter(Boolean);
   const skuSet = new Set<string>(skuList);
@@ -710,6 +724,136 @@ export async function getPortalData(campaignId: number) {
   const approvedCreatorsCount = rawCc.filter((cc: any) => cc.approval === 'approved' || cc.approval === 'alternate').length;
   const pendingCreatorsCount = rawCc.filter((cc: any) => cc.approval === 'pending').length;
 
+  // 9. Performance Ratios & Metrics
+  const activeApprovedCreators = enrichedCcData.filter((c: any) => (c.approval === 'approved' || c.approval === 'alternate') && c.total_vt > 0);
+  const activeCreatorsCount = activeApprovedCreators.length;
+  const totalApprovedVtCount = allApprovedVideoIds.size;
+
+  const revenuePerActiveCreator = activeCreatorsCount > 0 ? Math.round(calcOrganicGmv / activeCreatorsCount) : 0;
+  const revenuePerVideo = totalApprovedVtCount > 0 ? Math.round(calcOrganicGmv / totalApprovedVtCount) : 0;
+  const averageViewsPerVideo = totalApprovedVtCount > 0 ? Math.round(calcTotalViews / totalApprovedVtCount) : 0;
+  const likeER = calcTotalViews > 0 ? Number(((calcTotalLikes / calcTotalViews) * 100).toFixed(2)) : 0;
+  const conversionRate = calcTotalViews > 0 ? Number(((totalItemsSold / calcTotalViews) * 100).toFixed(2)) : 0;
+  const salesToLikesRatio = calcTotalLikes > 0 ? Number(((totalItemsSold / calcTotalLikes) * 100).toFixed(2)) : 0;
+
+  // 10. Top 10 Creators Leaderboard (4 Pillars: GMV, Views, ER, Items Sold)
+  const approvedPerfCreators = enrichedCcData
+    .filter((c: any) => c.approval === 'approved' || c.approval === 'alternate')
+    .map((c: any) => {
+      const views = Number(c.video_views) || 0;
+      const likes = Number(c.video_likes) || 0;
+      const cER = views > 0 ? Number(((likes / views) * 100).toFixed(2)) : 0;
+      return {
+        id: c.id,
+        creator_id: c.creator_id,
+        username: c.creators?.username || 'unknown',
+        nama_asli: c.creators?.nama_asli || '',
+        link_account: c.creators?.link_account || '',
+        tier: c.tier || '-',
+        gmv: Number(c.gmv_organic) || 0,
+        views,
+        likes,
+        items_sold: Number(c.items_sold) || 0,
+        total_vt: Number(c.total_vt) || 0,
+        er: cER
+      };
+    });
+
+  const top10ByGmv = [...approvedPerfCreators].sort((a, b) => b.gmv - a.gmv).slice(0, 10);
+  const top10ByViews = [...approvedPerfCreators].sort((a, b) => b.views - a.views).slice(0, 10);
+  const top10ByER = [...approvedPerfCreators].sort((a, b) => b.er - a.er).slice(0, 10);
+  const top10ByItemsSold = [...approvedPerfCreators].sort((a, b) => b.items_sold - a.items_sold).slice(0, 10);
+
+  // 11. Winning Concepts Performance & Showcase VT Links
+  const conceptPerfMap = new Map<number, {
+    concept: any;
+    total_vt: number;
+    total_views: number;
+    total_likes: number;
+    total_gmv: number;
+    items_sold: number;
+    videos: Array<{
+      id: any;
+      link_video: string;
+      creator_username: string;
+      views: number;
+      likes: number;
+      gmv: number;
+    }>;
+  }>();
+
+  // Initialize concepts from DB
+  (conceptsData || []).forEach((c: any) => {
+    const no = Number(c.no_konsep) || 0;
+    conceptPerfMap.set(no, {
+      concept: c,
+      total_vt: 0,
+      total_views: 0,
+      total_likes: 0,
+      total_gmv: 0,
+      items_sold: 0,
+      videos: []
+    });
+  });
+
+  // Map manual videos to concept
+  manualVideos.forEach((v: any) => {
+    const conceptNo = Number(v.concept);
+    if (!conceptNo || isNaN(conceptNo)) return;
+
+    if (!conceptPerfMap.has(conceptNo)) {
+      conceptPerfMap.set(conceptNo, {
+        concept: { no_konsep: conceptNo, judul_konsep: `Konsep ${conceptNo}` },
+        total_vt: 0,
+        total_views: 0,
+        total_likes: 0,
+        total_gmv: 0,
+        items_sold: 0,
+        videos: []
+      });
+    }
+
+    const cGroup = conceptPerfMap.get(conceptNo)!;
+    const uid = v.content_uid ? String(v.content_uid).trim() : '';
+    const orgData = uid ? orgUidMap.get(uid) : null;
+    const salesInfo = uid ? (salesByUid.get(uid) || { gmv: 0, quantity: 0 }) : { gmv: 0, quantity: 0 };
+    const link = v.link_video || (uid && v.creator_username ? `https://www.tiktok.com/@${v.creator_username}/video/${uid}` : '');
+
+    const views = orgData ? orgData.views : 0;
+    const likes = orgData ? orgData.likes : 0;
+
+    cGroup.total_vt += 1;
+    cGroup.total_views += views;
+    cGroup.total_likes += likes;
+    cGroup.total_gmv += salesInfo.gmv;
+    cGroup.items_sold += salesInfo.quantity;
+
+    if (link) {
+      cGroup.videos.push({
+        id: v.id,
+        link_video: link,
+        creator_username: v.creator_username || 'creator',
+        views,
+        likes,
+        gmv: salesInfo.gmv
+      });
+    }
+  });
+
+  const winningConcepts = Array.from(conceptPerfMap.values())
+    .map(cg => {
+      const vER = cg.total_views > 0 ? Number(((cg.total_likes / cg.total_views) * 100).toFixed(2)) : 0;
+      const vCR = cg.total_views > 0 ? Number(((cg.items_sold / cg.total_views) * 100).toFixed(2)) : 0;
+      return {
+        ...cg,
+        er: vER,
+        cr: vCR,
+        // Sort videos inside concept by views / gmv desc
+        videos: cg.videos.sort((a, b) => (b.views || 0) - (a.views || 0))
+      };
+    })
+    .sort((a, b) => b.total_gmv - a.total_gmv || b.total_views - a.total_views);
+
   return {
     authenticated: true,
     campaign,
@@ -720,7 +864,7 @@ export async function getPortalData(campaignId: number) {
       total_videos: calcUniqueVideos
     },
     totalSales: {
-      creatorsWithVideo: enrichedCcData.filter((c: any) => (c.approval === 'approved' || c.approval === 'alternate') && c.total_vt > 0).length,
+      creatorsWithVideo: activeCreatorsCount,
       creatorsWithLive: enrichedCcData.filter((c: any) => (c.approval === 'approved' || c.approval === 'alternate') && c.total_livestreams > 0).length
     },
     totalAwareness: {
@@ -764,7 +908,25 @@ export async function getPortalData(campaignId: number) {
     actualLives,
     salesPerProduct,
     totalItemsSold,
-    monthlyStats
+    monthlyStats,
+    // NEW PERFORMANCE METRICS & CONCEPTS
+    metrics: {
+      activeCreatorsCount,
+      totalApprovedVtCount,
+      revenuePerActiveCreator,
+      revenuePerVideo,
+      averageViewsPerVideo,
+      likeER,
+      conversionRate,
+      salesToLikesRatio
+    },
+    top10Creators: {
+      byGmv: top10ByGmv,
+      byViews: top10ByViews,
+      byER: top10ByER,
+      byItemsSold: top10ByItemsSold
+    },
+    winningConcepts
   };
 }
 

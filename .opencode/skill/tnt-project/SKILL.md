@@ -2706,4 +2706,25 @@ memberi informasi yang saling menguatkan, bukan noise.
    - Angka sesi live murni dari `organic_videos` (Awareness Live) dan TIDAK PERNAH tercampur dengan data pesanan di tabel `sales`.
    - Rujukan sesi lengkap: `docs/LOG-PERTEMUAN-2026-10-07.md`.
 
+---
 
+### 10e. Metrik Performa Organik, Leaderboard Top 10 & Winning Concept (8 Okt 2026)
+
+1. **Batasan & Transparansi Data TikTok Partner Center (Murni Organik):**
+   - Kolom yang **PASTI ADA** di TikTok Partner Center: `Video views`, `Video likes`, `Quantity` (Items Sold), `Order ID` (Orders), dan `Commission GMV`.
+   - Kolom yang **TIDAK ADA** di Partner Center: Clicks keranjang kuning, Shares, dan Saves (klik hanya ada di TikTok Ads Manager berbayar).
+2. **Standardisasi Metrik untuk Klien & Tim Internal:**
+   - **Like Engagement Rate (ER)**: $\frac{\text{Total Likes}}{\text{Total Views}} \times 100\%$ (indikator rasio apresiasi penonton per tayangan).
+   - **Conversion Rate (CR)**: $\frac{\text{Total Items Sold}}{\text{Total Views}} \times 100\%$ (indikator ketajaman konten membujuk audiens membeli).
+   - **Sales-to-Likes Ratio**: $\frac{\text{Total Items Sold}}{\text{Total Likes}} \times 100\%$ (rasio efektivitas audiens engaged hingga menjadi pembeli fisik).
+   - **Revenue per Video**: $\frac{\text{Total GMV Organik}}{\text{Total Video Terupload}}$ (omzet rata-rata per video tayang).
+   - **Revenue per Active Creator**: $\frac{\text{Total GMV Organik}}{\text{Jumlah Kreator yang Sudah Upload Video}}$ (kreator approved tanpa upload tidak menjadi pembagi).
+3. **Top 10 Creator Performance:**
+   - Dikelompokkan dalam 4 pilar: **Top GMV**, **Top Views**, **Top Like ER**, dan **Top Items Sold**.
+   - Dilengkapi nomor ranking 1-10, badge prestasi, link TikTok profil, dan rincian unit produk terjual.
+4. **Winning Concept Showcase & Relasi Link VT:**
+   - Master konsep dari `campaign_concepts` dihubungkan ke `videos.concept`, `organic_videos`, dan `sales`.
+   - Mengakumulasikan Total VT, Total Views, Items Sold, GMV Konsep, serta Like ER.
+   - Menyediakan accordion dropdown link TikTok VT valid (`https://www.tiktok.com/@username/video/${content_uid}`) yang dapat langsung diklik oleh tim dan brand.
+   - **Zero Database Migration**: Memanfaatkan skema tabel yang sudah ada tanpa penambahan tabel/kolom baru di PostgreSQL.
+   - Rujukan sesi lengkap: `docs/LOG-PERTEMUAN-2026-10-08.md`.

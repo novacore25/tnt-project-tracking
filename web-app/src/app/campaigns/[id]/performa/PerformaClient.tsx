@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { TrendingUp, BarChart3, Activity, ArrowUpDown, ChevronDown, ChevronRight, Edit2, Check, X, Loader2, Eye, Users, PlaySquare, Download } from "lucide-react";
+import { TrendingUp, BarChart3, Activity, ArrowUpDown, ChevronDown, ChevronRight, ChevronUp, Edit2, Check, X, Loader2, Eye, Users, PlaySquare, Download, ShoppingCart, ExternalLink } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { exportToCSV } from "@/utils/exportCsv";
@@ -44,6 +44,13 @@ export default function CampaignPerformaClient({ campaignId }: { campaignId: num
   const [masterConcepts, setMasterConcepts] = useState<any[]>([]);
   const [selectedConcept, setSelectedConcept] = useState<any>(null);
   const [aliasMap, setAliasMap] = useState<Record<string, string>>({});
+
+  // Top 10 Leaderboard & Concepts Showcase States
+  const [top10Tab, setTop10Tab] = useState<'gmv' | 'views' | 'er' | 'itemsSold'>('gmv');
+  const [expandedConcepts, setExpandedConcepts] = useState<Record<number, boolean>>({});
+  const toggleConceptExpand = (no: number) => {
+    setExpandedConcepts(prev => ({ ...prev, [no]: !prev[no] }));
+  };
 
   // Filter Creator State from Global Context
   const { appliedFilterType, appliedFilterUsernames } = useCampaignFilter();
@@ -697,6 +704,73 @@ export default function CampaignPerformaClient({ campaignId }: { campaignId: num
     return `Rp ${num.toLocaleString('id-ID')}`;
   };
 
+  // Performance Ratios & Metrics
+  const totalItemsSold = creatorStats.reduce((sum, c) => sum + (c.itemsSold || 0), 0);
+  const activeApprovedCreatorsCount = creatorStats.filter(c => (c.approval === 'approved' || c.approval === 'alternate') && c.totalVt > 0).length;
+  const revenuePerActiveCreator = activeApprovedCreatorsCount > 0 ? Math.round(totalOrganic / activeApprovedCreatorsCount) : 0;
+  const revenuePerVideo = totalApprovedVideos > 0 ? Math.round(totalOrganic / totalApprovedVideos) : 0;
+  const likeER = totalCampaignViews > 0 ? Number(((totalCampaignLikes / totalCampaignViews) * 100).toFixed(2)) : 0;
+  const conversionRate = totalCampaignViews > 0 ? Number(((totalItemsSold / totalCampaignViews) * 100).toFixed(2)) : 0;
+  const salesToLikesRatio = totalCampaignLikes > 0 ? Number(((totalItemsSold / totalCampaignLikes) * 100).toFixed(2)) : 0;
+
+  // Top 10 Creators
+  const approvedCreatorsOnly = creatorStats.filter(c => (c.approval === 'approved' || c.approval === 'alternate') && c.id !== -1);
+  const top10ByGmv = [...approvedCreatorsOnly].sort((a, b) => (b.gmvOrganic || 0) - (a.gmvOrganic || 0)).slice(0, 10);
+  const top10ByViews = [...approvedCreatorsOnly].sort((a, b) => (b.videoViews || 0) - (a.videoViews || 0)).slice(0, 10);
+  const top10ByER = [...approvedCreatorsOnly].sort((a, b) => {
+    const erA = (a.videoViews || 0) > 0 ? (a.videoLikes / a.videoViews) : 0;
+    const erB = (b.videoViews || 0) > 0 ? (b.videoLikes / b.videoViews) : 0;
+    return erB - erA;
+  }).slice(0, 10);
+  const top10ByItemsSold = [...approvedCreatorsOnly].sort((a, b) => (b.itemsSold || 0) - (a.itemsSold || 0)).slice(0, 10);
+
+  // Winning Concepts Aggregation with Videos
+  const winningConcepts = (masterConcepts || []).map((mc: any) => {
+    const no = String(mc.no_konsep);
+    let cVt = 0, cViews = 0, cLikes = 0, cGmv = 0, cItemsSold = 0;
+    const cVideos: any[] = [];
+
+    localCreators.forEach((cc: any) => {
+      const vids = cc.videos || [];
+      const u = cc.creators?.username || 'creator';
+      vids.forEach((v: any) => {
+        if (String(v.concept) === no) {
+          cVt++;
+          const link = v.link_video || (v.content_uid ? `https://www.tiktok.com/@${u}/video/${v.content_uid}` : '');
+          if (link) {
+            cVideos.push({
+              id: v.id,
+              link_video: link,
+              creator_username: u,
+              views: 0,
+              gmv: 0
+            });
+          }
+        }
+      });
+    });
+
+    creatorStats.forEach((c: any) => {
+      if (c.concepts && c.concepts.includes(no)) {
+        cViews += c.videoViews || 0;
+        cLikes += c.videoLikes || 0;
+        cGmv += c.gmvOrganic || 0;
+        cItemsSold += c.itemsSold || 0;
+      }
+    });
+
+    const erVal = cViews > 0 ? Number(((cLikes / cViews) * 100).toFixed(2)) : 0;
+    return {
+      concept: mc,
+      total_vt: cVt,
+      total_views: cViews,
+      total_gmv: cGmv,
+      items_sold: cItemsSold,
+      er: erVal,
+      videos: cVideos
+    };
+  }).sort((a, b) => b.total_gmv - a.total_gmv || b.total_views - a.total_views);
+
   return (
     <div className="space-y-[32px]">
       <div className="flex justify-between items-center mb-[24px] gap-[16px] flex-wrap">
@@ -1017,6 +1091,303 @@ export default function CampaignPerformaClient({ campaignId }: { campaignId: num
             )}
           </div>
         )}
+      </div>
+
+      {/* === HIGHLIGHT PERFORMANCE METRICS (Average & Productivity) === */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-[24px]">
+        <div className="bg-gradient-to-br from-amber-50 to-yellow-100/50 border border-amber-100 rounded-xl overflow-hidden p-[20px] shadow-sm">
+          <div className="flex justify-between items-start">
+            <div>
+              <p className="text-[12px] font-medium text-amber-800">Total Item Sold</p>
+              <h3 className="text-[26px] font-bold mt-[6px] text-amber-900">{totalItemsSold.toLocaleString()} <span className="text-[14px] font-normal text-amber-700">pcs</span></h3>
+              <p className="text-[11px] text-amber-700/70 mt-[2px]">Total unit produk terjual organik</p>
+            </div>
+            <div className="p-[10px] bg-white text-amber-600 rounded-[10px] shadow-sm"><ShoppingCart className="w-5 h-5" /></div>
+          </div>
+          <div className="mt-[16px] pt-[12px] border-t border-amber-200/60 flex items-center justify-between text-[11px]">
+            <span className="text-amber-800 font-medium">Conv Rate: <strong className="font-bold text-amber-950">{conversionRate}%</strong></span>
+            <span className="text-amber-800 font-medium">Sales/Likes: <strong className="font-bold text-amber-950">{salesToLikesRatio}%</strong></span>
+          </div>
+        </div>
+
+        <div className="bg-white border border-line rounded-xl p-[20px] shadow-sm">
+          <div className="flex justify-between items-start">
+            <div>
+              <p className="text-[12px] font-medium text-text-soft">Revenue per Active Creator</p>
+              <h4 className="text-[22px] font-bold mt-[6px] text-text">
+                Rp {revenuePerActiveCreator.toLocaleString()}
+              </h4>
+              <p className="text-[11px] text-text-soft mt-[2px]">
+                Dari {activeApprovedCreatorsCount} kreator upload video
+              </p>
+            </div>
+            <div className="p-[10px] bg-blue-50 text-blue-600 rounded-[10px]"><Users className="w-5 h-5" /></div>
+          </div>
+        </div>
+
+        <div className="bg-white border border-line rounded-xl p-[20px] shadow-sm">
+          <div className="flex justify-between items-start">
+            <div>
+              <p className="text-[12px] font-medium text-text-soft">Revenue per Video</p>
+              <h4 className="text-[22px] font-bold mt-[6px] text-text">
+                Rp {revenuePerVideo.toLocaleString()}
+              </h4>
+              <p className="text-[11px] text-text-soft mt-[2px]">
+                Rata-rata omzet per video ({totalApprovedVideos.toLocaleString()} VT)
+              </p>
+            </div>
+            <div className="p-[10px] bg-emerald-50 text-emerald-600 rounded-[10px]"><PlaySquare className="w-5 h-5" /></div>
+          </div>
+        </div>
+
+        <div className="bg-white border border-line rounded-xl p-[20px] shadow-sm">
+          <div className="flex justify-between items-start">
+            <div>
+              <p className="text-[12px] font-medium text-text-soft">Like Engagement Rate (ER)</p>
+              <h4 className="text-[22px] font-bold mt-[6px] text-text">
+                {likeER}%
+              </h4>
+              <p className="text-[11px] text-text-soft mt-[2px]">
+                Rasio likes per views ({totalCampaignLikes.toLocaleString()} likes)
+              </p>
+            </div>
+            <div className="p-[10px] bg-rose-50 text-rose-500 rounded-[10px]"><Activity className="w-5 h-5" /></div>
+          </div>
+        </div>
+      </div>
+
+      {/* === TOP 10 CREATOR LEADERBOARD === */}
+      <div className="ccard !p-0">
+        <div className="border-b border-line bg-slate-50/50 p-[16px] flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div>
+            <h3 className="font-bold flex items-center gap-[8px] text-[16px]">
+              🏆 Top 10 Creator Performance
+            </h3>
+            <p className="text-[12px] text-text-soft mt-1">10 Kreator dengan performa terbaik berdasarkan 4 pilar utama</p>
+          </div>
+          
+          <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-lg text-[12px] font-medium">
+            <button
+              onClick={() => setTop10Tab('gmv')}
+              className={`px-3 py-1.5 rounded-md transition-all ${top10Tab === 'gmv' ? 'bg-white text-indigo-600 shadow-sm font-bold' : 'text-slate-600 hover:text-slate-900'}`}
+            >
+              Top GMV
+            </button>
+            <button
+              onClick={() => setTop10Tab('views')}
+              className={`px-3 py-1.5 rounded-md transition-all ${top10Tab === 'views' ? 'bg-white text-indigo-600 shadow-sm font-bold' : 'text-slate-600 hover:text-slate-900'}`}
+            >
+              Top Views
+            </button>
+            <button
+              onClick={() => setTop10Tab('er')}
+              className={`px-3 py-1.5 rounded-md transition-all ${top10Tab === 'er' ? 'bg-white text-indigo-600 shadow-sm font-bold' : 'text-slate-600 hover:text-slate-900'}`}
+            >
+              Top Like ER
+            </button>
+            <button
+              onClick={() => setTop10Tab('itemsSold')}
+              className={`px-3 py-1.5 rounded-md transition-all ${top10Tab === 'itemsSold' ? 'bg-white text-indigo-600 shadow-sm font-bold' : 'text-slate-600 hover:text-slate-900'}`}
+            >
+              Top Items Sold
+            </button>
+          </div>
+        </div>
+
+        <div className="tbl-wrap !border-0 !rounded-none">
+          <table className="w-full text-[13px]">
+            <thead className="bg-white border-b border-line">
+              <tr>
+                <th className="py-[12px] w-12 text-center">Rank</th>
+                <th className="py-[12px]">Creator</th>
+                <th className="py-[12px] text-center">Total VT</th>
+                <th className="py-[12px] text-center">Views</th>
+                <th className="py-[12px] text-center">Like ER</th>
+                <th className="py-[12px] text-center">Items Sold</th>
+                <th className="py-[12px] text-right">GMV Organik</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(() => {
+                const currentList = top10Tab === 'gmv' ? top10ByGmv :
+                                    top10Tab === 'views' ? top10ByViews :
+                                    top10Tab === 'er' ? top10ByER :
+                                    top10ByItemsSold;
+
+                if (!currentList || currentList.length === 0) {
+                  return (
+                    <tr>
+                      <td colSpan={7} className="text-center py-[24px] text-text-soft">
+                        Belum ada data kreator untuk kategori ini.
+                      </td>
+                    </tr>
+                  );
+                }
+
+                return currentList.map((c: any, idx: number) => {
+                  const rankColors = [
+                    'bg-amber-100 text-amber-800 border-amber-300 font-bold',
+                    'bg-slate-200 text-slate-800 border-slate-300 font-bold',
+                    'bg-orange-100 text-orange-800 border-orange-300 font-bold'
+                  ];
+                  const badgeClass = idx < 3 ? rankColors[idx] : 'bg-slate-50 text-slate-600 border-slate-200';
+                  const cER = (c.videoViews || 0) > 0 ? Number(((c.videoLikes / c.videoViews) * 100).toFixed(2)) : 0;
+
+                  return (
+                    <tr key={c.id || idx} className="hover:bg-slate-50 transition-colors border-b border-line">
+                      <td className="text-center py-[12px]">
+                        <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-[12px] border ${badgeClass}`}>
+                          {idx + 1}
+                        </span>
+                      </td>
+                      <td className="py-[12px]">
+                        <Link href={`/creator-pool/${c.creator_id}`} className="font-bold text-indigo-600 hover:underline flex items-center gap-1">
+                          @{c.username}
+                          <ExternalLink className="w-3 h-3 text-slate-400" />
+                        </Link>
+                      </td>
+                      <td className="text-center py-[12px] font-semibold">{c.totalVt} VT</td>
+                      <td className={`text-center py-[12px] ${top10Tab === 'views' ? 'font-bold text-indigo-600' : ''}`}>
+                        {(c.videoViews || 0).toLocaleString()}
+                      </td>
+                      <td className={`text-center py-[12px] ${top10Tab === 'er' ? 'font-bold text-rose-600' : ''}`}>
+                        {cER}%
+                      </td>
+                      <td className={`text-center py-[12px] ${top10Tab === 'itemsSold' ? 'font-bold text-amber-700' : ''}`}>
+                        {(c.itemsSold || 0).toLocaleString()} pcs
+                      </td>
+                      <td className={`text-right py-[12px] ${top10Tab === 'gmv' ? 'font-bold text-emerald-700' : 'font-medium'}`}>
+                        Rp {(c.gmvOrganic || 0).toLocaleString()}
+                      </td>
+                    </tr>
+                  );
+                });
+              })()}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* === WINNING CONCEPTS SHOWCASE === */}
+      <div className="ccard !p-0">
+        <div className="border-b border-line bg-slate-50/50 p-[16px]">
+          <h3 className="font-bold flex items-center gap-[8px] text-[16px]">
+            💡 Winning Concept Performance & VT Showcase
+          </h3>
+          <p className="text-[12px] text-text-soft mt-1">
+            Evaluasi performa master brief konsep konten, penjualan, serta tautan video TikTok langsung
+          </p>
+        </div>
+
+        <div className="p-[16px] space-y-4">
+          {(!winningConcepts || winningConcepts.length === 0) ? (
+            <div className="text-center py-8 text-text-soft text-[13px]">
+              Belum ada master konsep yang dikaitkan ke video pada campaign ini.
+            </div>
+          ) : (
+            winningConcepts.map((item: any, idx: number) => {
+              const cNo = item.concept?.no_konsep || idx + 1;
+              const isExpanded = !!expandedConcepts[cNo];
+
+              return (
+                <div key={cNo} className="border border-line rounded-xl overflow-hidden hover:border-slate-300 transition-colors">
+                  <div 
+                    onClick={() => toggleConceptExpand(cNo)}
+                    className="p-4 bg-slate-50/70 hover:bg-slate-100/60 transition-colors cursor-pointer flex flex-col md:flex-row md:items-center justify-between gap-4"
+                  >
+                    <div className="flex items-start md:items-center gap-3">
+                      <span className="w-8 h-8 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-700 font-bold flex items-center justify-center text-sm shrink-0">
+                        #{cNo}
+                      </span>
+                      <div>
+                        <h4 className="font-bold text-text text-[14px]">
+                          {item.concept?.judul_konsep || `Konsep #${cNo}`}
+                        </h4>
+                        <div className="flex flex-wrap items-center gap-2 mt-1 text-[11px] text-text-soft">
+                          {item.concept?.tier && (
+                            <span className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 font-medium">
+                              Tier: {item.concept.tier}
+                            </span>
+                          )}
+                          {item.concept?.nama_produk && (
+                            <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-700">
+                              Produk: {item.concept.nama_produk}
+                            </span>
+                          )}
+                          <span>{item.total_vt} VT Terkait</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-4 md:gap-6 flex-wrap">
+                      <div className="text-left md:text-right">
+                        <p className="text-[11px] text-text-soft">Views & Like ER</p>
+                        <p className="text-[13px] font-bold text-text">
+                          {item.total_views.toLocaleString()} <span className="text-[11px] font-normal text-rose-600">({item.er}%)</span>
+                        </p>
+                      </div>
+                      <div className="text-left md:text-right">
+                        <p className="text-[11px] text-text-soft">Items Sold</p>
+                        <p className="text-[13px] font-bold text-amber-800">
+                          {item.items_sold.toLocaleString()} pcs
+                        </p>
+                      </div>
+                      <div className="text-left md:text-right">
+                        <p className="text-[11px] text-text-soft">Total GMV</p>
+                        <p className="text-[14px] font-bold text-emerald-700">
+                          Rp {item.total_gmv.toLocaleString()}
+                        </p>
+                      </div>
+                      <button className="px-3 py-1.5 rounded-lg border border-line bg-white hover:bg-slate-50 text-[12px] font-medium flex items-center gap-1.5 text-text transition-colors shadow-sm">
+                        {isExpanded ? (
+                          <>Tutup VT <ChevronUp className="w-3.5 h-3.5" /></>
+                        ) : (
+                          <>Lihat VT ({item.videos?.length || 0}) <ChevronDown className="w-3.5 h-3.5" /></>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  {isExpanded && (
+                    <div className="p-4 bg-white border-t border-line">
+                      {(!item.videos || item.videos.length === 0) ? (
+                        <p className="text-[12px] text-text-soft py-2">Belum ada video dengan link untuk konsep ini.</p>
+                      ) : (
+                        <div className="space-y-2">
+                          <p className="text-[11px] font-bold uppercase tracking-wider text-text-soft mb-2">
+                            Daftar Video TikTok yang Memakai Konsep Ini:
+                          </p>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                            {item.videos.map((vid: any, vIdx: number) => (
+                              <div 
+                                key={vid.id || vIdx}
+                                className="p-3 border border-line rounded-lg bg-slate-50/50 hover:bg-slate-50 flex items-center justify-between gap-3 transition-colors"
+                              >
+                                <div className="min-w-0">
+                                  <p className="text-[12px] font-bold text-text truncate">
+                                    @{vid.creator_username}
+                                  </p>
+                                </div>
+                                <a
+                                  href={vid.link_video}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="shrink-0 px-2.5 py-1.5 rounded bg-blue-50 text-blue-600 hover:bg-blue-100 text-[11px] font-bold flex items-center gap-1 transition-colors"
+                                >
+                                  Buka VT <ExternalLink className="w-3 h-3" />
+                                </a>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
       </div>
 
       <div className="ccard !p-0">
