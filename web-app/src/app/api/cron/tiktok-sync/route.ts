@@ -20,6 +20,18 @@ async function handleCron(req: NextRequest) {
     const denied = await requireUserOrError();
     if (denied) return NextResponse.json({ error: denied.message }, { status: denied.status || 401 });
 
+    const { db } = await import('@/db');
+    const { sql } = await import('drizzle-orm');
+    const authRows: any = await db.execute(sql`
+      SELECT is_scheduler_paused FROM tiktok_authorizations WHERE status = 'active' ORDER BY id DESC LIMIT 1
+    `);
+    if (authRows && authRows[0]?.is_scheduler_paused) {
+      return NextResponse.json({ 
+        success: false, 
+        message: 'Auto-sync scheduler sedang di-PAUSE oleh pengguna untuk melindungi tabel raw. Aktifkan kembali di menu Sinkronisasi TikTok jika ingin melanjutkan.' 
+      }, { status: 400 });
+    }
+
     console.log("[TikTok Cron] Triggering scheduled auto-sync...");
     const result = await runTikTokAutoSync({ triggerType: 'cron', daysBack: SCHEDULED_SYNC_DAYS_BACK });
 

@@ -59,24 +59,34 @@ export async function register() {
           return;
         }
 
-        // Check last_synced_at from database
+        // Check last_synced_at & is_scheduler_paused from database
         const { db } = await import('@/db');
         const { sql } = await import('drizzle-orm');
 
         let lastSyncedAt: Date | null = null;
+        let isPaused = true; // default true for safety
         try {
           const rows: any = await db.execute(sql`
-            SELECT last_synced_at 
+            SELECT last_synced_at, is_scheduler_paused 
             FROM tiktok_authorizations 
             WHERE status = 'active' 
             ORDER BY id DESC 
             LIMIT 1
           `);
-          if (rows && rows.length > 0 && rows[0].last_synced_at) {
-            lastSyncedAt = new Date(rows[0].last_synced_at);
+          if (rows && rows.length > 0) {
+            if (rows[0].last_synced_at) {
+              lastSyncedAt = new Date(rows[0].last_synced_at);
+            }
+            isPaused = rows[0].is_scheduler_paused ?? true;
           }
         } catch (dbErr) {
           console.warn('[AutoSync Scheduler] Could not query last_synced_at:', dbErr);
+        }
+
+        if (isPaused) {
+          // Scheduler di-pause oleh user agar tidak mengotori tabel raw
+          lastCheckedSlot = slotKey;
+          return;
         }
 
         // Determine if latest slot was missed:

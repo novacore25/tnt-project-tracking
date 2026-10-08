@@ -7,13 +7,14 @@ import { Button } from '@/components/ui/Button';
 import { 
   RefreshCw, CheckCircle2, AlertCircle, Clock, Zap, 
   ExternalLink, Database, ShieldCheck, ArrowRight, Activity,
-  Calendar, SlidersHorizontal, ChevronRight
+  Calendar, SlidersHorizontal, ChevronRight, PauseCircle, PlayCircle
 } from 'lucide-react';
 import { 
   getTikTokAuthStatusAction, 
   saveTikTokAuthTokensAction,
   triggerManualTikTokSyncAction, 
-  getTikTokSyncHistoryAction 
+  getTikTokSyncHistoryAction,
+  toggleTikTokSchedulerAction
 } from '@/app/actions/tiktokShopActions';
 
 export function TikTokSyncControlCard() {
@@ -21,6 +22,7 @@ export function TikTokSyncControlCard() {
   const [history, setHistory] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isTogglingPause, setIsTogglingPause] = useState(false);
   const [syncResult, setSyncResult] = useState<any>(null);
 
   // Sync Range States
@@ -211,6 +213,19 @@ export function TikTokSyncControlCard() {
                 Belum Terhubung
               </Badge>
             )}
+
+            {/* Scheduler Status Badge */}
+            {authData?.isSchedulerPaused ? (
+              <Badge className="bg-rose-500/20 text-rose-300 border-rose-500/40 flex items-center gap-1.5 px-2.5 py-0.5 font-semibold">
+                <PauseCircle className="w-3.5 h-3.5 text-rose-400" />
+                Jadwal Otomatis Dijeda (Paused)
+              </Badge>
+            ) : (
+              <Badge className="bg-emerald-500/20 text-emerald-300 border-emerald-500/40 flex items-center gap-1.5 px-2.5 py-0.5 font-semibold">
+                <PlayCircle className="w-3.5 h-3.5 text-emerald-400" />
+                Jadwal Otomatis Aktif
+              </Badge>
+            )}
           </div>
 
           <h3 className="text-xl font-bold tracking-tight text-white flex items-center gap-2">
@@ -218,10 +233,10 @@ export function TikTokSyncControlCard() {
           </h3>
           
           <p className="text-sm text-slate-300 leading-relaxed">
-            Data Sales, Awareness Video, dan Sesi Live ditarik otomatis langsung dari TikTok Partner Center tanpa perlu upload Excel manual.
+            Data Sales, Awareness Video, dan Sesi Live ditarik langsung dari TikTok Partner Center. Anda dapat menjeda penarikan otomatis agar tabel raw hanya diisi dari Excel manual.
           </p>
 
-          {/* Schedule Badges */}
+          {/* Schedule Badges & Pause Toggle */}
           <div className="pt-2 flex items-center gap-2 flex-wrap text-xs text-slate-400">
             <span className="flex items-center gap-1 text-indigo-300 font-medium">
               <Clock className="w-3.5 h-3.5" /> Jadwal Otomatis:
@@ -230,7 +245,41 @@ export function TikTokSyncControlCard() {
             <span className="bg-slate-800/80 border border-slate-700 px-2 py-0.5 rounded text-slate-200 font-mono">12:00 WIB</span>
             <span className="bg-slate-800/80 border border-slate-700 px-2 py-0.5 rounded text-slate-200 font-mono">15:00 WIB</span>
             <span className="bg-slate-800/80 border border-slate-700 px-2 py-0.5 rounded text-slate-200 font-mono">18:00 WIB</span>
-            <span className="text-slate-500">• Setiap Hari</span>
+
+            <button
+              type="button"
+              disabled={isTogglingPause}
+              onClick={async () => {
+                setIsTogglingPause(true);
+                try {
+                  const targetPause = !authData?.isSchedulerPaused;
+                  const res = await toggleTikTokSchedulerAction(targetPause);
+                  if (res.success) {
+                    await loadData();
+                  } else {
+                    alert('Gagal mengubah status scheduler: ' + (res.error || 'Terjadi kesalahan'));
+                  }
+                } catch (e: any) {
+                  alert('Error: ' + e.message);
+                } finally {
+                  setIsTogglingPause(false);
+                }
+              }}
+              className={`ml-2 inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-all shadow-sm border ${
+                authData?.isSchedulerPaused
+                  ? 'bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-200 border-emerald-500/40 hover:border-emerald-400'
+                  : 'bg-rose-600/30 hover:bg-rose-600/50 text-rose-200 border-rose-500/40 hover:border-rose-400'
+              }`}
+            >
+              {isTogglingPause ? (
+                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+              ) : authData?.isSchedulerPaused ? (
+                <PlayCircle className="w-3.5 h-3.5 text-emerald-400" />
+              ) : (
+                <PauseCircle className="w-3.5 h-3.5 text-rose-400" />
+              )}
+              {authData?.isSchedulerPaused ? '▶️ Aktifkan Kembali Jadwal' : '⏸️ Jeda Jadwal (Pause)'}
+            </button>
           </div>
 
           {/* Last Synced Report / Live Status Banner */}

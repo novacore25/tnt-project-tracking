@@ -275,12 +275,13 @@ export async function getTikTokAuthStatusAction() {
       ALTER TABLE tiktok_authorizations ADD COLUMN IF NOT EXISTS sync_progress_message TEXT;
       ALTER TABLE tiktok_authorizations ADD COLUMN IF NOT EXISTS sync_progress_percent INT DEFAULT 0;
       ALTER TABLE tiktok_authorizations ADD COLUMN IF NOT EXISTS sync_trigger_type TEXT;
+      ALTER TABLE tiktok_authorizations ADD COLUMN IF NOT EXISTS is_scheduler_paused BOOLEAN DEFAULT true;
     `);
 
     const rows = await db.execute(sql`
       SELECT id, seller_name, open_id, category_asset_cipher, seller_base_region, 
              status, last_synced_at, sync_status, sync_progress_message, sync_progress_percent,
-             sync_trigger_type, access_token_expire_in, created_at, updated_at
+             sync_trigger_type, is_scheduler_paused, access_token_expire_in, created_at, updated_at
       FROM tiktok_authorizations
       WHERE status = 'active'
       ORDER BY id DESC
@@ -324,11 +325,36 @@ export async function getTikTokAuthStatusAction() {
         syncStatus: currentSyncStatus,
         syncProgressMessage: record.sync_progress_message,
         syncProgressPercent: percent,
-        syncTriggerType: record.sync_trigger_type || 'cron'
+        syncTriggerType: record.sync_trigger_type || 'cron',
+        isSchedulerPaused: record.is_scheduler_paused ?? true
       }
     };
   } catch (error: any) {
     return { isConnected: false, error: error.message };
+  }
+}
+
+/**
+ * Toggle Pause / Resume for background auto-sync scheduler
+ */
+export async function toggleTikTokSchedulerAction(paused: boolean) {
+  try {
+    const { requireUser } = await import('@/lib/guards');
+    await requireUser();
+
+    const { db } = await import('@/db');
+    const { sql } = await import('drizzle-orm');
+
+    await db.execute(sql`
+      UPDATE tiktok_authorizations
+      SET is_scheduler_paused = ${paused},
+          updated_at = NOW()
+      WHERE status = 'active'
+    `);
+
+    return { success: true, isPaused: paused };
+  } catch (error: any) {
+    return { success: false, error: error.message };
   }
 }
 
