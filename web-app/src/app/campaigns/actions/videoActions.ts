@@ -62,7 +62,9 @@ export async function getInternalVideoData(campaignId: number, searchKeyword: st
       // 4. Fetch Sales stats for this campaign
       // Filter ganda: campaign_id ATAU product_id yang terdaftar di skus.
       db.execute(sql`
-        SELECT content_uid, creator_username, product_id, SUM(COALESCE(gmv, 0)) as gmv
+        SELECT content_uid, creator_username, product_id,
+               bool_or(LOWER(COALESCE(content_type, '')) IN ('live', 'livestream') OR content_type ILIKE '%live%') as is_live,
+               SUM(COALESCE(gmv, 0)) as gmv
         FROM sales
         WHERE campaign_id = ${campaignId}
            OR (product_id IS NOT NULL AND product_id IN (
@@ -166,14 +168,26 @@ export async function getInternalVideoData(campaignId: number, searchKeyword: st
       return s === 'livestream' || s === 'live';
     };
 
+    // Helper: ekstrak tanggal upload TikTok dari snowflake UID
+    const extractTikTokUploadDate = (videoId: string): string | null => {
+      try {
+        const id = BigInt(videoId);
+        const timestamp = Number(id >> BigInt(32)) * 1000;
+        const date = new Date(timestamp);
+        if (isNaN(date.getTime())) return null;
+        return date.toISOString();
+      } catch {
+        return null;
+      }
+    };
+
     // Process organic videos
     // CATATAN PENTING: organic_videos memuat satu baris per (content_uid, tanggal
     // import). Baris yang sama bisa muncul berkali-kali untuk video yang sama.
-    // Versi lama menjumlahkan semuanya sehingga views/likes terhitung berlipat.
     // Di sini di-dedup per content_uid dengan mengambil nilai TERBESAR
     // (snapshot terbaru), sama seperti PerformaClient.tsx:153-157.
     (organicRows || []).forEach((row: any) => {
-      const uname = (row.creator_username || '').toLowerCase().trim();
+      const uname = (row.creator_username || '').replace(/^@/, '').toLowerCase().trim();
       if (!uname) return;
       if (!videoStatsMap.has(uname)) videoStatsMap.set(uname, []);
       const list = videoStatsMap.get(uname)!;
@@ -185,6 +199,8 @@ export async function getInternalVideoData(campaignId: number, searchKeyword: st
         existing.views = Math.max(existing.views || 0, Number(row.views) || 0);
         existing.likes = Math.max(existing.likes || 0, Number(row.likes) || 0);
         if (!existing.product_id && row.product_id) existing.product_id = row.product_id;
+        if (isLiveContent(row.content_type)) existing.is_live = true;
+        if (!existing.post_time && row.post_time) existing.post_time = row.post_time;
       } else {
         list.push({
           content_uid: uid,
@@ -200,7 +216,7 @@ export async function getInternalVideoData(campaignId: number, searchKeyword: st
 
     // Process sales GMV
     (salesRows || []).forEach((row: any) => {
-      const uname = (row.creator_username || '').toLowerCase().trim();
+      const uname = (row.creator_username || '').replace(/^@/, '').toLowerCase().trim();
       if (!uname) return;
       if (!videoStatsMap.has(uname)) videoStatsMap.set(uname, []);
       const list = videoStatsMap.get(uname)!;
@@ -208,6 +224,7 @@ export async function getInternalVideoData(campaignId: number, searchKeyword: st
       if (existing) {
         existing.gmv = (existing.gmv || 0) + (Number(row.gmv) || 0);
         if (!existing.product_id && row.product_id) existing.product_id = row.product_id;
+        if (row.is_live) existing.is_live = true;
       } else {
         list.push({
           content_uid: row.content_uid,
@@ -215,13 +232,83 @@ export async function getInternalVideoData(campaignId: number, searchKeyword: st
           gmv: Number(row.gmv) || 0,
           views: 0,
           likes: 0,
-          is_live: false,
+          is_live: Boolean(row.is_live),
         });
       }
     });
 
+    const allAutoVideos: any[] = [];
+
     const mapped = (ccsRows || []).map((r: any) => {
-      const uname = (r.username || '').toLowerCase().trim();
+      const uname = (r.username || '').replace(/^@/, '').toLowerCase().trim();
+      const existingVideos = (r.videos || []).filter(Boolean);
+
+      // Kumpulkan UID video yang sudah ada di database agar tidak duplikat
+      const existingUids = new Set<string>();
+      existingVideos.forEach((v: any) => {
+        if (v.content_uid) {
+          const cleanUid = String(v.content_uid).replace(/^video_/, '').trim();
+          if (cleanUid) existingUids.add(cleanUid);
+        }
+        if (v.link_video) {
+          const match = String(v.link_video).match(/video\/(\d+)/i);
+          if (match) existingUids.add(match[1]);
+        }
+      });
+
+      let maxUrutan = existingVideos.reduce((max: number, v: any) => Math.max(max, Number(v.urutan) || 0), 0) + 1;
+      const statsList = videoStatsMap.get(uname) || [];
+      const autoVideosForCreator: any[] = [];
+
+      for (const s of statsList) {
+        // Abaikan livestream
+        if (s.is_live) continue;
+        const rawUid = String(s.content_uid || '').replace(/^video_/, '').trim();
+        if (!rawUid || rawUid === '-' || rawUid === '0') continue;
+        if (existingUids.has(rawUid)) continue;
+
+        existingUids.add(rawUid);
+
+        let resolvedSkuId: number | null = null;
+        if (s.product_id && Array.isArray(skusList)) {
+          const matchedSku = skusList.find((sku: any) => String(sku.product_id) === String(s.product_id));
+          if (matchedSku) resolvedSkuId = matchedSku.id;
+        }
+        if (!resolvedSkuId && Array.isArray(skusList) && skusList.length === 1) {
+          resolvedSkuId = skusList[0].id;
+        }
+
+        const postTime = s.post_time || extractTikTokUploadDate(rawUid);
+        const cleanHandle = (r.username || '').replace(/^@/, '').trim();
+
+        const autoVid = {
+          id: `auto_${rawUid}`,
+          campaign_creator_id: r.id,
+          urutan: maxUrutan++,
+          concept: 'Auto-detected',
+          concept_updated_at: null,
+          concept_updated_by: null,
+          link_video: cleanHandle ? `https://www.tiktok.com/@${cleanHandle}/video/${rawUid}` : `https://www.tiktok.com/video/${rawUid}`,
+          link_draft: null,
+          link_draft_updated_by: null,
+          link_draft_updated_at: null,
+          vt_approval: 'approved',
+          vt_approved_by: 'Auto-detect',
+          vt_approved_at: postTime || null,
+          revision_notes: null,
+          revision_notes_updated_by: null,
+          revision_notes_updated_at: null,
+          content_uid: rawUid,
+          sku_id: resolvedSkuId,
+          added_by: 'Auto-detect',
+          post_time: postTime,
+          created_at: postTime || new Date().toISOString(),
+        };
+
+        autoVideosForCreator.push(autoVid);
+        allAutoVideos.push(autoVid);
+      }
+
       return {
         ...r,
         creator_id: r.creator_id || r.creator_db_id,
@@ -233,8 +320,8 @@ export async function getInternalVideoData(campaignId: number, searchKeyword: st
           creator_contacts: r.creator_contacts || [],
           creator_snapshots: r.creator_snapshots || [],
         },
-        videos: r.videos || [],
-        _videoStats: videoStatsMap.get(uname) || [],
+        videos: [...existingVideos, ...autoVideosForCreator],
+        _videoStats: statsList,
       };
     });
 
@@ -274,7 +361,7 @@ export async function getInternalVideoData(campaignId: number, searchKeyword: st
       skus: skusList,
       creators: mapped,
       listingData: mapped,
-      allVideos: allVideosList,
+      allVideos: [...(allVideosList || []), ...allAutoVideos],
       initialRevisionNotes,
       stats: organicRows,
     };

@@ -1149,20 +1149,25 @@ function CampaignListingContent() {
             finalData = finalData.map((cc: any) => {
               if (!cc.creators) return cc;
               const cName = cc.creators.username;
-              const cSales = sData.filter((s: any) => s.creator_username === cName);
-              const uniqueUids = Array.from(new Set(cSales.map((s: any) => s.content_uid)));
+              const cleanCName = (cName || '').replace(/^@/, '').toLowerCase().trim();
+              const cSales = sData.filter((s: any) => (s.creator_username || '').replace(/^@/, '').toLowerCase().trim() === cleanCName);
+              const uniqueUids = Array.from(new Set(cSales.map((s: any) => String(s.content_uid).replace(/^video_/, '').trim()).filter(Boolean)));
               
               const existingVids = cc.videos || [];
               const autoVids: any[] = [];
+              const cleanHandle = (cName || '').replace(/^@/, '').trim();
               
               for (const uid of uniqueUids) {
-                if (!uid) continue;
-                const exists = existingVids.some((v: any) => v.content_uid === uid);
+                if (!uid || uid === '-' || uid === '0') continue;
+                const exists = existingVids.some((v: any) => {
+                  const vUid = String(v.content_uid || '').replace(/^video_/, '').trim();
+                  return vUid === uid || (v.link_video && v.link_video.includes(uid));
+                });
                 if (!exists) {
                   autoVids.push({
                     id: `auto_${uid}`,
-                    concept: 'Auto-detected from Sales CSV',
-                    link_video: `https://www.tiktok.com/@${cName}/video/${uid}`,
+                    concept: 'Auto-detected',
+                    link_video: cleanHandle ? `https://www.tiktok.com/@${cleanHandle}/video/${uid}` : `https://www.tiktok.com/video/${uid}`,
                     vt_approval: 'approved',
                     content_uid: uid,
                     urutan: 999

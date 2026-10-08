@@ -1587,14 +1587,32 @@ export async function fetchVideoCreatorIdsForCampaignAction(campaignId: number) 
 export async function fetchSalesByCreatorUsernamesAction(campaignId: number, creatorUsernames: string[], skuProductIds: string[]) {
   if (!creatorUsernames || creatorUsernames.length === 0 || !skuProductIds || skuProductIds.length === 0) return { success: true, data: [] };
   try {
+    const cleanUsernames = Array.from(new Set(
+      creatorUsernames.map(u => (u || '').replace(/^@/, '').toLowerCase().trim()).filter(Boolean)
+    ));
+    if (cleanUsernames.length === 0) return { success: true, data: [] };
+
     const data = await db.execute(sql`
-      SELECT content_uid, creator_username, product_id
-      FROM sales
-      WHERE campaign_id = ${campaignId}
-        AND creator_username IN ${sqlInList(creatorUsernames)}
-        AND product_id IN ${sqlInList(skuProductIds)}
-        AND content_uid IS NOT NULL
-        AND content_uid != ''
+      SELECT DISTINCT content_uid, creator_username, product_id
+      FROM (
+        SELECT content_uid, creator_username, product_id
+        FROM sales
+        WHERE (campaign_id = ${campaignId} OR (product_id IS NOT NULL AND product_id IN ${sqlInList(skuProductIds)}))
+          AND LOWER(REPLACE(creator_username, '@', '')) IN ${sqlInList(cleanUsernames)}
+          AND content_uid IS NOT NULL
+          AND content_uid != ''
+          AND content_uid != '-'
+          AND LOWER(COALESCE(content_type, '')) NOT IN ('live', 'livestream')
+        UNION ALL
+        SELECT content_uid, creator_username, product_id
+        FROM organic_videos
+        WHERE (campaign_id = ${campaignId} OR (product_id IS NOT NULL AND product_id IN ${sqlInList(skuProductIds)}))
+          AND LOWER(REPLACE(creator_username, '@', '')) IN ${sqlInList(cleanUsernames)}
+          AND content_uid IS NOT NULL
+          AND content_uid != ''
+          AND content_uid != '-'
+          AND LOWER(COALESCE(content_type, '')) NOT IN ('live', 'livestream')
+      ) combined
     `) as any[];
     return { success: true, data: data || [] };
   } catch (err: any) {

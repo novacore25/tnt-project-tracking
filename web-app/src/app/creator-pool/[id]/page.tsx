@@ -198,21 +198,41 @@ export default function CreatorProfilePage() {
 
       const manualVideos = localData?.videos?.filter((v: any) => v.campaign_creator_id === cc.id) || [];
       const uniqueVideoIds = new Set<string>();
-      let totalVtCount = manualVideos.length;
-      campaignSales.forEach((s: any) => {
-        let vid = s.content_uid;
-        if (vid && vid.startsWith('video_')) {
-          const parts = vid.split('_');
-          if (parts.length >= 2) vid = parts[1];
+      manualVideos.forEach((v: any) => {
+        if (v.content_uid) {
+          const cleanUid = String(v.content_uid).replace(/^video_/, '').trim();
+          if (cleanUid) uniqueVideoIds.add(cleanUid);
         }
-        
-        if (vid && !uniqueVideoIds.has(vid)) {
+        if (v.link_video) {
+          const m = String(v.link_video).match(/video\/(\d+)/i);
+          if (m) uniqueVideoIds.add(m[1]);
+        }
+      });
+      let totalVtCount = manualVideos.length;
+
+      campaignSales.forEach((s: any) => {
+        let vid = s.content_uid ? String(s.content_uid).replace(/^video_/, '').trim() : '';
+        if (vid && vid !== '-' && !uniqueVideoIds.has(vid)) {
           uniqueVideoIds.add(vid);
-          // `vt_code` dihapus: kolom itu tidak pernah ada di tabel `videos`,
-          // jadi perbandingannya selalu undefined dan tidak berguna.
-          if (!manualVideos.some((v: any) => v.content_uid === vid || v.content_uid === s.content_uid)) {
-            totalVtCount++;
-          }
+          totalVtCount++;
+        }
+      });
+
+      // Kumpulkan video organik non-live milik campaign ini
+      const campaignOrganicVideos = localData?.organicVideos?.filter((ov: any) => {
+        const cType = String(ov.content_type || '').toLowerCase();
+        if (cType === 'live' || cType === 'livestream') return false;
+        if (!ov.content_uid || ov.content_uid === '-' || ov.content_uid.trim() === '') return false;
+        const pId = ov.product_id;
+        const mappedCid = pId != null ? skuCampaignMap.get(String(pId)) : undefined;
+        return ov.campaign_id === cc.campaign_id || mappedCid === cc.campaign_id;
+      }) || [];
+
+      campaignOrganicVideos.forEach((ov: any) => {
+        let vid = ov.content_uid ? String(ov.content_uid).replace(/^video_/, '').trim() : '';
+        if (vid && vid !== '-' && !uniqueVideoIds.has(vid)) {
+          uniqueVideoIds.add(vid);
+          totalVtCount++;
         }
       });
 
@@ -298,6 +318,14 @@ export default function CreatorProfilePage() {
       if (manualVid) {
         const cc = localData?.ccs?.find((c: any) => c.id === manualVid.campaign_creator_id);
         if (cc) campaignIds.add(cc.campaign_id.toString());
+      }
+
+      if (video.campaign_id) {
+        campaignIds.add(video.campaign_id.toString());
+      }
+      const vidPid = video.product_id;
+      if (vidPid && skuMap[vidPid]) {
+        campaignIds.add(skuMap[vidPid].toString());
       }
 
       if (campaignIds.size === 0) {
@@ -1850,28 +1878,55 @@ export default function CreatorProfilePage() {
                         const mappedCid = pId != null ? skuCampaignMap.get(String(pId)) : undefined;
                         return s.campaign_id === tr.campaign_id || mappedCid === tr.campaign_id;
                       }) || [];
+                      const campaignOrganicVideos = localData?.organicVideos?.filter((ov: any) => {
+                        const cType = String(ov.content_type || '').toLowerCase();
+                        if (cType === 'live' || cType === 'livestream') return false;
+                        if (!ov.content_uid || ov.content_uid === '-' || ov.content_uid.trim() === '') return false;
+                        const pId = ov.product_id;
+                        const mappedCid = pId != null ? skuCampaignMap.get(String(pId)) : undefined;
+                        return ov.campaign_id === tr.campaign_id || mappedCid === tr.campaign_id;
+                      }) || [];
+
                       const combinedVideos = [...manualVideos];
                       const uniqueVideoIds2 = new Set<string>();
-                      campaignSales.forEach((s: any) => {
-                          let vid = s.content_uid;
-                          if (vid && vid.startsWith('video_')) {
-                            const parts = vid.split('_');
-                            if (parts.length >= 2) vid = parts[1];
-                          }
+                      manualVideos.forEach((v: any) => {
+                        if (v.content_uid) {
+                          const cleanUid = String(v.content_uid).replace(/^video_/, '').trim();
+                          if (cleanUid) uniqueVideoIds2.add(cleanUid);
+                        }
+                        if (v.link_video) {
+                          const m = String(v.link_video).match(/video\/(\d+)/i);
+                          if (m) uniqueVideoIds2.add(m[1]);
+                        }
+                      });
 
-                          if (vid && !uniqueVideoIds2.has(vid)) {
+                      const creatorHandle = (localData?.creator?.username || '').replace(/^@/, '').trim();
+
+                      campaignSales.forEach((s: any) => {
+                          let vid = s.content_uid ? String(s.content_uid).replace(/^video_/, '').trim() : '';
+                          if (vid && vid !== '-' && !uniqueVideoIds2.has(vid)) {
                               uniqueVideoIds2.add(vid);
-                              // Check if already in manual videos
-                              // (`vt_code` dihapus: kolom itu tidak pernah ada di tabel `videos`)
-                              if (!manualVideos.some((v: any) => v.content_uid === vid || v.content_uid === s.content_uid)) {
-                                  combinedVideos.push({
-                                     id: `auto-${vid}`,
-                                     content_uid: vid, // Use the true video ID
-                                     link_video: `https://www.tiktok.com/@${localData?.creator?.username}/video/${vid}`,
-                                     urutan: combinedVideos.length + 1,
-                                     campaign_creator_id: tr.id
-                                  });
-                              }
+                              combinedVideos.push({
+                                 id: `auto-${vid}`,
+                                 content_uid: vid,
+                                 link_video: creatorHandle ? `https://www.tiktok.com/@${creatorHandle}/video/${vid}` : `https://www.tiktok.com/video/${vid}`,
+                                 urutan: combinedVideos.length + 1,
+                                 campaign_creator_id: tr.id
+                              });
+                          }
+                      });
+
+                      campaignOrganicVideos.forEach((ov: any) => {
+                          let vid = ov.content_uid ? String(ov.content_uid).replace(/^video_/, '').trim() : '';
+                          if (vid && vid !== '-' && !uniqueVideoIds2.has(vid)) {
+                              uniqueVideoIds2.add(vid);
+                              combinedVideos.push({
+                                 id: `auto-${vid}`,
+                                 content_uid: vid,
+                                 link_video: creatorHandle ? `https://www.tiktok.com/@${creatorHandle}/video/${vid}` : `https://www.tiktok.com/video/${vid}`,
+                                 urutan: combinedVideos.length + 1,
+                                 campaign_creator_id: tr.id
+                              });
                           }
                       });
                       
@@ -1931,14 +1986,23 @@ export default function CreatorProfilePage() {
                                     {combinedVideos.length === 0 ? (
                                       <tr className="border-b border-line hover:bg-slate-50/50"><td className="py-[12px] px-[16px] text-center text-slate-400 py-3 text-xs" colSpan={5}>Belum ada video/VT diunggah.</td></tr>
                                     ) : combinedVideos.map((v: any) => {
+                                      const cleanVUid = String(v.content_uid || '').replace(/^video_/, '').trim();
                                       const videoSales = localData?.sales?.filter((s: any) => {
-                                        if (!s.content_uid || !v.content_uid) return false;
-                                        // True video ID could be exactly the content_uid, or embedded inside it like video_ID_PRODUCTID
-                                        return s.content_uid === v.content_uid || s.content_uid.includes(v.content_uid);
+                                        if (!s.content_uid) return false;
+                                        const sUid = String(s.content_uid).replace(/^video_/, '').trim();
+                                        return sUid === cleanVUid || (cleanVUid && s.content_uid.includes(cleanVUid));
                                       }) || [];
                                       const organicGmv = sumNum(videoSales, (row: any) => row.gmv);
                                       const itemsSold = sumNum(videoSales, (row: any) => row.quantity);
-                                      const maxViews = videoSales.length > 0 ? Math.max(...videoSales.map((s: any) => Number(s.raw_data?.['Video views'] || 0))) : 0;
+
+                                      const matchingOrganic = localData?.organicVideos?.filter((ov: any) => {
+                                        if (!ov.content_uid) return false;
+                                        const ovUid = String(ov.content_uid).replace(/^video_/, '').trim();
+                                        return ovUid === cleanVUid;
+                                      }) || [];
+                                      const organicViews = matchingOrganic.length > 0 ? Math.max(...matchingOrganic.map((ov: any) => Number(ov.video_views || 0))) : 0;
+                                      const salesViews = videoSales.length > 0 ? Math.max(...videoSales.map((s: any) => Number(s.raw_data?.['Video views'] || 0))) : 0;
+                                      const maxViews = Math.max(salesViews, organicViews);
                                       return { ...v, organicGmv, itemsSold, maxViews };
                                     }).sort((a: any, b: any) => {
                                       let diff = 0;
