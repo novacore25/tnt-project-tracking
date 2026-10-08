@@ -58,3 +58,16 @@ Atas arahan user untuk kebutuhan presentasi klien:
   3. **Penyempurnaan Subtitle Card UI**:
      - Subtitle kartu "Revenue per Active Creator" di Portal Brand (`PortalDashboardClient.tsx`) dan Internal (`PerformaClient.tsx`) diubah menjadi *"Rata-rata performa omzet per kreator aktif"* (menghilangkan penyebutan eksplisit jumlah kreator yang sudah upload video).
 - **Validasi Teknis**: `next build` lolos 100% dalam 10.2 detik tanpa error.
+
+## 5. Standardisasi Kreator Aktif (Video & Live) & Penambahan di Pencapaian Target Creator
+
+- **Latar Belakang & Realitas Operasional**:
+  - Di lapangan, model kerja kreator terbagi menjadi tiga: kreator *video-only*, *live-only*, dan yang menjalankan *keduanya* (hybrid). Menghitung kreator aktif hanya dari yang upload video menyebabkan kreator live-only tidak diakui kontribusinya.
+- **Implementasi**:
+  1. **Perhitungan Revenue per Active Creator**:
+     - Formula pembagi kini: kreator approved/alternate dengan `total_vt > 0 || total_live > 0`.
+     - Diterapkan konsisten di `PerformaClient.tsx` dan `portalActions.ts`.
+  2. **Card Pencapaian Target Creator**:
+     - Ditambahkan informasi badge **`X Kreator Aktif (VT / Live)`** berdampingan dengan jumlah approved dan pending.
+     - Diterapkan pada Internal Dashboard (`/campaigns/[id]/performa`) dan Brand Portal (`/portal/[id]/dashboard`).
+- **Validasi Build**: `next build` selesai 100% dalam 6.9 detik tanpa error.

@@ -706,7 +706,10 @@ export default function CampaignPerformaClient({ campaignId }: { campaignId: num
 
   // Performance Ratios & Metrics
   const totalItemsSold = creatorStats.reduce((sum, c) => sum + (c.itemsSold || 0), 0);
-  const activeApprovedCreatorsCount = creatorStats.filter(c => (c.approval === 'approved' || c.approval === 'alternate') && c.totalVt > 0).length;
+  const activeApprovedCreatorsCount = creatorStats.filter(c => 
+    (c.approval === 'approved' || c.approval === 'alternate') && 
+    ((Number(c.totalVt) || 0) > 0 || (Number(c.totalLive) || 0) > 0)
+  ).length;
   const revenuePerActiveCreator = activeApprovedCreatorsCount > 0 ? Math.round(totalOrganic / activeApprovedCreatorsCount) : 0;
   const revenuePerVideo = totalApprovedVideos > 0 ? Math.round(totalOrganic / totalApprovedVideos) : 0;
   const likeER = totalCampaignViews > 0 ? Number(((totalCampaignLikes / totalCampaignViews) * 100).toFixed(2)) : 0;
@@ -827,10 +830,14 @@ export default function CampaignPerformaClient({ campaignId }: { campaignId: num
                     {totalApprovedCreators} 
                     <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200">kreator approved</span>
                   </h3>
-                  <div className="flex items-center gap-3 text-[12px] mt-[6px] text-text-soft">
-                    <span className="flex items-center gap-2">
-                      {totalPendingCreators}
-                      <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200">kreator pending</span>
+                  <div className="flex flex-wrap items-center gap-2 text-[12px] mt-[8px]">
+                    <span className="flex items-center gap-1.5 font-semibold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-md">
+                      <Users className="w-3.5 h-3.5 text-blue-600" />
+                      {activeApprovedCreatorsCount} Kreator Aktif (VT / Live)
+                    </span>
+                    <span className="text-slate-300">·</span>
+                    <span className="text-text-soft text-[11px]">
+                      {totalPendingCreators} pending
                     </span>
                   </div>
                 </div>
