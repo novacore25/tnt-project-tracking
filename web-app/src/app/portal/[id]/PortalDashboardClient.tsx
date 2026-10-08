@@ -750,19 +750,9 @@ export default function PortalDashboardClient({ data, campaignId }: { data: any,
                           {totalApprovedCreators} 
                           <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200">kreator approved</span>
                         </h3>
-                        <div className="flex flex-wrap items-center gap-2 text-[12px] mt-[8px]">
-                          <span className="flex items-center gap-1.5 font-semibold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-md" title="Kreator approved yang telah membuat VT dan/atau Live">
-                            <Users className="w-3.5 h-3.5 text-blue-600" />
-                            {metrics?.activeCreatorsCount || 0} Aktif
-                          </span>
-                          <span className="flex items-center gap-1.5 font-medium text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md" title="Kreator approved yang belum membuat VT atau Live">
-                            {metrics?.inactiveCreatorsCount ?? Math.max(0, totalApprovedCreators - (metrics?.activeCreatorsCount || 0))} Belum Aktif
-                          </span>
-                          <span className="text-slate-300">·</span>
-                          <span className="text-slate-500 text-[11px]">
-                            {totalPendingCreators} pending
-                          </span>
-                        </div>
+                        <p className="text-[11px] text-slate-500 mt-[4px]">
+                          Total kreator yang telah disetujui untuk campaign ini
+                        </p>
                       </div>
                       <div className="p-[8px] bg-orange-50 text-orange-600 rounded-[8px]"><Users className="w-5 h-5" /></div>
                     </div>
