@@ -1,10 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
 import { runTikTokAutoSync } from "@/lib/tiktokAutoSync";
+import { requireUserOrError } from "@/lib/guards";
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {
   try {
+    const denied = await requireUserOrError();
+    if (denied) return NextResponse.json({ error: denied.message }, { status: denied.status || 401 });
+
+    const { db } = await import('@/db');
+    const { sql } = await import('drizzle-orm');
+    const authRows: any = await db.execute(sql`
+      SELECT is_scheduler_paused FROM tiktok_authorizations WHERE status = 'active' ORDER BY id DESC LIMIT 1
+    `);
+    if (authRows && authRows[0]?.is_scheduler_paused) {
+      return NextResponse.json({ 
+        error: 'Sinkronisasi manual ditolak karena sistem sedang di-PAUSE. Aktifkan kembali jadwal terlebih dahulu jika memang berniat menarik data.' 
+      }, { status: 400 });
+    }
+
     const body = await req.json().catch(() => ({}));
     const campaignId = body.campaignId ? Number(body.campaignId) : undefined;
     const daysBack = body.daysBack ? Number(body.daysBack) : undefined;

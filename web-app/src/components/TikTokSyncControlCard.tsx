@@ -23,6 +23,7 @@ export function TikTokSyncControlCard() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isTogglingPause, setIsTogglingPause] = useState(false);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [syncResult, setSyncResult] = useState<any>(null);
 
   // Sync Range States
@@ -461,27 +462,87 @@ export function TikTokSyncControlCard() {
           </div>
 
           <Button
-            onClick={handleSyncNow}
-            disabled={isSyncing || !isConnected}
+            onClick={() => {
+              if (authData?.isSchedulerPaused) return;
+              setShowConfirmModal(true);
+            }}
+            disabled={isSyncing || !isConnected || authData?.isSchedulerPaused}
+            title={authData?.isSchedulerPaused ? 'Sinkronisasi manual terkunci saat jadwal dijeda' : ''}
             className={`w-full font-bold px-4 py-3 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 text-sm ${
-              isConnected && !isSyncing
-                ? 'bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white shadow-emerald-900/30'
-                : 'bg-slate-800 text-slate-400 border border-slate-700'
+              authData?.isSchedulerPaused
+                ? 'bg-slate-800/80 text-rose-300 border border-rose-500/30 cursor-not-allowed opacity-80'
+                : isConnected && !isSyncing
+                  ? 'bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white shadow-emerald-900/30'
+                  : 'bg-slate-800 text-slate-400 border border-slate-700'
             }`}
           >
             <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
             {isSyncing 
               ? 'Sedang Menarik Data...' 
-              : syncRangeMode === '180d'
-                ? '⚡ Sync 180 Hari (6 Bulan)'
-                : syncRangeMode === 'month'
-                  ? `⚡ Sync Bulan ${selectedMonth}`
-                  : syncRangeMode === 'custom'
-                    ? '⚡ Sync Rentang Tanggal'
-                    : syncRangeMode === '30d'
-                      ? '⚡ Sync 30 Hari'
-                      : '⚡ Sync 90 Hari (Standar)'}
+              : authData?.isSchedulerPaused
+                ? '🔒 Terkunci (Jadwal Dijeda)'
+                : syncRangeMode === '180d'
+                  ? '⚡ Sync 180 Hari (6 Bulan)'
+                  : syncRangeMode === 'month'
+                    ? `⚡ Sync Bulan ${selectedMonth}`
+                    : syncRangeMode === 'custom'
+                      ? '⚡ Sync Rentang Tanggal'
+                      : syncRangeMode === '30d'
+                        ? '⚡ Sync 30 Hari'
+                        : '⚡ Sync 90 Hari (Standar)'}
           </Button>
+
+          {/* Modal Konfirmasi Peringatan Keras Sebelum Sync Manual */}
+          {showConfirmModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+              <div className="bg-slate-900 border border-rose-500/40 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 text-white">
+                <div className="flex items-start gap-3">
+                  <div className="p-2.5 rounded-full bg-rose-500/20 text-rose-400 border border-rose-500/30 shrink-0">
+                    <AlertCircle className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h4 className="text-lg font-bold text-white">Konfirmasi Sinkronisasi Manual</h4>
+                    <p className="text-xs text-rose-300 font-semibold mt-0.5">
+                      ⚠️ Data akan langsung masuk ke tabel utama (sales & video)
+                    </p>
+                  </div>
+                </div>
+
+                <div className="bg-slate-950/70 p-3.5 rounded-xl border border-slate-800 text-xs text-slate-300 space-y-2 leading-relaxed">
+                  <p>
+                    Anda akan menarik data transaksi dan video dari TikTok OpenAPI untuk rentang{' '}
+                    <span className="font-bold text-indigo-300 font-mono">
+                      {syncRangeMode === '180d' ? '180 Hari' : syncRangeMode === 'month' ? `Bulan ${selectedMonth}` : syncRangeMode === 'custom' ? `${customStartDate} s/d ${customEndDate}` : syncRangeMode === '30d' ? '30 Hari' : '90 Hari'}
+                    </span>.
+                  </p>
+                  <p className="text-amber-200/90 font-medium">
+                    Jika Anda lebih memilih data hanya bersumber dari upload file Excel resmi, batalkan tindakan ini.
+                  </p>
+                </div>
+
+                <div className="flex items-center justify-end gap-3 pt-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setShowConfirmModal(false)}
+                    className="border-slate-700 hover:bg-slate-800 text-slate-300"
+                  >
+                    Batal
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      setShowConfirmModal(false);
+                      handleSyncNow();
+                    }}
+                    className="bg-rose-600 hover:bg-rose-700 text-white font-bold shadow-md shadow-rose-900/30"
+                  >
+                    Ya, Lanjutkan Sync
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {!isConnected && (
             <a
