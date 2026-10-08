@@ -613,11 +613,29 @@ export default function CampaignVideoPage({
         }
       }
 
+      const cc = listingData.find(c => c.id === ccId);
+      const vStats = cc?._videoStats || [];
+
       for (const v of creatorVideos) {
         let finalContentUid = v.content_uid;
         if (v.link_video) {
            const match = v.link_video.match(/video\/(\d+)/);
            if (match) finalContentUid = match[1];
+        }
+
+        let finalSkuId = v.sku_id ? Number(v.sku_id) : null;
+        if (!finalSkuId && finalContentUid) {
+          const rawUid = String(finalContentUid).replace(/^video_/, '');
+          const matchingStat = vStats.find((s: any) => {
+            const sUid = s.content_uid ? String(s.content_uid).replace(/^video_/, '') : '';
+            return String(s.content_uid) === String(finalContentUid) || sUid === rawUid;
+          });
+          if (matchingStat?.product_id) {
+            const matchedSku = skus.find((s: any) => String(s.product_id) === String(matchingStat.product_id) && s.campaign_id === campaignId);
+            if (matchedSku) {
+              finalSkuId = matchedSku.id;
+            }
+          }
         }
 
         if (v.id && typeof v.id === 'number') {
@@ -634,7 +652,7 @@ export default function CampaignVideoPage({
             vt_approved_by: v.vt_approved_by || null,
             vt_approved_at: v.vt_approved_at || null,
             content_uid: finalContentUid,
-            sku_id: v.sku_id ? Number(v.sku_id) : null,
+            sku_id: finalSkuId,
             added_by: v.link_video ? (profile?.nama || profile?.username || 'PIC') : undefined
           });
         } else {
@@ -647,7 +665,7 @@ export default function CampaignVideoPage({
             link_draft: v.link_draft || null,
             link_video: v.link_video,
             content_uid: finalContentUid,
-            sku_id: v.sku_id ? Number(v.sku_id) : null,
+            sku_id: finalSkuId,
             // PENTING (6 Okt 2026): default WAJIB 'pending', bukan 'approved'.
             // Sebelumnya baris ini 'approved', jadi slot video baru yang disimpan
             // pertama kali LANGSUNG lolos review tanpa pernah dilihat PIC/Manajer.
@@ -1209,6 +1227,8 @@ export default function CampaignVideoPage({
        
        const vStats = cc._videoStats || [];
        let totalGmv = 0;
+       let videoGmv = 0;
+       let liveGmv = 0;
        let totalViews = 0;
        let totalLikes = 0;
 
@@ -1223,8 +1243,12 @@ export default function CampaignVideoPage({
           // Live tidak masuk views/likes, sama seperti halaman Performa
           // (PerformaClient.tsx:179-186). GMV live tetap dihitung karena
           // order dari livestream adalah penjualan nyata.
-          totalGmv += (s.gmv || 0);
-          if (!s.is_live) {
+          const itemGmv = (s.gmv || 0);
+          totalGmv += itemGmv;
+          if (s.is_live) {
+             liveGmv += itemGmv;
+          } else {
+             videoGmv += itemGmv;
              totalViews += (s.views || 0);
              totalLikes += (s.likes || 0);
           }
@@ -1234,6 +1258,8 @@ export default function CampaignVideoPage({
           uploadedVtCount,
           targetVt,
           totalGmv,
+          videoGmv,
+          liveGmv,
           totalViews,
           totalLikes
        });
@@ -1371,6 +1397,7 @@ export default function CampaignVideoPage({
         let vidViews = 0;
         let vidLikes = 0;
         let resolvedSkuId = v.sku_id;
+        let isProductLocked = Boolean(v.is_product_locked);
         
         if (dynamicContentUid) {
            const rawUid = dynamicContentUid.replace(/^video_/, '');
@@ -1382,10 +1409,11 @@ export default function CampaignVideoPage({
                vidGmv = matchingStat.gmv || 0;
                vidViews = matchingStat.views || 0;
                vidLikes = matchingStat.likes || 0;
-               if (!resolvedSkuId && matchingStat.product_id) {
-                 const matchedSku = skus.find((s: any) => s.product_id === matchingStat.product_id && s.campaign_id === campaignId);
+               if (matchingStat.product_id) {
+                 const matchedSku = skus.find((s: any) => String(s.product_id) === String(matchingStat.product_id) && s.campaign_id === campaignId);
                  if (matchedSku) {
                    resolvedSkuId = matchedSku.id;
+                   isProductLocked = true;
                  }
                }
            }
@@ -1414,6 +1442,7 @@ export default function CampaignVideoPage({
            ...v,
            concept: cleanConcept,
            sku_id: resolvedSkuId || v.sku_id || null,
+           is_product_locked: isProductLocked,
            post_time: effectivePostTime,
            creatorUsername: creator.username,
            creatorTier: cc.tier,
@@ -2326,6 +2355,11 @@ export default function CampaignVideoPage({
                         <div className="text-center px-2 lg:px-4 border-l border-slate-200">
                           <p className="text-[10px] text-emerald-600 font-medium">TOTAL GMV</p>
                           <p className="font-bold text-emerald-700">Rp {m?.totalGmv?.toLocaleString('id-ID') || 0}</p>
+                          <div className="flex items-center justify-center gap-1.5 text-[10px] text-slate-500 font-normal mt-0.5 whitespace-nowrap">
+                            <span>VT: <strong className="text-emerald-700">Rp {m?.videoGmv?.toLocaleString('id-ID') || 0}</strong></span>
+                            <span className="text-slate-300">•</span>
+                            <span>Live: <strong className="text-indigo-600">Rp {m?.liveGmv?.toLocaleString('id-ID') || 0}</strong></span>
+                          </div>
                         </div>
                         <div className="text-center px-2 lg:px-4 border-l border-slate-200">
                           <p className="text-[10px] text-slate-500 font-medium">TOTAL VIEWS</p>
@@ -2411,7 +2445,9 @@ export default function CampaignVideoPage({
                             const isConceptError = cleanConcept && !matchedConcept && masterConcepts.length > 0;
 
                             let resolvedCreatorSkuId = v.sku_id;
-                            if (!resolvedCreatorSkuId && hasContentUid) {
+                            let isProductLocked = Boolean(v.is_product_locked);
+
+                            if (hasContentUid) {
                               const vStats = cc._videoStats || [];
                               const rawUid = dynamicContentUid.replace(/^video_/, '');
                               const matchingStat = vStats.find((s: any) => {
@@ -2419,8 +2455,11 @@ export default function CampaignVideoPage({
                                 return s.content_uid === dynamicContentUid || sUid === rawUid;
                               });
                               if (matchingStat?.product_id) {
-                                const matchedSku = skus.find((s: any) => s.product_id === matchingStat.product_id && s.campaign_id === campaignId);
-                                if (matchedSku) resolvedCreatorSkuId = matchedSku.id;
+                                const matchedSku = skus.find((s: any) => String(s.product_id) === String(matchingStat.product_id) && s.campaign_id === campaignId);
+                                if (matchedSku) {
+                                  resolvedCreatorSkuId = matchedSku.id;
+                                  isProductLocked = true;
+                                }
                               }
                             }
                             if (!resolvedCreatorSkuId && cc.assigned_sku_ids && cc.assigned_sku_ids.length === 1) {
@@ -2611,17 +2650,34 @@ export default function CampaignVideoPage({
                                   </div>
                                 </td>
                                 <td>
-                                  <select 
-                                    className="select w-full"
-                                    value={v.sku_id || resolvedCreatorSkuId || ''}
-                                    onChange={(e) => handleVideoChange(cc.id, v.urutan, 'sku_id', e.target.value)}
-                                    disabled={!hasAccess}
-                                  >
-                                    <option value="">Pilih Produk...</option>
-                                    {skus.filter(s => s.campaign_id === campaignId).map(s => (
-                                      <option key={s.id} value={s.id}>{s.nama_produk || s.product_id}</option>
-                                    ))}
-                                  </select>
+                                  <div className="relative flex items-center">
+                                    <select 
+                                      className={`select w-full ${isProductLocked ? 'bg-slate-100 text-slate-700 cursor-not-allowed pr-8 border-slate-300 font-medium' : ''}`}
+                                      value={v.sku_id || resolvedCreatorSkuId || ''}
+                                      onChange={(e) => handleVideoChange(cc.id, v.urutan, 'sku_id', e.target.value)}
+                                      disabled={!hasAccess || isProductLocked}
+                                      title={isProductLocked ? "Terkunci otomatis sesuai Produk di Video TikTok" : "Pilih produk"}
+                                    >
+                                      <option value="">Pilih Produk...</option>
+                                      {skus.filter(s => s.campaign_id === campaignId).map(s => (
+                                        <option key={s.id} value={s.id}>{s.nama_produk || s.product_id}</option>
+                                      ))}
+                                    </select>
+                                    {isProductLocked && (
+                                      <div 
+                                        className="absolute right-3 pointer-events-none text-slate-400 flex items-center" 
+                                        title="Terkunci otomatis sesuai Video TikTok"
+                                      >
+                                        <Lock className="w-3.5 h-3.5 text-slate-500" />
+                                      </div>
+                                    )}
+                                  </div>
+                                  {isProductLocked && (
+                                    <p className="text-[10px] text-emerald-600 mt-1 flex items-center gap-1 font-medium">
+                                      <CheckCircle2 className="w-3 h-3 shrink-0" />
+                                      Terkunci otomatis dari TikTok
+                                    </p>
+                                  )}
                                 </td>
                               </tr>
                             );
@@ -2832,17 +2888,34 @@ export default function CampaignVideoPage({
                         </div>
                       </td>
                       <td className="p-4 align-top">
-                        <select 
-                          className="select w-full text-[13px]"
-                          value={v.sku_id || ''}
-                          onChange={(e) => handleVideoChange(v.ccId, v.urutan, 'sku_id', e.target.value)}
-                          disabled={!hasAccess}
-                        >
-                          <option value="">Pilih Produk...</option>
-                          {skus.filter(s => s.campaign_id === campaignId).map(s => (
-                            <option key={s.id} value={s.id}>{s.nama_produk || s.product_id}</option>
-                          ))}
-                        </select>
+                        <div className="relative flex items-center">
+                          <select 
+                            className={`select w-full text-[13px] ${v.is_product_locked ? 'bg-slate-100 text-slate-700 cursor-not-allowed pr-8 border-slate-300 font-medium' : ''}`}
+                            value={v.sku_id || ''}
+                            onChange={(e) => handleVideoChange(v.ccId, v.urutan, 'sku_id', e.target.value)}
+                            disabled={!hasAccess || v.is_product_locked}
+                            title={v.is_product_locked ? "Terkunci otomatis sesuai Produk di Video TikTok" : "Pilih produk"}
+                          >
+                            <option value="">Pilih Produk...</option>
+                            {skus.filter(s => s.campaign_id === campaignId).map(s => (
+                              <option key={s.id} value={s.id}>{s.nama_produk || s.product_id}</option>
+                            ))}
+                          </select>
+                          {v.is_product_locked && (
+                            <div 
+                              className="absolute right-3 pointer-events-none text-slate-400 flex items-center" 
+                              title="Terkunci otomatis sesuai Video TikTok"
+                            >
+                              <Lock className="w-3.5 h-3.5 text-slate-500" />
+                            </div>
+                          )}
+                        </div>
+                        {v.is_product_locked && (
+                          <p className="text-[10px] text-emerald-600 mt-1 flex items-center gap-1 font-medium">
+                            <CheckCircle2 className="w-3 h-3 shrink-0" />
+                            Terkunci otomatis dari TikTok
+                          </p>
+                        )}
                       </td>
                       <td className="p-4 align-top">
                         <div className="font-bold text-emerald-700 text-[15px]">Rp {v.vidGmv.toLocaleString('id-ID')}</div>

@@ -254,8 +254,39 @@ export async function getInternalVideoData(campaignId: number, searchKeyword: st
         }
       });
 
-      let maxUrutan = existingVideos.reduce((max: number, v: any) => Math.max(max, Number(v.urutan) || 0), 0) + 1;
       const statsList = videoStatsMap.get(uname) || [];
+
+      // Resolve sku_id dan flag lock untuk video yang sudah ada di database
+      const resolvedExistingVideos = existingVideos.map((v: any) => {
+        let resolvedSkuId = v.sku_id ? Number(v.sku_id) : null;
+        let isProductLocked = false;
+
+        const rawUid = String(v.content_uid || v.link_video?.match(/video\/(\d+)/i)?.[1] || '')
+          .replace(/^video_/, '')
+          .trim();
+
+        if (rawUid) {
+          const matchedStat = statsList.find((s: any) => {
+            const sUid = String(s.content_uid || '').replace(/^video_/, '').trim();
+            return sUid === rawUid;
+          });
+          if (matchedStat?.product_id && Array.isArray(skusList)) {
+            const matchedSku = skusList.find((sku: any) => String(sku.product_id) === String(matchedStat.product_id));
+            if (matchedSku) {
+              resolvedSkuId = matchedSku.id;
+              isProductLocked = true;
+            }
+          }
+        }
+
+        return {
+          ...v,
+          sku_id: resolvedSkuId,
+          is_product_locked: isProductLocked,
+        };
+      });
+
+      let maxUrutan = resolvedExistingVideos.reduce((max: number, v: any) => Math.max(max, Number(v.urutan) || 0), 0) + 1;
       const autoVideosForCreator: any[] = [];
 
       for (const s of statsList) {
@@ -268,9 +299,13 @@ export async function getInternalVideoData(campaignId: number, searchKeyword: st
         existingUids.add(rawUid);
 
         let resolvedSkuId: number | null = null;
+        let isProductLocked = false;
         if (s.product_id && Array.isArray(skusList)) {
           const matchedSku = skusList.find((sku: any) => String(sku.product_id) === String(s.product_id));
-          if (matchedSku) resolvedSkuId = matchedSku.id;
+          if (matchedSku) {
+            resolvedSkuId = matchedSku.id;
+            isProductLocked = true;
+          }
         }
         if (!resolvedSkuId && Array.isArray(skusList) && skusList.length === 1) {
           resolvedSkuId = skusList[0].id;
@@ -298,6 +333,7 @@ export async function getInternalVideoData(campaignId: number, searchKeyword: st
           revision_notes_updated_at: null,
           content_uid: rawUid,
           sku_id: resolvedSkuId,
+          is_product_locked: isProductLocked,
           added_by: 'Auto-detect',
           post_time: postTime,
           created_at: postTime || new Date().toISOString(),
@@ -318,7 +354,7 @@ export async function getInternalVideoData(campaignId: number, searchKeyword: st
           creator_contacts: r.creator_contacts || [],
           creator_snapshots: r.creator_snapshots || [],
         },
-        videos: [...existingVideos, ...autoVideosForCreator],
+        videos: [...resolvedExistingVideos, ...autoVideosForCreator],
         _videoStats: statsList,
       };
     });

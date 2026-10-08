@@ -145,4 +145,27 @@ Atas arahan user untuk kebutuhan presentasi klien:
 - **Hasil Verifikasi**:
   - `npm run build` selesai 100% sukses dalam 8.2 detik.
   - Seluruh menu (Listing, Performa, Video, Daily, Live Stream) kembali terbuka instan (<500ms) tanpa membebani CPU VPS maupun perangkat user.
+## 12. Transparansi GMV Kreator (Breakdown VT vs Live) & Auto-Lock Produk Berdasarkan Video ID
 
+- **Latar Belakang & Pertanyaan User**:
+  - Pada halaman Menu Video (`/campaigns/41/video`), pengguna melihat kreator memiliki Total GMV jutaan rupiah (misal `@risarivia` Rp 6.339.758), namun saat accordion videonya dibuka, semua 15 videonya mencatat GMV Rp 0.
+- **Investigasi & Fakta Database**:
+  1. Di tabel `sales` TikTok Partner Center untuk `@risarivia`, seluruh 31 order penjualan berjenis `content_type = 'Livestream'` (100% GMV = Rp 6.339.758).
+  2. 15 video VT milik `@risarivia` ditonton 2.069 views, namun tidak menghasilkan checkout langsung melalui keranjang kuning video (0 order -> Rp 0 GMV).
+  3. Total GMV di level header kreator adalah akumulasi gabungan seluruh penjualan kreator di campaign (Video + Live). Di Campaign 41 (MS Glow Beauty), ~68% total penjualan (Rp 20.045.388 dari Rp 29.338.244) memang berasal dari Livestreaming.
+- **Solusi & Fitur Baru yang Diterapkan**:
+  1. **Breakdown GMV di Header Kreator**:
+     - Di bawah angka `TOTAL GMV: Rp X`, ditambahkan baris rincian:
+       `VT: Rp ... • Live: Rp ...`
+     - Memberikan kejelasan instan kepada PIC/Brand mengenai proporsi penjualan yang bersumber dari video konten vs siaran langsung.
+  2. **Auto-Lock Produk Berdasarkan Video ID**:
+     - Setiap video TikTok yang terdeteksi di data TikTok Partner Center (`organic_videos` / `sales`) dan memiliki tautan produk yang terdaftar di campaign:
+       - Dropdown produk otomatis mengunci (`disabled={true}`) pada SKU yang sesuai.
+       - Dilengkapi dengan ikon `<Lock />`, badge hijau `Terkunci otomatis dari TikTok`, dan tooltip proteksi.
+     - Jika video tidak terdeteksi (video manual, custom link, atau keranjang kuning belum terdaftar di master produk):
+       - Dropdown produk tetap terbuka bebas agar PIC/staff dapat memilih produknya secara manual.
+  3. **Auto-Save Resolved SKU ID**:
+     - Pada saat PIC mengklik "Simpan Perubahan", SKU ID yang terdeteksi otomatis langsung ikut tersimpan ke database jika kolom `sku_id` di tabel `videos` sebelumnya masih kosong.
+- **Status & Verifikasi**:
+  - `npm run build` berhasil 100% (Turbopack, 8.1s).
+  - Tampilan visual rapi dan informatif di seluruh tab tampilan Video.
