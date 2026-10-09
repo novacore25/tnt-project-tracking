@@ -70,11 +70,19 @@ export default function TimelineTarget({ campaign, dailyData }: TimelineTargetPr
       dDate.setHours(0, 0, 0, 0);
       achievedMap.set(dDate.getTime(), {
         gmv: (Number(d.gmvOrganic) || 0) + (Number(d.gmvAds) || 0),
+        gmvOrganic: Number(d.gmvOrganic) || 0,
         video: Number(d.totalVideos) || 0,
         live: Number(d.totalLiveSessions) || 0,
         creator: Number(d.totalCreators) || 0,
         pendingCreator: Number(d.totalPendingCreators) || 0,
         videoCreator: Number(d.totalVideoCreators) || 0,
+        activeCreator: Number(d.totalActiveCreators) || 0,
+        itemsSold: Number(d.itemsSold) || 0,
+        views: Number(d.totalViews) || 0,
+        likes: Number(d.totalLikes) || 0,
+        revPerActiveCreator: Number(d.revPerActiveCreator) || 0,
+        revPerVideo: Number(d.revPerVideo) || 0,
+        likeER: Number(d.likeER) || 0,
         pendingNano: Number(d.pendingNano) || 0,
         pendingMicro: Number(d.pendingMicro) || 0,
         pendingMacro: Number(d.pendingMacro) || 0,
@@ -116,11 +124,16 @@ export default function TimelineTarget({ campaign, dailyData }: TimelineTargetPr
     let currentWeekLiveCreatorTargetVelocity = 0;
 
     let currentWeekGmvAchieve = 0;
+    let currentWeekGmvOrganicAchieve = 0;
     let currentWeekVideoAchieve = 0;
     let currentWeekLiveAchieve = 0;
     let currentWeekVideoCreatorAchieve = 0;
     let currentWeekApprovedCreatorAchieve = 0;
     let currentWeekPendingCreatorAchieve = 0;
+    let currentWeekItemsSoldAchieve = 0;
+    let currentWeekViewsAchieve = 0;
+    let currentWeekLikesAchieve = 0;
+    let currentWeekActiveCreatorsSet = new Set<string>();
     let currentWeekPendingNano = 0;
     let currentWeekPendingMicro = 0;
     let currentWeekPendingMacro = 0;
@@ -154,11 +167,15 @@ export default function TimelineTarget({ campaign, dailyData }: TimelineTargetPr
       const achievedToday = achievedMap.get(time) || { gmv: 0, video: 0, live: 0, creator: 0, pendingCreator: 0, videoCreator: 0, liveCreator: 0, pendingLiveCreator: 0, pendingNano: 0, pendingMicro: 0, pendingMacro: 0, pendingMega: 0, approvedNano: 0, approvedMicro: 0, approvedMacro: 0, approvedMega: 0, pendingLiveNano: 0, pendingLiveMicro: 0, pendingLiveMacro: 0, pendingLiveMega: 0, approvedLiveNano: 0, approvedLiveMicro: 0, approvedLiveMacro: 0, approvedLiveMega: 0 };
 
       currentWeekGmvAchieve += achievedToday.gmv;
+      currentWeekGmvOrganicAchieve += achievedToday.gmvOrganic;
       currentWeekVideoAchieve += achievedToday.video;
       currentWeekLiveAchieve += achievedToday.live;
       currentWeekVideoCreatorAchieve += (achievedToday.videoCreator || 0);
       currentWeekApprovedCreatorAchieve += achievedToday.creator;
       currentWeekPendingCreatorAchieve += achievedToday.pendingCreator;
+      currentWeekItemsSoldAchieve += achievedToday.itemsSold;
+      currentWeekViewsAchieve += achievedToday.views;
+      currentWeekLikesAchieve += achievedToday.likes;
       currentWeekPendingNano += achievedToday.pendingNano;
       currentWeekPendingMicro += achievedToday.pendingMicro;
       currentWeekPendingMacro += achievedToday.pendingMacro;
@@ -230,6 +247,13 @@ export default function TimelineTarget({ campaign, dailyData }: TimelineTargetPr
         achievedCreator: achievedToday.creator,
         achievedPendingCreator: achievedToday.pendingCreator,
         achievedVideoCreator: achievedToday.videoCreator || 0,
+        achievedActiveCreator: achievedToday.activeCreator || 0,
+        itemsSold: achievedToday.itemsSold || 0,
+        views: achievedToday.views || 0,
+        likes: achievedToday.likes || 0,
+        revPerActiveCreator: achievedToday.revPerActiveCreator || 0,
+        revPerVideo: achievedToday.revPerVideo || 0,
+        likeER: achievedToday.likeER || 0,
         achievedPendingNano: achievedToday.pendingNano,
         achievedPendingMicro: achievedToday.pendingMicro,
         achievedPendingMacro: achievedToday.pendingMacro,
@@ -266,6 +290,12 @@ export default function TimelineTarget({ campaign, dailyData }: TimelineTargetPr
       
       if (isSunday || isLastDay) {
         if (lastNodeIndex >= 0) {
+          const wVids = currentWeekVideoAchieve;
+          const wActiveCreators = currentWeekVideoCreatorAchieve; // Atau fallback ke video creators
+          const wRevPerCreator = wActiveCreators > 0 ? Math.round(currentWeekGmvOrganicAchieve / wActiveCreators) : 0;
+          const wRevPerVideo = wVids > 0 ? Math.round(currentWeekGmvOrganicAchieve / wVids) : 0;
+          const wLikeER = currentWeekViewsAchieve > 0 ? Number(((currentWeekLikesAchieve / currentWeekViewsAchieve) * 100).toFixed(2)) : 0;
+
           data[lastNodeIndex].weeklySummary = {
             targetGmv: currentWeekGmvTargetVelocity * currentWeekWorkingDaysCount,
             targetVideo: currentWeekVideoTargetVelocity * currentWeekWorkingDaysCount,
@@ -279,6 +309,10 @@ export default function TimelineTarget({ campaign, dailyData }: TimelineTargetPr
             achievedVideoCreator: currentWeekVideoCreatorAchieve,
             achievedApprovedCreator: currentWeekApprovedCreatorAchieve,
             achievedPendingCreator: currentWeekPendingCreatorAchieve,
+            itemsSold: currentWeekItemsSoldAchieve,
+            revPerActiveCreator: wRevPerCreator,
+            revPerVideo: wRevPerVideo,
+            likeER: wLikeER,
             achievedPendingNano: currentWeekPendingNano,
             achievedPendingMicro: currentWeekPendingMicro,
             achievedPendingMacro: currentWeekPendingMacro,
@@ -310,11 +344,15 @@ export default function TimelineTarget({ campaign, dailyData }: TimelineTargetPr
         currentWeekWorkingDaysCount = 0;
 
         currentWeekGmvAchieve = 0;
+        currentWeekGmvOrganicAchieve = 0;
         currentWeekVideoAchieve = 0;
         currentWeekLiveAchieve = 0;
         currentWeekVideoCreatorAchieve = 0;
         currentWeekApprovedCreatorAchieve = 0;
         currentWeekPendingCreatorAchieve = 0;
+        currentWeekItemsSoldAchieve = 0;
+        currentWeekViewsAchieve = 0;
+        currentWeekLikesAchieve = 0;
         currentWeekPendingNano = 0;
         currentWeekPendingMicro = 0;
         currentWeekPendingMacro = 0;
@@ -473,6 +511,33 @@ export default function TimelineTarget({ campaign, dailyData }: TimelineTargetPr
                           </div>
                         </div>
 
+                        <div className="grid grid-cols-4 gap-1.5 mb-3 bg-white/70 rounded-[10px] p-2 border border-blue-100/60 text-center">
+                          <div>
+                            <div className="text-[9px] font-semibold text-slate-500 uppercase leading-tight">Item Sold</div>
+                            <div className="font-bold text-amber-700 text-[11px] mt-0.5 truncate" title={`${(day.weeklySummary.itemsSold || 0).toLocaleString()} pcs`}>
+                              {formatCompact(day.weeklySummary.itemsSold || 0)}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-[9px] font-semibold text-slate-500 uppercase leading-tight" title="Revenue per Active Creator">Rev / Kr</div>
+                            <div className="font-bold text-blue-700 text-[11px] mt-0.5 truncate" title={`Rp ${(day.weeklySummary.revPerActiveCreator || 0).toLocaleString()}`}>
+                              {formatCompact(day.weeklySummary.revPerActiveCreator || 0)}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-[9px] font-semibold text-slate-500 uppercase leading-tight" title="Revenue per Video">Rev / VT</div>
+                            <div className="font-bold text-emerald-700 text-[11px] mt-0.5 truncate" title={`Rp ${(day.weeklySummary.revPerVideo || 0).toLocaleString()}`}>
+                              {formatCompact(day.weeklySummary.revPerVideo || 0)}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-[9px] font-semibold text-slate-500 uppercase leading-tight" title="Like Engagement Rate">Like ER</div>
+                            <div className="font-bold text-rose-600 text-[11px] mt-0.5">
+                              {day.weeklySummary.likeER || 0}%
+                            </div>
+                          </div>
+                        </div>
+
                         <div className="bg-white/50 rounded-[12px] p-3 border border-blue-100/50">
                            <div className="grid grid-cols-2 gap-4">
                              {/* Kreator Ditambah */}
@@ -624,6 +689,34 @@ export default function TimelineTarget({ campaign, dailyData }: TimelineTargetPr
                             <div className="text-[10px] text-purple-700/70 leading-tight">
                               Total sesi live
                             </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Performance Highlight Metrics (Item Sold, Rev/Kr, Rev/VT, Like ER) */}
+                      <div className="grid grid-cols-4 gap-1.5 mb-5 bg-slate-50/80 rounded-[12px] p-2 border border-slate-100 text-center">
+                        <div>
+                          <div className="text-[9px] font-semibold text-slate-500 uppercase leading-tight">Item Sold</div>
+                          <div className="font-bold text-amber-700 text-[11px] mt-0.5 truncate" title={`${(day.itemsSold || 0).toLocaleString()} pcs`}>
+                            {formatCompact(day.itemsSold || 0)}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-[9px] font-semibold text-slate-500 uppercase leading-tight" title="Revenue per Active Creator">Rev / Kr</div>
+                          <div className="font-bold text-blue-700 text-[11px] mt-0.5 truncate" title={`Rp ${(day.revPerActiveCreator || 0).toLocaleString()}`}>
+                            {formatCompact(day.revPerActiveCreator || 0)}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-[9px] font-semibold text-slate-500 uppercase leading-tight" title="Revenue per Video">Rev / VT</div>
+                          <div className="font-bold text-emerald-700 text-[11px] mt-0.5 truncate" title={`Rp ${(day.revPerVideo || 0).toLocaleString()}`}>
+                            {formatCompact(day.revPerVideo || 0)}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-[9px] font-semibold text-slate-500 uppercase leading-tight" title="Like Engagement Rate">Like ER</div>
+                          <div className="font-bold text-rose-600 text-[11px] mt-0.5">
+                            {day.likeER || 0}%
                           </div>
                         </div>
                       </div>

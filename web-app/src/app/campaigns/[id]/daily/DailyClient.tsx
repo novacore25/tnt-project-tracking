@@ -85,6 +85,9 @@ interface GroupData {
   gmvVT: number;
   ordersLive: number;
   ordersVT: number;
+  itemsSold: number;
+  views: number;
+  likes: number;
   videos: Set<string>;
   liveSessions: Set<string>;
   videoCreators: Set<string>;
@@ -106,6 +109,9 @@ const createEmptyGroup = (): GroupData => ({
   gmvVT: 0,
   ordersLive: 0,
   ordersVT: 0,
+  itemsSold: 0,
+  views: 0,
+  likes: 0,
   videos: new Set<string>(),
   liveSessions: new Set<string>(),
   videoCreators: new Set<string>(),
@@ -203,6 +209,7 @@ export default function CampaignDailyPerformanceClient({ campaignId }: { campaig
         gmv_vt: number;
         orders_live: number;
         orders_vt: number;
+        items_sold: number;
       }>();
 
       allSales.forEach(s => {
@@ -220,7 +227,8 @@ export default function CampaignDailyPerformanceClient({ campaignId }: { campaig
             gmv_live: 0,
             gmv_vt: 0,
             orders_live: 0,
-            orders_vt: 0
+            orders_vt: 0,
+            items_sold: 0
           });
         }
         const day = dailySalesMap.get(dateStr)!;
@@ -233,6 +241,7 @@ export default function CampaignDailyPerformanceClient({ campaignId }: { campaig
         const prodName = skuNameMap.get(pId) || pId;
 
         day.total_gmv += gmv;
+        day.items_sold += qty;
 
         if (isLive) {
           day.gmv_live += gmv;
@@ -290,6 +299,7 @@ export default function CampaignDailyPerformanceClient({ campaignId }: { campaig
           grouped[dateStr].gmvVT += (stat.gmv_vt || 0);
           grouped[dateStr].ordersVT += (stat.orders_vt || 0);
           grouped[dateStr].gmv += (stat.total_gmv || 0);
+          grouped[dateStr].itemsSold += (stat.items_sold || 0);
 
           const monthStr = dateStr.substring(0, 7);
           initMonthlyGroup(monthStr);
@@ -298,6 +308,7 @@ export default function CampaignDailyPerformanceClient({ campaignId }: { campaig
           monthlyGrouped[monthStr].gmvVT += (stat.gmv_vt || 0);
           monthlyGrouped[monthStr].ordersVT += (stat.orders_vt || 0);
           monthlyGrouped[monthStr].gmv += (stat.total_gmv || 0);
+          monthlyGrouped[monthStr].itemsSold += (stat.items_sold || 0);
         });
       }
 
@@ -576,6 +587,15 @@ export default function CampaignDailyPerformanceClient({ campaignId }: { campaig
           ...Array.from(g.liveCreators)
         ]);
 
+        const itemsSold = g.itemsSold || (g.ordersLive + g.ordersVT) || 0;
+        const totalViews = (g.videoList || []).reduce((acc, v) => acc + (v.views || 0), 0);
+        const totalLikes = (g.videoList || []).reduce((acc, v) => acc + (v.likes || 0), 0);
+        const activeCount = activeCreators.size;
+        const totalVids = g.videos.size;
+        const revPerActiveCreator = activeCount > 0 ? Math.round(g.gmv / activeCount) : 0;
+        const revPerVideo = totalVids > 0 ? Math.round(g.gmv / totalVids) : 0;
+        const likeER = totalViews > 0 ? Number(((totalLikes / totalViews) * 100).toFixed(2)) : 0;
+
         return {
           date,
           gmvOrganic: g.gmv,
@@ -583,6 +603,12 @@ export default function CampaignDailyPerformanceClient({ campaignId }: { campaig
           gmvVT: g.gmvVT,
           ordersLive: g.ordersLive,
           ordersVT: g.ordersVT,
+          itemsSold,
+          totalViews,
+          totalLikes,
+          revPerActiveCreator,
+          revPerVideo,
+          likeER,
           gmvAds: g.gmvAds,
           totalActiveCreators: activeCreators.size,
           totalCreators: g.approvedCreators.size,
@@ -616,6 +642,15 @@ export default function CampaignDailyPerformanceClient({ campaignId }: { campaig
           ...Array.from(g.liveCreators)
         ]);
 
+        const itemsSold = g.itemsSold || (g.ordersLive + g.ordersVT) || 0;
+        const totalViews = (g.videoList || []).reduce((acc, v) => acc + (v.views || 0), 0);
+        const totalLikes = (g.videoList || []).reduce((acc, v) => acc + (v.likes || 0), 0);
+        const activeCount = activeCreators.size;
+        const totalVids = g.videos.size;
+        const revPerActiveCreator = activeCount > 0 ? Math.round(g.gmv / activeCount) : 0;
+        const revPerVideo = totalVids > 0 ? Math.round(g.gmv / totalVids) : 0;
+        const likeER = totalViews > 0 ? Number(((totalLikes / totalViews) * 100).toFixed(2)) : 0;
+
         return {
           month,
           gmvOrganic: g.gmv,
@@ -623,6 +658,12 @@ export default function CampaignDailyPerformanceClient({ campaignId }: { campaig
           gmvVT: g.gmvVT,
           ordersLive: g.ordersLive,
           ordersVT: g.ordersVT,
+          itemsSold,
+          totalViews,
+          totalLikes,
+          revPerActiveCreator,
+          revPerVideo,
+          likeER,
           gmvAds: g.gmvAds,
           totalActiveCreators: activeCreators.size,
           totalCreators: g.approvedCreators.size,
@@ -772,6 +813,33 @@ export default function CampaignDailyPerformanceClient({ campaignId }: { campaig
                       <span className="font-bold text-indigo-900 text-[11px]">
                         {m.totalLiveSessions} / {tgts.targetLive > 0 ? tgts.targetLive : '-'}
                       </span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-4 gap-1.5 mb-3 bg-white/70 rounded-[10px] p-2 border border-indigo-100/60 text-center">
+                    <div>
+                      <div className="text-[9px] font-semibold text-slate-500 uppercase leading-tight">Item Sold</div>
+                      <div className="font-bold text-amber-700 text-[11px] mt-0.5 truncate" title={`${(m.itemsSold || 0).toLocaleString()} pcs`}>
+                        {formatCompact(m.itemsSold || 0)}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[9px] font-semibold text-slate-500 uppercase leading-tight" title="Revenue per Active Creator">Rev / Kr</div>
+                      <div className="font-bold text-blue-700 text-[11px] mt-0.5 truncate" title={`Rp ${(m.revPerActiveCreator || 0).toLocaleString()}`}>
+                        {formatCompact(m.revPerActiveCreator || 0)}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[9px] font-semibold text-slate-500 uppercase leading-tight" title="Revenue per Video">Rev / VT</div>
+                      <div className="font-bold text-emerald-700 text-[11px] mt-0.5 truncate" title={`Rp ${(m.revPerVideo || 0).toLocaleString()}`}>
+                        {formatCompact(m.revPerVideo || 0)}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[9px] font-semibold text-slate-500 uppercase leading-tight" title="Like Engagement Rate">Like ER</div>
+                      <div className="font-bold text-rose-600 text-[11px] mt-0.5">
+                        {m.likeER || 0}%
+                      </div>
                     </div>
                   </div>
 
