@@ -32,6 +32,7 @@ import {
 import Link from "next/link";
 import { CreatorContractPdfDocument, CreatorContractData } from "@/components/contract/CreatorContractPdfDocument";
 import { syncContractCreatorProfileDataAction } from "@/app/actions/creatorActions";
+import { fetchCampaignCreatorsForDocumentsAction } from "@/app/actions/campaignPageActions";
 
 const PDFViewer = dynamic(
   () => import("@react-pdf/renderer").then((mod) => mod.PDFViewer),
@@ -120,17 +121,30 @@ export default function ContractGeneratorWorkspace({
 
   // SELEKSI KREATOR UNTUK FORM AUTO-FILL
   const [selectedCcId, setSelectedCcId] = useState<number | null>(null);
+  const [selectedCreator, setSelectedCreator] = useState<any | null>(null);
 
   // SEARCH AUTOCOMPLETE STATE (Pencarian username interaktif)
   const [searchQuery, setSearchQuery] = useState("");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const searchContainerRef = useRef<HTMLDivElement>(null);
+  const [serverSearchResults, setServerSearchResults] = useState<any[]>([]);
+  const [isSearchingServer, setIsSearchingServer] = useState(false);
 
-  // Auto-fill form jika kreator dipilih
+  // Auto-fill form jika kreator dipilih (prioritas selectedCreator, fallback creators array)
   const currentCreator = useMemo(() => {
+    if (selectedCreator) return selectedCreator;
     if (!selectedCcId) return null;
     return creators.find((c) => c.cc_id === selectedCcId) || null;
-  }, [selectedCcId, creators]);
+  }, [selectedCreator, selectedCcId, creators]);
+
+  // Reset pencarian & seleksi kreator ketika campaign berganti
+  useEffect(() => {
+    setSelectedCcId(null);
+    setSelectedCreator(null);
+    setSearchQuery("");
+    setServerSearchResults([]);
+    setIsSearchingServer(false);
+  }, [selectedCampaignId]);
 
   // DATE HELPERS
   const today = new Date();
@@ -206,63 +220,114 @@ export default function ContractGeneratorWorkspace({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Filter creator recommendations based on searchQuery
+  // Real-time server-side lookup dengan debounce agar akurat ke seluruh kreator di database
+  useEffect(() => {
+    const cleanQ = searchQuery.trim().replace(/^@+/, "");
+    if (!cleanQ || !selectedCampaignId) {
+      setServerSearchResults([]);
+      setIsSearchingServer(false);
+      return;
+    }
+
+    // Jika searchQuery sama dengan kreator yang sedang aktif dipilih, tidak perlu cari ulang
+    if (
+      selectedCreator &&
+      (cleanQ.toLowerCase() === (selectedCreator.username || "").toLowerCase() ||
+        `@${cleanQ.toLowerCase()}` === `@${(selectedCreator.username || "").toLowerCase()}`)
+    ) {
+      return;
+    }
+
+    setIsSearchingServer(true);
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetchCampaignCreatorsForDocumentsAction({
+          campaignId: selectedCampaignId,
+          search: cleanQ,
+          approvalFilter: "all",
+        });
+        if (res.success && res.data) {
+          setServerSearchResults(res.data);
+        } else {
+          setServerSearchResults([]);
+        }
+      } catch (err) {
+        console.error("Gagal mencari kreator di server:", err);
+        setServerSearchResults([]);
+      } finally {
+        setIsSearchingServer(false);
+      }
+    }, 280);
+
+    return () => clearTimeout(timer);
+  }, [searchQuery, selectedCampaignId, selectedCreator]);
+
+  // Filter creator recommendations based on searchQuery (prioritas server, fallback lokal)
   const filteredCreators = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase().replace(/^@/, "");
-    if (!q) return creators.slice(0, 8);
+    const cleanQ = searchQuery.trim().replace(/^@+/, "").toLowerCase();
+    if (!cleanQ) return creators.slice(0, 10);
+    if (serverSearchResults.length > 0) return serverSearchResults;
     return creators.filter((c: any) => {
       const u = (c.username || "").toLowerCase();
       const n = (c.nama_lengkap || c.nama_asli || "").toLowerCase();
-      return u.includes(q) || n.includes(q);
+      return u.includes(cleanQ) || n.includes(cleanQ);
     });
-  }, [creators, searchQuery]);
+  }, [creators, searchQuery, serverSearchResults]);
+
+  // Mengisi form secara otomatis dari data profil kreator
+  const applyCreatorData = (c: any) => {
+    if (!c) return;
+    const uName = (c.username || "").replace(/^@+/, "");
+    const realName = c.nama_lengkap || c.nama_asli || c.nama_ktp || uName;
+    const phone = c.contact_nomor || c.no_whatsapp || c.pic_nomor_wa || "";
+    const nik = c.nik_ktp || "";
+    const alamat = c.alamat_ktp || c.alamat_domisili || "";
+    const bName = c.bank_name || "";
+    const bNum = c.account_number || "";
+    const bHolder = c.account_holder || realName;
+    const rate = Number(c.price) || 0;
+    const vt = Number(c.qty_vt) || 1;
+    const ttUid = c.tiktok_uid || "";
+    const email = c.email || "";
+    const npwp = c.npwp || "";
+    const tLahir = c.tempat_lahir || "";
+    const tgLahir = c.tanggal_lahir ? String(c.tanggal_lahir).split("T")[0] : "";
+
+    setNamaKreator(realName);
+    setUsernameTikTok(uName);
+    setTeleponKreator(phone);
+    setNikKtp(nik);
+    setAlamatKreator(alamat);
+    setTiktokUid(ttUid);
+    setEmailKreator(email);
+    setNpwpKreator(npwp);
+    setTempatLahir(tLahir);
+    setTanggalLahir(tgLahir);
+    setNamaBank(bName);
+    setNomorRekening(bNum);
+    setAtasNamaRekening(bHolder);
+    if (rate > 0) setBiayaHonor(rate);
+    if (vt > 0) setQtyVt(vt);
+
+    setNomorKontrak(`TNT/KTR/${curYear}/${pad(today.getMonth() + 1)}/${c.cc_id}`);
+    setKetentuanPembayaran(
+      `Honor PIHAK KEDUA akan dibayarkan oleh PIHAK PERTAMA 100% maksimal H+14 setelah upload video ke ${vt}`
+    );
+  };
 
   // Handler saat user memilih kreator dari dropdown rekomendasi
   const handleSelectCreator = (c: any) => {
     setSelectedCcId(c.cc_id);
+    setSelectedCreator(c);
+    applyCreatorData(c);
     setSearchQuery(`@${c.username}`);
     setIsDropdownOpen(false);
   };
 
-  // Sync state ketika currentCreator berubah
+  // Sync state ketika currentCreator berubah jika terpilih di luar autocomplete
   useEffect(() => {
     if (currentCreator) {
-      const uName = (currentCreator.username || "").replace("@", "");
-      const realName = currentCreator.nama_lengkap || currentCreator.nama_asli || currentCreator.nama_ktp || uName;
-      const phone = currentCreator.contact_nomor || currentCreator.no_whatsapp || currentCreator.pic_nomor_wa || "";
-      const nik = currentCreator.nik_ktp || "";
-      const alamat = currentCreator.alamat_ktp || currentCreator.alamat_domisili || "";
-      const bName = currentCreator.bank_name || "";
-      const bNum = currentCreator.account_number || "";
-      const bHolder = currentCreator.account_holder || realName;
-      const rate = Number(currentCreator.price) || 0;
-      const vt = Number(currentCreator.qty_vt) || 1;
-      const ttUid = currentCreator.tiktok_uid || "";
-      const email = currentCreator.email || "";
-      const npwp = currentCreator.npwp || "";
-      const tLahir = currentCreator.tempat_lahir || "";
-      const tgLahir = currentCreator.tanggal_lahir ? String(currentCreator.tanggal_lahir).split("T")[0] : "";
-
-      setNamaKreator(realName);
-      setUsernameTikTok(uName);
-      setTeleponKreator(phone);
-      setNikKtp(nik);
-      setAlamatKreator(alamat);
-      setTiktokUid(ttUid);
-      setEmailKreator(email);
-      setNpwpKreator(npwp);
-      setTempatLahir(tLahir);
-      setTanggalLahir(tgLahir);
-      setNamaBank(bName);
-      setNomorRekening(bNum);
-      setAtasNamaRekening(bHolder);
-      if (rate > 0) setBiayaHonor(rate);
-      if (vt > 0) setQtyVt(vt);
-
-      setNomorKontrak(`TNT/KTR/${curYear}/${pad(today.getMonth() + 1)}/${currentCreator.cc_id}`);
-      setKetentuanPembayaran(
-        `Honor PIHAK KEDUA akan dibayarkan oleh PIHAK PERTAMA 100% maksimal H+14 setelah upload video ke ${vt}`
-      );
+      applyCreatorData(currentCreator);
     }
   }, [currentCreator]);
 
@@ -474,33 +539,47 @@ export default function ContractGeneratorWorkspace({
                 onChange={(e) => {
                   setSearchQuery(e.target.value);
                   setIsDropdownOpen(true);
-                  if (!e.target.value.trim()) setSelectedCcId(null);
+                  if (!e.target.value.trim()) {
+                    setSelectedCcId(null);
+                    setSelectedCreator(null);
+                  }
                 }}
                 placeholder="Ketik username kreator (@...)"
-                className="w-full pl-9 pr-8 py-2.5 bg-emerald-50/50 border border-emerald-300 rounded-xl text-sm font-medium text-slate-800 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 outline-none transition-all"
+                className="w-full pl-9 pr-9 py-2.5 bg-emerald-50/50 border border-emerald-300 rounded-xl text-sm font-medium text-slate-800 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 outline-none transition-all"
               />
               <Search className="w-4 h-4 text-emerald-600 absolute left-3 top-3 pointer-events-none" />
 
-              {searchQuery && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSearchQuery("");
-                    setSelectedCcId(null);
-                    setIsDropdownOpen(false);
-                  }}
-                  className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 p-0.5"
-                  title="Hapus pencarian"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              )}
+              <div className="absolute right-2.5 top-2.5 flex items-center gap-1">
+                {isSearchingServer && (
+                  <RefreshCw className="w-4 h-4 text-emerald-600 animate-spin" />
+                )}
+                {searchQuery && !isSearchingServer && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchQuery("");
+                      setSelectedCcId(null);
+                      setSelectedCreator(null);
+                      setIsDropdownOpen(false);
+                    }}
+                    className="text-slate-400 hover:text-slate-600 p-0.5"
+                    title="Hapus pencarian"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* DROPDOWN REKOMENDASI HASIL PENCARIAN */}
             {isDropdownOpen && (
-              <div className="absolute z-50 left-0 right-0 top-full mt-1.5 bg-white border border-slate-200 rounded-xl shadow-xl max-h-64 overflow-y-auto divide-y divide-slate-100">
-                {filteredCreators.length > 0 ? (
+              <div className="absolute z-50 left-0 right-0 top-full mt-1.5 bg-white border border-slate-200 rounded-xl shadow-xl max-h-72 overflow-y-auto divide-y divide-slate-100">
+                {isSearchingServer ? (
+                  <div className="p-4 text-center flex items-center justify-center gap-2 text-xs text-slate-500 font-medium">
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin text-emerald-600" />
+                    Mencari @{searchQuery.trim().replace(/^@+/, "")} di database campaign...
+                  </div>
+                ) : filteredCreators.length > 0 ? (
                   filteredCreators.map((c: any) => (
                     <button
                       key={c.cc_id}
@@ -508,10 +587,21 @@ export default function ContractGeneratorWorkspace({
                       onClick={() => handleSelectCreator(c)}
                       className="w-full text-left px-3.5 py-2.5 hover:bg-emerald-50/70 transition-colors flex items-center justify-between group cursor-pointer"
                     >
-                      <div>
-                        <div className="text-xs font-bold text-slate-900 group-hover:text-emerald-700 flex items-center gap-1.5">
+                      <div className="min-w-0 pr-2">
+                        <div className="text-xs font-bold text-slate-900 group-hover:text-emerald-700 flex items-center gap-1.5 flex-wrap">
                           <span>@{c.username}</span>
-                          <span className="text-[10px] font-normal text-slate-400">
+                          <span
+                            className={`text-[9px] px-1.5 py-0.5 rounded-full font-semibold uppercase tracking-wider ${
+                              c.approval === "approved"
+                                ? "bg-emerald-100 text-emerald-700"
+                                : c.approval === "pending"
+                                ? "bg-amber-100 text-amber-800"
+                                : "bg-slate-100 text-slate-600"
+                            }`}
+                          >
+                            {c.approval || "listed"}
+                          </span>
+                          <span className="text-[10px] font-normal text-slate-400 truncate">
                             • {c.nama_lengkap || c.nama_asli || "Tanpa Nama"}
                           </span>
                         </div>
@@ -519,7 +609,7 @@ export default function ContractGeneratorWorkspace({
                           Fee: Rp {Number(c.price || 0).toLocaleString("id-ID")} • {c.qty_vt || 1} VT
                         </div>
                       </div>
-                      <span className="text-[10px] font-semibold text-emerald-600 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <span className="text-[10px] font-semibold text-emerald-600 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
                         Pilih
                       </span>
                     </button>

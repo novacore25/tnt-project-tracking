@@ -2441,8 +2441,11 @@ export async function fetchCampaignCreatorsForDocumentsAction(params: {
     }
 
     if (search && search.trim() !== '') {
-      const s = `%${search.trim()}%`;
-      conditions.push(sql`(c.username ILIKE ${s} OR c.nama_lengkap ILIKE ${s} OR c.nama_asli ILIKE ${s})`);
+      const cleanSearch = search.trim().replace(/^@+/, '').trim();
+      if (cleanSearch !== '') {
+        const s = `%${cleanSearch}%`;
+        conditions.push(sql`(c.username ILIKE ${s} OR c.nama_lengkap ILIKE ${s} OR c.nama_asli ILIKE ${s})`);
+      }
     }
 
     const rows = await db.execute(sql`

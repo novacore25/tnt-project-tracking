@@ -26,7 +26,7 @@ export default function DokumenClient() {
   const [activeTab, setActiveTab] = useState<"buat_dokumen" | "batch_export">("buat_dokumen");
 
   const [selectedCampaignId, setSelectedCampaignId] = useState<number | null>(null);
-  const [approvalFilter, setApprovalFilter] = useState<string>("approved");
+  const [approvalFilter, setApprovalFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
 
