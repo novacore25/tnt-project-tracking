@@ -2783,3 +2783,33 @@ memberi informasi yang saling menguatkan, bukan noise.
    - **Jebakan Correlated Scan**: Jangan pernah menggunakan `EXISTS (SELECT 1 FROM organic_videos WHERE LOWER(...) = LOWER(...) ...)` di dalam `FILTER` per baris `campaign_creators`. Pada campaign berisi 1.958 kreator dan tabel log berisi 56.660 baris, operasi ini memicu >150 juta komparasi string, menghabiskan 100% CPU VPS, dan menahan antrean koneksi sehingga seluruh menu lain (Performa, Daily, dsb.) macet.
    - **Solusi Wajib**: Selalu gunakan **Set-Based CTE** (`WITH active_usernames AS (...)`). Ekstrak himpunan username unik satu kali per campaign, lalu lakukan `LEFT JOIN` pada integer ID. Query turun dari 30.000 ms ke <25 ms.
    - **Jebakan DDL di Request Baca**: Jangan pernah memanggil fungsi yang berisi DDL `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` (seperti `ensureVideoColumns()`) di dalam server action pembacaan data rutin (`getInternalVideoData`). `ALTER TABLE` meminta `AccessExclusiveLock` yang membekukan tabel dari pembacaan query lain.
+
+---
+
+### 10f. Visualisasi Tren Performa Interaktif Bulanan & Mingguan (9 Okt 2026)
+
+1. **Komponen Tren Performa (`MonthlyPerformanceChart.tsx`):**
+   - Ditempatkan di menu **Performa Harian (Automated)** (`/campaigns/[id]/daily`) tepat di atas kartu ringkasan bulanan.
+   - Menggunakan kurva Bézier cubic spline murni berbasis React SVG (tanpa dependensi package charting berat eksternal) dengan area gradient fill.
+   - Dilengkapi filter checkbox pill per kategori (**Semua**, **Finansial**, **Kreator**, **VT & Live**, **Efisiensi & ER**) serta tombol *Pilih Semua* dan *Reset*.
+
+2. **Format Satuan Dinamis Sumbu Y & Integritas Desimal:**
+   - Sumbu Y menampilkan interval skala teratur yang otomatis menyematkan satuan metrik:
+     - Juta Rupiah: `JT` (misal: `2,34JT`)
+     - Ribuan Rupiah / Views: `RB` (misal: `234,66RB`)
+     - Persentase: `%` (misal: `12,5%`)
+     - Kuantitas Konten: `VT` / `Live`
+     - Kuantitas Fisik: `pcs` / `Ord` / `Kr`
+   - Diformat dengan pemisah koma Indonesia (`locale: 'id-ID'`) dan maksimal 2 angka desimal.
+
+3. **Collision-Free Label Stacking di Atas Titik Data:**
+   - Angka aktual tampil langsung di atas masing-masing titik grafik dengan warna selaras kurva metrik dan *soft white halo glow* (kontras tinggi).
+   - **Algoritma Pengurutan Menurun (*Sorted Descending*)**: Jika beberapa kurva beririsan pada satu kolom (bulan/minggu yang sama), angka-angka diurutkan dari nilai **terbesar di atas** hingga nilai **terkecil di bawahnya**.
+   - Dilengkapi deteksi ambang batas vertikal minimum (`minSpacing = 11px`) sehingga angka tidak pernah bertumpuk (*collision-free*).
+   - Ukuran font label dirampingkan 20% (`8px` default / `9px` saat hover) dengan ukuran titik data `3px` agar tetap tajam dan estetis.
+   - Disediakan tombol toggle **"Tampilkan Angka" / "Sembunyikan Angka"** di header chart untuk fleksibilitas pembacaan (mode screenshot vs mode minimalis).
+
+4. **Mode Periode Terintegrasi (Bulanan & Mingguan):**
+   - Mendukung switch mode instan di header grafik: **Bulanan** vs **Mingguan**.
+   - Mode Mingguan mengagregasikan data harian dari `dailyData` ke dalam *cut-off* mingguan (Minggu malam), memberi tim visibilitas *sprint performance* yang presisi tanpa reload halaman.
+
