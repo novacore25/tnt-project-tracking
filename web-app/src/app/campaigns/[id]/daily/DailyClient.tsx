@@ -818,7 +818,7 @@ export default function CampaignDailyPerformanceClient({ campaignId }: { campaig
       </div>
 
       {!loading && monthlyData.length > 0 && (
-        <MonthlyPerformanceChart monthlyData={monthlyData} />
+        <MonthlyPerformanceChart monthlyData={monthlyData} dailyData={dailyData} />
       )}
 
       {!loading && monthlyData.length > 0 && (() => {

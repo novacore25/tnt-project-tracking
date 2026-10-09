@@ -15,8 +15,9 @@ import {
   Sparkles 
 } from "lucide-react";
 
-export interface MonthlyChartItem {
-  month: string; // 'YYYY-MM'
+export interface PerformanceChartItem {
+  key: string;
+  label: string;
   gmvOrganic: number;
   gmvLive: number;
   gmvVT: number;
@@ -39,6 +40,8 @@ export interface MonthlyChartItem {
   totalLiveSessions: number;
 }
 
+export type MonthlyChartItem = PerformanceChartItem;
+
 export interface MetricDefinition {
   id: string;
   label: string;
@@ -47,7 +50,7 @@ export interface MetricDefinition {
   color: string;
   fillColor: string;
   unit: string;
-  getValue: (d: MonthlyChartItem) => number;
+  getValue: (d: PerformanceChartItem) => number;
   formatTooltip: (val: number) => string;
 }
 
@@ -307,14 +310,140 @@ function getBezierPath(points: { x: number; y: number }[]): string {
 }
 
 interface MonthlyPerformanceChartProps {
-  monthlyData: MonthlyChartItem[];
+  monthlyData: any[];
+  dailyData?: any[];
 }
 
-export default function MonthlyPerformanceChart({ monthlyData }: MonthlyPerformanceChartProps) {
-  // Sort data chronologically (oldest to newest) for line chart progression
-  const chartData = useMemo(() => {
-    return [...monthlyData].sort((a, b) => new Date(a.month + "-01").getTime() - new Date(b.month + "-01").getTime());
+export default function MonthlyPerformanceChart({ monthlyData, dailyData = [] }: MonthlyPerformanceChartProps) {
+  // Switch period: "monthly" (Bulanan) | "weekly" (Mingguan)
+  const [periodMode, setPeriodMode] = useState<"monthly" | "weekly">("monthly");
+
+  // Format monthly data items
+  const formattedMonthlyList = useMemo<PerformanceChartItem[]>(() => {
+    return monthlyData
+      .map((m: any) => {
+        const dObj = new Date((m.month || "") + "-01");
+        const monthLabel = !isNaN(dObj.getTime())
+          ? dObj.toLocaleDateString("id-ID", { month: "short", year: "numeric" })
+          : m.month || "";
+
+        return {
+          key: m.month,
+          label: monthLabel,
+          gmvOrganic: m.gmvOrganic || 0,
+          gmvLive: m.gmvLive || 0,
+          gmvVT: m.gmvVT || 0,
+          ordersLive: m.ordersLive || 0,
+          ordersVT: m.ordersVT || 0,
+          itemsSold: m.itemsSold || 0,
+          totalViews: m.totalViews || 0,
+          totalLikes: m.totalLikes || 0,
+          revPerActiveCreator: m.revPerActiveCreator || 0,
+          revPerVideo: m.revPerVideo || 0,
+          likeER: m.likeER || 0,
+          gmvAds: m.gmvAds || 0,
+          totalActiveCreators: m.totalActiveCreators || 0,
+          totalCreators: m.totalCreators || 0,
+          totalPendingCreators: m.totalPendingCreators || 0,
+          totalLiveCreators: m.totalLiveCreators || 0,
+          totalPendingLiveCreators: m.totalPendingLiveCreators || 0,
+          totalVideos: m.totalVideos || 0,
+          totalVideoCreators: m.totalVideoCreators || 0,
+          totalLiveSessions: m.totalLiveSessions || 0
+        };
+      })
+      .sort((a, b) => new Date(a.key + "-01").getTime() - new Date(b.key + "-01").getTime());
   }, [monthlyData]);
+
+  // Aggregate dailyData into weekly items (Monday-Sunday or chronological Sunday cutoffs)
+  const formattedWeeklyList = useMemo<PerformanceChartItem[]>(() => {
+    if (!dailyData || dailyData.length === 0) return [];
+
+    // Sort daily oldest to newest
+    const sortedDays = [...dailyData].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    const weeks: PerformanceChartItem[] = [];
+
+    let currentWeekNum = 1;
+    let currentWeekDays: any[] = [];
+
+    sortedDays.forEach((day, index) => {
+      currentWeekDays.push(day);
+      const dayDate = new Date(day.date);
+      const isSunday = dayDate.getDay() === 0;
+      const isLast = index === sortedDays.length - 1;
+
+      if (isSunday || isLast) {
+        const startDay = currentWeekDays[0];
+        const endDay = currentWeekDays[currentWeekDays.length - 1];
+        const sD = new Date(startDay.date);
+        const eD = new Date(endDay.date);
+
+        const shortLabel = `M${currentWeekNum} (${sD.toLocaleDateString("id-ID", { day: "numeric", month: "short" })})`;
+
+        const gmvOrganic = currentWeekDays.reduce((acc, d) => acc + (Number(d.gmvOrganic) || 0), 0);
+        const gmvAds = currentWeekDays.reduce((acc, d) => acc + (Number(d.gmvAds) || 0), 0);
+        const gmvLive = currentWeekDays.reduce((acc, d) => acc + (Number(d.gmvLive) || 0), 0);
+        const gmvVT = currentWeekDays.reduce((acc, d) => acc + (Number(d.gmvVT) || 0), 0);
+        const ordersLive = currentWeekDays.reduce((acc, d) => acc + (Number(d.ordersLive) || 0), 0);
+        const ordersVT = currentWeekDays.reduce((acc, d) => acc + (Number(d.ordersVT) || 0), 0);
+        const itemsSold = currentWeekDays.reduce((acc, d) => acc + (Number(d.itemsSold) || 0), 0);
+        const totalViews = currentWeekDays.reduce((acc, d) => acc + (Number(d.totalViews) || 0), 0);
+        const totalLikes = currentWeekDays.reduce((acc, d) => acc + (Number(d.totalLikes) || 0), 0);
+        const totalVideos = currentWeekDays.reduce((acc, d) => acc + (Number(d.totalVideos) || 0), 0);
+        const totalLiveSessions = currentWeekDays.reduce((acc, d) => acc + (Number(d.totalLiveSessions) || 0), 0);
+
+        // Maximum or snapshot of creator pipeline in this week
+        const totalActiveCreators = Math.max(...currentWeekDays.map(d => Number(d.totalActiveCreators) || 0));
+        const totalCreators = Math.max(...currentWeekDays.map(d => Number(d.totalCreators) || 0));
+        const totalPendingCreators = Math.max(...currentWeekDays.map(d => Number(d.totalPendingCreators) || 0));
+        const totalLiveCreators = Math.max(...currentWeekDays.map(d => Number(d.totalLiveCreators) || 0));
+        const totalPendingLiveCreators = Math.max(...currentWeekDays.map(d => Number(d.totalPendingLiveCreators) || 0));
+        const totalVideoCreators = Math.max(...currentWeekDays.map(d => Number(d.totalVideoCreators) || 0));
+
+        const revPerActiveCreator = totalActiveCreators > 0 ? Math.round(gmvOrganic / totalActiveCreators) : 0;
+        const revPerVideo = totalVideos > 0 ? Math.round(gmvOrganic / totalVideos) : 0;
+        const likeER = totalViews > 0 ? Number(((totalLikes / totalViews) * 100).toFixed(2)) : 0;
+
+        weeks.push({
+          key: `week-${currentWeekNum}-${startDay.date}`,
+          label: shortLabel,
+          gmvOrganic,
+          gmvAds,
+          gmvLive,
+          gmvVT,
+          ordersLive,
+          ordersVT,
+          itemsSold,
+          totalViews,
+          totalLikes,
+          revPerActiveCreator,
+          revPerVideo,
+          likeER,
+          totalActiveCreators,
+          totalCreators,
+          totalPendingCreators,
+          totalLiveCreators,
+          totalPendingLiveCreators,
+          totalVideos,
+          totalVideoCreators,
+          totalLiveSessions
+        });
+
+        currentWeekNum++;
+        currentWeekDays = [];
+      }
+    });
+
+    return weeks;
+  }, [dailyData]);
+
+  // Active chart items according to period switch
+  const chartData = useMemo<PerformanceChartItem[]>(() => {
+    if (periodMode === "weekly" && formattedWeeklyList.length > 0) {
+      return formattedWeeklyList;
+    }
+    return formattedMonthlyList;
+  }, [periodMode, formattedWeeklyList, formattedMonthlyList]);
 
   // Default active metrics to replicate the screenshot
   const [selectedMetrics, setSelectedMetrics] = useState<Record<string, boolean>>({
@@ -460,11 +589,47 @@ export default function MonthlyPerformanceChart({ monthlyData }: MonthlyPerforma
               <TrendingUp className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base sm:text-lg font-bold text-slate-900 tracking-tight">
-                Tren Performa Campaign (Bulanan)
-              </h3>
-              <p className="text-xs text-slate-500">
-                Pilih metrik dan sesuaikan tampilan label angka aktual di atas titik secara fleksibel.
+              <div className="flex items-center gap-3">
+                <h3 className="text-base sm:text-lg font-bold text-slate-900 tracking-tight">
+                  Tren Performa Campaign ({periodMode === "monthly" ? "Bulanan" : "Mingguan"})
+                </h3>
+
+                {/* Period Switch: Bulanan / Mingguan */}
+                <div className="inline-flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200/80">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPeriodMode("monthly");
+                      setHoveredMonthIndex(null);
+                    }}
+                    className={`px-2.5 py-1 text-xs font-bold rounded-md transition-all ${
+                      periodMode === "monthly"
+                        ? "bg-white text-indigo-700 shadow-xs"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    Bulanan
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPeriodMode("weekly");
+                      setHoveredMonthIndex(null);
+                    }}
+                    className={`px-2.5 py-1 text-xs font-bold rounded-md transition-all ${
+                      periodMode === "weekly"
+                        ? "bg-white text-indigo-700 shadow-xs"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    Mingguan
+                  </button>
+                </div>
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5">
+                {periodMode === "monthly" 
+                  ? "Lihat perbandingan performa kumulatif antar bulan kalender."
+                  : "Lihat tren progres per minggu (cut-off Minggu) secara mendalam."}
               </p>
             </div>
           </div>
@@ -647,11 +812,9 @@ export default function MonthlyPerformanceChart({ monthlyData }: MonthlyPerforma
               );
             })}
 
-            {/* Vertical Month lines */}
+            {/* Vertical Columns (Month or Week) */}
             {chartData.map((d, idx) => {
               const xPos = monthPointsX[idx];
-              const dateObj = new Date(d.month + "-01");
-              const monthLabel = dateObj.toLocaleDateString("id-ID", { month: "short", year: "numeric" });
               const isHovered = hoveredMonthIndex === idx;
 
               return (
@@ -669,11 +832,11 @@ export default function MonthlyPerformanceChart({ monthlyData }: MonthlyPerforma
                     x={xPos}
                     y={height - paddingBottom + 24}
                     textAnchor="middle"
-                    fontSize="12"
+                    fontSize={chartData.length > 8 ? "10.5" : "11.5"}
                     fontWeight={isHovered ? "700" : "600"}
                     fill={isHovered ? "#312e81" : "#64748b"}
                   >
-                    {monthLabel}
+                    {d.label}
                   </text>
                 </g>
               );
@@ -719,98 +882,97 @@ export default function MonthlyPerformanceChart({ monthlyData }: MonthlyPerforma
                         key={`pt-${m.id}-${pIdx}`}
                         cx={pt.x}
                         cy={pt.y}
-                        r={isHovered ? "6" : "3.5"}
+                        r={isHovered ? "5.5" : "3"}
                         fill="#ffffff"
                         stroke={m.color}
-                        strokeWidth={isHovered ? "3" : "2"}
+                        strokeWidth={isHovered ? "2.5" : "1.8"}
                         className="transition-all cursor-pointer"
                       />
-                  );
-                })}
-              </g>
-            );
-          })}
+                    );
+                  })}
+                </g>
+              );
+            })}
 
-          {/* Grouped and collision-free stacked labels per month (Sorted descending: largest value on top) */}
-          {showDataLabels && chartData.map((d, colIdx) => {
-            const xPos = monthPointsX[colIdx];
-            const isHoveredCol = hoveredMonthIndex === colIdx;
+            {/* Grouped and collision-free stacked labels per period (Sorted descending: largest value on top) */}
+            {showDataLabels && chartData.map((d, colIdx) => {
+              const xPos = monthPointsX[colIdx];
+              const isHoveredCol = hoveredMonthIndex === colIdx;
 
-            // Collect all active metrics for this month
-            const monthLabels = activeMetricList.map((m) => {
-              const val = m.getValue(d);
-              const origY = paddingTop + chartHeight - (val / maxY) * chartHeight;
-              return {
-                id: m.id,
-                color: m.color,
-                unit: m.unit,
-                val,
-                origY,
-                text: formatCompactUnit(val, m.unit)
-              };
-            });
-
-            // Sort by val descending (largest on top, so smallest at bottom)
-            monthLabels.sort((a, b) => b.val - a.val);
-
-            // Compute collision-free stacked Y positions
-            const minSpacing = 14;
-            const positionedLabels: { id: string; color: string; text: string; x: number; y: number }[] = [];
-
-            monthLabels.forEach((item, itemIdx) => {
-              let targetY = item.origY - 8; // standard offset above point
-
-              if (itemIdx > 0) {
-                const prevPlaced = positionedLabels[itemIdx - 1];
-                // Since sorted descending, if current item is too close to prevPlaced (within minSpacing), push it down
-                if (targetY - prevPlaced.y < minSpacing) {
-                  targetY = prevPlaced.y + minSpacing;
-                }
-              }
-
-              positionedLabels.push({
-                id: item.id,
-                color: item.color,
-                text: item.text,
-                x: xPos,
-                y: targetY
+              // Collect all active metrics for this period
+              const monthLabels = activeMetricList.map((m) => {
+                const val = m.getValue(d);
+                const origY = paddingTop + chartHeight - (val / maxY) * chartHeight;
+                return {
+                  id: m.id,
+                  color: m.color,
+                  unit: m.unit,
+                  val,
+                  origY,
+                  text: formatCompactUnit(val, m.unit)
+                };
               });
-            });
 
-            return (
-              <g key={`labels-col-${colIdx}`} className="pointer-events-none select-none">
-                {positionedLabels.map((lbl) => (
-                  <g key={`lbl-item-${colIdx}-${lbl.id}`}>
-                    {/* Crisp white halo outline */}
-                    <text
-                      x={lbl.x}
-                      y={lbl.y}
-                      textAnchor="middle"
-                      stroke="#ffffff"
-                      strokeWidth="3.5"
-                      strokeLinejoin="round"
-                      fontSize={isHoveredCol ? "11" : "10"}
-                      fontWeight="700"
-                      fill="none"
-                    >
-                      {lbl.text}
-                    </text>
-                    {/* Actual colored text matching the metric line */}
-                    <text
-                      x={lbl.x}
-                      y={lbl.y}
-                      textAnchor="middle"
-                      fontSize={isHoveredCol ? "11" : "10"}
-                      fontWeight="700"
-                      fill={lbl.color}
-                    >
-                      {lbl.text}
-                    </text>
-                  </g>
-                ))}
-              </g>
-            );
-          })}
+              // Sort by val descending (largest on top, so smallest at bottom)
+              monthLabels.sort((a, b) => b.val - a.val);
+
+              // Compute collision-free stacked Y positions (with compact 11px spacing)
+              const minSpacing = 11;
+              const positionedLabels: { id: string; color: string; text: string; x: number; y: number }[] = [];
+
+              monthLabels.forEach((item, itemIdx) => {
+                let targetY = item.origY - 6; // standard offset above point
+
+                if (itemIdx > 0) {
+                  const prevPlaced = positionedLabels[itemIdx - 1];
+                  if (targetY - prevPlaced.y < minSpacing) {
+                    targetY = prevPlaced.y + minSpacing;
+                  }
+                }
+
+                positionedLabels.push({
+                  id: item.id,
+                  color: item.color,
+                  text: item.text,
+                  x: xPos,
+                  y: targetY
+                });
+              });
+
+              return (
+                <g key={`labels-col-${colIdx}`} className="pointer-events-none select-none">
+                  {positionedLabels.map((lbl) => (
+                    <g key={`lbl-item-${colIdx}-${lbl.id}`}>
+                      {/* Crisp white halo outline (smaller font size by 20%: 8px / 9px) */}
+                      <text
+                        x={lbl.x}
+                        y={lbl.y}
+                        textAnchor="middle"
+                        stroke="#ffffff"
+                        strokeWidth="3"
+                        strokeLinejoin="round"
+                        fontSize={isHoveredCol ? "9" : "8"}
+                        fontWeight="700"
+                        fill="none"
+                      >
+                        {lbl.text}
+                      </text>
+                      {/* Actual colored text matching the metric line */}
+                      <text
+                        x={lbl.x}
+                        y={lbl.y}
+                        textAnchor="middle"
+                        fontSize={isHoveredCol ? "9" : "8"}
+                        fontWeight="700"
+                        fill={lbl.color}
+                      >
+                        {lbl.text}
+                      </text>
+                    </g>
+                  ))}
+                </g>
+              );
+            })}
 
             {/* Horizontal Dashed Lines to Y-axis for the hovered month */}
             {hoveredMonthIndex !== null && chartData[hoveredMonthIndex] && (
@@ -898,11 +1060,8 @@ export default function MonthlyPerformanceChart({ monthlyData }: MonthlyPerforma
           <div className="mt-4 p-4 bg-white rounded-xl border border-indigo-100 shadow-md animate-in fade-in slide-in-from-top-1 duration-150">
             <div className="flex items-center justify-between pb-2 mb-3 border-b border-slate-100">
               <span className="text-xs font-bold text-indigo-950 uppercase tracking-wider">
-                Rincian Bulan:{" "}
-                {new Date(chartData[hoveredMonthIndex].month + "-01").toLocaleDateString("id-ID", {
-                  month: "long",
-                  year: "numeric"
-                })}
+                Rincian {periodMode === "monthly" ? "Bulan" : "Minggu"}:{" "}
+                {chartData[hoveredMonthIndex].label}
               </span>
               <span className="text-[11px] font-semibold text-slate-400">
                 {activeMetricList.length} Metrik Aktif
