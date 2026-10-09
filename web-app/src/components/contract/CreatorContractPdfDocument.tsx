@@ -248,9 +248,17 @@ export interface CreatorContractData {
   // Pihak Kedua (Kreator)
   namaKreator: string;
   usernameTikTok: string;
-  rekeningKreator: string;
+  tiktokUid?: string;
+  nikKtp?: string;
+  tempatTanggalLahir?: string;
   alamatKreator: string;
   teleponKreator: string;
+  emailKreator?: string;
+  npwpKreator?: string;
+  namaBank?: string;
+  nomorRekening?: string;
+  atasNamaRekening?: string;
+  rekeningKreator: string;
   // Detail Kerjasama
   namaCampaign: string;
   namaBrand: string;
@@ -267,6 +275,12 @@ export interface CreatorContractData {
 export function CreatorContractPdfDocument({ data }: { data: CreatorContractData }) {
   const cleanUname = (data.usernameTikTok || "").replace("@", "");
   const honorFormatted = Number(data.biayaHonor || 0).toLocaleString("id-ID");
+
+  const rekeningDisplay = data.rekeningKreator || (
+    data.namaBank && data.nomorRekening
+      ? `${data.namaBank} - ${data.nomorRekening} a.n. ${data.atasNamaRekening || data.namaKreator}`
+      : "-"
+  );
 
   return (
     <Document>
@@ -321,21 +335,49 @@ export function CreatorContractPdfDocument({ data }: { data: CreatorContractData
             <Text style={styles.partyColon}>:</Text>
             <Text style={[styles.partyValue, styles.bold]}>{data.namaKreator} (@{cleanUname})</Text>
           </View>
+          {data.nikKtp && (
+            <View style={styles.partyRow}>
+              <Text style={styles.partyLabel}>NIK (KTP)</Text>
+              <Text style={styles.partyColon}>:</Text>
+              <Text style={styles.partyValue}>{data.nikKtp}</Text>
+            </View>
+          )}
+          {data.tempatTanggalLahir && (
+            <View style={styles.partyRow}>
+              <Text style={styles.partyLabel}>Tempat, Tanggal Lahir</Text>
+              <Text style={styles.partyColon}>:</Text>
+              <Text style={styles.partyValue}>{data.tempatTanggalLahir}</Text>
+            </View>
+          )}
           <View style={styles.partyRow}>
-            <Text style={styles.partyLabel}>Rekening</Text>
+            <Text style={styles.partyLabel}>Rekening Bank</Text>
             <Text style={styles.partyColon}>:</Text>
-            <Text style={styles.partyValue}>{data.rekeningKreator || "-"}</Text>
+            <Text style={styles.partyValue}>{rekeningDisplay}</Text>
           </View>
           <View style={styles.partyRow}>
-            <Text style={styles.partyLabel}>Alamat</Text>
+            <Text style={styles.partyLabel}>Alamat Sesuai KTP / Domisili</Text>
             <Text style={styles.partyColon}>:</Text>
             <Text style={styles.partyValue}>{data.alamatKreator || "-"}</Text>
           </View>
           <View style={styles.partyRow}>
-            <Text style={styles.partyLabel}>Telepon</Text>
+            <Text style={styles.partyLabel}>Telepon / WhatsApp</Text>
             <Text style={styles.partyColon}>:</Text>
             <Text style={styles.partyValue}>{data.teleponKreator || "-"}</Text>
           </View>
+          {data.emailKreator && (
+            <View style={styles.partyRow}>
+              <Text style={styles.partyLabel}>Alamat Email</Text>
+              <Text style={styles.partyColon}>:</Text>
+              <Text style={styles.partyValue}>{data.emailKreator}</Text>
+            </View>
+          )}
+          {data.npwpKreator && (
+            <View style={styles.partyRow}>
+              <Text style={styles.partyLabel}>NPWP</Text>
+              <Text style={styles.partyColon}>:</Text>
+              <Text style={styles.partyValue}>{data.npwpKreator}</Text>
+            </View>
+          )}
         </View>
         <Text style={styles.paragraphJustify}>
           Dalam hal ini bertindak atas nama diri pribadi yang selanjutnya disebut sebagai <Text style={styles.bold}>PIHAK KEDUA</Text>.
