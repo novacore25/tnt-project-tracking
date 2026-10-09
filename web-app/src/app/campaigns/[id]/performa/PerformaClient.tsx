@@ -809,6 +809,38 @@ export default function CampaignPerformaClient({ campaignId }: { campaignId: num
     setCurrentPage(1);
   }, [searchQuery, sortField, sortOrder]);
 
+  // Map produk yang dipromosikan per kreator beserta performanya (untuk Accordion Top 10 Creators)
+  const creatorProductsMap = React.useMemo(() => {
+    const map = new Map<string, any[]>();
+    (winningProducts || []).forEach((prod: any) => {
+      (prod.creators || []).forEach((cr: any) => {
+        const u = String(cr.username || '').toLowerCase().trim();
+        if (!u) return;
+        if (!map.has(u)) {
+          map.set(u, []);
+        }
+        // Tampilkan produk jika ada VT, GMV, penjualan, atau views
+        if ((cr.totalVt || 0) > 0 || (cr.gmv || 0) > 0 || (cr.itemsSold || 0) > 0 || (cr.totalViews || 0) > 0) {
+          map.get(u)!.push({
+            product_id: prod.product_id,
+            nama_produk: prod.nama_produk,
+            gmv: cr.gmv || 0,
+            items_sold: cr.itemsSold || 0,
+            total_vt: cr.totalVt || 0,
+            total_views: cr.totalViews || 0,
+            videos: cr.videos || [],
+          });
+        }
+      });
+    });
+
+    for (const [u, prods] of map.entries()) {
+      prods.sort((a, b) => (b.gmv - a.gmv) || (b.total_vt - a.total_vt) || (b.total_views - a.total_views));
+    }
+
+    return map;
+  }, [winningProducts]);
+
   if (isLoading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -1032,38 +1064,6 @@ export default function CampaignPerformaClient({ campaignId }: { campaignId: num
       videos: cVideos
     };
   }).sort((a, b) => b.total_gmv - a.total_gmv || b.total_views - a.total_views);
-
-  // Map produk yang dipromosikan per kreator beserta performanya (untuk Accordion Top 10 Creators)
-  const creatorProductsMap = React.useMemo(() => {
-    const map = new Map<string, any[]>();
-    (winningProducts || []).forEach((prod: any) => {
-      (prod.creators || []).forEach((cr: any) => {
-        const u = String(cr.username || '').toLowerCase().trim();
-        if (!u) return;
-        if (!map.has(u)) {
-          map.set(u, []);
-        }
-        // Tampilkan produk jika ada VT, GMV, penjualan, atau views
-        if ((cr.totalVt || 0) > 0 || (cr.gmv || 0) > 0 || (cr.itemsSold || 0) > 0 || (cr.totalViews || 0) > 0) {
-          map.get(u)!.push({
-            product_id: prod.product_id,
-            nama_produk: prod.nama_produk,
-            gmv: cr.gmv || 0,
-            items_sold: cr.itemsSold || 0,
-            total_vt: cr.totalVt || 0,
-            total_views: cr.totalViews || 0,
-            videos: cr.videos || [],
-          });
-        }
-      });
-    });
-
-    for (const [u, prods] of map.entries()) {
-      prods.sort((a, b) => (b.gmv - a.gmv) || (b.total_vt - a.total_vt) || (b.total_views - a.total_views));
-    }
-
-    return map;
-  }, [winningProducts]);
 
   return (
     <div className="space-y-[32px]">
