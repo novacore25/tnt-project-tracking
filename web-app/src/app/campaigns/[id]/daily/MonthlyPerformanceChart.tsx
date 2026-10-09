@@ -332,6 +332,7 @@ export default function MonthlyPerformanceChart({ monthlyData }: MonthlyPerforma
 
   const [activeTab, setActiveTab] = useState<"all" | "financial" | "creator" | "content" | "efficiency">("all");
   const [hoveredMonthIndex, setHoveredMonthIndex] = useState<number | null>(null);
+  const [showDataLabels, setShowDataLabels] = useState<boolean>(true);
 
   const toggleMetric = (id: string) => {
     setSelectedMetrics(prev => ({
@@ -364,9 +365,9 @@ export default function MonthlyPerformanceChart({ monthlyData }: MonthlyPerforma
   // Dimension setup for SVG viewBox
   const width = 1000;
   const height = 340;
-  const paddingLeft = 85;
+  const paddingLeft = 70;
   const paddingRight = 40;
-  const paddingTop = 30;
+  const paddingTop = 36;
   const paddingBottom = 50;
 
   const chartWidth = width - paddingLeft - paddingRight;
@@ -425,53 +426,20 @@ export default function MonthlyPerformanceChart({ monthlyData }: MonthlyPerforma
     return formatted;
   };
 
-  // Generate smart Y-axis ticks: standard intervals + actual data points cleanly interleaved
-  const combinedYTicks = useMemo(() => {
-    // 1. Base standard intervals (0, 20%, 40%, ..., 100% of maxY)
-    const baseTicks = [0, 0.25, 0.5, 0.75, 1.0].map(pct => ({
-      val: Math.round(maxY * pct),
-      yPos: paddingTop + chartHeight - (pct) * chartHeight,
-      label: dominantUnit 
-        ? formatCompactUnit(Math.round(maxY * pct), dominantUnit) 
-        : formatCompactUnit(Math.round(maxY * pct)),
-      isActual: false,
-      color: "#94a3b8",
-      bgColor: undefined as string | undefined
-    }));
-
-    // 2. Collect unique actual values from active metrics
-    const actualPoints: { val: number; yPos: number; label: string; isActual: boolean; color: string; bgColor: string }[] = [];
-    
-    chartData.forEach(d => {
-      activeMetricList.forEach(m => {
-        const val = m.getValue(d);
-        if (val <= 0) return; // skip 0 as base tick already covers 0
-        const yPos = paddingTop + chartHeight - (val / maxY) * chartHeight;
-        const label = formatCompactUnit(val, m.unit);
-
-        // Check if an existing actual point or base tick already has nearly identical yPos (within 13px)
-        const conflict = actualPoints.some(p => Math.abs(p.yPos - yPos) < 13);
-        if (!conflict) {
-          actualPoints.push({
-            val,
-            yPos,
-            label,
-            isActual: true,
-            color: "#ffffff",
-            bgColor: m.color
-          });
-        }
-      });
-    });
-
-    // 3. Filter out base ticks that collide with actual points (within 13px)
-    const filteredBaseTicks = baseTicks.filter(bt => 
-      !actualPoints.some(ap => Math.abs(ap.yPos - bt.yPos) < 13)
-    );
-
-    // 4. Combine and sort from top (lowest yPos) to bottom (highest yPos)
-    return [...filteredBaseTicks, ...actualPoints].sort((a, b) => a.yPos - b.yPos);
-  }, [maxY, dominantUnit, chartData, activeMetricList, paddingTop, chartHeight]);
+  // Clean regular intervals for Y-axis (5 steps)
+  const yTicks = useMemo(() => {
+    const count = 5;
+    const ticks = [];
+    for (let i = 0; i <= count; i++) {
+      const val = Math.round((maxY / count) * i);
+      const yPos = paddingTop + chartHeight - (val / maxY) * chartHeight;
+      const label = dominantUnit 
+        ? formatCompactUnit(val, dominantUnit) 
+        : formatCompactUnit(val);
+      ticks.push({ val, yPos, label });
+    }
+    return ticks;
+  }, [maxY, dominantUnit, paddingTop, chartHeight]);
 
   // Month coordinate mapping
   const monthPointsX = useMemo(() => {
@@ -496,7 +464,7 @@ export default function MonthlyPerformanceChart({ monthlyData }: MonthlyPerforma
                 Tren Performa Campaign (Bulanan)
               </h3>
               <p className="text-xs text-slate-500">
-                Pilih atau sembunyikan metrik untuk membandingkan grafik tren antar bulan secara real-time.
+                Pilih metrik dan sesuaikan tampilan label angka aktual di atas titik secara fleksibel.
               </p>
             </div>
           </div>
@@ -504,6 +472,27 @@ export default function MonthlyPerformanceChart({ monthlyData }: MonthlyPerforma
 
         {/* Global Action Buttons */}
         <div className="flex items-center gap-2 flex-wrap">
+          {/* Toggle Tampilkan Nilai Aktual */}
+          <button
+            type="button"
+            onClick={() => setShowDataLabels(prev => !prev)}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all cursor-pointer shadow-xs ${
+              showDataLabels
+                ? "bg-indigo-50 border-indigo-200 text-indigo-700 ring-1 ring-indigo-200/50"
+                : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
+            }`}
+            title="Tampilkan atau sembunyikan label angka di atas setiap titik data"
+          >
+            <span
+              className={`w-2 h-2 rounded-full transition-all ${
+                showDataLabels ? "bg-indigo-600 animate-pulse" : "bg-slate-300"
+              }`}
+            />
+            <span>{showDataLabels ? "Sembunyikan Angka" : "Tampilkan Angka"}</span>
+          </button>
+
+          <div className="h-4 w-px bg-slate-200 hidden sm:block" />
+
           {/* Category Tabs */}
           <div className="inline-flex items-center bg-slate-100 p-1 rounded-xl text-xs font-semibold text-slate-600">
             <button
@@ -561,7 +550,7 @@ export default function MonthlyPerformanceChart({ monthlyData }: MonthlyPerforma
             className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-all cursor-pointer"
           >
             <CheckSquare className="w-3.5 h-3.5 text-emerald-600" />
-            <span>Pilih Semua</span>
+            <span>Semua</span>
           </button>
           <button
             type="button"
@@ -631,8 +620,8 @@ export default function MonthlyPerformanceChart({ monthlyData }: MonthlyPerforma
               ))}
             </defs>
 
-            {/* Horizontal Grid lines & Interleaved Y-axis Labels */}
-            {combinedYTicks.map((tick, idx) => {
+            {/* Horizontal Grid lines & Clean Standard Y-axis labels with units */}
+            {yTicks.map((tick, idx) => {
               return (
                 <g key={`ytick-${idx}-${tick.val}`}>
                   <line
@@ -640,48 +629,20 @@ export default function MonthlyPerformanceChart({ monthlyData }: MonthlyPerforma
                     y1={tick.yPos}
                     x2={width - paddingRight}
                     y2={tick.yPos}
-                    stroke={tick.isActual ? (tick.bgColor || "#e2e8f0") : "#e2e8f0"}
-                    strokeDasharray={tick.yPos >= paddingTop + chartHeight ? "none" : "3 3"}
-                    strokeWidth={tick.isActual ? "1.2" : (tick.yPos >= paddingTop + chartHeight ? "1.5" : "1")}
-                    strokeOpacity={tick.isActual ? 0.35 : 0.8}
+                    stroke="#e2e8f0"
+                    strokeDasharray={idx === 0 ? "none" : "3 3"}
+                    strokeWidth={idx === 0 ? "1.5" : "1"}
                   />
-
-                  {tick.isActual && tick.bgColor ? (
-                    /* Actual Data Badge on Y-axis (Screenshot friendly) */
-                    <g transform={`translate(${paddingLeft - 6}, ${tick.yPos})`}>
-                      <rect
-                        x={-68}
-                        y={-8}
-                        width={64}
-                        height={16}
-                        rx={4}
-                        fill={tick.bgColor}
-                        filter="drop-shadow(0px 1px 2px rgba(0,0,0,0.12))"
-                      />
-                      <text
-                        x={-36}
-                        y={3.5}
-                        textAnchor="middle"
-                        fontSize="9"
-                        fontWeight="700"
-                        fill="#ffffff"
-                      >
-                        {tick.label}
-                      </text>
-                    </g>
-                  ) : (
-                    /* Standard Base Tick on Y-axis */
-                    <text
-                      x={paddingLeft - 10}
-                      y={tick.yPos + 4}
-                      textAnchor="end"
-                      fontSize="10"
-                      fontWeight="500"
-                      fill="#94a3b8"
-                    >
-                      {tick.label}
-                    </text>
-                  )}
+                  <text
+                    x={paddingLeft - 10}
+                    y={tick.yPos + 4}
+                    textAnchor="end"
+                    fontSize="11"
+                    fontWeight="600"
+                    fill="#64748b"
+                  >
+                    {tick.label}
+                  </text>
                 </g>
               );
             })}
@@ -724,7 +685,7 @@ export default function MonthlyPerformanceChart({ monthlyData }: MonthlyPerforma
                 const val = m.getValue(d);
                 const x = monthPointsX[idx];
                 const y = paddingTop + chartHeight - (val / maxY) * chartHeight;
-                return { x, y };
+                return { x, y, val };
               });
 
               const splinePath = getBezierPath(points);
@@ -766,68 +727,100 @@ export default function MonthlyPerformanceChart({ monthlyData }: MonthlyPerforma
                       />
                     );
                   })}
-                </g>
-              );
-            })}
 
-            {/* Permanent Horizontal Dashed Lines across to data points */}
-            {chartData.map((d, dIdx) => {
-              const ptX = monthPointsX[dIdx];
-              return (
-                <g key={`dashed-lines-col-${dIdx}`}>
-                  {activeMetricList.map((m) => {
-                    const val = m.getValue(d);
-                    const ptY = paddingTop + chartHeight - (val / maxY) * chartHeight;
-                    const isHovered = hoveredMonthIndex === dIdx;
+                  {/* Actual Data Value Labels directly above points (Controlled by showDataLabels toggle) */}
+                  {showDataLabels && points.map((pt, pIdx) => {
+                    const labelText = formatCompactUnit(pt.val, m.unit);
+                    const isHovered = hoveredMonthIndex === pIdx;
 
                     return (
-                      <line
-                        key={`dash-${dIdx}-${m.id}`}
-                        x1={paddingLeft}
-                        y1={ptY}
-                        x2={ptX}
-                        y2={ptY}
-                        stroke={m.color}
-                        strokeWidth={isHovered ? "1.8" : "1"}
-                        strokeDasharray="4 4"
-                        strokeOpacity={isHovered ? 0.9 : 0.35}
-                      />
+                      <g key={`lbl-${m.id}-${pIdx}`} className="pointer-events-none select-none">
+                        {/* Soft white outline glow so numbers are crisp over intersecting lines */}
+                        <text
+                          x={pt.x}
+                          y={pt.y - 8}
+                          textAnchor="middle"
+                          stroke="#ffffff"
+                          strokeWidth="3.5"
+                          strokeLinejoin="round"
+                          fontSize={isHovered ? "11" : "10"}
+                          fontWeight="700"
+                          fill="none"
+                        >
+                          {labelText}
+                        </text>
+                        {/* Actual colored text */}
+                        <text
+                          x={pt.x}
+                          y={pt.y - 8}
+                          textAnchor="middle"
+                          fontSize={isHovered ? "11" : "10"}
+                          fontWeight="700"
+                          fill={m.color}
+                        >
+                          {labelText}
+                        </text>
+                      </g>
                     );
                   })}
                 </g>
               );
             })}
 
-            {/* Hover Focused Pill Badges on Y-axis when a month is hovered */}
+            {/* Horizontal Dashed Lines to Y-axis for the hovered month */}
             {hoveredMonthIndex !== null && chartData[hoveredMonthIndex] && (
-              <g key={`hover-badges-${hoveredMonthIndex}`}>
+              <g key={`hover-guides-${hoveredMonthIndex}`}>
                 {activeMetricList.map((m) => {
                   const d = chartData[hoveredMonthIndex];
                   const val = m.getValue(d);
+                  const ptX = monthPointsX[hoveredMonthIndex];
                   const ptY = paddingTop + chartHeight - (val / maxY) * chartHeight;
                   const labelValue = formatCompactUnit(val, m.unit);
 
                   return (
-                    <g key={`hover-badge-${m.id}`} transform={`translate(${paddingLeft - 6}, ${ptY})`}>
-                      <rect
-                        x={-68}
-                        y={-9}
-                        width={64}
-                        height={18}
-                        rx={5}
-                        fill={m.color}
-                        filter="drop-shadow(0px 2px 4px rgba(0,0,0,0.18))"
+                    <g key={`hover-guide-${m.id}`}>
+                      {/* Horizontal dashed reference line to Y-axis */}
+                      <line
+                        x1={paddingLeft}
+                        y1={ptY}
+                        x2={ptX}
+                        y2={ptY}
+                        stroke={m.color}
+                        strokeWidth="1.5"
+                        strokeDasharray="4 4"
+                        strokeOpacity="0.85"
                       />
-                      <text
-                        x={-36}
-                        y={3.5}
-                        textAnchor="middle"
-                        fill="#ffffff"
-                        fontSize="9.5"
-                        fontWeight="700"
-                      >
-                        {labelValue}
-                      </text>
+
+                      {/* Dot on the Y-axis */}
+                      <circle
+                        cx={paddingLeft}
+                        cy={ptY}
+                        r="2.5"
+                        fill={m.color}
+                      />
+
+                      {/* Pill badge on Y-axis for screenshot clarity */}
+                      <g transform={`translate(${paddingLeft - 6}, ${ptY})`}>
+                        <rect
+                          x={-68}
+                          y={-9}
+                          width={64}
+                          height={18}
+                          rx={5}
+                          fill={m.color}
+                          filter="drop-shadow(0px 2px 4px rgba(0,0,0,0.18))"
+                        />
+                        <text
+                          x={-36}
+                          y={3.5}
+                          textAnchor="middle"
+                          fill="#ffffff"
+                          fontSize="9.5"
+                          fontWeight="700"
+                        >
+                          {labelValue}
+                        </text>
+                      </g>
                     </g>
                   );
                 })}
