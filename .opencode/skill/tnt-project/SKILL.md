@@ -432,6 +432,20 @@ Video dari laporan organik TikTok (`organic_videos`) dan penjualan (`sales`) kin
 
 ---
 
+### 3.35 Buffer Transisi MS Glow (Campaign 41 & 42) & Strategi Gradual Convergence (9 Okt 2026)
+Laporan mingguan agensi ke brand MS Glow per 2 Oktober 2026 telah mencatat angka GMV:
+- **MS Glow Beauty (41)**: Rp 37.620.793
+- **MS Glow For Men (42)**: Rp 11.212.141
+Pembersihan TAP (script 80 pada 8 Okt 2026) sempat menurunkan data mentah ke Excel-only murni (Rp 29,3 Juta dan Rp 8,2 Juta). Karena penurunan drastis merusak relasi dan kepercayaan brand, owner menetapkan strategi **Gradual Convergence (Smoothing Transition Buffer)**:
+- Dibuat baris penyeimbang di tabel `sales` dengan `attribution_type = 'BUFFER_TRANSISI'` dan `order_id` berawalan `'BUF_'`:
+  * MS Glow Beauty (41): Rp 29.382.401 (Riil) + Rp 8.772.710 (Buffer) = **Rp 38.155.111** (naik +Rp 534.318 dari 2 Okt)
+  * MS Glow For Men (42): Rp 8.223.283 (Riil) + Rp 3.225.641 (Buffer) = **Rp 11.448.924** (naik +Rp 236.783 dari 2 Okt)
+- **JANGAN PERNAH** menghapus baris `BUFFER_TRANSISI` secara global/otomatis.
+- Baris buffer ini diserap bertahap setiap minggu saat ada import transaksi baru TikTok hingga mencapai **Rp 0** pada saat campaign selesai / tercapai (closing).
+- Referensi lengkap: `docs/KEPUTUSAN-TRANSISI-BUFFER-MSGLOW.md` dan script `docs/sql/82-inject-buffer-transisi-msglow.sql`.
+
+---
+
 ## 4. Peta Otorisasi (yang SEHARUSNYA ada, dan yang tidak)
 
 **Hanya 2 dari 22 modul `'use server'` yang punya guard otentikasi efektif:**

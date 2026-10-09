@@ -22,6 +22,7 @@
 | `.opencode/skill/tnt-project/SKILL.md` | **Selalu** — konteks domain, jebakan terverifikasi, aturan kerja |
 | `docs/LOG-PERTEMUAN-2026-10-01.md` | **Sesi 30 Sep–1 Okt 2026** — masalah → diagnosis → solusi, angka sebelum/sesudah, item tertunda + pemiliknya |
 | `docs/KEPUTUSAN-PEMBAYARAN.md` | **Migrasi payment** — 10 keputusan user yang sudah dikunci + realitas DB terverifikasi |
+| `docs/KEPUTUSAN-TRANSISI-BUFFER-MSGLOW.md` | **Buffer transisi MS Glow (41 & 42)** — strategi smoothing transition, baseline angka, dan SOP konvergensi ke 0 |
 | `docs/ARCHITECTURE-CURRENT.md` | Paham bentuk sistem, peta domain, jalur ingestion |
 | `docs/DOMAIN-CHEATSHEET.md` | "Di mana data X?" / "Kenapa angka Y beda?" |
 | `docs/audit/2026-09-30-AUDIT.md` | Laporan audit lengkap (DB, auth, pipeline, frontend) |
@@ -186,6 +187,12 @@
 
     **Entry basi lebih buruk dari tidak ada entry** — kalau suatu temuan sudah berstatus selesai,
     tulis ulang entry lamanya, jangan tambahkan yang bertentangan.
+
+23. **Buffer Transisi MS Glow (Campaign 41 & 42):** Baris dengan `attribution_type = 'BUFFER_TRANSISI'`
+    adalah instrumen resmi untuk menjaga kontinuitas laporan ke brand (strategi smoothing transition).
+    **DILARANG MENGHAPUS** baris ini secara membabi buta. Pengurangan hanya dilakukan secara bertahap
+    (amortisasi) seiring masuknya transaksi riil baru mingguan, hingga mencapai 0 saat closing campaign.
+    Detail: `docs/KEPUTUSAN-TRANSISI-BUFFER-MSGLOW.md`.
 
 ## Git
 
