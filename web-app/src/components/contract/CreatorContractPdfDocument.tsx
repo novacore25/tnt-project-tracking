@@ -2,53 +2,85 @@ import React from "react";
 import { Document, Page, Text, View, StyleSheet, Image } from "@react-pdf/renderer";
 import { logoTntBase64 } from "./logoBase64";
 
-// Margin 2.54 cm = 72 pt
-const MARGIN_2_54_CM = 72;
+// Margin spesifikasi:
+// Margin Left & Right = 2.54 cm = 72 pt
+// Gap Top ke Kop / Header = 1.25 cm = 35.43 pt (~35.5 pt)
+// Gap dari Header ke Konten Isi = 1.0 cm = 28.35 pt (~28.5 pt)
+// Margin Bottom = 2.54 cm = 72 pt (dengan footer di posisi bottom ~35 pt)
+const MARGIN_LEFT_RIGHT = 72; // 2.54 cm
+const GAP_TOP_HEADER = 35.5;  // 1.25 cm
+const GAP_HEADER_CONTENT = 28.5; // 1.00 cm
+const MARGIN_BOTTOM = 72;     // 2.54 cm
 
 const styles = StyleSheet.create({
   page: {
-    paddingTop: MARGIN_2_54_CM,
-    paddingBottom: MARGIN_2_54_CM,
-    paddingLeft: MARGIN_2_54_CM,
-    paddingRight: MARGIN_2_54_CM,
+    paddingTop: GAP_TOP_HEADER,
+    paddingBottom: MARGIN_BOTTOM,
+    paddingLeft: MARGIN_LEFT_RIGHT,
+    paddingRight: MARGIN_LEFT_RIGHT,
     fontFamily: "Times-Roman",
     fontSize: 12,
     color: "#000000",
     lineHeight: 1.5,
   },
-  // KOP / HEADER RATA TENGAH
+  // KOP / HEADER DI ATAS SETIAP HALAMAN
   headerContainer: {
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 20,
+    marginBottom: GAP_HEADER_CONTENT,
     borderBottomWidth: 0.5,
-    borderBottomColor: "#cccccc",
-    paddingBottom: 10,
+    borderBottomColor: "#94a3b8",
+    paddingBottom: 8,
   },
   headerLogo: {
     width: 140,
-    height: 40,
+    height: 38,
     objectFit: "contain",
-    marginBottom: 4,
+    marginBottom: 3,
   },
   headerSubText: {
     fontFamily: "Times-Roman",
     fontSize: 10,
     textAlign: "center",
     color: "#000000",
-    lineHeight: 1.25,
+    lineHeight: 1.2,
   },
   headerEmail: {
     fontFamily: "Times-Roman",
     fontSize: 10,
     textAlign: "center",
     color: "#0056b3",
-    lineHeight: 1.25,
+    lineHeight: 1.2,
+  },
+  // FOOTER RESMI DI BAGIAN BAWAH SETIAP HALAMAN
+  footerContainer: {
+    position: "absolute",
+    bottom: 35, // 1.25 cm dari tepi bawah kertas
+    left: MARGIN_LEFT_RIGHT,
+    right: MARGIN_LEFT_RIGHT,
+    borderTopWidth: 0.5,
+    borderTopColor: "#94a3b8",
+    paddingTop: 5,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  footerLeftText: {
+    fontFamily: "Times-Roman",
+    fontSize: 9,
+    color: "#475569",
+    textAlign: "left",
+  },
+  footerRightText: {
+    fontFamily: "Times-Roman",
+    fontSize: 9,
+    color: "#475569",
+    textAlign: "right",
   },
   // JUDUL SURAT
   docTitleContainer: {
     textAlign: "center",
-    marginBottom: 16,
+    marginBottom: 14,
   },
   docTitle: {
     fontFamily: "Times-Bold",
@@ -71,27 +103,15 @@ const styles = StyleSheet.create({
     lineHeight: 1.5,
     marginBottom: 8,
   },
-  paragraphIndent: {
-    fontFamily: "Times-Roman",
-    fontSize: 12,
-    textAlign: "justify",
-    lineHeight: 1.5,
-    marginBottom: 8,
-    textIndent: 20,
-  },
   bold: {
     fontFamily: "Times-Bold",
   },
   italic: {
     fontFamily: "Times-Italic",
   },
-  boldItalic: {
-    fontFamily: "Times-BoldItalic",
-  },
   // TABEL IDENTITAS PIHAK
   partyTable: {
     marginVertical: 4,
-    marginLeft: 0,
     marginBottom: 8,
   },
   partyRow: {
@@ -134,7 +154,7 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     marginBottom: 4,
   },
-  // AYAT DENGAN NUMBERING (1.1, 1.2, atau 1, 2, 3)
+  // AYAT DENGAN NUMBERING
   numberedItem: {
     flexDirection: "row",
     marginBottom: 4,
@@ -254,7 +274,7 @@ export function CreatorContractPdfDocument({ data }: { data: CreatorContractData
           HALAMAN 1: KOP, IDENTITAS PARA PIHAK, PASAL 1 & PASAL 2
       ======================================================== */}
       <Page size="A4" style={styles.page}>
-        {/* KOP / HEADER RATA TENGAH */}
+        {/* KOP / HEADER DI ATAS HALAMAN 1 (GAP TOP 1.25 cm, GAP KE ISI 1 cm) */}
         <View style={styles.headerContainer}>
           <Image src={logoTntBase64} style={styles.headerLogo} />
           <Text style={styles.headerSubText}>Official TikTok MCN &amp; Affiliate Partner</Text>
@@ -385,6 +405,17 @@ export function CreatorContractPdfDocument({ data }: { data: CreatorContractData
         <Text style={styles.paragraphJustify}>
           <Text style={styles.bold}>PIHAK PERTAMA</Text> menyetujui untuk bekerja sama dengan <Text style={styles.bold}>PIHAK KEDUA</Text>, yang dalam hal ini <Text style={styles.bold}>PIHAK KEDUA</Text> ditetapkan sebagai Content Creator oleh <Text style={styles.bold}>PIHAK PERTAMA</Text> untuk melaksanakan jasa pembuatan konten yang diminta oleh <Text style={styles.bold}>PIHAK PERTAMA</Text> untuk memasarkan {data.namaBrand} ({data.namaCampaign}).
         </Text>
+
+        {/* FOOTER HALAMAN 1 */}
+        <View style={styles.footerContainer} fixed>
+          <Text style={styles.footerLeftText}>
+            PT TNT Digital Kreatif - Official TikTok Agency Partner
+          </Text>
+          <Text
+            style={styles.footerRightText}
+            render={({ pageNumber, totalPages }) => `Halaman ${pageNumber}/${totalPages}`}
+          />
+        </View>
       </Page>
 
       {/* ========================================================
@@ -520,6 +551,17 @@ export function CreatorContractPdfDocument({ data }: { data: CreatorContractData
         <Text style={styles.paragraphJustify}>
           Kontrak ini akan berlaku mulai tanggal {data.tanggalMulai} dan akan berakhir pada tanggal {data.tanggalBerakhir}, kecuali diberikan perpanjangan secara tertulis oleh kedua belah pihak atau diakhiri lebih awal sesuai dengan ketentuan yang terdapat dalam perjanjian ini.
         </Text>
+
+        {/* FOOTER HALAMAN 2 */}
+        <View style={styles.footerContainer} fixed>
+          <Text style={styles.footerLeftText}>
+            PT TNT Digital Kreatif - Official TikTok Agency Partner
+          </Text>
+          <Text
+            style={styles.footerRightText}
+            render={({ pageNumber, totalPages }) => `Halaman ${pageNumber}/${totalPages}`}
+          />
+        </View>
       </Page>
 
       {/* ========================================================
@@ -587,6 +629,17 @@ export function CreatorContractPdfDocument({ data }: { data: CreatorContractData
               <Text style={styles.signRole}>@{cleanUname}</Text>
             </View>
           </View>
+        </View>
+
+        {/* FOOTER HALAMAN 3 */}
+        <View style={styles.footerContainer} fixed>
+          <Text style={styles.footerLeftText}>
+            PT TNT Digital Kreatif - Official TikTok Agency Partner
+          </Text>
+          <Text
+            style={styles.footerRightText}
+            render={({ pageNumber, totalPages }) => `Halaman ${pageNumber}/${totalPages}`}
+          />
         </View>
       </Page>
     </Document>
