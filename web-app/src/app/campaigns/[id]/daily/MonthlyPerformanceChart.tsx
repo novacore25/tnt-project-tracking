@@ -425,15 +425,53 @@ export default function MonthlyPerformanceChart({ monthlyData }: MonthlyPerforma
     return formatted;
   };
 
-  // Y-axis tick intervals
-  const yTicks = useMemo(() => {
-    const count = 5;
-    const ticks = [];
-    for (let i = 0; i <= count; i++) {
-      ticks.push(Math.round((maxY / count) * i));
-    }
-    return ticks;
-  }, [maxY]);
+  // Generate smart Y-axis ticks: standard intervals + actual data points cleanly interleaved
+  const combinedYTicks = useMemo(() => {
+    // 1. Base standard intervals (0, 20%, 40%, ..., 100% of maxY)
+    const baseTicks = [0, 0.25, 0.5, 0.75, 1.0].map(pct => ({
+      val: Math.round(maxY * pct),
+      yPos: paddingTop + chartHeight - (pct) * chartHeight,
+      label: dominantUnit 
+        ? formatCompactUnit(Math.round(maxY * pct), dominantUnit) 
+        : formatCompactUnit(Math.round(maxY * pct)),
+      isActual: false,
+      color: "#94a3b8",
+      bgColor: undefined as string | undefined
+    }));
+
+    // 2. Collect unique actual values from active metrics
+    const actualPoints: { val: number; yPos: number; label: string; isActual: boolean; color: string; bgColor: string }[] = [];
+    
+    chartData.forEach(d => {
+      activeMetricList.forEach(m => {
+        const val = m.getValue(d);
+        if (val <= 0) return; // skip 0 as base tick already covers 0
+        const yPos = paddingTop + chartHeight - (val / maxY) * chartHeight;
+        const label = formatCompactUnit(val, m.unit);
+
+        // Check if an existing actual point or base tick already has nearly identical yPos (within 13px)
+        const conflict = actualPoints.some(p => Math.abs(p.yPos - yPos) < 13);
+        if (!conflict) {
+          actualPoints.push({
+            val,
+            yPos,
+            label,
+            isActual: true,
+            color: "#ffffff",
+            bgColor: m.color
+          });
+        }
+      });
+    });
+
+    // 3. Filter out base ticks that collide with actual points (within 13px)
+    const filteredBaseTicks = baseTicks.filter(bt => 
+      !actualPoints.some(ap => Math.abs(ap.yPos - bt.yPos) < 13)
+    );
+
+    // 4. Combine and sort from top (lowest yPos) to bottom (highest yPos)
+    return [...filteredBaseTicks, ...actualPoints].sort((a, b) => a.yPos - b.yPos);
+  }, [maxY, dominantUnit, chartData, activeMetricList, paddingTop, chartHeight]);
 
   // Month coordinate mapping
   const monthPointsX = useMemo(() => {
@@ -593,34 +631,57 @@ export default function MonthlyPerformanceChart({ monthlyData }: MonthlyPerforma
               ))}
             </defs>
 
-            {/* Horizontal Grid lines & Standard Y-axis labels */}
-            {yTicks.map((val, idx) => {
-              const yPos = paddingTop + chartHeight - (val / maxY) * chartHeight;
-              const formattedTick = dominantUnit 
-                ? formatCompactUnit(val, dominantUnit)
-                : formatCompactUnit(val);
-
+            {/* Horizontal Grid lines & Interleaved Y-axis Labels */}
+            {combinedYTicks.map((tick, idx) => {
               return (
-                <g key={`grid-${idx}`}>
+                <g key={`ytick-${idx}-${tick.val}`}>
                   <line
                     x1={paddingLeft}
-                    y1={yPos}
+                    y1={tick.yPos}
                     x2={width - paddingRight}
-                    y2={yPos}
-                    stroke="#e2e8f0"
-                    strokeDasharray={idx === 0 ? "none" : "3 3"}
-                    strokeWidth={idx === 0 ? "1.5" : "1"}
+                    y2={tick.yPos}
+                    stroke={tick.isActual ? (tick.bgColor || "#e2e8f0") : "#e2e8f0"}
+                    strokeDasharray={tick.yPos >= paddingTop + chartHeight ? "none" : "3 3"}
+                    strokeWidth={tick.isActual ? "1.2" : (tick.yPos >= paddingTop + chartHeight ? "1.5" : "1")}
+                    strokeOpacity={tick.isActual ? 0.35 : 0.8}
                   />
-                  <text
-                    x={paddingLeft - 10}
-                    y={yPos + 4}
-                    textAnchor="end"
-                    fontSize="11"
-                    fontWeight="500"
-                    fill="#94a3b8"
-                  >
-                    {formattedTick}
-                  </text>
+
+                  {tick.isActual && tick.bgColor ? (
+                    /* Actual Data Badge on Y-axis (Screenshot friendly) */
+                    <g transform={`translate(${paddingLeft - 6}, ${tick.yPos})`}>
+                      <rect
+                        x={-68}
+                        y={-8}
+                        width={64}
+                        height={16}
+                        rx={4}
+                        fill={tick.bgColor}
+                        filter="drop-shadow(0px 1px 2px rgba(0,0,0,0.12))"
+                      />
+                      <text
+                        x={-36}
+                        y={3.5}
+                        textAnchor="middle"
+                        fontSize="9"
+                        fontWeight="700"
+                        fill="#ffffff"
+                      >
+                        {tick.label}
+                      </text>
+                    </g>
+                  ) : (
+                    /* Standard Base Tick on Y-axis */
+                    <text
+                      x={paddingLeft - 10}
+                      y={tick.yPos + 4}
+                      textAnchor="end"
+                      fontSize="10"
+                      fontWeight="500"
+                      fill="#94a3b8"
+                    >
+                      {tick.label}
+                    </text>
+                  )}
                 </g>
               );
             })}
@@ -709,62 +770,64 @@ export default function MonthlyPerformanceChart({ monthlyData }: MonthlyPerforma
               );
             })}
 
-            {/* Hover Guides: Horizontal dashed line spanning from data point to Y-axis + Y-axis Value Pill Badge */}
-            {hoveredMonthIndex !== null && chartData[hoveredMonthIndex] && (
-              <g key={`hover-guides-${hoveredMonthIndex}`}>
-                {activeMetricList.map((m) => {
-                  const d = chartData[hoveredMonthIndex];
-                  const val = m.getValue(d);
-                  const ptX = monthPointsX[hoveredMonthIndex];
-                  const ptY = paddingTop + chartHeight - (val / maxY) * chartHeight;
-                  const labelValue = formatCompactUnit(val, m.unit);
+            {/* Permanent Horizontal Dashed Lines across to data points */}
+            {chartData.map((d, dIdx) => {
+              const ptX = monthPointsX[dIdx];
+              return (
+                <g key={`dashed-lines-col-${dIdx}`}>
+                  {activeMetricList.map((m) => {
+                    const val = m.getValue(d);
+                    const ptY = paddingTop + chartHeight - (val / maxY) * chartHeight;
+                    const isHovered = hoveredMonthIndex === dIdx;
 
-                  return (
-                    <g key={`hover-line-${m.id}`}>
-                      {/* Horizontal dashed reference line to Y-axis */}
+                    return (
                       <line
+                        key={`dash-${dIdx}-${m.id}`}
                         x1={paddingLeft}
                         y1={ptY}
                         x2={ptX}
                         y2={ptY}
                         stroke={m.color}
-                        strokeWidth="1.5"
+                        strokeWidth={isHovered ? "1.8" : "1"}
                         strokeDasharray="4 4"
-                        strokeOpacity="0.85"
+                        strokeOpacity={isHovered ? 0.9 : 0.35}
                       />
+                    );
+                  })}
+                </g>
+              );
+            })}
 
-                      {/* Small anchor dot on the Y-axis intersection */}
-                      <circle
-                        cx={paddingLeft}
-                        cy={ptY}
-                        r="2.5"
+            {/* Hover Focused Pill Badges on Y-axis when a month is hovered */}
+            {hoveredMonthIndex !== null && chartData[hoveredMonthIndex] && (
+              <g key={`hover-badges-${hoveredMonthIndex}`}>
+                {activeMetricList.map((m) => {
+                  const d = chartData[hoveredMonthIndex];
+                  const val = m.getValue(d);
+                  const ptY = paddingTop + chartHeight - (val / maxY) * chartHeight;
+                  const labelValue = formatCompactUnit(val, m.unit);
+
+                  return (
+                    <g key={`hover-badge-${m.id}`} transform={`translate(${paddingLeft - 6}, ${ptY})`}>
+                      <rect
+                        x={-68}
+                        y={-9}
+                        width={64}
+                        height={18}
+                        rx={5}
                         fill={m.color}
+                        filter="drop-shadow(0px 2px 4px rgba(0,0,0,0.18))"
                       />
-
-                      {/* Exact formatted value pill badge at the Y-axis for screenshots */}
-                      <g transform={`translate(${paddingLeft - 6}, ${ptY})`}>
-                        {/* Rounded rectangle background */}
-                        <rect
-                          x={-68}
-                          y={-9}
-                          width={64}
-                          height={18}
-                          rx={5}
-                          fill={m.color}
-                          filter="drop-shadow(0px 1px 2px rgba(0,0,0,0.15))"
-                        />
-                        {/* Text label */}
-                        <text
-                          x={-36}
-                          y={3.5}
-                          textAnchor="middle"
-                          fill="#ffffff"
-                          fontSize="9.5"
-                          fontWeight="700"
-                        >
-                          {labelValue}
-                        </text>
-                      </g>
+                      <text
+                        x={-36}
+                        y={3.5}
+                        textAnchor="middle"
+                        fill="#ffffff"
+                        fontSize="9.5"
+                        fontWeight="700"
+                      >
+                        {labelValue}
+                      </text>
                     </g>
                   );
                 })}
