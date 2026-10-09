@@ -1034,6 +1034,17 @@ export async function syncContractCreatorProfileDataAction(data: {
     const creatorSets: any[] = [];
     if (data.namaLengkap?.trim()) {
       creatorSets.push(sql`nama_asli = ${data.namaLengkap.trim()}`);
+      creatorSets.push(sql`nama_lengkap = ${data.namaLengkap.trim()}`);
+    }
+    if (data.nikKtp?.trim()) {
+      creatorSets.push(sql`nik = ${data.nikKtp.trim()}`);
+    }
+    if (data.alamatKtp?.trim()) {
+      creatorSets.push(sql`alamat_ktp = ${data.alamatKtp.trim()}`);
+    }
+    if (data.noWhatsapp?.trim()) {
+      creatorSets.push(sql`no_whatsapp = ${data.noWhatsapp.trim()}`);
+      creatorSets.push(sql`nomor_wa_dealing = ${data.noWhatsapp.trim()}`);
     }
     if (data.tiktokUid?.trim()) {
       creatorSets.push(sql`tiktok_uid = ${data.tiktokUid.trim()}`);

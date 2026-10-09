@@ -544,6 +544,12 @@ export default function ContractGeneratorWorkspace({
                     setSelectedCreator(null);
                   }
                 }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && filteredCreators.length > 0) {
+                    e.preventDefault();
+                    handleSelectCreator(filteredCreators[0]);
+                  }
+                }}
                 placeholder="Ketik username kreator (@...)"
                 className="w-full pl-9 pr-9 py-2.5 bg-emerald-50/50 border border-emerald-300 rounded-xl text-sm font-medium text-slate-800 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 outline-none transition-all"
               />
