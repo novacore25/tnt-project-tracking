@@ -373,6 +373,31 @@ export default function ContractGeneratorWorkspace({
     }
   };
 
+  // Auto write-back otomatis ke profil kreator saat dokumen diunduh
+  const handleAutoWriteBack = async () => {
+    if (!currentCreator?.creator_id) return;
+    try {
+      await syncContractCreatorProfileDataAction({
+        creatorId: currentCreator.creator_id,
+        namaLengkap: namaKreator,
+        tiktokUid,
+        nikKtp,
+        alamatKtp: alamatKreator,
+        tempatLahir,
+        tanggalLahir,
+        noWhatsapp: teleponKreator,
+        email: emailKreator,
+        npwp: npwpKreator,
+        namaBank,
+        nomorRekening,
+        atasNamaRekening,
+      });
+      if (onCreatorUpdated) onCreatorUpdated();
+    } catch (err) {
+      console.error("Auto write-back background error:", err);
+    }
+  };
+
   // Selected Campaign Object
   const selectedCampaign = useMemo(() => {
     return campaigns.find((c) => c.id === selectedCampaignId) || null;
@@ -1142,6 +1167,7 @@ export default function ContractGeneratorWorkspace({
             <PDFDownloadLink
               document={<CreatorContractPdfDocument data={contractPdfData} />}
               fileName={outputFileName}
+              onClick={handleAutoWriteBack}
               className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-500/20 transition-all cursor-pointer"
             >
               {({ loading }) => (
