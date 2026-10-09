@@ -2426,3 +2426,56 @@ export async function deleteSingleDuplicateCampaignCreatorAction(deleteId: numbe
     return { success: false, error: err.message };
   }
 }
+
+export async function fetchCampaignCreatorsForDocumentsAction(params: {
+  campaignId: number;
+  search?: string;
+  approvalFilter?: string;
+}) {
+  try {
+    const { campaignId, search, approvalFilter } = params;
+    const conditions: any[] = [sql`cc.campaign_id = ${campaignId}`];
+
+    if (approvalFilter && approvalFilter !== 'all') {
+      conditions.push(sql`cc.approval = ${approvalFilter}`);
+    }
+
+    if (search && search.trim() !== '') {
+      const s = `%${search.trim()}%`;
+      conditions.push(sql`(c.username ILIKE ${s} OR c.nama_lengkap ILIKE ${s} OR c.nama_asli ILIKE ${s})`);
+    }
+
+    const rows = await db.execute(sql`
+      SELECT 
+        cc.id as cc_id,
+        cc.campaign_id,
+        cc.creator_id,
+        cc.price,
+        cc.qty_vt,
+        cc.qty_live,
+        cc.approval,
+        cc.content_type,
+        c.username,
+        c.nama_lengkap,
+        c.nama_asli,
+        c.no_whatsapp,
+        (
+          SELECT ct.nomor 
+          FROM creator_contacts ct 
+          WHERE ct.creator_id = c.id 
+          ORDER BY ct.id ASC LIMIT 1
+        ) as contact_nomor
+      FROM campaign_creators cc
+      JOIN creators c ON cc.creator_id = c.id
+      WHERE ${sql.join(conditions, sql` AND `)}
+      ORDER BY cc.id DESC
+      LIMIT 300
+    `) as any[];
+
+    return { success: true, data: rows || [] };
+  } catch (err: any) {
+    console.error('fetchCampaignCreatorsForDocumentsAction error:', err);
+    return { success: false, error: err.message, data: [] };
+  }
+}
+

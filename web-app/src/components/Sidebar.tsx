@@ -1,7 +1,7 @@
 "use client";
 
 import Link from 'next/link';
-import { LayoutDashboard, Users, FolderKanban, Receipt, Wallet, Settings, Package, LogOut, Shield, Activity, Puzzle, ChevronLeft, ChevronRight } from 'lucide-react';
+import { LayoutDashboard, Users, FolderKanban, Receipt, Wallet, Settings, Package, LogOut, Shield, Activity, Puzzle, ChevronLeft, ChevronRight, FileText } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/utils/cn';
 import { useState, useEffect } from 'react';
@@ -11,11 +11,12 @@ import { signOut } from 'next-auth/react';
 const navItems = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard, activePhase: true },
   { name: 'Creator Pool', href: '/creator-pool', icon: Users, activePhase: true },
-  { name: 'Migrasi Data', href: '/import-data', icon: FolderKanban, activePhase: true },
   { name: 'Campaign', href: '/campaigns', icon: FolderKanban, activePhase: true },
+  { name: 'Dokumen', href: '/dokumen', icon: FileText, activePhase: true },
   { name: 'Master Produk', href: '/skus', icon: Package, activePhase: true },
   { name: 'Input Penjualan', href: '/input-penjualan', icon: Receipt, activePhase: true },
   { name: 'Ads Report', href: '/ads-report', icon: FolderKanban, activePhase: true },
+  { name: 'Migrasi Data', href: '/import-data', icon: FolderKanban, activePhase: true },
   { name: 'Unduh Ekstensi', href: '/extension', icon: Puzzle, activePhase: true },
   { name: 'Pengaturan', href: '/settings', icon: Settings, activePhase: true },
 ];
