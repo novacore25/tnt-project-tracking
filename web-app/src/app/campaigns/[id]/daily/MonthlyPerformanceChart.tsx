@@ -364,7 +364,7 @@ export default function MonthlyPerformanceChart({ monthlyData }: MonthlyPerforma
   // Dimension setup for SVG viewBox
   const width = 1000;
   const height = 340;
-  const paddingLeft = 60;
+  const paddingLeft = 85;
   const paddingRight = 40;
   const paddingTop = 30;
   const paddingBottom = 50;
@@ -387,6 +387,43 @@ export default function MonthlyPerformanceChart({ monthlyData }: MonthlyPerforma
     const multiple = Math.ceil(max / power);
     return Math.max(10, multiple * power);
   }, [chartData, activeMetricList]);
+
+  // Primary unit or dominant unit among active metrics
+  const dominantUnit = useMemo(() => {
+    if (activeMetricList.length === 0) return "";
+    const units = activeMetricList.map(m => m.unit);
+    const allSame = units.every(u => u === units[0]);
+    if (allSame) return units[0];
+    return "";
+  }, [activeMetricList]);
+
+  // Helper format number with up to 2 decimal digits in Indonesian locale
+  const formatCompactUnit = (val: number, unit?: string): string => {
+    const formatted = val.toLocaleString("id-ID", {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2
+    });
+
+    if (!unit) {
+      if (val >= 1000000) {
+        return `${(val / 1000000).toLocaleString("id-ID", { maximumFractionDigits: 2 })}JT`;
+      }
+      if (val >= 1000) {
+        return `${(val / 1000).toLocaleString("id-ID", { maximumFractionDigits: 2 })}RB`;
+      }
+      return formatted;
+    }
+
+    if (unit === "Juta Rp") return `${formatted}JT`;
+    if (unit === "Ribu Rp" || unit === "Ribu Views") return `${formatted}RB`;
+    if (unit === "%") return `${formatted}%`;
+    if (unit === "video") return `${formatted} VT`;
+    if (unit === "sesi") return `${formatted} Live`;
+    if (unit === "pcs") return `${formatted} pcs`;
+    if (unit === "orang") return `${formatted} Kr`;
+    if (unit === "order") return `${formatted} Ord`;
+    return formatted;
+  };
 
   // Y-axis tick intervals
   const yTicks = useMemo(() => {
@@ -545,7 +582,7 @@ export default function MonthlyPerformanceChart({ monthlyData }: MonthlyPerforma
         ) : (
           <svg
             viewBox={`0 0 ${width} ${height}`}
-            className="w-full h-auto min-w-[700px] overflow-visible"
+            className="w-full h-auto min-w-[750px] overflow-visible"
           >
             <defs>
               {activeMetricList.map((m) => (
@@ -556,9 +593,13 @@ export default function MonthlyPerformanceChart({ monthlyData }: MonthlyPerforma
               ))}
             </defs>
 
-            {/* Horizontal Grid lines */}
+            {/* Horizontal Grid lines & Standard Y-axis labels */}
             {yTicks.map((val, idx) => {
               const yPos = paddingTop + chartHeight - (val / maxY) * chartHeight;
+              const formattedTick = dominantUnit 
+                ? formatCompactUnit(val, dominantUnit)
+                : formatCompactUnit(val);
+
               return (
                 <g key={`grid-${idx}`}>
                   <line
@@ -578,7 +619,7 @@ export default function MonthlyPerformanceChart({ monthlyData }: MonthlyPerforma
                     fontWeight="500"
                     fill="#94a3b8"
                   >
-                    {val.toLocaleString("id-ID")}
+                    {formattedTick}
                   </text>
                 </g>
               );
@@ -656,7 +697,7 @@ export default function MonthlyPerformanceChart({ monthlyData }: MonthlyPerforma
                         key={`pt-${m.id}-${pIdx}`}
                         cx={pt.x}
                         cy={pt.y}
-                        r={isHovered ? "5.5" : "3.5"}
+                        r={isHovered ? "6" : "3.5"}
                         fill="#ffffff"
                         stroke={m.color}
                         strokeWidth={isHovered ? "3" : "2"}
@@ -667,6 +708,68 @@ export default function MonthlyPerformanceChart({ monthlyData }: MonthlyPerforma
                 </g>
               );
             })}
+
+            {/* Hover Guides: Horizontal dashed line spanning from data point to Y-axis + Y-axis Value Pill Badge */}
+            {hoveredMonthIndex !== null && chartData[hoveredMonthIndex] && (
+              <g key={`hover-guides-${hoveredMonthIndex}`}>
+                {activeMetricList.map((m) => {
+                  const d = chartData[hoveredMonthIndex];
+                  const val = m.getValue(d);
+                  const ptX = monthPointsX[hoveredMonthIndex];
+                  const ptY = paddingTop + chartHeight - (val / maxY) * chartHeight;
+                  const labelValue = formatCompactUnit(val, m.unit);
+
+                  return (
+                    <g key={`hover-line-${m.id}`}>
+                      {/* Horizontal dashed reference line to Y-axis */}
+                      <line
+                        x1={paddingLeft}
+                        y1={ptY}
+                        x2={ptX}
+                        y2={ptY}
+                        stroke={m.color}
+                        strokeWidth="1.5"
+                        strokeDasharray="4 4"
+                        strokeOpacity="0.85"
+                      />
+
+                      {/* Small anchor dot on the Y-axis intersection */}
+                      <circle
+                        cx={paddingLeft}
+                        cy={ptY}
+                        r="2.5"
+                        fill={m.color}
+                      />
+
+                      {/* Exact formatted value pill badge at the Y-axis for screenshots */}
+                      <g transform={`translate(${paddingLeft - 6}, ${ptY})`}>
+                        {/* Rounded rectangle background */}
+                        <rect
+                          x={-68}
+                          y={-9}
+                          width={64}
+                          height={18}
+                          rx={5}
+                          fill={m.color}
+                          filter="drop-shadow(0px 1px 2px rgba(0,0,0,0.15))"
+                        />
+                        {/* Text label */}
+                        <text
+                          x={-36}
+                          y={3.5}
+                          textAnchor="middle"
+                          fill="#ffffff"
+                          fontSize="9.5"
+                          fontWeight="700"
+                        >
+                          {labelValue}
+                        </text>
+                      </g>
+                    </g>
+                  );
+                })}
+              </g>
+            )}
 
             {/* Transparent touch/hover bars for each month column */}
             {chartData.map((_, idx) => {
