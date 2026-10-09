@@ -725,47 +725,92 @@ export default function MonthlyPerformanceChart({ monthlyData }: MonthlyPerforma
                         strokeWidth={isHovered ? "3" : "2"}
                         className="transition-all cursor-pointer"
                       />
-                    );
-                  })}
+                  );
+                })}
+              </g>
+            );
+          })}
 
-                  {/* Actual Data Value Labels directly above points (Controlled by showDataLabels toggle) */}
-                  {showDataLabels && points.map((pt, pIdx) => {
-                    const labelText = formatCompactUnit(pt.val, m.unit);
-                    const isHovered = hoveredMonthIndex === pIdx;
+          {/* Grouped and collision-free stacked labels per month (Sorted descending: largest value on top) */}
+          {showDataLabels && chartData.map((d, colIdx) => {
+            const xPos = monthPointsX[colIdx];
+            const isHoveredCol = hoveredMonthIndex === colIdx;
 
-                    return (
-                      <g key={`lbl-${m.id}-${pIdx}`} className="pointer-events-none select-none">
-                        {/* Soft white outline glow so numbers are crisp over intersecting lines */}
-                        <text
-                          x={pt.x}
-                          y={pt.y - 8}
-                          textAnchor="middle"
-                          stroke="#ffffff"
-                          strokeWidth="3.5"
-                          strokeLinejoin="round"
-                          fontSize={isHovered ? "11" : "10"}
-                          fontWeight="700"
-                          fill="none"
-                        >
-                          {labelText}
-                        </text>
-                        {/* Actual colored text */}
-                        <text
-                          x={pt.x}
-                          y={pt.y - 8}
-                          textAnchor="middle"
-                          fontSize={isHovered ? "11" : "10"}
-                          fontWeight="700"
-                          fill={m.color}
-                        >
-                          {labelText}
-                        </text>
-                      </g>
-                    );
-                  })}
-                </g>
-              );
-            })}
+            // Collect all active metrics for this month
+            const monthLabels = activeMetricList.map((m) => {
+              const val = m.getValue(d);
+              const origY = paddingTop + chartHeight - (val / maxY) * chartHeight;
+              return {
+                id: m.id,
+                color: m.color,
+                unit: m.unit,
+                val,
+                origY,
+                text: formatCompactUnit(val, m.unit)
+              };
+            });
+
+            // Sort by val descending (largest on top, so smallest at bottom)
+            monthLabels.sort((a, b) => b.val - a.val);
+
+            // Compute collision-free stacked Y positions
+            const minSpacing = 14;
+            const positionedLabels: { id: string; color: string; text: string; x: number; y: number }[] = [];
+
+            monthLabels.forEach((item, itemIdx) => {
+              let targetY = item.origY - 8; // standard offset above point
+
+              if (itemIdx > 0) {
+                const prevPlaced = positionedLabels[itemIdx - 1];
+                // Since sorted descending, if current item is too close to prevPlaced (within minSpacing), push it down
+                if (targetY - prevPlaced.y < minSpacing) {
+                  targetY = prevPlaced.y + minSpacing;
+                }
+              }
+
+              positionedLabels.push({
+                id: item.id,
+                color: item.color,
+                text: item.text,
+                x: xPos,
+                y: targetY
+              });
+            });
+
+            return (
+              <g key={`labels-col-${colIdx}`} className="pointer-events-none select-none">
+                {positionedLabels.map((lbl) => (
+                  <g key={`lbl-item-${colIdx}-${lbl.id}`}>
+                    {/* Crisp white halo outline */}
+                    <text
+                      x={lbl.x}
+                      y={lbl.y}
+                      textAnchor="middle"
+                      stroke="#ffffff"
+                      strokeWidth="3.5"
+                      strokeLinejoin="round"
+                      fontSize={isHoveredCol ? "11" : "10"}
+                      fontWeight="700"
+                      fill="none"
+                    >
+                      {lbl.text}
+                    </text>
+                    {/* Actual colored text matching the metric line */}
+                    <text
+                      x={lbl.x}
+                      y={lbl.y}
+                      textAnchor="middle"
+                      fontSize={isHoveredCol ? "11" : "10"}
+                      fontWeight="700"
+                      fill={lbl.color}
+                    >
+                      {lbl.text}
+                    </text>
+                  </g>
+                ))}
+              </g>
+            );
+          })}
 
             {/* Horizontal Dashed Lines to Y-axis for the hovered month */}
             {hoveredMonthIndex !== null && chartData[hoveredMonthIndex] && (
