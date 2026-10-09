@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useDatabaseStore } from "@/store/useDatabaseStore";
 import { getCreatorType, getJenisKerjasama } from "@/utils/computed";
 import { formatAbbreviated, formatRupiah } from "@/utils/formatters";
-import { ChevronDown, ChevronRight, ChevronLeft, Edit2, Check, X, Loader2, Trash2, Download, ArrowUp, ArrowDown, ArrowUpDown, Plus, AlertCircle, CheckCircle2, Save, Filter, GitMerge, Users } from "lucide-react";
+import { ChevronDown, ChevronRight, ChevronLeft, Edit2, Check, X, Loader2, Trash2, Download, ArrowUp, ArrowDown, ArrowUpDown, Plus, AlertCircle, CheckCircle2, Save, Filter, GitMerge, Users, FileText } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -17,6 +17,7 @@ import { MultiSelect } from "@/components/MultiSelect";
 import { useCampaignFilter } from "@/providers/CampaignFilterProvider";
 import { NotesTimeline } from "@/components/NotesTimeline";
 import { CreatorRow } from "./CreatorRow";
+import CreatorContractModal from "@/components/contract/CreatorContractModal";
 import {
   fetchCampaignConceptsAction,
   fetchRevisionNotesAction,
@@ -543,6 +544,15 @@ function CampaignListingContent() {
   const [selectedCreators, setSelectedCreators] = useState<Set<number>>(new Set());
   const isSelectionLoaded = useRef(false);
   const [bulkActionProcessing, setBulkActionProcessing] = useState(false);
+
+  // Contract Modal State
+  const [contractModalOpen, setContractModalOpen] = useState(false);
+  const [contractModalCreator, setContractModalCreator] = useState<any>(null);
+
+  const handleOpenContractModal = (cc: any) => {
+    setContractModalCreator(cc);
+    setContractModalOpen(true);
+  };
 
   // Load selection from localStorage
   useEffect(() => {
@@ -2879,6 +2889,7 @@ function CampaignListingContent() {
                     masterConcepts={masterConcepts}
                     revisionNotes={revisionNotes}
                     saveRevisionNote={saveRevisionNote}
+                    onGenerateContract={handleOpenContractModal}
                   />
                 );
               })
@@ -3133,6 +3144,21 @@ function CampaignListingContent() {
             >
               {bulkActionProcessing ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Set Pending'}
             </button>
+            <button 
+              onClick={() => {
+                const ids = Array.from(selectedCreators);
+                const allKnown = [...listingData, ...displayData];
+                const firstCc = allKnown.find((cc: any) => ids.includes(cc.id));
+                if (firstCc) {
+                  handleOpenContractModal(firstCc);
+                }
+              }}
+              className="px-3 py-1.5 text-xs font-semibold rounded-full bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition-colors flex items-center gap-1.5"
+              title="Buat Dokumen Kontrak Kreator (PDF)"
+            >
+              <FileText className="w-3.5 h-3.5" />
+              Kontrak Kreator
+            </button>
             <div className="w-[1px] h-[24px] bg-slate-200 mx-1"></div>
             <button 
               onClick={handleBulkDelete}
@@ -3250,6 +3276,32 @@ function CampaignListingContent() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* MODAL GENERATOR KONTRAK KREATOR (PDF) */}
+      {contractModalOpen && contractModalCreator && (
+        <CreatorContractModal
+          isOpen={contractModalOpen}
+          onClose={() => {
+            setContractModalOpen(false);
+            setContractModalCreator(null);
+          }}
+          creatorData={{
+            ccId: contractModalCreator.id,
+            username: contractModalCreator.creators?.username || "kreator",
+            namaLengkap: contractModalCreator.creators?.nama_lengkap || "",
+            noWhatsapp: contractModalCreator.creators?.no_whatsapp || "",
+            ratecard: Number(contractModalCreator.price) || 0,
+            qtyVt: Number(contractModalCreator.qty_vt) || 1,
+            qtyLive: Number(contractModalCreator.qty_live) || 0,
+          }}
+          campaignData={{
+            id: campaignId,
+            nama: campaigns.find((c: any) => c.id === campaignId)?.nama || "Campaign TNT",
+            brandName: campaigns.find((c: any) => c.id === campaignId)?.brands?.nama || "Brand Partner",
+          }}
+          userName={profile?.full_name || profile?.email?.split("@")[0] || "PIC TNT Kreatif"}
+        />
       )}
 
     </div>

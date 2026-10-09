@@ -1,6 +1,6 @@
 import React from "react";
 import Link from "next/link";
-import { ChevronDown, ChevronRight, Trash2, Edit2, Loader2, PlayCircle, Info, AlertCircle, Plus, RotateCw, Save, X } from "lucide-react";
+import { ChevronDown, ChevronRight, Trash2, Edit2, Loader2, PlayCircle, Info, AlertCircle, Plus, RotateCw, Save, X, FileText } from "lucide-react";
 import { formatAbbreviated, formatDateTime, formatDateTimeShort, formatRupiah } from "@/utils/formatters";
 import { getCreatorType, getJenisKerjasama, getConceptColor } from "@/utils/computed";
 import { MultiSelect } from "@/components/MultiSelect";
@@ -23,7 +23,8 @@ const areEqual = (prev: any, next: any) => {
     prev.addAndSetVideoField === next.addAndSetVideoField &&
     prev.deleteVideoRow === next.deleteVideoRow &&
     prev.masterConcepts === next.masterConcepts &&
-    prev.revisionNotes === next.revisionNotes
+    prev.revisionNotes === next.revisionNotes &&
+    prev.onGenerateContract === next.onGenerateContract
   );
 };
 
@@ -63,6 +64,7 @@ interface CreatorRowProps {
   masterConcepts?: any[];
   revisionNotes?: Record<string, any>;
   saveRevisionNote?: (ccId: number, urutan: number, noteText: string) => Promise<void>;
+  onGenerateContract?: (cc: any) => void;
 }
 
 export const CreatorRow = React.memo(({
@@ -100,7 +102,8 @@ export const CreatorRow = React.memo(({
   deleteVideoRow,
   masterConcepts = [],
   revisionNotes = {},
-  saveRevisionNote
+  saveRevisionNote,
+  onGenerateContract,
 }: CreatorRowProps) => {
   const [selectedConcept, setSelectedConcept] = React.useState<any>(null);
   const [playingDriveId, setPlayingDriveId] = React.useState<string | null>(null);
@@ -620,7 +623,17 @@ export const CreatorRow = React.memo(({
         </td>
         <td className="text-right">
           {hasAccess ? (
-            <div className="flex justify-end gap-[4px] transition-opacity">
+            <div className="flex justify-end items-center gap-[4px] transition-opacity">
+              {onGenerateContract && (
+                <button
+                  type="button"
+                  onClick={() => onGenerateContract(cc)}
+                  className="p-[6px] hover:bg-indigo-50 text-slate-500 hover:text-indigo-600 rounded transition-colors"
+                  title="Generate Surat Kontrak Kreator (PDF)"
+                >
+                  <FileText className="w-4 h-4" />
+                </button>
+              )}
               <button onClick={() => handleDeleteCreator(cc.id)} className="p-[6px] hover:bg-red-50 rounded" title="Hapus Creator">
                 <Trash2 className="w-4 h-4 text-text-soft hover:text-red-600" />
               </button>
