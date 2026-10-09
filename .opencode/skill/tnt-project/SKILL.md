@@ -2822,21 +2822,28 @@ memberi informasi yang saling menguatkan, bukan noise.
    - Menghindari penggunaan Puppeteer/headless Chromium di VPS Coolify yang memakan memori ratusan MB dan risiko timeout saat rendering bersamaan.
    - Dynamic import dengan `{ ssr: false }` untuk mencegah hydration mismatch pada Next.js App Router.
 
-2. **Template Dokumen Standar TNT Kreatif (`CreatorContractPdfDocument.tsx`):**
-   - Kop surat resmi TNT Kreatif Digital Agency dengan logo, nomor surat otomatis, dan tanggal perjanjian.
-   - Pasal 1: Identitas Para Pihak (TNT Digital & Pihak Kedua / Kreator).
-   - Pasal 2: Ruang Lingkup Pekerjaan (*Scope of Work*): rincian jumlah Video TikTok (VT) & Sesi Live.
-   - Pasal 3: Imbalan Jasa & Cara Pembayaran: ratecard otomatis terbilang dalam Rupiah (*auto-terbilang*, e.g., "Satu Juta Lima Ratus Ribu Rupiah").
-   - Pasal 4–6: Ketentuan Konten, Revisi, Kerahasiaan (*NDA*), dan Hak Cipta.
-   - Lembar Tanda Tangan: Pihak Pertama (TNT) dan Pihak Kedua (Kreator) berdampingan.
+2. **Template Dokumen Resmi Standar TNT Media (`CreatorContractPdfDocument.tsx`):**
+   - Mengikuti template master resmi Word (`Kontrak Kreator Campaign.docx`):
+     - Kop surat resmi: TNT Media (Official TikTok MCN & Affiliate Partner), email `tntmediaaffiliate@gmail.com`.
+     - Pembukaan: Hari, tanggal terbilang, dan tahun perjanjian.
+     - Identitas Para Pihak:
+       - Pihak Pertama (TNT Media: alamat Gading Serpong, telepon kantor, PIC penandatangan).
+       - Pihak Kedua (Kreator: nama lengkap, username TikTok, nomor rekening/e-wallet, alamat domisili, telepon).
+     - Pasal 1: Definisi/Istilah (Content Creator, Viewers, Script, Draft Video, Keranjang Kuning, Brief, Boost/Ads).
+     - Pasal 2: Status Kerjasama (pemasaran produk brand).
+     - Pasal 3: Hak & Kewajiban (revisi draft, sanksi pemotongan 50% jika telat, larangan cheating/boost liar, timeline unggah, larangan hapus/private video).
+     - Pasal 4: Biaya & Honorarium (angka nominal & terbilang rupiah).
+     - Pasal 5: Tata Cara Pembayaran (rekening terdaftar, pelunasan 100% H+14).
+     - Pasal 6–9: Masa Berakhir Kontrak, Force Majeure, Penyelesaian Sengketa, dan Penutup.
+     - Lembar Tanda Tangan: Pihak Pertama (TNT Media) dan Pihak Kedua (Kreator).
 
-3. **Menu Dedicated Dokumen (`/dokumen` & Sidebar Nav):**
+3. **Menu Dedicated Dokumen (`/dokumen` & Workspace Buat Dokumen):**
    - Menambahkan menu **"Dokumen"** di navigasi utama Sidebar (`Sidebar.tsx`) dengan ikon `FileText`.
-   - Halaman `/dokumen` (`DokumenClient.tsx`) berfungsi sebagai *central hub* manajemen berkas:
-     - Dropdown filter Campaign & Status Approval Kreator.
-     - Pencarian instan kreator berdasarkan username, nama lengkap, atau nomor kontak.
-     - Multi-select checkbox untuk seleksi批量 (bulk).
-     - Tombol **"Buat Kontrak"** untuk membuka modal live preview interaktif (`<PDFViewer>`) & download file PDF instan.
-   - Terintegrasi pula secara kontekstual di halaman Listing Campaign (`/campaigns/[id]/listing`) pada setiap baris kreator dan floating action bar.
+   - Halaman `/dokumen` (`DokumenClient.tsx` & `ContractGeneratorWorkspace.tsx`):
+     - **Tab "Buat Dokumen" (Default)**:
+       - **Panel Kiri**: Form pengisian lengkap (Legalitas surat, Data Pihak Pertama TNT, Data Pihak Kedua Kreator, Deliverables VT, Honorarium, dan Jadwal). Terdapat opsi "Isi Otomatis Dari Database Kreator" untuk langsung menarik username, nama, no HP, ratecard, dan SOW dari database.
+       - **Panel Kanan**: Live preview dokumen PDF A4 (`<PDFViewer>`) yang ter-update secara *real-time* saat form diedit, dilengkapi tombol **"Unduh Dokumen PDF"**.
+     - **Tab "Export Batch (.ZIP)"**: Memungkinkan pengemasan berkas kontrak seluruh kreator kampanye ke dalam 1 file ZIP instan (client-side).
+
 
 
