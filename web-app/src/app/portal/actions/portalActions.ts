@@ -919,7 +919,34 @@ export async function getPortalData(campaignId: number) {
     creatorDbVideosMap.get(u)!.push(v);
   });
 
-  const winningProducts = (skusData || [])
+  const existingSkuPids = new Set((skusData || []).map((s: any) => String(s.product_id || '').trim()));
+  const allSkusToProcess = [...(skusData || [])];
+
+  (salesData || []).forEach((s: any) => {
+    const pId = String(s.product_id || '').trim();
+    if (pId && !existingSkuPids.has(pId)) {
+      existingSkuPids.add(pId);
+      allSkusToProcess.push({
+        id: -Math.abs(Number(pId) || 999),
+        product_id: pId,
+        nama_produk: `Produk ${pId}`,
+      });
+    }
+  });
+
+  (organicVideos || []).forEach((ov: any) => {
+    const pId = String(ov.product_id || '').trim();
+    if (pId && !existingSkuPids.has(pId)) {
+      existingSkuPids.add(pId);
+      allSkusToProcess.push({
+        id: -Math.abs(Number(pId) || 999),
+        product_id: pId,
+        nama_produk: `Produk ${pId}`,
+      });
+    }
+  });
+
+  const winningProducts = allSkusToProcess
     .map((sku: any) => {
       const pId = String(sku.product_id || '').trim();
       const skuDbId = sku.id;

@@ -92,6 +92,19 @@ export default function PortalDashboardClient({ data, campaignId }: { data: any,
     setExpandedProductCreators(prev => ({ ...prev, [key]: !prev[key] }));
   };
 
+  // Top 10 Creators Accordion States (Level 1: Creator -> Level 2: Produk -> Level 3: Video)
+  const [expandedTopCreators, setExpandedTopCreators] = useState<Record<string, boolean>>({});
+  const [expandedCreatorProducts, setExpandedCreatorProducts] = useState<Record<string, boolean>>({});
+
+  const toggleTopCreatorExpand = (username: string) => {
+    const key = String(username || '').toLowerCase().trim();
+    setExpandedTopCreators(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const toggleCreatorProductExpand = (key: string) => {
+    setExpandedCreatorProducts(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
   // Reset video page and show loading effect when filters change
   React.useEffect(() => {
     setIsVideoFiltering(true);
@@ -125,6 +138,37 @@ export default function PortalDashboardClient({ data, campaignId }: { data: any,
   
   const isAwareness = campaign?.tipe_campaign === 'awareness' || campaign?.tipe_campaign === 'gmv_awareness';
   const approvedOnlyList = approvalList?.filter((cc: any) => cc.approval === 'approved' || cc.client_approval === 'approved') || [];
+
+  // Map produk yang dipromosikan per kreator beserta performanya (untuk Accordion Top 10 Creators)
+  const creatorProductsMap = React.useMemo(() => {
+    const map = new Map<string, any[]>();
+    (winningProducts || []).forEach((prod: any) => {
+      (prod.creators || []).forEach((cr: any) => {
+        const u = String(cr.username || '').toLowerCase().trim();
+        if (!u) return;
+        if (!map.has(u)) {
+          map.set(u, []);
+        }
+        if ((cr.totalVt || cr.total_vt || 0) > 0 || (cr.gmv || 0) > 0 || (cr.itemsSold || cr.items_sold || 0) > 0 || (cr.totalViews || cr.total_views || 0) > 0) {
+          map.get(u)!.push({
+            product_id: prod.product_id,
+            nama_produk: prod.nama_produk,
+            gmv: cr.gmv || 0,
+            items_sold: cr.itemsSold || cr.items_sold || 0,
+            total_vt: cr.totalVt || cr.total_vt || 0,
+            total_views: cr.totalViews || cr.total_views || 0,
+            videos: cr.videos || [],
+          });
+        }
+      });
+    });
+
+    for (const [u, prods] of map.entries()) {
+      prods.sort((a, b) => (b.gmv - a.gmv) || (b.total_vt - a.total_vt) || (b.total_views - a.total_views));
+    }
+
+    return map;
+  }, [winningProducts]);
 
   const totalApprovedCreators = fastCountsData ? fastCountsData.approved : (rpc?.total_approved_creators !== undefined ? Number(rpc.total_approved_creators) : 0);
   const totalPendingCreators = fastCountsData ? fastCountsData.pending : (rpc?.total_pending_creators !== undefined ? Number(rpc.total_pending_creators) : 0);
@@ -998,6 +1042,7 @@ export default function PortalDashboardClient({ data, campaignId }: { data: any,
                           <TableHead className="py-[12px] text-center">Like ER</TableHead>
                           <TableHead className="py-[12px] text-center">Items Sold</TableHead>
                           <TableHead className="py-[12px] text-right">GMV Organik</TableHead>
+                          <TableHead className="py-[12px] w-28 text-center">Produk</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -1010,7 +1055,7 @@ export default function PortalDashboardClient({ data, campaignId }: { data: any,
                           if (!currentList || currentList.length === 0) {
                             return (
                               <TableRow>
-                                <TableCell colSpan={7} className="text-center py-[24px] text-slate-500">
+                                <TableCell colSpan={8} className="text-center py-[24px] text-slate-500">
                                   Belum ada data kreator untuk kategori ini.
                                 </TableCell>
                               </TableRow>
@@ -1024,42 +1069,224 @@ export default function PortalDashboardClient({ data, campaignId }: { data: any,
                               'bg-orange-100 text-orange-800 border-orange-300 font-bold' // #3 Perunggu
                             ];
                             const badgeClass = idx < 3 ? rankColors[idx] : 'bg-slate-50 text-slate-600 border-slate-200';
+                            const uKey = String(c.username || '').toLowerCase().trim();
+                            const cProducts = creatorProductsMap.get(uKey) || [];
+                            const isCreatorExpanded = !!expandedTopCreators[uKey];
 
                             return (
-                              <TableRow key={c.id || idx} className="hover:bg-slate-50/80 transition-colors">
-                                <TableCell className="text-center py-[12px]">
-                                  <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-[12px] border ${badgeClass}`}>
-                                    {idx + 1}
-                                  </span>
-                                </TableCell>
-                                <TableCell className="py-[12px]">
-                                  <div className="flex flex-col">
-                                    <a 
-                                      href={c.link_account || `https://www.tiktok.com/@${c.username}`} 
-                                      target="_blank" 
-                                      rel="noopener noreferrer"
-                                      className="font-bold text-blue-600 hover:underline flex items-center gap-1"
+                              <React.Fragment key={c.id || idx}>
+                                <TableRow className={`hover:bg-slate-50/80 transition-colors ${isCreatorExpanded ? 'bg-blue-50/20' : ''}`}>
+                                  <TableCell className="text-center py-[12px]">
+                                    <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-[12px] border ${badgeClass}`}>
+                                      {idx + 1}
+                                    </span>
+                                  </TableCell>
+                                  <TableCell className="py-[12px]">
+                                    <div className="flex flex-col">
+                                      <a 
+                                        href={c.link_account || `https://www.tiktok.com/@${c.username}`} 
+                                        target="_blank" 
+                                        rel="noopener noreferrer"
+                                        className="font-bold text-blue-600 hover:underline flex items-center gap-1"
+                                      >
+                                        @{c.username}
+                                        <ExternalLink className="w-3 h-3 text-slate-400" />
+                                      </a>
+                                      {c.nama_asli && <span className="text-[11px] text-slate-500">{c.nama_asli}</span>}
+                                    </div>
+                                  </TableCell>
+                                  <TableCell className="text-center py-[12px] font-semibold">{c.total_vt} VT</TableCell>
+                                  <TableCell className={`text-center py-[12px] ${top10Tab === 'views' ? 'font-bold text-indigo-600' : ''}`}>
+                                    {(c.views || 0).toLocaleString()}
+                                  </TableCell>
+                                  <TableCell className={`text-center py-[12px] ${top10Tab === 'er' ? 'font-bold text-rose-600' : ''}`}>
+                                    {c.er || 0}%
+                                  </TableCell>
+                                  <TableCell className={`text-center py-[12px] ${top10Tab === 'itemsSold' ? 'font-bold text-amber-700' : ''}`}>
+                                    {(c.items_sold || 0).toLocaleString()} pcs
+                                  </TableCell>
+                                  <TableCell className={`text-right py-[12px] ${top10Tab === 'gmv' ? 'font-bold text-emerald-700' : 'font-medium'}`}>
+                                    Rp {(c.gmv || 0).toLocaleString()}
+                                  </TableCell>
+                                  <TableCell className="text-center py-[12px]">
+                                    <button
+                                      onClick={() => toggleTopCreatorExpand(c.username)}
+                                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all border ${
+                                        isCreatorExpanded 
+                                          ? 'bg-blue-600 text-white border-blue-600 shadow-sm' 
+                                          : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50 hover:border-slate-300'
+                                      }`}
+                                      title="Lihat daftar produk yang dibawakan kreator ini"
                                     >
-                                      @{c.username}
-                                      <ExternalLink className="w-3 h-3 text-slate-400" />
-                                    </a>
-                                    {c.nama_asli && <span className="text-[11px] text-slate-500">{c.nama_asli}</span>}
-                                  </div>
-                                </TableCell>
-                                <TableCell className="text-center py-[12px] font-semibold">{c.total_vt} VT</TableCell>
-                                <TableCell className={`text-center py-[12px] ${top10Tab === 'views' ? 'font-bold text-indigo-600' : ''}`}>
-                                  {(c.views || 0).toLocaleString()}
-                                </TableCell>
-                                <TableCell className={`text-center py-[12px] ${top10Tab === 'er' ? 'font-bold text-rose-600' : ''}`}>
-                                  {c.er || 0}%
-                                </TableCell>
-                                <TableCell className={`text-center py-[12px] ${top10Tab === 'itemsSold' ? 'font-bold text-amber-700' : ''}`}>
-                                  {(c.items_sold || 0).toLocaleString()} pcs
-                                </TableCell>
-                                <TableCell className={`text-right py-[12px] ${top10Tab === 'gmv' ? 'font-bold text-emerald-700' : 'font-medium'}`}>
-                                  Rp {(c.gmv || 0).toLocaleString()}
-                                </TableCell>
-                              </TableRow>
+                                      <span>{cProducts.length} Produk</span>
+                                      {isCreatorExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                                    </button>
+                                  </TableCell>
+                                </TableRow>
+
+                                {/* Level 2: Accordion Produk yang dibawakan kreator */}
+                                {isCreatorExpanded && (
+                                  <TableRow className="bg-slate-50/70 border-b border-slate-200">
+                                    <TableCell colSpan={8} className="p-3.5 sm:p-4">
+                                      <div className="bg-white border border-slate-200 rounded-xl p-3.5 sm:p-4 shadow-sm space-y-3">
+                                        {/* Header Accordion Kreator */}
+                                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-slate-100">
+                                          <div>
+                                            <h4 className="font-bold text-[13px] text-slate-800 flex items-center gap-2">
+                                              <Package className="w-4 h-4 text-blue-600" />
+                                              <span>Produk yang Dibawakan oleh @{c.username}</span>
+                                              <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                                                {cProducts.length} Produk
+                                              </span>
+                                            </h4>
+                                            <p className="text-[11px] text-slate-500 mt-0.5">
+                                              Klik produk di bawah untuk melihat rincian video VT, tautan TikTok langsung, dan performa per video
+                                            </p>
+                                          </div>
+                                          <div className="text-[11px] text-slate-500">
+                                            Total Omzet Kreator: <strong className="text-emerald-700 font-bold">Rp {(c.gmv || 0).toLocaleString()}</strong>
+                                          </div>
+                                        </div>
+
+                                        {cProducts.length === 0 ? (
+                                          <div className="text-center py-4 text-[12px] text-slate-400">
+                                            Belum ada produk atau video yang terhubung dengan kreator ini pada campaign ini.
+                                          </div>
+                                        ) : (
+                                          <div className="space-y-2">
+                                            {cProducts.map((p: any, pIdx: number) => {
+                                              const prodKey = `${uKey}_${p.product_id}`;
+                                              const isProdOpen = !!expandedCreatorProducts[prodKey];
+                                              const isTopProd = pIdx === 0 && p.gmv > 0;
+
+                                              return (
+                                                <div key={prodKey} className="border border-slate-200 rounded-xl overflow-hidden hover:border-slate-300 transition-colors bg-white">
+                                                  {/* Level 2: Header Produk */}
+                                                  <div 
+                                                    onClick={() => toggleCreatorProductExpand(prodKey)}
+                                                    className={`p-3 transition-colors cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                                                      isTopProd ? 'bg-amber-50/50 hover:bg-amber-100/50' : 'bg-slate-50/60 hover:bg-slate-100/60'
+                                                    }`}
+                                                  >
+                                                    <div className="flex items-start sm:items-center gap-2.5 min-w-0">
+                                                      <span className={`w-6 h-6 rounded-md font-bold flex items-center justify-center text-[11px] shrink-0 ${
+                                                        isTopProd ? 'bg-amber-200 text-amber-900 border border-amber-300' : 'bg-slate-200 text-slate-700'
+                                                      }`}>
+                                                        #{pIdx + 1}
+                                                      </span>
+                                                      <div className="min-w-0">
+                                                        <h5 className="font-bold text-slate-800 text-[13px] truncate" title={p.nama_produk}>
+                                                          {p.nama_produk}
+                                                        </h5>
+                                                        <div className="flex flex-wrap items-center gap-2 mt-0.5 text-[10px] text-slate-500">
+                                                          <span className="font-mono text-slate-400">ID: {p.product_id}</span>
+                                                          <span>• {p.total_vt} VT</span>
+                                                          <span>• {p.total_views.toLocaleString()} Views</span>
+                                                        </div>
+                                                      </div>
+                                                    </div>
+
+                                                    <div className="flex items-center gap-3 sm:gap-4 shrink-0 justify-between sm:justify-end">
+                                                      <div className="text-left sm:text-right">
+                                                        <p className="text-[10px] text-slate-500">Sold</p>
+                                                        <p className="text-[12px] font-bold text-amber-800">
+                                                          {p.items_sold.toLocaleString()} pcs
+                                                        </p>
+                                                      </div>
+                                                      <div className="text-left sm:text-right">
+                                                        <p className="text-[10px] text-slate-500">GMV</p>
+                                                        <p className="text-[12px] font-bold text-emerald-700">
+                                                          Rp {p.gmv.toLocaleString()}
+                                                        </p>
+                                                      </div>
+                                                      <button className="px-2 py-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-[11px] font-medium flex items-center gap-1 text-slate-700 transition-colors shadow-sm shrink-0">
+                                                        {isProdOpen ? (
+                                                          <>Tutup VT <ChevronUp className="w-3.5 h-3.5 text-slate-500" /></>
+                                                        ) : (
+                                                          <>Lihat VT ({p.videos?.length || 0}) <ChevronDown className="w-3.5 h-3.5 text-slate-500" /></>
+                                                        )}
+                                                      </button>
+                                                    </div>
+                                                  </div>
+
+                                                  {/* Level 3: Rincian Video VT Produk Ini */}
+                                                  {isProdOpen && (
+                                                    <div className="p-3 bg-white border-t border-slate-200 space-y-2">
+                                                      {(!p.videos || p.videos.length === 0) ? (
+                                                        <p className="text-[11px] text-slate-500 py-1">Belum ada video VT yang tercatat untuk produk ini.</p>
+                                                      ) : (
+                                                        <div className="space-y-2">
+                                                          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                                                            Daftar Video VT (@{c.username}) untuk Produk Ini:
+                                                          </p>
+                                                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                                            {p.videos.map((vid: any, vIdx: number) => (
+                                                              <div 
+                                                                key={vid.id || vIdx}
+                                                                className="p-2.5 border border-slate-200 rounded-lg bg-slate-50/50 hover:bg-slate-50 flex flex-col gap-2 transition-colors"
+                                                              >
+                                                                <div className="flex items-center justify-between gap-2">
+                                                                  <div className="flex items-center gap-1.5 min-w-0">
+                                                                    <span className="w-5 h-5 rounded bg-blue-50 border border-blue-200 text-blue-700 font-bold flex items-center justify-center text-[10px] shrink-0">
+                                                                      #{vIdx + 1}
+                                                                    </span>
+                                                                    {vid.concept_no && (
+                                                                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 font-medium truncate max-w-[140px]" title={vid.concept_title || ''}>
+                                                                        Konsep #{vid.concept_no}
+                                                                      </span>
+                                                                    )}
+                                                                  </div>
+                                                                  {vid.link_video ? (
+                                                                    <a
+                                                                      href={vid.link_video}
+                                                                      target="_blank"
+                                                                      rel="noopener noreferrer"
+                                                                      className="px-2 py-0.5 rounded bg-blue-50 text-blue-600 hover:bg-blue-100 text-[10px] font-bold flex items-center gap-1 transition-colors shrink-0"
+                                                                    >
+                                                                      Buka VT <ExternalLink className="w-3 h-3" />
+                                                                    </a>
+                                                                  ) : (
+                                                                    <span className="text-[10px] text-slate-400">Tidak ada link</span>
+                                                                  )}
+                                                                </div>
+
+                                                                <div className="grid grid-cols-4 gap-1.5 text-center bg-white p-1.5 rounded border border-slate-100 text-[10px]">
+                                                                  <div>
+                                                                    <span className="text-slate-500 block text-[9px]">Views</span>
+                                                                    <strong className="text-slate-800 font-bold">{(vid.views || 0).toLocaleString()}</strong>
+                                                                  </div>
+                                                                  <div>
+                                                                    <span className="text-slate-500 block text-[9px]">Likes</span>
+                                                                    <strong className="text-slate-800 font-bold">{(vid.likes || 0).toLocaleString()}</strong>
+                                                                  </div>
+                                                                  <div>
+                                                                    <span className="text-slate-500 block text-[9px]">Like ER</span>
+                                                                    <strong className="text-rose-600 font-bold">{vid.er || 0}%</strong>
+                                                                  </div>
+                                                                  <div>
+                                                                    <span className="text-slate-500 block text-[9px]">GMV VT</span>
+                                                                    <strong className="text-emerald-700 font-bold">
+                                                                      {vid.gmv > 0 ? `Rp ${(vid.gmv || 0).toLocaleString()}` : 'Rp 0'}
+                                                                    </strong>
+                                                                  </div>
+                                                                </div>
+                                                              </div>
+                                                            ))}
+                                                          </div>
+                                                        </div>
+                                                      )}
+                                                    </div>
+                                                  )}
+                                                </div>
+                                              );
+                                            })}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </TableCell>
+                                  </TableRow>
+                                )}
+                              </React.Fragment>
                             );
                           });
                         })()}
