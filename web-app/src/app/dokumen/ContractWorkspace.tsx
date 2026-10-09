@@ -107,27 +107,44 @@ export default function ContractWorkspace({
   // Active creator contract data for live preview
   const activeContractData: CreatorContractData | null = useMemo(() => {
     if (!activeCreator) return null;
-    const dateStr = today.toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" });
+    const curYear = today.getFullYear();
+    const curMonth = today.getMonth();
+    const dayNames = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
+    const monthNames = [
+      "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+      "Juli", "Agustus", "September", "Oktober", "November", "Desember"
+    ];
+    const curDayName = dayNames[today.getDay()];
+    const curDateNum = today.getDate();
+    const curMonthName = monthNames[curMonth];
+
     const contractNo = `${prefixNomor}/${activeCreator.cc_id}`;
     const rateVal = Number(activeCreator.price) || 0;
-    const terbilangStr = rateVal > 0 ? `${terbilang(rateVal).trim()} Rupiah` : "Nol Rupiah";
+    const terbilangStr = rateVal > 0 ? `${terbilang(rateVal).trim()} rupiah` : "nol rupiah";
 
     return {
       nomorKontrak: contractNo,
-      tanggalKontrak: dateStr,
-      namaPihakPertama,
-      jabatanPihakPertama,
-      perusahaanPihakPertama,
+      hariTanggalPerjanjian: `${curDayName} ${curDateNum} (${terbilang(curDateNum)}) ${curMonthName} tahun ${curYear} (${terbilang(curYear)})`,
+      tanggalKota: `Tangerang, ${curDateNum} ${curMonthName} ${curYear}`,
+      namaPerusahaan: perusahaanPihakPertama || "TNT Media",
+      alamatPerusahaan: "Gading Serpong, Tangerang",
+      teleponPerusahaan: "+62 85178230404",
+      emailPerusahaan: "tntmediaaffiliate@gmail.com",
+      namaPicTNT: namaPihakPertama || "Safira",
       namaKreator: activeCreator.nama_lengkap || activeCreator.nama_asli || activeCreator.username,
       usernameTikTok: activeCreator.username,
-      noWhatsapp: activeCreator.no_whatsapp || activeCreator.contact_nomor || "-",
-      nikKtp: "",
+      rekeningKreator: "-",
+      alamatKreator: "-",
+      teleponKreator: activeCreator.no_whatsapp || activeCreator.contact_nomor || "-",
       namaCampaign: selectedCampaign?.nama || "Campaign TNT",
       namaBrand: campaignBrandName || "Brand Partner",
       qtyVt: Number(activeCreator.qty_vt) || 1,
-      qtyLive: Number(activeCreator.qty_live) || 0,
-      ratecard: rateVal,
-      terbilangRatecard: terbilangStr,
+      periodeTayang: `${curDateNum} - ${curDateNum + 5} ${curMonthName} ${curYear}`,
+      biayaHonor: rateVal,
+      terbilangHonor: terbilangStr,
+      ketentuanPembayaran: `Honor PIHAK KEDUA akan dibayarkan oleh PIHAK PERTAMA 100% maksimal H+14 setelah upload video ke ${Number(activeCreator.qty_vt) || 1}`,
+      tanggalMulai: `${curDateNum} ${curMonthName} ${curYear}`,
+      tanggalBerakhir: `${curDateNum} ${monthNames[(curMonth + 1) % 12]} ${curYear}`,
       customClauses,
     };
   }, [
@@ -135,7 +152,6 @@ export default function ContractWorkspace({
     selectedCampaign,
     campaignBrandName,
     namaPihakPertama,
-    jabatanPihakPertama,
     perusahaanPihakPertama,
     prefixNomor,
     customClauses,
@@ -148,33 +164,49 @@ export default function ContractWorkspace({
     setZipProgress({ current: 0, total: targetCreators.length });
 
     try {
-      // Dynamic import pdf function from react-pdf
       const { pdf } = await import("@react-pdf/renderer");
       const zip = new JSZip();
-      const dateStr = today.toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" });
+
+      const curYear = today.getFullYear();
+      const curMonth = today.getMonth();
+      const dayNames = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
+      const monthNames = [
+        "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+        "Juli", "Agustus", "September", "Oktober", "November", "Desember"
+      ];
+      const curDayName = dayNames[today.getDay()];
+      const curDateNum = today.getDate();
+      const curMonthName = monthNames[curMonth];
 
       for (let i = 0; i < targetCreators.length; i++) {
         const c = targetCreators[i];
         setZipProgress({ current: i + 1, total: targetCreators.length });
 
         const rateVal = Number(c.price) || 0;
-        const terbilangStr = rateVal > 0 ? `${terbilang(rateVal).trim()} Rupiah` : "Nol Rupiah";
+        const terbilangStr = rateVal > 0 ? `${terbilang(rateVal).trim()} rupiah` : "nol rupiah";
         const cData: CreatorContractData = {
           nomorKontrak: `${prefixNomor}/${c.cc_id}`,
-          tanggalKontrak: dateStr,
-          namaPihakPertama,
-          jabatanPihakPertama,
-          perusahaanPihakPertama,
+          hariTanggalPerjanjian: `${curDayName} ${curDateNum} (${terbilang(curDateNum)}) ${curMonthName} tahun ${curYear} (${terbilang(curYear)})`,
+          tanggalKota: `Tangerang, ${curDateNum} ${curMonthName} ${curYear}`,
+          namaPerusahaan: perusahaanPihakPertama || "TNT Media",
+          alamatPerusahaan: "Gading Serpong, Tangerang",
+          teleponPerusahaan: "+62 85178230404",
+          emailPerusahaan: "tntmediaaffiliate@gmail.com",
+          namaPicTNT: namaPihakPertama || "Safira",
           namaKreator: c.nama_lengkap || c.nama_asli || c.username,
           usernameTikTok: c.username,
-          noWhatsapp: c.no_whatsapp || c.contact_nomor || "-",
-          nikKtp: "",
+          rekeningKreator: "-",
+          alamatKreator: "-",
+          teleponKreator: c.no_whatsapp || c.contact_nomor || "-",
           namaCampaign: selectedCampaign?.nama || "Campaign TNT",
           namaBrand: campaignBrandName || "Brand Partner",
           qtyVt: Number(c.qty_vt) || 1,
-          qtyLive: Number(c.qty_live) || 0,
-          ratecard: rateVal,
-          terbilangRatecard: terbilangStr,
+          periodeTayang: `${curDateNum} - ${curDateNum + 5} ${curMonthName} ${curYear}`,
+          biayaHonor: rateVal,
+          terbilangHonor: terbilangStr,
+          ketentuanPembayaran: `Honor PIHAK KEDUA akan dibayarkan oleh PIHAK PERTAMA 100% maksimal H+14 setelah upload video ke ${Number(c.qty_vt) || 1}`,
+          tanggalMulai: `${curDateNum} ${curMonthName} ${curYear}`,
+          tanggalBerakhir: `${curDateNum} ${monthNames[(curMonth + 1) % 12]} ${curYear}`,
           customClauses,
         };
 

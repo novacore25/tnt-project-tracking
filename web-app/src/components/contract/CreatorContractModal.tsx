@@ -76,39 +76,53 @@ export default function CreatorContractModal({
 
   const contractData: CreatorContractData = useMemo(() => {
     const today = new Date();
-    const dateStr = today.toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" });
-    const contractNo = `TNT/KTR/${today.getFullYear()}/${String(today.getMonth() + 1).padStart(2, "0")}/${creatorData.ccId}`;
+    const curYear = today.getFullYear();
+    const curMonth = today.getMonth();
+    const dayNames = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
+    const monthNames = [
+      "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+      "Juli", "Agustus", "September", "Oktober", "November", "Desember"
+    ];
+    const curDayName = dayNames[today.getDay()];
+    const curDateNum = today.getDate();
+    const curMonthName = monthNames[curMonth];
 
+    const contractNo = `TNT/KTR/${curYear}/${String(curMonth + 1).padStart(2, "0")}/${creatorData.ccId}`;
     const rateVal = creatorData.ratecard || 0;
-    const terbilangStr = rateVal > 0 ? `${terbilang(rateVal).trim()} Rupiah` : "Nol Rupiah";
+    const terbilangStr = rateVal > 0 ? `${terbilang(rateVal).trim()} rupiah` : "nol rupiah";
 
     return {
       nomorKontrak: contractNo,
-      tanggalKontrak: dateStr,
-      namaPihakPertama,
-      jabatanPihakPertama,
-      perusahaanPihakPertama,
+      hariTanggalPerjanjian: `${curDayName} ${curDateNum} (${terbilang(curDateNum)}) ${curMonthName} tahun ${curYear} (${terbilang(curYear)})`,
+      tanggalKota: `Tangerang, ${curDateNum} ${curMonthName} ${curYear}`,
+      namaPerusahaan: perusahaanPihakPertama || "TNT Media",
+      alamatPerusahaan: "Gading Serpong, Tangerang",
+      teleponPerusahaan: "+62 85178230404",
+      emailPerusahaan: "tntmediaaffiliate@gmail.com",
+      namaPicTNT: namaPihakPertama || "Safira",
       namaKreator: namaKreator || creatorData.username,
       usernameTikTok: creatorData.username,
-      noWhatsapp,
-      nikKtp,
+      rekeningKreator: "-",
+      alamatKreator: "-",
+      teleponKreator: noWhatsapp || "-",
       namaCampaign: campaignData.nama,
       namaBrand: campaignData.brandName || "Brand Partner",
       qtyVt: creatorData.qtyVt || 1,
-      qtyLive: creatorData.qtyLive || 0,
-      ratecard: rateVal,
-      terbilangRatecard: terbilangStr,
+      periodeTayang: `${curDateNum} - ${curDateNum + 5} ${curMonthName} ${curYear}`,
+      biayaHonor: rateVal,
+      terbilangHonor: terbilangStr,
+      ketentuanPembayaran: `Honor PIHAK KEDUA akan dibayarkan oleh PIHAK PERTAMA 100% maksimal H+14 setelah upload video ke ${creatorData.qtyVt || 1}`,
+      tanggalMulai: `${curDateNum} ${curMonthName} ${curYear}`,
+      tanggalBerakhir: `${curDateNum} ${monthNames[(curMonth + 1) % 12]} ${curYear}`,
       customClauses,
     };
   }, [
     creatorData,
     campaignData,
     namaPihakPertama,
-    jabatanPihakPertama,
     perusahaanPihakPertama,
     namaKreator,
     noWhatsapp,
-    nikKtp,
     customClauses
   ]);
 
