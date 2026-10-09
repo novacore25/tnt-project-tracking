@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import dynamic from "next/dynamic";
 import {
   FileText,
@@ -24,8 +24,14 @@ import {
   Clock,
   ShieldCheck,
   Check,
+  Search,
+  Save,
+  PlusCircle,
+  X,
 } from "lucide-react";
+import Link from "next/link";
 import { CreatorContractPdfDocument, CreatorContractData } from "@/components/contract/CreatorContractPdfDocument";
+import { syncContractCreatorProfileDataAction } from "@/app/actions/creatorActions";
 
 const PDFViewer = dynamic(
   () => import("@react-pdf/renderer").then((mod) => mod.PDFViewer),
@@ -97,6 +103,7 @@ interface ContractGeneratorWorkspaceProps {
   onSelectCampaign: (id: number) => void;
   campaignBrandName: string;
   defaultUserName: string;
+  onCreatorUpdated?: () => void;
 }
 
 export default function ContractGeneratorWorkspace({
@@ -106,12 +113,18 @@ export default function ContractGeneratorWorkspace({
   onSelectCampaign,
   campaignBrandName,
   defaultUserName,
+  onCreatorUpdated,
 }: ContractGeneratorWorkspaceProps) {
   // PILIHAN KONTRAK / TEMPLATE DOKUMEN
   const [selectedDocType, setSelectedDocType] = useState<string>("kontrak_creator");
 
   // SELEKSI KREATOR UNTUK FORM AUTO-FILL
   const [selectedCcId, setSelectedCcId] = useState<number | null>(null);
+
+  // SEARCH AUTOCOMPLETE STATE (Pencarian username interaktif)
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const searchContainerRef = useRef<HTMLDivElement>(null);
 
   // Auto-fill form jika kreator dipilih
   const currentCreator = useMemo(() => {
@@ -178,7 +191,40 @@ export default function ContractGeneratorWorkspace({
   const [rawKontrakBerakhir, setRawKontrakBerakhir] = useState(nextMonthStr);
   const [customClauses, setCustomClauses] = useState("");
 
-  // Sync state ketika user memilih kreator dari dropdown
+  // SINKRONISASI KE PROFIL KREATOR DI DATABASE
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<{ success?: boolean; message?: string } | null>(null);
+
+  // Close dropdown on click outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(event.target as Node)) {
+        setIsDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // Filter creator recommendations based on searchQuery
+  const filteredCreators = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase().replace(/^@/, "");
+    if (!q) return creators.slice(0, 8);
+    return creators.filter((c: any) => {
+      const u = (c.username || "").toLowerCase();
+      const n = (c.nama_lengkap || c.nama_asli || "").toLowerCase();
+      return u.includes(q) || n.includes(q);
+    });
+  }, [creators, searchQuery]);
+
+  // Handler saat user memilih kreator dari dropdown rekomendasi
+  const handleSelectCreator = (c: any) => {
+    setSelectedCcId(c.cc_id);
+    setSearchQuery(`@${c.username}`);
+    setIsDropdownOpen(false);
+  };
+
+  // Sync state ketika currentCreator berubah
   useEffect(() => {
     if (currentCreator) {
       const uName = (currentCreator.username || "").replace("@", "");
@@ -191,15 +237,25 @@ export default function ContractGeneratorWorkspace({
       const bHolder = currentCreator.account_holder || realName;
       const rate = Number(currentCreator.price) || 0;
       const vt = Number(currentCreator.qty_vt) || 1;
+      const ttUid = currentCreator.tiktok_uid || "";
+      const email = currentCreator.email || "";
+      const npwp = currentCreator.npwp || "";
+      const tLahir = currentCreator.tempat_lahir || "";
+      const tgLahir = currentCreator.tanggal_lahir ? String(currentCreator.tanggal_lahir).split("T")[0] : "";
 
       setNamaKreator(realName);
       setUsernameTikTok(uName);
       setTeleponKreator(phone);
       setNikKtp(nik);
-      if (alamat) setAlamatKreator(alamat);
-      if (bName) setNamaBank(bName);
-      if (bNum) setNomorRekening(bNum);
-      if (bHolder) setAtasNamaRekening(bHolder);
+      setAlamatKreator(alamat);
+      setTiktokUid(ttUid);
+      setEmailKreator(email);
+      setNpwpKreator(npwp);
+      setTempatLahir(tLahir);
+      setTanggalLahir(tgLahir);
+      setNamaBank(bName);
+      setNomorRekening(bNum);
+      setAtasNamaRekening(bHolder);
       if (rate > 0) setBiayaHonor(rate);
       if (vt > 0) setQtyVt(vt);
 
@@ -209,6 +265,48 @@ export default function ContractGeneratorWorkspace({
       );
     }
   }, [currentCreator]);
+
+  // Handle tombol Simpan / Sinkronkan ke Profil Kreator
+  const handleSyncToProfile = async () => {
+    if (!currentCreator?.creator_id) {
+      setSyncStatus({
+        success: false,
+        message: "Pilih kreator dari database terlebih dahulu sebelum menyimpan ke profil.",
+      });
+      return;
+    }
+
+    setIsSyncing(true);
+    setSyncStatus(null);
+    try {
+      const res = await syncContractCreatorProfileDataAction({
+        creatorId: currentCreator.creator_id,
+        namaLengkap: namaKreator,
+        tiktokUid,
+        nikKtp,
+        alamatKtp: alamatKreator,
+        tempatLahir,
+        tanggalLahir,
+        noWhatsapp: teleponKreator,
+        email: emailKreator,
+        npwp: npwpKreator,
+        namaBank,
+        nomorRekening,
+        atasNamaRekening,
+      });
+
+      if (res.success) {
+        setSyncStatus({ success: true, message: "Data profil kreator berhasil diperbarui ke database!" });
+        if (onCreatorUpdated) onCreatorUpdated();
+      } else {
+        setSyncStatus({ success: false, message: res.error || "Gagal memperbarui profil." });
+      }
+    } catch (err: any) {
+      setSyncStatus({ success: false, message: err.message || "Terjadi kesalahan sistem." });
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   // Selected Campaign Object
   const selectedCampaign = useMemo(() => {
@@ -358,27 +456,104 @@ export default function ContractGeneratorWorkspace({
             </select>
           </div>
 
-          {/* Auto-fill Dari Kreator Terdaftar */}
-          <div className="md:col-span-4 space-y-1">
+          {/* AUTOCOMPLETE / KETIK USERNAME KREATOR */}
+          <div className="md:col-span-4 space-y-1 relative" ref={searchContainerRef}>
             <label className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
               <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
-              Pilih dari Creator Pool
+              Cari Username Kreator
               <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 font-semibold lowercase">
                 auto-fill
               </span>
             </label>
-            <select
-              value={selectedCcId || ""}
-              onChange={(e) => setSelectedCcId(e.target.value ? Number(e.target.value) : null)}
-              className="w-full px-3 py-2.5 bg-emerald-50/50 border border-emerald-300 rounded-xl text-sm font-medium text-slate-800 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 outline-none transition-all cursor-pointer"
-            >
-              <option value="">-- Ketik Sendiri / Manual --</option>
-              {creators.map((c: any) => (
-                <option key={c.cc_id} value={c.cc_id}>
-                  @{c.username} - {c.nama_lengkap || c.nama_asli || "Tanpa Nama"} (Rp {Number(c.price || 0).toLocaleString("id-ID")})
-                </option>
-              ))}
-            </select>
+
+            <div className="relative">
+              <input
+                type="text"
+                value={searchQuery}
+                onFocus={() => setIsDropdownOpen(true)}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setIsDropdownOpen(true);
+                  if (!e.target.value.trim()) setSelectedCcId(null);
+                }}
+                placeholder="Ketik username kreator (@...)"
+                className="w-full pl-9 pr-8 py-2.5 bg-emerald-50/50 border border-emerald-300 rounded-xl text-sm font-medium text-slate-800 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 outline-none transition-all"
+              />
+              <Search className="w-4 h-4 text-emerald-600 absolute left-3 top-3 pointer-events-none" />
+
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchQuery("");
+                    setSelectedCcId(null);
+                    setIsDropdownOpen(false);
+                  }}
+                  className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 p-0.5"
+                  title="Hapus pencarian"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+
+            {/* DROPDOWN REKOMENDASI HASIL PENCARIAN */}
+            {isDropdownOpen && (
+              <div className="absolute z-50 left-0 right-0 top-full mt-1.5 bg-white border border-slate-200 rounded-xl shadow-xl max-h-64 overflow-y-auto divide-y divide-slate-100">
+                {filteredCreators.length > 0 ? (
+                  filteredCreators.map((c: any) => (
+                    <button
+                      key={c.cc_id}
+                      type="button"
+                      onClick={() => handleSelectCreator(c)}
+                      className="w-full text-left px-3.5 py-2.5 hover:bg-emerald-50/70 transition-colors flex items-center justify-between group cursor-pointer"
+                    >
+                      <div>
+                        <div className="text-xs font-bold text-slate-900 group-hover:text-emerald-700 flex items-center gap-1.5">
+                          <span>@{c.username}</span>
+                          <span className="text-[10px] font-normal text-slate-400">
+                            • {c.nama_lengkap || c.nama_asli || "Tanpa Nama"}
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-slate-500 mt-0.5">
+                          Fee: Rp {Number(c.price || 0).toLocaleString("id-ID")} • {c.qty_vt || 1} VT
+                        </div>
+                      </div>
+                      <span className="text-[10px] font-semibold text-emerald-600 opacity-0 group-hover:opacity-100 transition-opacity">
+                        Pilih
+                      </span>
+                    </button>
+                  ))
+                ) : (
+                  <div className="p-4 text-center space-y-2">
+                    <p className="text-xs text-slate-500 font-medium">
+                      Username &ldquo;<span className="font-semibold text-slate-800">{searchQuery}</span>&rdquo; tidak ditemukan di campaign ini.
+                    </p>
+                    <p className="text-[11px] text-slate-400">
+                      Silakan tambahkan kreator di menu{" "}
+                      <Link
+                        href={`/campaigns/${selectedCampaignId}/listing`}
+                        target="_blank"
+                        className="text-blue-600 hover:underline font-semibold inline-flex items-center gap-0.5"
+                      >
+                        Listing Campaign
+                        <ExternalLink className="w-2.5 h-2.5" />
+                      </Link>{" "}
+                      atau di{" "}
+                      <Link
+                        href="/creator-pool"
+                        target="_blank"
+                        className="text-blue-600 hover:underline font-semibold inline-flex items-center gap-0.5"
+                      >
+                        Creator Pool
+                        <ExternalLink className="w-2.5 h-2.5" />
+                      </Link>
+                      .
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -405,11 +580,17 @@ export default function ContractGeneratorWorkspace({
                 <User className="w-4 h-4 text-emerald-600" />
                 PIHAK KEDUA (KREATOR)
               </h3>
-              {selectedCcId && (
-                <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full flex items-center gap-1">
-                  <Check className="w-3 h-3" /> Auto-filled
-                </span>
-              )}
+              <div className="flex items-center gap-2">
+                {selectedCcId ? (
+                  <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full flex items-center gap-1">
+                    <Check className="w-3 h-3" /> Auto-filled
+                  </span>
+                ) : (
+                  <span className="text-[11px] font-semibold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">
+                    Ketik Manual
+                  </span>
+                )}
+              </div>
             </div>
 
             <div className="space-y-3 text-xs">
@@ -575,6 +756,47 @@ export default function ContractGeneratorWorkspace({
                   </div>
                 </div>
               </div>
+
+              {/* SINKRONISASI KE PROFIL DATABASE BUTTON */}
+              {currentCreator?.creator_id && (
+                <div className="pt-2">
+                  <button
+                    type="button"
+                    onClick={handleSyncToProfile}
+                    disabled={isSyncing}
+                    className="w-full py-2 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-60"
+                  >
+                    {isSyncing ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        <span>Menyimpan ke Database Profil Kreator...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Save className="w-3.5 h-3.5" />
+                        <span>Simpan &amp; Hubungkan Perubahan ke Profil Kreator</span>
+                      </>
+                    )}
+                  </button>
+
+                  {syncStatus && (
+                    <div
+                      className={`mt-2 p-2 rounded text-[11px] font-medium flex items-center gap-1.5 ${
+                        syncStatus.success
+                          ? "bg-emerald-100 text-emerald-800"
+                          : "bg-rose-100 text-rose-800"
+                      }`}
+                    >
+                      {syncStatus.success ? (
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                      ) : (
+                        <AlertCircle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                      )}
+                      <span>{syncStatus.message}</span>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 

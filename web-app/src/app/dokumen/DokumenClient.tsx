@@ -157,6 +157,7 @@ export default function DokumenClient() {
           onSelectCampaign={(id) => setSelectedCampaignId(id)}
           campaignBrandName={campaignBrandName}
           defaultUserName={profile?.nama || profile?.email?.split("@")[0] || "Safira"}
+          onCreatorUpdated={loadCreators}
         />
       ) : (
         <ContractWorkspace

@@ -2460,6 +2460,11 @@ export async function fetchCampaignCreatorsForDocumentsAction(params: {
         c.nama_asli,
         c.no_whatsapp,
         c.link_account,
+        c.tiktok_uid,
+        c.email,
+        c.npwp,
+        c.tempat_lahir,
+        c.tanggal_lahir,
         (
           SELECT ct.nomor 
           FROM creator_contacts ct 

@@ -1008,5 +1008,140 @@ export async function deleteCreatorBankAccountAction(id: number, creatorId: numb
   return { success: true, message: 'Rekening bank berhasil dihapus.' };
 }
 
+export async function syncContractCreatorProfileDataAction(data: {
+  creatorId: number;
+  namaLengkap?: string;
+  tiktokUid?: string;
+  nikKtp?: string;
+  alamatKtp?: string;
+  tempatLahir?: string;
+  tanggalLahir?: string;
+  noWhatsapp?: string;
+  email?: string;
+  npwp?: string;
+  namaBank?: string;
+  nomorRekening?: string;
+  atasNamaRekening?: string;
+}) {
+  const session = await auth();
+  if (!session?.user?.id) return { success: false, error: 'Unauthorized' };
+
+  const { creatorId } = data;
+  if (!creatorId) return { success: false, error: 'Creator ID tidak ditemukan' };
+
+  try {
+    // 1. Update master tabel creators
+    const creatorSets: any[] = [];
+    if (data.namaLengkap?.trim()) {
+      creatorSets.push(sql`nama_asli = ${data.namaLengkap.trim()}`);
+    }
+    if (data.tiktokUid?.trim()) {
+      creatorSets.push(sql`tiktok_uid = ${data.tiktokUid.trim()}`);
+    }
+    if (data.email?.trim()) {
+      creatorSets.push(sql`email = ${data.email.trim()}`);
+    }
+    if (data.npwp?.trim()) {
+      creatorSets.push(sql`npwp = ${data.npwp.trim()}`);
+    }
+    if (data.tempatLahir?.trim()) {
+      creatorSets.push(sql`tempat_lahir = ${data.tempatLahir.trim()}`);
+    }
+    if (data.tanggalLahir?.trim()) {
+      creatorSets.push(sql`tanggal_lahir = ${data.tanggalLahir.trim()}::date`);
+    }
+
+    if (creatorSets.length > 0) {
+      await db.execute(sql`
+        UPDATE creators
+        SET ${sql.join(creatorSets, sql`, `)}
+        WHERE id = ${creatorId}
+      `);
+    }
+
+    // 2. Simpan / Update creator_identities (NIK & Alamat KTP)
+    const cleanNik = data.nikKtp?.trim();
+    if (cleanNik) {
+      await db.execute(sql`
+        INSERT INTO creator_identities (
+          creator_id, nik, nama_ktp, alamat_ktp, tempat_lahir, tanggal_lahir, is_primary
+        ) VALUES (
+          ${creatorId},
+          ${cleanNik},
+          ${data.namaLengkap?.trim() || null},
+          ${data.alamatKtp?.trim() || null},
+          ${data.tempatLahir?.trim() || null},
+          ${data.tanggalLahir?.trim() ? sql`${data.tanggalLahir.trim()}::date` : null},
+          true
+        )
+        ON CONFLICT (creator_id, nik) DO UPDATE
+        SET nama_ktp = COALESCE(EXCLUDED.nama_ktp, creator_identities.nama_ktp),
+            alamat_ktp = COALESCE(EXCLUDED.alamat_ktp, creator_identities.alamat_ktp),
+            tempat_lahir = COALESCE(EXCLUDED.tempat_lahir, creator_identities.tempat_lahir),
+            tanggal_lahir = COALESCE(EXCLUDED.tanggal_lahir, creator_identities.tanggal_lahir),
+            is_primary = true
+      `);
+    } else if (data.alamatKtp?.trim()) {
+      // Jika NIK belum ada tetapi alamat KTP diisi, update primary identity jika ada
+      await db.execute(sql`
+        UPDATE creator_identities
+        SET alamat_ktp = ${data.alamatKtp.trim()}
+        WHERE creator_id = ${creatorId} AND is_primary = true
+      `);
+    }
+
+    // 3. Simpan / Update Kontak Aktif WhatsApp
+    const cleanWa = data.noWhatsapp?.trim();
+    if (cleanWa) {
+      const activeContact = await db.execute(sql`
+        SELECT id, nomor FROM creator_contacts 
+        WHERE creator_id = ${creatorId} AND status = 'aktif'
+        LIMIT 1
+      `) as any[];
+
+      if (activeContact && activeContact.length > 0) {
+        if (activeContact[0].nomor !== cleanWa) {
+          await db.execute(sql`
+            UPDATE creator_contacts SET nomor = ${cleanWa} WHERE id = ${activeContact[0].id}
+          `);
+        }
+      } else {
+        await db.execute(sql`
+          INSERT INTO creator_contacts (creator_id, nomor, status, tanggal_mulai)
+          VALUES (${creatorId}, ${cleanWa}, 'aktif', CURRENT_DATE)
+        `);
+      }
+    }
+
+    // 4. Simpan / Update Rekening Bank (creator_bank_accounts)
+    const cleanBank = data.namaBank?.trim();
+    const cleanAcc = data.nomorRekening?.trim();
+    const cleanHolder = data.atasNamaRekening?.trim() || data.namaLengkap?.trim();
+
+    if (cleanBank && cleanAcc && cleanHolder) {
+      await db.execute(sql`
+        UPDATE creator_bank_accounts SET is_primary = false WHERE creator_id = ${creatorId}
+      `).catch(() => {});
+
+      await db.execute(sql`
+        INSERT INTO creator_bank_accounts (
+          creator_id, bank_name, account_number, account_holder, is_primary
+        ) VALUES (
+          ${creatorId}, ${cleanBank}, ${cleanAcc}, ${cleanHolder}, true
+        )
+        ON CONFLICT (creator_id, bank_name, account_number) DO UPDATE
+        SET account_holder = ${cleanHolder}, is_primary = true
+      `);
+    }
+
+    revalidatePath(`/creator-pool/${creatorId}`);
+    return { success: true, message: 'Data profil kreator berhasil disinkronisasi ke database.' };
+  } catch (err: any) {
+    console.error('syncContractCreatorProfileDataAction error:', err);
+    return { success: false, error: err.message };
+  }
+}
+
+
 
 
