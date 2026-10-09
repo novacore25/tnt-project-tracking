@@ -164,7 +164,7 @@ export default function CampaignDailyPerformanceClient({ campaignId }: { campaig
       const campaignStartStr = campaignData.start_date ? campaignData.start_date.substring(0, 10) : null;
       const campaignEndStr = campaignData.end_date ? campaignData.end_date.substring(0, 10) : null;
 
-      const skuSet = new Set((res.skus || []).map((s: any) => s.product_id).filter(Boolean));
+      const skuSet = new Set((res.skus || []).map((s: any) => String(s.product_id || '').trim()).filter(Boolean));
       const hasSkus = skuSet.size > 0;
 
       const skuNameMap = new Map<string, string>();
@@ -215,7 +215,8 @@ export default function CampaignDailyPerformanceClient({ campaignId }: { campaig
       allSales.forEach(s => {
         const u = (s.creator_username || '').toLowerCase().trim();
         if (approvedUsernameSet.size > 0 && !approvedUsernameSet.has(u)) return;
-        if (!hasSkus || !s.product_id || !skuSet.has(s.product_id)) return;
+        const rawPid = s.product_id ? String(s.product_id).trim() : '';
+        if (!hasSkus || !rawPid || !skuSet.has(rawPid)) return;
 
         const dateStr = toWIBDateStr(s.tanggal);
         if (!dateStr) return;
@@ -377,59 +378,19 @@ export default function CampaignDailyPerformanceClient({ campaignId }: { campaig
               }
             }
           }
-
-          // Track uploaded videos from creator submissions
-          if (cc.videos && cc.videos.length > 0) {
-            cc.videos.forEach((v: any) => {
-              if (!v.link_video) return; // Ignore empty draft slots
-              
-              // Extract TikTok video ID
-              const match = v.link_video.match(/\/video\/(\d+)/);
-              const videoId = match ? match[1] : (v.content_uid || v.id).toString();
-              
-              // Accurate TikTok upload date via Snowflake ID, fallback to created_at
-              let uploadDateStr = match ? extractTikTokUploadDate(match[1]) : null;
-              if (!uploadDateStr && v.created_at) {
-                uploadDateStr = toWIBDateStr(v.created_at);
-              }
-              if (!uploadDateStr) return;
-              if (campaignStartStr && uploadDateStr < campaignStartStr) return;
-
-              initGroup(uploadDateStr);
-              grouped[uploadDateStr].videos.add(videoId);
-              if (username && username !== 'unknown') {
-                grouped[uploadDateStr].videoCreators.add(username);
-              }
-
-              if (!grouped[uploadDateStr].videoList.some(item => item.videoId === videoId)) {
-                grouped[uploadDateStr].videoList.push({
-                  videoId,
-                  creator: username || 'unknown',
-                  linkVideo: v.link_video || `https://www.tiktok.com/@${username}/video/${videoId}`,
-                  views: Number(v.views || 0),
-                  likes: Number(v.likes || 0),
-                  postTime: uploadDateStr,
-                  source: 'Submission Slot'
-                });
-              }
-
-              const monthStr = uploadDateStr.substring(0, 7);
-              initMonthlyGroup(monthStr);
-              monthlyGrouped[monthStr].videos.add(videoId);
-              if (username && username !== 'unknown') {
-                monthlyGrouped[monthStr].videoCreators.add(username);
-              }
-            });
-          }
         });
       }
 
-      // 3. Map Organic Videos & Livestreams from TikTok Sync / Organic Import
+      // 2. Map Organic Videos & Livestreams from TikTok Sync / Organic Import first
+      // Agar views & likes dari TikTok tercatat secara akurat
+      const orgVideoStatsMap = new Map<string, { views: number; likes: number; creator: string; dateStr: string; monthStr: string; productId: any; productName: string }>();
+
       if (allOrganicVideos.length > 0) {
         allOrganicVideos.forEach(v => {
-          if (!hasSkus || !v.product_id || !skuSet.has(v.product_id)) return;
+          const rawPid = v.product_id ? String(v.product_id).trim() : '';
+          if (!hasSkus || !rawPid || !skuSet.has(rawPid)) return;
           if (!v.content_uid) return;
-          const uidStr = v.content_uid.toString();
+          const uidStr = v.content_uid.toString().trim();
           const cType = (v.content_type || '').toLowerCase();
           const isLive = cType.includes('live') || cType.includes('livestream');
 
@@ -448,7 +409,7 @@ export default function CampaignDailyPerformanceClient({ campaignId }: { campaig
           initMonthlyGroup(monthStr);
 
           const creatorUname = (v.creator_username || '').toLowerCase().trim();
-          const prodName = skuNameMap.get(String(v.product_id).trim()) || v.product_id;
+          const prodName = skuNameMap.get(rawPid) || v.product_id;
 
           if (!isLive) {
             grouped[dateStr].videos.add(uidStr);
@@ -456,18 +417,59 @@ export default function CampaignDailyPerformanceClient({ campaignId }: { campaig
             monthlyGrouped[monthStr].videos.add(uidStr);
             if (creatorUname) monthlyGrouped[monthStr].videoCreators.add(creatorUname);
 
+            const vViews = Number(v.video_views || 0);
+            const vLikes = Number(v.video_likes || 0);
+
+            // Record best stats for this content_uid
+            if (!orgVideoStatsMap.has(uidStr)) {
+              orgVideoStatsMap.set(uidStr, {
+                views: vViews,
+                likes: vLikes,
+                creator: creatorUname,
+                dateStr,
+                monthStr,
+                productId: v.product_id,
+                productName: prodName
+              });
+            } else {
+              const cur = orgVideoStatsMap.get(uidStr)!;
+              cur.views = Math.max(cur.views, vViews);
+              cur.likes = Math.max(cur.likes, vLikes);
+            }
+
+            // Daily video list
             const existingVid = grouped[dateStr].videoList.find(item => item.videoId === uidStr);
             if (existingVid) {
-              existingVid.views = Math.max(existingVid.views || 0, Number(v.video_views || 0));
-              existingVid.likes = Math.max(existingVid.likes || 0, Number(v.video_likes || 0));
+              existingVid.views = Math.max(existingVid.views || 0, vViews);
+              existingVid.likes = Math.max(existingVid.likes || 0, vLikes);
               if (!existingVid.productName && prodName) existingVid.productName = prodName;
             } else {
               grouped[dateStr].videoList.push({
                 videoId: uidStr,
                 creator: creatorUname || 'unknown',
                 linkVideo: `https://www.tiktok.com/@${creatorUname}/video/${uidStr}`,
-                views: Number(v.video_views || 0),
-                likes: Number(v.video_likes || 0),
+                views: vViews,
+                likes: vLikes,
+                postTime: dateStr,
+                productId: v.product_id,
+                productName: prodName,
+                source: 'Auto-Sync / Organic'
+              });
+            }
+
+            // Monthly video list
+            const existingMonthVid = monthlyGrouped[monthStr].videoList.find(item => item.videoId === uidStr);
+            if (existingMonthVid) {
+              existingMonthVid.views = Math.max(existingMonthVid.views || 0, vViews);
+              existingMonthVid.likes = Math.max(existingMonthVid.likes || 0, vLikes);
+              if (!existingMonthVid.productName && prodName) existingMonthVid.productName = prodName;
+            } else {
+              monthlyGrouped[monthStr].videoList.push({
+                videoId: uidStr,
+                creator: creatorUname || 'unknown',
+                linkVideo: `https://www.tiktok.com/@${creatorUname}/video/${uidStr}`,
+                views: vViews,
+                likes: vLikes,
                 postTime: dateStr,
                 productId: v.product_id,
                 productName: prodName,
@@ -483,17 +485,114 @@ export default function CampaignDailyPerformanceClient({ campaignId }: { campaig
             monthlyGrouped[monthStr].liveSessions.add(uniqueKey);
             if (creatorUname) monthlyGrouped[monthStr].liveCreators.add(creatorUname);
 
+            const lViews = Number(v.video_views || 0);
+            const lLikes = Number(v.video_likes || 0);
+
             if (!grouped[dateStr].liveList.some(item => item.roomId === uniqueKey)) {
               grouped[dateStr].liveList.push({
                 roomId: uidStr || uniqueKey,
                 creator: creatorUname || 'unknown',
-                views: Number(v.video_views || 0),
-                likes: Number(v.video_likes || 0),
+                views: lViews,
+                likes: lLikes,
                 startTime: dateStr,
                 duration: v.duration_str || '-',
                 source: 'Auto-Sync / Live'
               });
             }
+
+            if (!monthlyGrouped[monthStr].liveList.some(item => item.roomId === uniqueKey)) {
+              monthlyGrouped[monthStr].liveList.push({
+                roomId: uidStr || uniqueKey,
+                creator: creatorUname || 'unknown',
+                views: lViews,
+                likes: lLikes,
+                startTime: dateStr,
+                duration: v.duration_str || '-',
+                source: 'Auto-Sync / Live'
+              });
+            }
+          }
+        });
+      }
+
+      // 3. Map Uploaded Videos from creator submissions (Submission Slots)
+      // Diproses setelah organic_videos agar jika video sudah terdeteksi di organic_videos,
+      // views dan likes-nya langsung sinkron/terbawa.
+      if (allVideosFromCreators.length > 0) {
+        allVideosFromCreators.forEach((cc: any) => {
+          const username = (cc.creators?.username || '').toLowerCase().trim();
+          if (cc.videos && cc.videos.length > 0) {
+            cc.videos.forEach((v: any) => {
+              if (!v.link_video) return; // Ignore empty draft slots
+
+              const match = v.link_video.match(/\/video\/(\d+)/);
+              const videoId = match ? match[1] : (v.content_uid || v.id).toString();
+
+              let uploadDateStr = match ? extractTikTokUploadDate(match[1]) : null;
+              if (!uploadDateStr && v.created_at) {
+                uploadDateStr = toWIBDateStr(v.created_at);
+              }
+              if (!uploadDateStr) return;
+              if (campaignStartStr && uploadDateStr < campaignStartStr) return;
+
+              initGroup(uploadDateStr);
+              grouped[uploadDateStr].videos.add(videoId);
+              if (username && username !== 'unknown') {
+                grouped[uploadDateStr].videoCreators.add(username);
+              }
+
+              const monthStr = uploadDateStr.substring(0, 7);
+              initMonthlyGroup(monthStr);
+              monthlyGrouped[monthStr].videos.add(videoId);
+              if (username && username !== 'unknown') {
+                monthlyGrouped[monthStr].videoCreators.add(username);
+              }
+
+              // Lookup if TikTok sync already has views/likes for this video
+              const organicStat = orgVideoStatsMap.get(videoId);
+              const resolvedViews = Math.max(Number(v.views || 0), organicStat?.views || 0);
+              const resolvedLikes = Math.max(Number(v.likes || 0), organicStat?.likes || 0);
+
+              // Daily video list
+              const existingDayVid = grouped[uploadDateStr].videoList.find(item => item.videoId === videoId);
+              if (existingDayVid) {
+                existingDayVid.views = Math.max(existingDayVid.views || 0, resolvedViews);
+                existingDayVid.likes = Math.max(existingDayVid.likes || 0, resolvedLikes);
+                if (username && username !== 'unknown' && existingDayVid.creator === 'unknown') {
+                  existingDayVid.creator = username;
+                }
+              } else {
+                grouped[uploadDateStr].videoList.push({
+                  videoId,
+                  creator: username || 'unknown',
+                  linkVideo: v.link_video || `https://www.tiktok.com/@${username}/video/${videoId}`,
+                  views: resolvedViews,
+                  likes: resolvedLikes,
+                  postTime: uploadDateStr,
+                  source: 'Submission Slot'
+                });
+              }
+
+              // Monthly video list
+              const existingMonthVid = monthlyGrouped[monthStr].videoList.find(item => item.videoId === videoId);
+              if (existingMonthVid) {
+                existingMonthVid.views = Math.max(existingMonthVid.views || 0, resolvedViews);
+                existingMonthVid.likes = Math.max(existingMonthVid.likes || 0, resolvedLikes);
+                if (username && username !== 'unknown' && existingMonthVid.creator === 'unknown') {
+                  existingMonthVid.creator = username;
+                }
+              } else {
+                monthlyGrouped[monthStr].videoList.push({
+                  videoId,
+                  creator: username || 'unknown',
+                  linkVideo: v.link_video || `https://www.tiktok.com/@${username}/video/${videoId}`,
+                  views: resolvedViews,
+                  likes: resolvedLikes,
+                  postTime: uploadDateStr,
+                  source: 'Submission Slot'
+                });
+              }
+            });
           }
         });
       }
