@@ -2813,3 +2813,30 @@ memberi informasi yang saling menguatkan, bukan noise.
    - Mendukung switch mode instan di header grafik: **Bulanan** vs **Mingguan**.
    - Mode Mingguan mengagregasikan data harian dari `dailyData` ke dalam *cut-off* mingguan (Minggu malam), memberi tim visibilitas *sprint performance* yang presisi tanpa reload halaman.
 
+---
+
+### 10g. Generator Dokumen & Kontrak Kreator (PDF) Client-Side (9 Okt 2026)
+
+1. **Arsitektur Generator PDF Bebas Beban Server (0% CPU Server / VPS):**
+   - Menggunakan `@react-pdf/renderer` yang dijalankan 100% pada peramban (*client-side*).
+   - Menghindari penggunaan Puppeteer/headless Chromium di VPS Coolify yang memakan memori ratusan MB dan risiko timeout saat rendering bersamaan.
+   - Dynamic import dengan `{ ssr: false }` untuk mencegah hydration mismatch pada Next.js App Router.
+
+2. **Template Dokumen Standar TNT Kreatif (`CreatorContractPdfDocument.tsx`):**
+   - Kop surat resmi TNT Kreatif Digital Agency dengan logo, nomor surat otomatis, dan tanggal perjanjian.
+   - Pasal 1: Identitas Para Pihak (TNT Digital & Pihak Kedua / Kreator).
+   - Pasal 2: Ruang Lingkup Pekerjaan (*Scope of Work*): rincian jumlah Video TikTok (VT) & Sesi Live.
+   - Pasal 3: Imbalan Jasa & Cara Pembayaran: ratecard otomatis terbilang dalam Rupiah (*auto-terbilang*, e.g., "Satu Juta Lima Ratus Ribu Rupiah").
+   - Pasal 4–6: Ketentuan Konten, Revisi, Kerahasiaan (*NDA*), dan Hak Cipta.
+   - Lembar Tanda Tangan: Pihak Pertama (TNT) dan Pihak Kedua (Kreator) berdampingan.
+
+3. **Menu Dedicated Dokumen (`/dokumen` & Sidebar Nav):**
+   - Menambahkan menu **"Dokumen"** di navigasi utama Sidebar (`Sidebar.tsx`) dengan ikon `FileText`.
+   - Halaman `/dokumen` (`DokumenClient.tsx`) berfungsi sebagai *central hub* manajemen berkas:
+     - Dropdown filter Campaign & Status Approval Kreator.
+     - Pencarian instan kreator berdasarkan username, nama lengkap, atau nomor kontak.
+     - Multi-select checkbox untuk seleksi批量 (bulk).
+     - Tombol **"Buat Kontrak"** untuk membuka modal live preview interaktif (`<PDFViewer>`) & download file PDF instan.
+   - Terintegrasi pula secara kontekstual di halaman Listing Campaign (`/campaigns/[id]/listing`) pada setiap baris kreator dan floating action bar.
+
+
