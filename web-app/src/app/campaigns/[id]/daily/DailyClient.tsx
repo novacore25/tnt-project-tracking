@@ -6,6 +6,7 @@ import { useDatabaseStore } from "@/store/useDatabaseStore";
 import { fetchDailyPerformancePageDataAction } from "@/app/actions/campaignPageActions";
 import { normalizeKurs } from "@/utils/computed";
 import TimelineTarget from "./TimelineTarget";
+import MonthlyPerformanceChart from "./MonthlyPerformanceChart";
 import { ChevronDown, ChevronRight, Video, Radio, ShoppingBag, ExternalLink, Search } from "lucide-react";
 
 const toWIBDateStr = (utcString: string | number | null | undefined): string | null => {
@@ -815,6 +816,10 @@ export default function CampaignDailyPerformanceClient({ campaignId }: { campaig
           </p>
         </div>
       </div>
+
+      {!loading && monthlyData.length > 0 && (
+        <MonthlyPerformanceChart monthlyData={monthlyData} />
+      )}
 
       {!loading && monthlyData.length > 0 && (() => {
         const targetGmv = Number(campaign.target_gmv) || 0;
