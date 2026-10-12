@@ -22,6 +22,17 @@ description: Konteks permanen untuk Project Tracking System TNT (repo novacore25
 | Skala | ~163 file TS/TSX, ~51.000 baris, 239 exported server action, 40 route |
 | Bahasa UI | 100% Bahasa Indonesia. Hardcoded, tidak ada i18n. |
 
+### Server Architecture & Deployment Context
+
+- **Environment**: Ubuntu VPS managed via **Coolify v4 & Docker**.
+- **Reverse Proxy**: Traefik (`coolify-proxy`) listens on ports 80 & 443. All web services **MUST** route through Traefik using Docker labels; **DO NOT** bind host ports directly for web apps.
+- **Port Restrictions (DO NOT allocate/bind on host)**:
+  - `80`, `443`, `8080`: Reserved for Traefik (`coolify-proxy`).
+  - `6001`, `6002`: Reserved for Coolify WebSockets (Realtime events & interactive terminal).
+  - `8000`: Reserved for Coolify web service.
+  - `5432`, `54321`, `54322`: Reserved for existing PostgreSQL proxies & database instances.
+- **Application Networking**: Web apps should run on internal Docker networks (expose default ports like `3000` internally only) and be configured via Coolify domains.
+
 ### Stack (dari `web-app/package.json`)
 
 - Next.js **16.2.7** (App Router, Turbopack) — **bukan** Next 13/14/15. Baca `node_modules/next/dist/docs/` sebelum menulis kode.

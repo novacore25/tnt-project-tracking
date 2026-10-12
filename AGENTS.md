@@ -194,6 +194,16 @@
     (amortisasi) seiring masuknya transaksi riil baru mingguan, hingga mencapai 0 saat closing campaign.
     Detail: `docs/KEPUTUSAN-TRANSISI-BUFFER-MSGLOW.md`.
 
+24. **Server Architecture, Traefik Reverse Proxy & Port Restrictions (VPS Coolify):**
+    - **Environment**: Ubuntu VPS managed via Coolify v4 & Docker.
+    - **Reverse Proxy**: Traefik (`coolify-proxy`) listen di port `80` & `443`. Semua web service **WAJIB** diarahkan via Traefik menggunakan Docker labels. **DILARANG bind host port secara langsung untuk aplikasi web**.
+    - **Port Terlarang (DILARANG alokasikan / bind langsung pada host VPS)**:
+      - `80`, `443`, `8080`: Reserved untuk Traefik (`coolify-proxy`).
+      - `6001`, `6002`: Reserved untuk Coolify WebSockets (Realtime events & interactive terminal).
+      - `8000`: Reserved untuk Coolify web service.
+      - `5432`, `54321`, `54322`: Reserved untuk PostgreSQL proxy & instance DB yang ada.
+    - **Application Networking**: Aplikasi web harus berjalan di internal Docker networks (expose internal port default seperti `3000`) dan dikonfigurasi domainnya via Coolify.
+
 ## Git
 
 > **Pakai SSH, bukan HTTPS.** Setup selesai 2 Okt 2026.
