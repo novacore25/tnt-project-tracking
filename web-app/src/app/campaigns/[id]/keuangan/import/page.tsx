@@ -95,6 +95,7 @@ export default function ImportHistoricalBatchPage() {
   const mapPaymentType = (status: string) => {
     if (!status) return '100_akhir';
     const s = status.toLowerCase();
+    if (s.includes('100') && (s.includes('awal') || s.includes('dp'))) return '100_awal';
     if (s.includes('dp') || s.includes('awal')) return '50_awal';
     if (s.includes('pelunasan') && s.includes('50')) return '50_akhir';
     return '100_akhir';

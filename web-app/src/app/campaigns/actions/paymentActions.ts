@@ -1201,7 +1201,7 @@ async function syncPaidItemsToCampaignCreators(paymentItemIds: number[], actualP
       const finalNominal = item.actual_transfer != null ? Number(item.actual_transfer) : Number(item.nominal || 0);
       const pType = String(item.payment_type || '').toLowerCase();
 
-      if (pType === '100_akhir' || pType === '50_akhir') {
+      if (pType === '100_akhir' || pType === '50_akhir' || pType === '100_awal') {
         await db.execute(sql`
           UPDATE campaign_creators
           SET status_bayar = 'lunas',

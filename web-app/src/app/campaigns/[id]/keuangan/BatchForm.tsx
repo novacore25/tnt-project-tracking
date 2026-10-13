@@ -454,14 +454,14 @@ export function BatchForm({
         const ratecard = Number(current.ratecard_awal || 0);
         if (value === '50_awal' || value === '50_akhir') {
           updatedNominal = Math.round(ratecard / 2);
-        } else if (value === '100_akhir') {
+        } else if (value === '100_akhir' || value === '100_awal') {
           updatedNominal = ratecard;
         }
       } else if (field === 'ratecard_awal') {
         const ratecard = Number(value || 0);
         if (current.payment_type === '50_awal' || current.payment_type === '50_akhir') {
           updatedNominal = Math.round(ratecard / 2);
-        } else if (current.payment_type === '100_akhir') {
+        } else if (current.payment_type === '100_akhir' || current.payment_type === '100_awal') {
           updatedNominal = ratecard;
         }
       }
@@ -496,7 +496,7 @@ export function BatchForm({
         }
       } else {
         if (f.payment_type === '50_akhir') {
-          return `Kreator @${cc.creators?.username} tidak memiliki termin DP 50% Awal yang aktif. Harap pilih 100% Akhir atau DP 50% Awal!`;
+          return `Kreator @${cc.creators?.username} tidak memiliki termin DP 50% Awal yang aktif. Harap pilih 100% Akhir, 100% Awal, atau DP 50% Awal!`;
         }
       }
 
@@ -845,6 +845,9 @@ export function BatchForm({
                                   <option value="100_akhir" disabled={hasPending50}>
                                     {hasPending50 ? "100% Akhir (Menunggu Pelunasan DP 50%)" : "100% Akhir"}
                                   </option>
+                                  <option value="100_awal" disabled={hasPending50}>
+                                    {hasPending50 ? "100% Awal (Menunggu Pelunasan DP 50%)" : "100% Awal"}
+                                  </option>
                                   <option value="50_awal" disabled={hasPending50}>
                                     {hasPending50 ? "DP 50% Awal (Menunggu Pelunasan DP 50%)" : "DP 50% Awal"}
                                   </option>
@@ -881,6 +884,12 @@ export function BatchForm({
                           <label className="block text-xs font-medium text-slate-600 mb-1">Biaya Transfer (Opsional)</label>
                           <input type="number" className="w-full p-2 border border-slate-300 rounded text-sm outline-none focus:border-blue-500" value={f.biaya_transfer} onChange={e => handleChange(cc.id, 'biaya_transfer', e.target.value)} />
                         </div>
+                        {f.payment_type === '100_awal' && (
+                          <div className="col-span-2 text-xs text-blue-700 bg-blue-50 border border-blue-200 p-2.5 rounded-lg flex flex-col gap-0.5">
+                            <span className="font-bold">ℹ️ Skema Pembayaran 100% di Awal (Upfront)</span>
+                            <span>Pembayaran penuh di awal sebelum kreator menyelesaikan tugas/konten. Nominal diajukan: <strong>{formatRupiah(f.nominal)}</strong>.</span>
+                          </div>
+                        )}
                         {f.payment_type === '50_awal' && (
                           <div className="col-span-2 text-xs text-indigo-700 bg-indigo-50 border border-indigo-200 p-2.5 rounded-lg flex flex-col gap-0.5">
                             <span className="font-bold">ℹ️ Skema Pembayaran Termin 1 (DP 50%)</span>

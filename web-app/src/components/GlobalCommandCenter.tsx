@@ -427,8 +427,10 @@ export function GlobalCommandCenter({ role, onSuccess }: { role: string, onSucce
                                       <div className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100 inline-block mt-0.5">
                                         Termin 2 (Pelunasan 50%): Rp {Number(item.nominal).toLocaleString()}
                                       </div>
+                                    ) : item.payment_type === '100_awal' ? (
+                                      <div className="text-[11px] font-semibold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100 inline-block mt-0.5">Pembayaran Penuh 100% (Awal)</div>
                                     ) : item.payment_type === '100_akhir' ? (
-                                      <div className="text-[11px] text-slate-600 font-medium">Pembayaran Penuh 100%</div>
+                                      <div className="text-[11px] text-slate-600 font-medium">Pembayaran Penuh 100% (Akhir)</div>
                                     ) : (
                                       <div className="text-xs text-slate-500 uppercase">{item.payment_type}</div>
                                     )}

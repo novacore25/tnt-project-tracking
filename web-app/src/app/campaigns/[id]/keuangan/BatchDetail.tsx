@@ -625,7 +625,7 @@ export function BatchDetail({ batch, creatorHistory, onBack, onRefresh, onRefres
                         if (!item.campaign_creator_id || item.payment_type === 'ads') return null;
                         const pastHistory = creatorHistory[item.campaign_creator_id] || [];
                         const types = [...pastHistory.map(h => h.payment_type), item.payment_type];
-                        const isFullyPaid = types.includes('100_akhir') || (types.includes('50_awal') && types.includes('50_akhir'));
+                        const isFullyPaid = types.includes('100_akhir') || types.includes('100_awal') || (types.includes('50_awal') && types.includes('50_akhir'));
                         if (isFullyPaid) {
                           return <span className="text-[10px] font-semibold text-orange-700 bg-orange-100 px-1.5 py-0.5 rounded ml-2">Ratecard Lunas</span>;
                         }
@@ -653,9 +653,14 @@ export function BatchDetail({ batch, creatorHistory, onBack, onRefresh, onRefres
                           Termin 2 (Pelunasan 50%)
                         </div>
                       )}
+                      {item.payment_type === '100_awal' && (
+                        <div className="text-[10px] font-semibold text-blue-700 bg-blue-50 border border-blue-100 px-1.5 py-0.5 rounded mt-1 inline-block">
+                          Pembayaran Penuh 100% di Awal
+                        </div>
+                      )}
                       {item.payment_type === '100_akhir' && (
                         <div className="text-[10px] text-slate-400 font-normal mt-0.5">
-                          Pelunasan Penuh 100%
+                          Pelunasan Penuh 100% (Akhir)
                         </div>
                       )}
                     </td>
@@ -1078,6 +1083,7 @@ export function BatchDetail({ batch, creatorHistory, onBack, onRefresh, onRefres
                     <select className="w-full p-2 border border-slate-300 rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none" 
                       value={editForm.payment_type} onChange={e => setEditForm({...editForm, payment_type: e.target.value})}>
                       <option value="100_akhir">100% Akhir</option>
+                      <option value="100_awal">100% Awal</option>
                       <option value="50_awal">50% Awal</option>
                       <option value="50_akhir">50% Akhir</option>
                       <option value="ads">Ads / Ekstra</option>

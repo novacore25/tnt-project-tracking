@@ -34,7 +34,8 @@ export function CampaignCreatorMutationTab({ campaignId }: { campaignId: number 
 
   const getPaymentTypeLabel = (type: string) => {
     switch (type) {
-      case '100_akhir': return 'Full Payment';
+      case '100_awal': return '100% Awal (Upfront)';
+      case '100_akhir': return 'Full Payment (Akhir)';
       case '50_awal': return 'DP 50%';
       case '50_akhir': return 'Pelunasan 50%';
       default: return type?.replace('_', ' ') || '-';

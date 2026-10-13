@@ -47,7 +47,7 @@ export function UnpaidCreatorsTab({ campaignId, onSuccess }: { campaignId: numbe
         // Ratecard khusus campaign ini SELALU murni dari cc.price (sesuai yang di-input di Listing)
         const effectivePrice = toNum(cc.price || 0);
 
-        const hasFinishedTermin = paidTypes.includes('100_akhir') || (count50Awal > 0 && count50Awal === count50Akhir);
+        const hasFinishedTermin = paidTypes.includes('100_akhir') || paidTypes.includes('100_awal') || (count50Awal > 0 && count50Awal === count50Akhir);
         const isFullyPaid = hasFinishedTermin && (effectivePrice === 0 || paidNominal >= effectivePrice);
 
         // Sisa nominal yang belum dibayar

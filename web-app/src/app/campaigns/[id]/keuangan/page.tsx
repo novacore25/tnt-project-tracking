@@ -145,7 +145,7 @@ function CampaignKeuanganContent() {
         // Nominal yang sudah lunas dibayar (status 'paid')
         const paidNominal = sumNum(paidItems, h => h.nominal);
 
-        const hasFinishedTermin = paidTypes.includes('100_akhir') || (count50Awal > 0 && count50Awal === count50Akhir);
+        const hasFinishedTermin = paidTypes.includes('100_akhir') || paidTypes.includes('100_awal') || (count50Awal > 0 && count50Awal === count50Akhir);
         const isFullyPaid = hasFinishedTermin && (effectivePrice === 0 || paidNominal >= effectivePrice);
 
         const pendingItem = history.find(h => 
@@ -882,6 +882,8 @@ function CampaignKeuanganContent() {
                                                           return <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">DP 50%</span>;
                                                         case '50_akhir':
                                                           return <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">Pelunasan 50%</span>;
+                                                        case '100_awal':
+                                                          return <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">100% Awal</span>;
                                                         case '100_akhir':
                                                           return <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">Full 100%</span>;
                                                         case 'ads':
