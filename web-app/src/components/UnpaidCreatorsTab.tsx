@@ -196,6 +196,20 @@ export function UnpaidCreatorsTab({ campaignId, onSuccess }: { campaignId: numbe
     setShowBatchForm(true);
   };
 
+  const allEligibleCount = filteredCreators.filter(c => c.canSubmit).length;
+
+  const selectedCreators = useMemo(() => {
+    return creators.filter(c => selectedIds.has(c.id));
+  }, [creators, selectedIds]);
+
+  const selectedNominal = useMemo(() => {
+    return sumNum(selectedCreators, c => c.unpaidNominal ?? c.price ?? 0);
+  }, [selectedCreators]);
+
+  const totalAllUnpaidNominal = useMemo(() => {
+    return sumNum(creators, c => c.unpaidNominal ?? c.price ?? 0);
+  }, [creators]);
+
   if (showBatchForm) {
     return (
       <BatchForm 
@@ -213,20 +227,6 @@ export function UnpaidCreatorsTab({ campaignId, onSuccess }: { campaignId: numbe
       />
     );
   }
-
-  const allEligibleCount = filteredCreators.filter(c => c.canSubmit).length;
-
-  const selectedCreators = useMemo(() => {
-    return creators.filter(c => selectedIds.has(c.id));
-  }, [creators, selectedIds]);
-
-  const selectedNominal = useMemo(() => {
-    return sumNum(selectedCreators, c => c.unpaidNominal ?? c.price ?? 0);
-  }, [selectedCreators]);
-
-  const totalAllUnpaidNominal = useMemo(() => {
-    return sumNum(creators, c => c.unpaidNominal ?? c.price ?? 0);
-  }, [creators]);
 
   return (
     <div className="space-y-4 pb-12">
