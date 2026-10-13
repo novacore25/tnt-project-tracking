@@ -252,6 +252,7 @@ function CampaignListingContent() {
         }
       };
       (existing as any)[field] = value;
+      const orig = existing.original;
 
       // Auto-compute content_type when qty_vt or qty_live changes
       if (field === 'qty_vt' || field === 'qty_live') {
@@ -264,7 +265,6 @@ function CampaignListingContent() {
       }
 
       // Check if all changed fields match original
-      const orig = existing.original;
       const fields = ['price', 'qty_vt', 'qty_live', 'approval', 'client_approval', 'assigned_sku_ids', 'content_type', 'followers', 'level', 'gmv_30d', 'gmv_30d_video', 'gmv_30d_live'] as const;
       let hasRealChange = false;
       for (const f of fields) {
