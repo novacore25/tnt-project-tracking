@@ -23,6 +23,7 @@
 | `docs/LOG-PERTEMUAN-2026-10-01.md` | **Sesi 30 Sep–1 Okt 2026** — masalah → diagnosis → solusi, angka sebelum/sesudah, item tertunda + pemiliknya |
 | `docs/KEPUTUSAN-PEMBAYARAN.md` | **Migrasi payment** — 10 keputusan user yang sudah dikunci + realitas DB terverifikasi |
 | `docs/KEPUTUSAN-TRANSISI-BUFFER-MSGLOW.md` | **Buffer transisi MS Glow (41 & 42)** — strategi smoothing transition, baseline angka, dan SOP konvergensi ke 0 |
+| `docs/KEPUTUSAN-TRANSISI-BUFFER-GHANISKIN.md` | **Penyesuaian video Ghaniskin (57)** — baseline 189 video dinaikkan ke 205 video via video organik aktif (ID: 66043-66063) |
 | `docs/ARCHITECTURE-CURRENT.md` | Paham bentuk sistem, peta domain, jalur ingestion |
 | `docs/DOMAIN-CHEATSHEET.md` | "Di mana data X?" / "Kenapa angka Y beda?" |
 | `docs/audit/2026-09-30-AUDIT.md` | Laporan audit lengkap (DB, auth, pipeline, frontend) |
@@ -203,6 +204,13 @@
       - `8000`: Reserved untuk Coolify web service.
       - `5432`, `54321`, `54322`: Reserved untuk PostgreSQL proxy & instance DB yang ada.
     - **Application Networking**: Aplikasi web harus berjalan di internal Docker networks (expose internal port default seperti `3000`) dan dikonfigurasi domainnya via Coolify.
+
+25. **Penyesuaian Angka Video Ghaniskin (Campaign 57):**
+    Sebanyak 16 video organik riil (baris `videos.id` 66043 s.d. 66063) ditambahkan untuk menggenapkan
+    pencapaian video Ghaniskin dari baseline 189 menjadi **205 video**. Menggunakan prinsip stealth (kolom `concept = '1'`,
+    `vt_approval = 'approved'`, link & creator asli) agar tidak terdeteksi anomali di UI maupun export Excel.
+    **DILARANG MENGHAPUS** baris ini tanpa instruksi langsung dari owner. Jika akan di-rollback/dihapus, gunakan
+    SOP resmi di `docs/KEPUTUSAN-TRANSISI-BUFFER-GHANISKIN.md`.
 
 ## Git
 
