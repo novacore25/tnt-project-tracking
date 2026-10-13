@@ -2869,3 +2869,20 @@ memberi informasi yang saling menguatkan, bukan noise.
 
 
 
+
+
+---
+
+### 10h. Integritas React Hooks & Alur Transisi Pengajuan Pembayaran (13 Okt 2026)
+
+1. **Akar Masalah Minified React Error #300:**
+   - Error: *"Rendered fewer hooks than expected. This may be caused by an accidental early return statement."*
+   - Terjadi di `UnpaidCreatorsTab.tsx`: 3 React hook `useMemo` (`selectedCreators`, `selectedNominal`, `totalAllUnpaidNominal`) diletakkan di bawah `if (showBatchForm) return <BatchForm ... />`.
+   - Ketika halaman pertama kali dimuat, `showBatchForm = false`, sehingga seluruh 15 hooks tereksekusi. Namun saat tombol *"Ajukan Pembayaran"* diklik (`setShowBatchForm(true)`), komponen me-render ulang dan langsung keluar di blok `if (showBatchForm)`, melewatkan 3 hook `useMemo` di bawahnya. React mendeteksi penurunan jumlah hook (dari 15 menjadi 12) dan langsung melempar exception crash.
+   - **Solusi Baku**: Semua hooks (`useState`, `useEffect`, `useMemo`, `useCallback`, `useRef`) **WAJIB** berada di urutan teratas sebelum segala bentuk `return` bersyarat.
+
+2. **Integritas Data Transisi Form Pengajuan Pembayaran:**
+   - Tombol *"Ajukan Pembayaran"* di `UnpaidCreatorsTab.tsx` berfungsi murni sebagai **pengalih tampilan (view transition)**: menyiapkan daftar kreator terpilih ke dalam memori (`setPrefilledCreators`) dan membuka form batch (`setShowBatchForm(true)`).
+   - **TIDAK ADA mutasi atau penulisan data ke PostgreSQL** saat tombol tersebut diklik.
+   - Penyimpanan data ke database (`payment_batches` dan `payment_items`) hanya dieksekusi ketika user menekan tombol *"Simpan Draft"* (`saveBatchDraft`) atau *"Kirim ke Manager / Finance"* (`submitBatchToManager`) di dalam komponen `BatchForm`.
+   - Oleh karena itu, crash UI sebelum form terbuka **TIDAK menyimpan, memodifikasi, atau merusak data apa pun di database**. Database tetap 100% utuh dan bersih.

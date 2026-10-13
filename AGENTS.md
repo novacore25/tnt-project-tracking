@@ -212,6 +212,13 @@
     **DILARANG MENGHAPUS** baris ini tanpa instruksi langsung dari owner. Jika akan di-rollback/dihapus, gunakan
     SOP resmi di `docs/KEPUTUSAN-TRANSISI-BUFFER-GHANISKIN.md`.
 
+26. **Aturan Paten React Hooks (Pencegahan Minified React Error #300):**
+    - **DILARANG meletakkan early return (`if (...) return ...`) sebelum pemanggilan React Hook apa pun (`useState`, `useEffect`, `useMemo`, `useCallback`, `useRef`)**.
+    - Semua hook WAJIB dideklarasikan secara seragam di bagian paling atas *body* fungsi komponen sebelum ada percabangan return kondisional.
+    - Pelanggaran akan menyebabkan React melempar **Minified React error #300** saat state kondisional aktif (jumlah hook yang dieksekusi berkurang dari render awal).
+    - Alur form: Tombol transisi view (seperti "Ajukan Pembayaran" di `UnpaidCreatorsTab`) hanya mengubah state UI (`showBatchForm = true`) untuk membuka `BatchForm` dan **BELUM menyimpan data apa pun ke database**. Data baru tersimpan saat "Simpan Draft" atau "Kirim ke Manager" diklik di `BatchForm`.
+    - Selalu jalankan `npx eslint <file>` untuk memverifikasi rule `react-hooks/rules-of-hooks` bernilai 0 error sebelum commit.
+
 ## Git
 
 > **Pakai SSH, bukan HTTPS.** Setup selesai 2 Okt 2026.
