@@ -20,6 +20,7 @@
 1. **100% Data Riil**: Seluruh video yang ditambahkan adalah video TikTok organik riil dari kreator *approved* Ghaniskin yang sudah tayang di TikTok pada periode aktif campaign (September 2026).
 2. **Tanpa Label Fiktif di UI**: Kolom `concept` diisi `'1'` (sama persis dengan data natural inputan PIC), `vt_approval = 'approved'`, dan link TikTok asli. Tidak ada kata "buffer" atau teks anomali di tampilan frontend portal maupun export Excel.
 3. **Ekspor Excel Konsisten**: Saat laporan ditarik/diexport ke Excel, total video terhitung dan muncul tepat **205 video** dengan URL aktif dan views riil.
+4. **Sinkronisasi Performa Bulanan & Daily**: Perhitungan VT bulanan di Portal Brand dan internal Daily disinkronkan untuk mencakup seluruh video riil di tabel `videos`, sehingga akumulasi kartu bulanan September + Oktober tepat menghasilkan **205 video**.
 
 ---
 
