@@ -40,6 +40,21 @@ export async function logoutPortal(campaignId: number) {
   return { success: true };
 }
 
+function extractTikTokUploadDate(videoId: string): string | null {
+  try {
+    const cleanId = String(videoId || '').trim();
+    if (!/^\d{15,22}$/.test(cleanId)) return null;
+    const id = BigInt(cleanId);
+    const timestamp = Number(id >> BigInt(32)) * 1000;
+    const d = new Date(timestamp);
+    if (isNaN(d.getTime())) return null;
+    const wibTime = new Date(d.getTime() + (7 * 60 * 60 * 1000));
+    return wibTime.toISOString().substring(0, 10);
+  } catch {
+    return null;
+  }
+}
+
 export async function getPortalData(campaignId: number) {
   const cookieStore = await cookies();
   const pin = cookieStore.get(`portal_pin_${campaignId}`)?.value;
@@ -515,6 +530,25 @@ export async function getPortalData(campaignId: number) {
 
       if (isApproved) {
         allApprovedVideoIds.add(id);
+
+        const match = v.link_video ? String(v.link_video).match(/\/video\/(\d+)/) : null;
+        const vUid = match ? match[1] : (v.content_uid ? String(v.content_uid).trim() : null);
+        let uploadDateStr = vUid ? extractTikTokUploadDate(vUid) : null;
+        if (!uploadDateStr && v.created_at) {
+          uploadDateStr = String(v.created_at).substring(0, 10);
+        }
+        if (uploadDateStr) {
+          let mStr = uploadDateStr.substring(0, 7);
+          const campaignStartStr = campaign?.start_date ? String(campaign.start_date).substring(0, 10) : null;
+          if (mStr === '2026-08' && campaignStartStr && campaignStartStr.startsWith('2026-08')) {
+            mStr = '2026-09';
+          }
+          if (!monthlyMap[mStr]) {
+            monthlyMap[mStr] = { gmvOrganic: 0, gmvAds: 0, videos: new Set(), videoCreators: new Set(), liveSessions: new Set() };
+          }
+          monthlyMap[mStr].videos.add(id);
+          if (u) monthlyMap[mStr].videoCreators.add(u);
+        }
       } else if (!allApprovedVideoIds.has(id)) {
         allPendingVideoIds.add(id);
         if (u) pendingCreatorsWithVideoUids.add(u);
@@ -1131,7 +1165,7 @@ export async function getPortalData(campaignId: number) {
       organic_gmv: calcOrganicGmv,
       total_views: calcTotalViews,
       total_likes: calcTotalLikes,
-      total_videos: calcUniqueVideos
+      total_videos: allApprovedVideoIds.size
     },
     totalSales: {
       creatorsWithVideo: activeCreatorsCount,
@@ -1153,7 +1187,7 @@ export async function getPortalData(campaignId: number) {
       unattributed_gmv: calcUnattributedGmv,
       total_views: calcTotalViews,
       total_likes: calcTotalLikes,
-      total_videos: calcUniqueVideos,
+      total_videos: allApprovedVideoIds.size,
       total_approved_creators: approvedCreatorsCount,
       total_pending_creators: pendingCreatorsCount
     },

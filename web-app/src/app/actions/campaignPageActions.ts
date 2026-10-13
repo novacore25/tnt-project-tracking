@@ -271,9 +271,12 @@ export async function fetchDailyPerformancePageDataAction(campaignId: number) {
         WHERE cc.campaign_id = ${campaignId}
       `).catch(() => []) as Promise<any[]>,
       db.execute(sql`
-        SELECT v.id, v.campaign_creator_id, v.created_at, v.link_video, v.content_uid, v.views, v.likes
+        SELECT 
+          v.id, v.campaign_creator_id, v.created_at, v.link_video, v.content_uid, v.views, v.likes,
+          c.username as creator_username
         FROM videos v
         JOIN campaign_creators cc ON v.campaign_creator_id = cc.id
+        LEFT JOIN creators c ON cc.creator_id = c.id
         WHERE cc.campaign_id = ${campaignId}
       `).catch(() => []) as Promise<any[]>,
       db.execute(sql`
@@ -313,16 +316,17 @@ export async function fetchDailyPerformancePageDataAction(campaignId: number) {
     const organicVideos = orgRes || [];
     const liveSessions = liveRes || [];
 
-    // Map videos to creators
-    const videosByCcId = new Map<number, any[]>();
+    // Map videos to creators with string keys to avoid type mismatch
+    const videosByCcId = new Map<string, any[]>();
     for (const v of videos) {
-      if (!videosByCcId.has(v.campaign_creator_id)) {
-        videosByCcId.set(v.campaign_creator_id, []);
+      const key = String(v.campaign_creator_id);
+      if (!videosByCcId.has(key)) {
+        videosByCcId.set(key, []);
       }
-      videosByCcId.get(v.campaign_creator_id)!.push(v);
+      videosByCcId.get(key)!.push(v);
     }
     for (const cc of campaignCreators) {
-      cc.videos = videosByCcId.get(cc.id) || [];
+      cc.videos = videosByCcId.get(String(cc.id)) || [];
     }
 
     return {
