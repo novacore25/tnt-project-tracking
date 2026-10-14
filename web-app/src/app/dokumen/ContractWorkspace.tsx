@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import dynamic from "next/dynamic";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/Dialog";
 import {
@@ -105,6 +105,15 @@ export default function ContractWorkspace({
     "1. Video wajib ditayangkan selambat-lambatnya 7 (tujuh) hari kerja setelah konsep disetujui.\n2. Konten tidak boleh dihapus atau di-private minimal selama 60 hari sejak penayangan publik."
   );
 
+  // Nama Brand di Dokumen (Bisa Diedit Manual Jika Data Sistem Kurang Sesuai)
+  const [customBrandName, setCustomBrandName] = useState(campaignBrandName || "");
+
+  useEffect(() => {
+    setCustomBrandName(campaignBrandName || "");
+  }, [campaignBrandName]);
+
+  const effectiveBrandName = customBrandName.trim() || campaignBrandName || "Brand Partner";
+
   // Target creators to generate
   const targetCreators = useMemo(() => {
     if (selectedCcIds.size > 0) {
@@ -169,7 +178,7 @@ export default function ContractWorkspace({
       rekeningKreator: activeCreator.no_rekening ? `${activeCreator.nama_bank || ""} ${activeCreator.no_rekening} a.n ${activeCreator.nama_rekening || activeCreator.nama_lengkap}` : "-",
 
       namaCampaign: selectedCampaign?.nama || "Campaign TNT",
-      namaBrand: campaignBrandName || "Brand Partner",
+      namaBrand: effectiveBrandName,
       jenisCampaign: "Fee",
       qtyVt: Number(activeCreator.qty_vt) || 1,
       qtyPhotoSlide: 0,
@@ -193,6 +202,7 @@ export default function ContractWorkspace({
     previewIndex,
     selectedCampaign,
     campaignBrandName,
+    customBrandName,
     namaPihakPertama,
     jabatanPihakPertama,
     perusahaanPihakPertama,
@@ -259,7 +269,7 @@ export default function ContractWorkspace({
           rekeningKreator: c.no_rekening ? `${c.nama_bank || ""} ${c.no_rekening} a.n ${c.nama_rekening || c.nama_lengkap}` : "-",
 
           namaCampaign: selectedCampaign?.nama || "Campaign TNT",
-          namaBrand: campaignBrandName || "Brand Partner",
+          namaBrand: effectiveBrandName,
           jenisCampaign: "Fee",
           qtyVt: Number(c.qty_vt) || 1,
           qtyPhotoSlide: 0,
@@ -388,6 +398,29 @@ export default function ContractWorkspace({
           </div>
 
           <div className="space-y-3">
+            <div>
+              <div className="flex items-center justify-between">
+                <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">
+                  Nama Brand di Dokumen (Lampiran I)
+                </label>
+                {customBrandName && customBrandName !== campaignBrandName && (
+                  <span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-100 text-amber-800 font-semibold">
+                    Diubah
+                  </span>
+                )}
+              </div>
+              <input
+                type="text"
+                value={customBrandName}
+                onChange={(e) => setCustomBrandName(e.target.value)}
+                placeholder={campaignBrandName || "Ketik nama brand resmi..."}
+                className="w-full text-xs mt-1 px-3 py-2 bg-amber-50/40 border border-amber-300 rounded-xl focus:bg-white focus:ring-1 focus:ring-amber-500 font-semibold text-slate-800"
+              />
+              <span className="text-[10px] text-slate-400 mt-0.5 block">
+                Jika nama brand di sistem tidak sesuai, silakan ubah di sini (hanya mengubah nama di dokumen).
+              </span>
+            </div>
+
             <div>
               <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">
                 Format Prefix Nomor Surat

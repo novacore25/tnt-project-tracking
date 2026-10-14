@@ -241,6 +241,16 @@ export default function ContractGeneratorWorkspace({
   const [catatanTambahan, setCatatanTambahan] = useState("");
   const [customClauses, setCustomClauses] = useState("");
 
+  // NAMA BRAND MANUAL (OVERRIDE UNTUK DOKUMEN JIKA NAMA BRAND DI SISTEM SALAH)
+  const [manualBrandName, setManualBrandName] = useState(campaignBrandName || "");
+
+  // Sinkronkan manualBrandName ketika campaignBrandName berubah dari seleksi campaign
+  useEffect(() => {
+    setManualBrandName(campaignBrandName || "");
+  }, [campaignBrandName]);
+
+  const effectiveBrandName = manualBrandName.trim() || campaignBrandName || "Brand Partner";
+
   // SINKRONISASI KE PROFIL KREATOR DI DATABASE
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncStatus, setSyncStatus] = useState<{ success?: boolean; message?: string } | null>(null);
@@ -534,7 +544,7 @@ export default function ContractGeneratorWorkspace({
 
       // Detail Kerjasama & Lampiran I
       namaCampaign: selectedCampaign?.nama || "Campaign TNT",
-      namaBrand: campaignBrandName || "Brand Partner",
+      namaBrand: effectiveBrandName,
       jenisCampaign,
       qtyVt: Number(qtyVt) || 1,
       qtyPhotoSlide: Number(qtyPhotoSlide) || 0,
@@ -585,6 +595,7 @@ export default function ContractGeneratorWorkspace({
     atasNamaRekening,
     selectedCampaign,
     campaignBrandName,
+    manualBrandName,
     jenisCampaign,
     qtyVt,
     qtyPhotoSlide,
@@ -649,6 +660,30 @@ export default function ContractGeneratorWorkspace({
                 </option>
               ))}
             </select>
+
+            {/* Kolom Pengisian Manual Nama Brand di Dokumen jika nama brand di sistem salah */}
+            <div className="pt-1.5">
+              <div className="flex items-center justify-between">
+                <label className="text-[11px] font-semibold text-slate-600 flex items-center gap-1">
+                  <span>Nama Brand di Dokumen</span>
+                  {manualBrandName && manualBrandName !== campaignBrandName && (
+                    <span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-100 text-amber-800 font-semibold">
+                      Diubah
+                    </span>
+                  )}
+                </label>
+              </div>
+              <input
+                type="text"
+                value={manualBrandName}
+                onChange={(e) => setManualBrandName(e.target.value)}
+                placeholder={campaignBrandName || "Ketik nama brand resmi..."}
+                className="w-full mt-1 px-3 py-1.5 bg-amber-50/50 border border-amber-300/80 rounded-lg text-xs font-bold text-slate-900 focus:bg-white focus:ring-2 focus:ring-amber-500/20 focus:border-amber-600 outline-none transition-all"
+              />
+              <span className="text-[10px] text-slate-400 mt-0.5 block leading-tight">
+                Jika nama brand di sistem tidak sesuai, silakan ubah di sini (hanya mengubah nama di dokumen).
+              </span>
+            </div>
           </div>
 
           {/* AUTOCOMPLETE / KETIK USERNAME KREATOR */}
@@ -1173,6 +1208,24 @@ export default function ContractGeneratorWorkspace({
             </h3>
 
             <div className="space-y-3 text-xs">
+              {/* Nama Brand di Dokumen (Lampiran I Baris 1) */}
+              <div>
+                <label className="font-semibold text-slate-700 flex items-center justify-between">
+                  <span>Nama Brand di Dokumen (Lampiran I) *</span>
+                  <span className="text-[10px] text-slate-400 font-normal">Sistem: {campaignBrandName || "-"}</span>
+                </label>
+                <input
+                  type="text"
+                  value={manualBrandName}
+                  onChange={(e) => setManualBrandName(e.target.value)}
+                  placeholder="Contoh: MS GLOW / The Originote"
+                  className="w-full mt-1 px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 font-bold focus:ring-2 focus:ring-amber-500/20 focus:border-amber-600 outline-none"
+                />
+                <span className="text-[10px] text-amber-700 mt-1 block">
+                  Jika nama brand tidak sesuai dengan ejaan resmi / legal, silakan ubah di sini. Hanya mengubah nama brand di dokumen perjanjian tanpa mengubah nama brand di sistem.
+                </span>
+              </div>
+
               {/* Jenis Campaign */}
               <div>
                 <label className="font-semibold text-slate-700">Jenis Campaign (Lampiran I)</label>

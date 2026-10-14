@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import dynamic from "next/dynamic";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/Dialog";
 import { FileText, Download, Edit3, Eye, Loader2, CheckCircle2, User, Building } from "lucide-react";
@@ -73,6 +73,13 @@ export default function CreatorContractModal({
   const [customClauses, setCustomClauses] = useState(
     "1. Video wajib ditayangkan selambat-lambatnya 7 (tujuh) hari kerja setelah konsep disetujui.\n2. Konten tidak boleh dihapus atau di-private minimal selama 60 hari sejak penayangan."
   );
+  const [namaBrandManual, setNamaBrandManual] = useState(campaignData.brandName || "");
+
+  useEffect(() => {
+    setNamaBrandManual(campaignData.brandName || "");
+  }, [campaignData.brandName]);
+
+  const effectiveBrandName = namaBrandManual.trim() || campaignData.brandName || "Brand Partner";
 
   const contractData: CreatorContractData = useMemo(() => {
     const today = new Date();
@@ -116,7 +123,7 @@ export default function CreatorContractModal({
       teleponKreator: noWhatsapp || "-",
       nikKtp: nikKtp || "-",
       namaCampaign: campaignData.nama,
-      namaBrand: campaignData.brandName || "Brand Partner",
+      namaBrand: effectiveBrandName,
       jenisCampaign: "Fee",
       qtyVt: creatorData.qtyVt || 1,
       periodeTayang: `${curDateNum} - ${curDateNum + 5} ${curMonthName} ${curYear}`,
@@ -137,7 +144,8 @@ export default function CreatorContractModal({
     namaKreator,
     noWhatsapp,
     nikKtp,
-    customClauses
+    customClauses,
+    namaBrandManual
   ]);
 
   const fileName = `Perjanjian_Join_Campaign_${creatorData.username.replace("@", "")}_${campaignData.nama.replace(/\s+/g, "_")}.pdf`;
@@ -261,6 +269,25 @@ export default function CreatorContractModal({
                     />
                   </div>
                 </div>
+              </div>
+
+              <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 space-y-2">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold text-slate-700 uppercase">
+                    Nama Brand di Dokumen (Lampiran I)
+                  </h4>
+                  <span className="text-[10px] text-slate-400 font-normal">Sistem: {campaignData.brandName || "-"}</span>
+                </div>
+                <input
+                  type="text"
+                  value={namaBrandManual}
+                  onChange={(e) => setNamaBrandManual(e.target.value)}
+                  placeholder={campaignData.brandName || "Ketik nama brand resmi..."}
+                  className="w-full text-xs input mt-0.5 bg-amber-50/30 border-amber-300 font-semibold text-slate-800"
+                />
+                <span className="text-[10px] text-slate-400 block">
+                  Jika nama brand di sistem tidak sesuai, silakan ubah di sini (hanya mengubah nama brand di dokumen tanpa mengubah data sistem).
+                </span>
               </div>
 
               <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 space-y-2">
