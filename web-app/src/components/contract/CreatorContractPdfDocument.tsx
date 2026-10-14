@@ -19,17 +19,21 @@ export function terbilangIndo(angka: number): string {
   return angka.toString();
 }
 
-// Konfigurasi margin & layout standar kertas A4 (595.28 x 841.89 pt)
-const PADDING_HORIZONTAL = 54; // ~1.9 cm
-const PADDING_TOP = 38;        // ~1.34 cm
-const PADDING_BOTTOM = 42;     // ~1.48 cm
+// Konfigurasi Standar Resmi Margin & Kertas A4 (595.28 x 841.89 pt)
+// Margin Left & Right = 2.54 cm = 72 pt (Standar Resmi Word / Dokumen Legal TNT)
+// Margin Bottom = 2.54 cm = 72 pt (dengan footer resmi di posisi bottom ~35 pt = 1.25 cm)
+// Gap Top = 35.5 pt = 1.25 cm (Standar resmi batas atas dokumen TNT)
+const MARGIN_LEFT_RIGHT = 72; // 2.54 cm
+const GAP_TOP = 35.5;         // 1.25 cm
+const MARGIN_BOTTOM = 72;     // 2.54 cm
+const FOOTER_BOTTOM = 35;     // 1.25 cm dari tepi bawah kertas
 
 const styles = StyleSheet.create({
   page: {
-    paddingTop: PADDING_TOP,
-    paddingBottom: PADDING_BOTTOM,
-    paddingLeft: PADDING_HORIZONTAL,
-    paddingRight: PADDING_HORIZONTAL,
+    paddingTop: GAP_TOP,
+    paddingBottom: MARGIN_BOTTOM,
+    paddingLeft: MARGIN_LEFT_RIGHT,
+    paddingRight: MARGIN_LEFT_RIGHT,
     fontFamily: "Times-Roman",
     fontSize: 10.5,
     color: "#000000",
@@ -38,26 +42,26 @@ const styles = StyleSheet.create({
   // FOOTER RESMI DI BAGIAN BAWAH SETIAP HALAMAN
   footerContainer: {
     position: "absolute",
-    bottom: 22,
-    left: PADDING_HORIZONTAL,
-    right: PADDING_HORIZONTAL,
+    bottom: FOOTER_BOTTOM,
+    left: MARGIN_LEFT_RIGHT,
+    right: MARGIN_LEFT_RIGHT,
     borderTopWidth: 0.5,
-    borderTopColor: "#cbd5e1",
-    paddingTop: 4,
+    borderTopColor: "#94a3b8",
+    paddingTop: 5,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
   footerLeftText: {
     fontFamily: "Times-Roman",
-    fontSize: 8,
-    color: "#64748b",
+    fontSize: 8.5,
+    color: "#475569",
     textAlign: "left",
   },
   footerRightText: {
     fontFamily: "Times-Roman",
-    fontSize: 8,
-    color: "#64748b",
+    fontSize: 8.5,
+    color: "#475569",
     textAlign: "right",
   },
   // JUDUL SURAT UTAMA
