@@ -1,5 +1,6 @@
 import React from "react";
-import { Document, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
+import { Document, Page, Text, View, StyleSheet, Image } from "@react-pdf/renderer";
+import { logoTntBase64 } from "./logoBase64";
 
 // Helper konversi angka ke kata bahasa Indonesia
 export function terbilangIndo(angka: number): string {
@@ -38,6 +39,35 @@ const styles = StyleSheet.create({
     fontSize: 10.5,
     color: "#000000",
     lineHeight: 1.38,
+  },
+  // KOP / HEADER DI ATAS SETIAP HALAMAN
+  headerContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 14,
+    borderBottomWidth: 0.5,
+    borderBottomColor: "#94a3b8",
+    paddingBottom: 6,
+  },
+  headerLogo: {
+    width: 140,
+    height: 38,
+    objectFit: "contain",
+    marginBottom: 3,
+  },
+  headerSubText: {
+    fontFamily: "Times-Roman",
+    fontSize: 9.5,
+    textAlign: "center",
+    color: "#000000",
+    lineHeight: 1.2,
+  },
+  headerEmail: {
+    fontFamily: "Times-Roman",
+    fontSize: 9.5,
+    textAlign: "center",
+    color: "#0056b3",
+    lineHeight: 1.2,
   },
   // FOOTER RESMI DI BAGIAN BAWAH SETIAP HALAMAN
   footerContainer: {
@@ -383,6 +413,15 @@ export function CreatorContractPdfDocument({ data }: { data: CreatorContractData
       ? `${data.tanggalMulai} sampai dengan ${data.tanggalBerakhir}`
       : "________ sampai dengan ________");
 
+  // Reusable header (Kop Surat Resmi TNT) untuk setiap halaman
+  const renderHeader = () => (
+    <View style={styles.headerContainer}>
+      <Image src={logoTntBase64} style={styles.headerLogo} />
+      <Text style={styles.headerSubText}>Official TikTok MCN &amp; Affiliate Partner</Text>
+      <Text style={styles.headerEmail}>email: {data.emailPerusahaan || "tntmediaaffiliate@gmail.com"}</Text>
+    </View>
+  );
+
   // Reusable footer untuk setiap halaman
   const renderFooter = () => (
     <View style={styles.footerContainer} fixed>
@@ -402,6 +441,7 @@ export function CreatorContractPdfDocument({ data }: { data: CreatorContractData
           HALAMAN 1: JUDUL, NOMOR, IDENTITAS PARA PIHAK, PREAMBLE
       ======================================================== */}
       <Page size="A4" style={styles.page}>
+        {renderHeader()}
         <View style={styles.titleContainer}>
           <Text style={styles.titleMain}>PERJANJIAN KERJA SAMA JOIN CAMPAIGN</Text>
           <Text style={styles.titleSub}>ANTARA PT TNT KREATIF DIGITAL</Text>
@@ -483,6 +523,7 @@ export function CreatorContractPdfDocument({ data }: { data: CreatorContractData
           HALAMAN 2: PASAL 1 (DEFINISI) & PASAL 2 (RUANG LINGKUP)
       ======================================================== */}
       <Page size="A4" style={styles.page}>
+        {renderHeader()}
         <View style={styles.pasalHeader}>
           <Text style={styles.pasalTitle}>PASAL 1</Text>
           <Text style={styles.pasalSubTitle}>DEFINISI</Text>
@@ -588,6 +629,7 @@ export function CreatorContractPdfDocument({ data }: { data: CreatorContractData
           HALAMAN 3: PASAL 3 (BRIEF & KEWAJIBAN) & PASAL 4 (TIMELINE)
       ======================================================== */}
       <Page size="A4" style={styles.page}>
+        {renderHeader()}
         <View style={styles.pasalHeader}>
           <Text style={styles.pasalTitle}>PASAL 3</Text>
           <Text style={styles.pasalSubTitle}>BRIEF, DELIVERABLE, DAN KEWAJIBAN PARA PIHAK</Text>
@@ -684,6 +726,7 @@ export function CreatorContractPdfDocument({ data }: { data: CreatorContractData
           HALAMAN 4: PASAL 5 (KONTROL KONTEN) & PASAL 6 (PEMBAYARAN)
       ======================================================== */}
       <Page size="A4" style={styles.page}>
+        {renderHeader()}
         <View style={styles.pasalHeader}>
           <Text style={styles.pasalTitle}>PASAL 5</Text>
           <Text style={styles.pasalSubTitle}>KONTROL KONTEN</Text>
@@ -785,6 +828,7 @@ export function CreatorContractPdfDocument({ data }: { data: CreatorContractData
           HALAMAN 5: PASAL 7 (JAMINAN) & PASAL 8 (WANPRESTASI AYAT 1-3)
       ======================================================== */}
       <Page size="A4" style={styles.page}>
+        {renderHeader()}
         <View style={styles.pasalHeader}>
           <Text style={styles.pasalTitle}>PASAL 7</Text>
           <Text style={styles.pasalSubTitle}>JAMINAN KREATOR</Text>
@@ -904,6 +948,7 @@ export function CreatorContractPdfDocument({ data }: { data: CreatorContractData
           HALAMAN 6: PASAL 8 (AYAT 4-5), PASAL 9 & PASAL 10 (AYAT 1-3 AWAL)
       ======================================================== */}
       <Page size="A4" style={styles.page}>
+        {renderHeader()}
         <View style={styles.listItem}>
           <Text style={styles.listNumber}>4.</Text>
           <Text style={styles.listText}>
@@ -1002,6 +1047,7 @@ export function CreatorContractPdfDocument({ data }: { data: CreatorContractData
           HALAMAN 7: PASAL 10 (LANJUTAN AYAT 3), PASAL 11 & PASAL 12 (AYAT 1-4)
       ======================================================== */}
       <Page size="A4" style={styles.page}>
+        {renderHeader()}
         <Text style={[styles.paragraphJustify, { marginTop: 4 }]}>
           yang merendahkan, mencemarkan nama baik, atau merugikan reputasi TNT, karyawan TNT, atau Brand, baik
           selama maupun setelah berakhirnya Perjanjian; pelanggaran atas ketentuan ini merupakan wanprestasi
@@ -1085,6 +1131,7 @@ export function CreatorContractPdfDocument({ data }: { data: CreatorContractData
           HALAMAN 8: PASAL 12 (AYAT 5-7), PASAL 13, PENUTUP & TANDA TANGAN
       ======================================================== */}
       <Page size="A4" style={styles.page}>
+        {renderHeader()}
         <View style={styles.listItem}>
           <Text style={styles.listNumber}>5.</Text>
           <Text style={styles.listText}>
@@ -1169,6 +1216,7 @@ export function CreatorContractPdfDocument({ data }: { data: CreatorContractData
           HALAMAN 9: LAMPIRAN I (KETENTUAN CAMPAIGN & DELIVERABLES)
       ======================================================== */}
       <Page size="A4" style={styles.page}>
+        {renderHeader()}
         <View style={styles.lampiranHeaderContainer}>
           <Text style={styles.lampiranTitle}>LAMPIRAN I</Text>
         </View>
@@ -1284,6 +1332,7 @@ export function CreatorContractPdfDocument({ data }: { data: CreatorContractData
           HALAMAN 10: LAMPIRAN II (DO AND DON'T KREATOR CAMPAIGN)
       ======================================================== */}
       <Page size="A4" style={styles.page}>
+        {renderHeader()}
         <View style={styles.lampiranHeaderContainer}>
           <Text style={styles.lampiranTitle}>
             LAMPIRAN II — DO AND DON’T KREATOR CAMPAIGN
