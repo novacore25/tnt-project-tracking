@@ -97,6 +97,20 @@ function formatHariTanggalIndo(dateStr: string): string {
   return `${dayName} ${dateNum} (${terbilang(dateNum)}) ${monthName} tahun ${year} (${terbilang(year)})`;
 }
 
+function getRomanMonth(m: number): string {
+  const romans = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"];
+  return romans[m] || "X";
+}
+
+function getInitials(name: string): string {
+  if (!name) return "TNT";
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 1) {
+    return parts[0].slice(0, 2).toUpperCase();
+  }
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
 interface ContractGeneratorWorkspaceProps {
   campaigns: any[];
   creators: any[];
@@ -162,15 +176,23 @@ export default function ContractGeneratorWorkspace({
   const nextMonthStr = `${nextMonth.getFullYear()}-${pad(nextMonth.getMonth() + 1)}-${pad(nextMonth.getDate())}`;
 
   const curYear = today.getFullYear();
+  const curMonthIndex = today.getMonth();
+  const curRomanMonth = getRomanMonth(curMonthIndex);
+  const initialDrafter = getInitials(defaultUserName || "Safira");
 
   // FORM STATE - FIELD DATA KONTRAK
-  const [nomorKontrak, setNomorKontrak] = useState(`095/PWS/VII/${curYear}`);
+  const [inisialDrafter, setInisialDrafter] = useState(initialDrafter);
+  const [nomorKontrak, setNomorKontrak] = useState(`001/JC-TNT/${initialDrafter}/${curRomanMonth}/${curYear}`);
   const [rawTanggalKontrak, setRawTanggalKontrak] = useState(todayStr);
   const [kotaPenandatangan, setKotaPenandatangan] = useState("Tangerang");
 
-  // Pihak Pertama (TNT Media)
-  const [namaPerusahaan, setNamaPerusahaan] = useState("PT TNT DIGITAL KREATIF (TNT Media)");
-  const [alamatPerusahaan, setAlamatPerusahaan] = useState("Gading Serpong, Tangerang");
+  // Pihak Pertama (PT TNT KREATIF DIGITAL)
+  const [namaPerusahaan, setNamaPerusahaan] = useState("PT TNT KREATIF DIGITAL");
+  const [alamatPerusahaan, setAlamatPerusahaan] = useState(
+    "Jalan Kavling Perkebunan Raya, RT 006 / RW 013, Panunggangan Barat, Kecamatan Cibodas, Kota Tangerang, Banten 15139"
+  );
+  const [namaDirekturTNT, setNamaDirekturTNT] = useState("Stevani");
+  const [jabatanDirekturTNT, setJabatanDirekturTNT] = useState("Direktur");
   const [teleponPerusahaan, setTeleponPerusahaan] = useState("+62 85178230404");
   const [emailPerusahaan, setEmailPerusahaan] = useState("tntmediaaffiliate@gmail.com");
   const [namaPicTNT, setNamaPicTNT] = useState(defaultUserName || "Safira");
@@ -193,16 +215,30 @@ export default function ContractGeneratorWorkspace({
   const [nomorRekening, setNomorRekening] = useState("");
   const [atasNamaRekening, setAtasNamaRekening] = useState("");
 
-  // Deliverables & Scope
+  // Deliverables & Scope (Lampiran I)
+  const [jenisCampaign, setJenisCampaign] = useState("Fee");
   const [qtyVt, setQtyVt] = useState<number>(4);
+  const [qtyPhotoSlide, setQtyPhotoSlide] = useState<number>(0);
+  const [qtyLive, setQtyLive] = useState<number>(0);
+  const [durasiKonten, setDurasiKonten] = useState("30 - 60");
+  const [durasiKontenTerbilang, setDurasiKontenTerbilang] = useState("tiga puluh sampai enam puluh");
+  const [hashtag, setHashtag] = useState("");
+  const [rawDraftDate, setRawDraftDate] = useState(todayStr);
   const [rawPostingStart, setRawPostingStart] = useState(todayStr);
   const [rawPostingEnd, setRawPostingEnd] = useState(nextWeekStr);
   const [biayaHonor, setBiayaHonor] = useState<number>(200000);
+  const [feePerVtManual, setFeePerVtManual] = useState<number>(0);
+  const [batasWaktuRevisi, setBatasWaktuRevisi] = useState("2 (dua)");
+  const [jangkaWaktuTayang, setJangkaWaktuTayang] = useState("60 (enam puluh)");
+  const [skemaPembayaran, setSkemaPembayaran] = useState(
+    "H+14 dari selesai Campaign sampai dengan H+21 dari selesai Campaign"
+  );
   const [ketentuanPembayaran, setKetentuanPembayaran] = useState(
     "Honor PIHAK KEDUA akan dibayarkan oleh PIHAK PERTAMA 100% maksimal H+14 setelah upload video ke 4"
   );
   const [rawKontrakMulai, setRawKontrakMulai] = useState(todayStr);
   const [rawKontrakBerakhir, setRawKontrakBerakhir] = useState(nextMonthStr);
+  const [catatanTambahan, setCatatanTambahan] = useState("");
   const [customClauses, setCustomClauses] = useState("");
 
   // SINKRONISASI KE PROFIL KREATOR DI DATABASE
@@ -309,7 +345,12 @@ export default function ContractGeneratorWorkspace({
     if (rate > 0) setBiayaHonor(rate);
     if (vt > 0) setQtyVt(vt);
 
-    setNomorKontrak(`TNT/KTR/${curYear}/${pad(today.getMonth() + 1)}/${c.cc_id}`);
+    const seqStr = String(c.cc_id || 1).padStart(3, "0");
+    const romanMonth = getRomanMonth(today.getMonth());
+    setNomorKontrak(`${seqStr}/JC-TNT/${inisialDrafter || "TNT"}/${romanMonth}/${curYear}`);
+    if (selectedCampaign?.nama) {
+      setHashtag(`#${selectedCampaign.nama.replace(/\s+/g, "")}`);
+    }
     setKetentuanPembayaran(
       `Honor PIHAK KEDUA akan dibayarkan oleh PIHAK PERTAMA 100% maksimal H+14 setelah upload video ke ${vt}`
     );
@@ -438,15 +479,43 @@ export default function ContractGeneratorWorkspace({
       rekeningStr = `${namaBank} - ${nomorRekening} a.n. ${atasNamaRekening || namaKreator}`;
     }
 
+    const d = new Date(rawTanggalKontrak);
+    const dayNames = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
+    const hariPerjanjian = !isNaN(d.getTime()) ? dayNames[d.getDay()] : "____";
+    const tanggalPerjanjian = formatDateIndo(rawTanggalKontrak) || "____";
+
+    const draftStr = rawDraftDate ? formatDateIndo(rawDraftDate) : "__ ______ ____";
+    const postingRangeStr =
+      rawPostingStart && rawPostingEnd
+        ? `${formatDateIndo(rawPostingStart)} - ${formatDateIndo(rawPostingEnd)}`
+        : "__ ______ ____";
+
+    const calculatedFeePerVt =
+      feePerVtManual > 0
+        ? feePerVtManual
+        : Number(qtyVt) > 0
+        ? Math.round(honorNum / Number(qtyVt))
+        : honorNum;
+
     return {
       nomorKontrak,
+      hariPerjanjian,
+      tanggalPerjanjian,
       hariTanggalPerjanjian,
       tanggalKota,
+      tempatPerjanjian: kotaPenandatangan || "Tangerang",
+
+      // Pihak Pertama (TNT)
       namaPerusahaan,
       alamatPerusahaan,
+      namaDirekturTNT: namaDirekturTNT || "Stevani",
+      jabatanDirekturTNT: jabatanDirekturTNT || "Direktur",
+      namaPicTNT,
+      jabatanPicTNT,
       teleponPerusahaan,
       emailPerusahaan,
-      namaPicTNT,
+
+      // Pihak Kedua (Kreator)
       namaKreator: namaKreator || "Nama Content Creator",
       usernameTikTok: usernameTikTok || "username",
       tiktokUid,
@@ -456,30 +525,52 @@ export default function ContractGeneratorWorkspace({
       teleponKreator: teleponKreator || "-",
       emailKreator,
       npwpKreator,
+
+      // Rekening
       namaBank,
       nomorRekening,
       atasNamaRekening,
       rekeningKreator: rekeningStr,
+
+      // Detail Kerjasama & Lampiran I
       namaCampaign: selectedCampaign?.nama || "Campaign TNT",
       namaBrand: campaignBrandName || "Brand Partner",
+      jenisCampaign,
       qtyVt: Number(qtyVt) || 1,
+      qtyPhotoSlide: Number(qtyPhotoSlide) || 0,
+      qtyLive: Number(qtyLive) || 0,
+      durasiKonten: durasiKonten || "30 - 60",
+      durasiKontenTerbilang: durasiKontenTerbilang || "tiga puluh sampai enam puluh",
+      hashtag: hashtag || (selectedCampaign?.nama ? `#${selectedCampaign.nama.replace(/\s+/g, "")}` : "-"),
+      jadwalDraft: draftStr,
+      jadwalPosting: postingRangeStr,
+      batasWaktuRevisi: batasWaktuRevisi || "2 (dua)",
+      jangkaWaktuTayang: jangkaWaktuTayang || "60 (enam puluh)",
       periodeTayang: periodeTayangStr,
       biayaHonor: honorNum,
       terbilangHonor: terbilangStr,
+      feePerVt: calculatedFeePerVt,
+      skemaPembayaran,
       ketentuanPembayaran,
       tanggalMulai: tanggalMulaiStr,
       tanggalBerakhir: tanggalBerakhirStr,
+      catatanTambahan: catatanTambahan || customClauses,
       customClauses,
     };
   }, [
     nomorKontrak,
+    rawTanggalKontrak,
     hariTanggalPerjanjian,
     tanggalKota,
+    kotaPenandatangan,
     namaPerusahaan,
     alamatPerusahaan,
+    namaDirekturTNT,
+    jabatanDirekturTNT,
     teleponPerusahaan,
     emailPerusahaan,
     namaPicTNT,
+    jabatanPicTNT,
     namaKreator,
     usernameTikTok,
     tiktokUid,
@@ -494,16 +585,30 @@ export default function ContractGeneratorWorkspace({
     atasNamaRekening,
     selectedCampaign,
     campaignBrandName,
+    jenisCampaign,
     qtyVt,
+    qtyPhotoSlide,
+    qtyLive,
+    durasiKonten,
+    durasiKontenTerbilang,
+    hashtag,
+    rawDraftDate,
+    rawPostingStart,
+    rawPostingEnd,
+    batasWaktuRevisi,
+    jangkaWaktuTayang,
     periodeTayangStr,
     biayaHonor,
+    feePerVtManual,
+    skemaPembayaran,
     ketentuanPembayaran,
     tanggalMulaiStr,
     tanggalBerakhirStr,
+    catatanTambahan,
     customClauses,
   ]);
 
-  const outputFileName = `Kontrak_${(usernameTikTok || "kreator").replace(/[@\s]/g, "")}_${(selectedCampaign?.nama || "Campaign").replace(/[\s/]/g, "_")}.pdf`;
+  const outputFileName = `Perjanjian_Join_Campaign_${(usernameTikTok || "kreator").replace(/[@\s]/g, "")}_${(selectedCampaign?.nama || "Campaign").replace(/[\s/]/g, "_")}.pdf`;
 
   return (
     <div className="space-y-6">
@@ -521,7 +626,7 @@ export default function ContractGeneratorWorkspace({
               onChange={(e) => setSelectedDocType(e.target.value)}
               className="w-full px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-bold text-slate-800 focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none transition-all cursor-pointer"
             >
-              <option value="kontrak_creator">Surat Perjanjian Kerjasama (SPK Kontrak Kreator)</option>
+              <option value="kontrak_creator">Perjanjian Kerja Sama Join Campaign (Revisi Terbaru)</option>
               <option value="surat_tugas" disabled>Surat Tugas PIC (Coming Soon)</option>
               <option value="nda_brand" disabled>Non-Disclosure Agreement (NDA) (Coming Soon)</option>
             </select>
@@ -921,34 +1026,71 @@ export default function ContractGeneratorWorkspace({
             </div>
           </div>
 
-          {/* SECTION 2: PIHAK PERTAMA (PENANDATANGAN TNT) */}
+          {/* SECTION 2: PIHAK PERTAMA (PT TNT KREATIF DIGITAL) */}
           <div className="space-y-4 p-4 rounded-xl bg-slate-50/60 border border-slate-200/60">
             <h3 className="text-xs font-bold text-indigo-800 uppercase tracking-wider flex items-center gap-1.5">
               <Building className="w-4 h-4 text-indigo-600" />
-              PIHAK PERTAMA (PENANDATANGAN TNT)
+              PIHAK PERTAMA (PT TNT KREATIF DIGITAL)
             </h3>
 
             <div className="grid grid-cols-2 gap-3 text-xs">
               <div>
-                <label className="font-semibold text-slate-700">Nama Penandatangan TNT *</label>
+                <label className="font-semibold text-slate-700">Nama Direktur TNT *</label>
                 <input
                   type="text"
-                  value={namaPicTNT}
-                  onChange={(e) => setNamaPicTNT(e.target.value)}
-                  placeholder="Safira"
+                  value={namaDirekturTNT}
+                  onChange={(e) => setNamaDirekturTNT(e.target.value)}
+                  placeholder="Stevani"
                   className="w-full mt-1 px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 font-semibold focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 outline-none"
                 />
               </div>
               <div>
-                <label className="font-semibold text-slate-700">Jabatan Penandatangan</label>
+                <label className="font-semibold text-slate-700">Jabatan Perwakilan</label>
                 <input
                   type="text"
-                  value={jabatanPicTNT}
-                  onChange={(e) => setJabatanPicTNT(e.target.value)}
-                  placeholder="Project Manager"
+                  value={jabatanDirekturTNT}
+                  onChange={(e) => setJabatanDirekturTNT(e.target.value)}
+                  placeholder="Direktur"
                   className="w-full mt-1 px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 outline-none"
                 />
               </div>
+
+              <div>
+                <label className="font-semibold text-slate-700">Nama Drafter / PIC TNT</label>
+                <input
+                  type="text"
+                  value={namaPicTNT}
+                  onChange={(e) => {
+                    const newName = e.target.value;
+                    setNamaPicTNT(newName);
+                    const newInit = getInitials(newName);
+                    setInisialDrafter(newInit);
+                    const seqMatch = nomorKontrak.match(/^(\d{3})\/JC-TNT/);
+                    const seq = seqMatch ? seqMatch[1] : "001";
+                    setNomorKontrak(`${seq}/JC-TNT/${newInit}/${curRomanMonth}/${curYear}`);
+                  }}
+                  placeholder="Safira"
+                  className="w-full mt-1 px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 outline-none"
+                />
+              </div>
+              <div>
+                <label className="font-semibold text-slate-700">Inisial Nama Drafter</label>
+                <input
+                  type="text"
+                  maxLength={5}
+                  value={inisialDrafter}
+                  onChange={(e) => {
+                    const newInit = e.target.value.toUpperCase();
+                    setInisialDrafter(newInit);
+                    const seqMatch = nomorKontrak.match(/^(\d{3})\/JC-TNT/);
+                    const seq = seqMatch ? seqMatch[1] : "001";
+                    setNomorKontrak(`${seq}/JC-TNT/${newInit || "TNT"}/${curRomanMonth}/${curYear}`);
+                  }}
+                  placeholder="SF"
+                  className="w-full mt-1 px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 font-mono font-bold uppercase focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 outline-none"
+                />
+              </div>
+
               <div className="col-span-2">
                 <label className="font-semibold text-slate-700">Nama Entitas Perusahaan</label>
                 <input
@@ -959,29 +1101,11 @@ export default function ContractGeneratorWorkspace({
                 />
               </div>
               <div className="col-span-2">
-                <label className="font-semibold text-slate-700">Alamat Perusahaan</label>
+                <label className="font-semibold text-slate-700">Alamat Kantor Resmi</label>
                 <input
                   type="text"
                   value={alamatPerusahaan}
                   onChange={(e) => setAlamatPerusahaan(e.target.value)}
-                  className="w-full mt-1 px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 outline-none"
-                />
-              </div>
-              <div>
-                <label className="font-semibold text-slate-700">Telepon Kantor TNT</label>
-                <input
-                  type="text"
-                  value={teleponPerusahaan}
-                  onChange={(e) => setTeleponPerusahaan(e.target.value)}
-                  className="w-full mt-1 px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 outline-none"
-                />
-              </div>
-              <div>
-                <label className="font-semibold text-slate-700">Email Resmi TNT</label>
-                <input
-                  type="text"
-                  value={emailPerusahaan}
-                  onChange={(e) => setEmailPerusahaan(e.target.value)}
                   className="w-full mt-1 px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 outline-none"
                 />
               </div>
@@ -992,7 +1116,7 @@ export default function ContractGeneratorWorkspace({
           <div className="space-y-4 p-4 rounded-xl bg-slate-50/60 border border-slate-200/60">
             <h3 className="text-xs font-bold text-blue-800 uppercase tracking-wider flex items-center gap-1.5">
               <Calendar className="w-4 h-4 text-blue-600" />
-              LEGALITAS SURAT & TANGGAL KONTRAK
+              LEGALITAS SURAT &amp; TANGGAL KONTRAK
             </h3>
 
             <div className="space-y-3 text-xs">
@@ -1002,9 +1126,12 @@ export default function ContractGeneratorWorkspace({
                   type="text"
                   value={nomorKontrak}
                   onChange={(e) => setNomorKontrak(e.target.value)}
-                  placeholder="095 / PWS / VII / 2026"
-                  className="w-full mt-1 px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 font-mono focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none"
+                  placeholder="001/JC-TNT/SF/X/2026"
+                  className="w-full mt-1 px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 font-mono font-semibold focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none"
                 />
+                <span className="text-[10px] text-slate-400 mt-1 block">
+                  Format baku: [No]/JC-TNT/[Inisial Drafter]/[Bulan Romawi]/[Tahun]
+                </span>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -1030,26 +1157,38 @@ export default function ContractGeneratorWorkspace({
               </div>
 
               <div className="p-2.5 bg-blue-50/60 rounded-lg border border-blue-200/70 text-[11px] text-blue-900 space-y-1">
-                <div className="font-semibold">Format Otomatis Terbilang di Dokumen:</div>
+                <div className="font-semibold">Format Otomatis di Pembuka Perjanjian:</div>
                 <div className="italic text-slate-700">
-                  &ldquo;Pada hari ini, {hariTanggalPerjanjian}...&rdquo;
-                </div>
-                <div className="text-slate-600">
-                  Kota & Tanggal: <span className="font-medium">{tanggalKota}</span>
+                  &ldquo;Pada hari ini, <span className="font-bold">{formatHariTanggalIndo(rawTanggalKontrak).split(" ")[0]}</span>, tanggal <span className="font-bold">{formatDateIndo(rawTanggalKontrak)}</span>, bertempat di <span className="font-bold">{kotaPenandatangan || "Tangerang"}</span>...&rdquo;
                 </div>
               </div>
             </div>
           </div>
 
-          {/* SECTION 4: DELIVERABLES, JADWAL & HONORARIUM */}
+          {/* SECTION 4: DELIVERABLES, JADWAL & LAMPIRAN I */}
           <div className="space-y-4 p-4 rounded-xl bg-slate-50/60 border border-slate-200/60">
             <h3 className="text-xs font-bold text-amber-800 uppercase tracking-wider flex items-center gap-1.5">
               <CreditCard className="w-4 h-4 text-amber-600" />
-              DELIVERABLES, JADWAL & HONORARIUM
+              DETAIL DELIVERABLES &amp; LAMPIRAN I
             </h3>
 
             <div className="space-y-3 text-xs">
-              <div className="grid grid-cols-2 gap-3">
+              {/* Jenis Campaign */}
+              <div>
+                <label className="font-semibold text-slate-700">Jenis Campaign (Lampiran I)</label>
+                <select
+                  value={jenisCampaign}
+                  onChange={(e) => setJenisCampaign(e.target.value)}
+                  className="w-full mt-1 px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 font-semibold focus:ring-2 focus:ring-amber-500/20 focus:border-amber-600 outline-none cursor-pointer"
+                >
+                  <option value="Fee">Fee (Berbayar Penuh)</option>
+                  <option value="Barter">Barter (Produk / Jasa)</option>
+                  <option value="Fee dan Barter">Fee dan Barter (Kombinasi)</option>
+                </select>
+              </div>
+
+              {/* Rincian Deliverable: Video, Photo Slide, Live */}
+              <div className="grid grid-cols-3 gap-2">
                 <div>
                   <label className="font-semibold text-slate-700">Jumlah Video (VT)</label>
                   <input
@@ -1061,7 +1200,98 @@ export default function ContractGeneratorWorkspace({
                   />
                 </div>
                 <div>
-                  <label className="font-semibold text-slate-700">Honorarium / Fee (Rp)</label>
+                  <label className="font-semibold text-slate-700">Photo Slide</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={qtyPhotoSlide}
+                    onChange={(e) => setQtyPhotoSlide(Number(e.target.value))}
+                    className="w-full mt-1 px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-amber-500/20 focus:border-amber-600 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="font-semibold text-slate-700">Live (Sesi)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={qtyLive}
+                    onChange={(e) => setQtyLive(Number(e.target.value))}
+                    className="w-full mt-1 px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-amber-500/20 focus:border-amber-600 outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Durasi Konten */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-semibold text-slate-700">Durasi Konten (Detik)</label>
+                  <input
+                    type="text"
+                    value={durasiKonten}
+                    onChange={(e) => setDurasiKonten(e.target.value)}
+                    placeholder="30 - 60"
+                    className="w-full mt-1 px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-amber-500/20 focus:border-amber-600 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="font-semibold text-slate-700">Durasi Terbilang</label>
+                  <input
+                    type="text"
+                    value={durasiKontenTerbilang}
+                    onChange={(e) => setDurasiKontenTerbilang(e.target.value)}
+                    placeholder="tiga puluh sampai enam puluh"
+                    className="w-full mt-1 px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-amber-500/20 focus:border-amber-600 outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Hashtag Campaign */}
+              <div>
+                <label className="font-semibold text-slate-700">Hashtag Campaign</label>
+                <input
+                  type="text"
+                  value={hashtag}
+                  onChange={(e) => setHashtag(e.target.value)}
+                  placeholder="#BrandPartner #CampaignName #TikTokShop"
+                  className="w-full mt-1 px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-amber-500/20 focus:border-amber-600 outline-none"
+                />
+              </div>
+
+              {/* Jadwal Draft & Jadwal Posting */}
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="font-semibold text-slate-700">Kirim Draft:</label>
+                  <input
+                    type="date"
+                    value={rawDraftDate}
+                    onChange={(e) => setRawDraftDate(e.target.value)}
+                    className="w-full mt-1 px-2.5 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-amber-500/20 focus:border-amber-600 outline-none text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="font-semibold text-slate-700">Mulai Posting:</label>
+                  <input
+                    type="date"
+                    value={rawPostingStart}
+                    onChange={(e) => setRawPostingStart(e.target.value)}
+                    className="w-full mt-1 px-2.5 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-amber-500/20 focus:border-amber-600 outline-none text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="font-semibold text-slate-700">Batas Posting:</label>
+                  <input
+                    type="date"
+                    value={rawPostingEnd}
+                    onChange={(e) => setRawPostingEnd(e.target.value)}
+                    className="w-full mt-1 px-2.5 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-amber-500/20 focus:border-amber-600 outline-none text-xs"
+                  />
+                </div>
+              </div>
+
+              {/* Honorarium Total & Nilai per Deliverable */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-semibold text-slate-700">Total Fee Campaign (Rp)</label>
                   <input
                     type="number"
                     step={10000}
@@ -1070,41 +1300,60 @@ export default function ContractGeneratorWorkspace({
                     className="w-full mt-1 px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 font-bold focus:ring-2 focus:ring-amber-500/20 focus:border-amber-600 outline-none"
                   />
                 </div>
+                <div>
+                  <label className="font-semibold text-slate-700">Fee per Deliverable (Rp, Opsional)</label>
+                  <input
+                    type="number"
+                    step={10000}
+                    value={feePerVtManual || ""}
+                    onChange={(e) => setFeePerVtManual(Number(e.target.value))}
+                    placeholder={`Otomatis: ${(Number(qtyVt) > 0 ? Math.round(biayaHonor / Number(qtyVt)) : biayaHonor).toLocaleString("id-ID")}`}
+                    className="w-full mt-1 px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-amber-500/20 focus:border-amber-600 outline-none"
+                  />
+                </div>
               </div>
 
-              {/* Periode Unggah Video (Kalender Dari & Sampai) */}
+              {/* Skema Pembayaran */}
               <div>
-                <label className="font-semibold text-slate-700 flex items-center justify-between">
-                  <span>Periode Unggah Video (Jadwal Tayang)</span>
-                  <span className="text-[10px] text-slate-400 font-normal">Pilih rentang tanggal</span>
-                </label>
-                <div className="grid grid-cols-2 gap-3 mt-1">
-                  <div>
-                    <span className="text-[10px] text-slate-500">Mulai Unggah:</span>
-                    <input
-                      type="date"
-                      value={rawPostingStart}
-                      onChange={(e) => setRawPostingStart(e.target.value)}
-                      className="w-full mt-0.5 px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-amber-500/20 focus:border-amber-600 outline-none"
-                    />
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-500">Batas Akhir Unggah:</span>
-                    <input
-                      type="date"
-                      value={rawPostingEnd}
-                      onChange={(e) => setRawPostingEnd(e.target.value)}
-                      className="w-full mt-0.5 px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-amber-500/20 focus:border-amber-600 outline-none"
-                    />
-                  </div>
+                <label className="font-semibold text-slate-700">Skema Pembayaran (Lampiran I)</label>
+                <input
+                  type="text"
+                  value={skemaPembayaran}
+                  onChange={(e) => setSkemaPembayaran(e.target.value)}
+                  placeholder="H+14 dari selesai Campaign sampai dengan H+21 dari selesai Campaign"
+                  className="w-full mt-1 px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-amber-500/20 focus:border-amber-600 outline-none"
+                />
+              </div>
+
+              {/* Batas Revisi & Jangka Tayang */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-semibold text-slate-700">Batas Waktu Revisi</label>
+                  <input
+                    type="text"
+                    value={batasWaktuRevisi}
+                    onChange={(e) => setBatasWaktuRevisi(e.target.value)}
+                    placeholder="2 (dua)"
+                    className="w-full mt-1 px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-amber-500/20 focus:border-amber-600 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="font-semibold text-slate-700">Jangka Waktu Tayang (Hari)</label>
+                  <input
+                    type="text"
+                    value={jangkaWaktuTayang}
+                    onChange={(e) => setJangkaWaktuTayang(e.target.value)}
+                    placeholder="60 (enam puluh)"
+                    className="w-full mt-1 px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-amber-500/20 focus:border-amber-600 outline-none"
+                  />
                 </div>
               </div>
 
               {/* Masa Berlaku Kontrak */}
               <div>
                 <label className="font-semibold text-slate-700 flex items-center justify-between">
-                  <span>Masa Berlaku Perjanjian (Pasal 6)</span>
-                  <span className="text-[10px] text-slate-400 font-normal">Tanggal Mulai s.d. Selesai</span>
+                  <span>Periode Kontrak Keseluruhan (Lampiran I)</span>
+                  <span className="text-[10px] text-slate-400 font-normal">Mulai s.d. Selesai</span>
                 </label>
                 <div className="grid grid-cols-2 gap-3 mt-1">
                   <div>
@@ -1117,7 +1366,7 @@ export default function ContractGeneratorWorkspace({
                     />
                   </div>
                   <div>
-                    <span className="text-[10px] text-slate-500">Tanggal Berakhir:</span>
+                    <span className="text-[10px] text-slate-500">Tanggal Selesai:</span>
                     <input
                       type="date"
                       value={rawKontrakBerakhir}
@@ -1128,25 +1377,14 @@ export default function ContractGeneratorWorkspace({
                 </div>
               </div>
 
-              {/* Ketentuan Pembayaran */}
+              {/* Catatan Tambahan Lampiran I */}
               <div>
-                <label className="font-semibold text-slate-700">Ketentuan Pembayaran (Pasal 5)</label>
+                <label className="font-semibold text-slate-700">Catatan Tambahan (Lampiran I)</label>
                 <textarea
                   rows={2}
-                  value={ketentuanPembayaran}
-                  onChange={(e) => setKetentuanPembayaran(e.target.value)}
-                  className="w-full mt-1 p-2.5 bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-amber-500/20 focus:border-amber-600 outline-none"
-                />
-              </div>
-
-              {/* Klausul Tambahan Khusus */}
-              <div>
-                <label className="font-semibold text-slate-700">Pasal Tambahan Khusus (Opsional)</label>
-                <textarea
-                  rows={2}
-                  value={customClauses}
-                  onChange={(e) => setCustomClauses(e.target.value)}
-                  placeholder="Klausul penalti khusus, batasan khusus brand, dsb..."
+                  value={catatanTambahan}
+                  onChange={(e) => setCatatanTambahan(e.target.value)}
+                  placeholder="Catatan teknis khusus untuk campaign ini..."
                   className="w-full mt-1 p-2.5 bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-amber-500/20 focus:border-amber-600 outline-none"
                 />
               </div>

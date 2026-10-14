@@ -66,7 +66,7 @@ export default function CreatorContractModal({
   // Editable Form State
   const [namaPihakPertama, setNamaPihakPertama] = useState(userName);
   const [jabatanPihakPertama, setJabatanPihakPertama] = useState("Campaign Specialist");
-  const [perusahaanPihakPertama, setPerusahaanPihakPertama] = useState("PT TNT Kreatif Nusantara");
+  const [perusahaanPihakPertama, setPerusahaanPihakPertama] = useState("PT TNT KREATIF DIGITAL");
   const [namaKreator, setNamaKreator] = useState(creatorData.namaLengkap || "");
   const [noWhatsapp, setNoWhatsapp] = useState(creatorData.noWhatsapp || "");
   const [nikKtp, setNikKtp] = useState("");
@@ -83,20 +83,29 @@ export default function CreatorContractModal({
       "Januari", "Februari", "Maret", "April", "Mei", "Juni",
       "Juli", "Agustus", "September", "Oktober", "November", "Desember"
     ];
+    const romans = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"];
+    const curRomanMonth = romans[curMonth] || "X";
     const curDayName = dayNames[today.getDay()];
     const curDateNum = today.getDate();
     const curMonthName = monthNames[curMonth];
 
-    const contractNo = `TNT/KTR/${curYear}/${String(curMonth + 1).padStart(2, "0")}/${creatorData.ccId}`;
+    const seqStr = String(creatorData.ccId || 1).padStart(3, "0");
+    const contractNo = `${seqStr}/JC-TNT/SF/${curRomanMonth}/${curYear}`;
     const rateVal = creatorData.ratecard || 0;
     const terbilangStr = rateVal > 0 ? `${terbilang(rateVal).trim()} rupiah` : "nol rupiah";
 
     return {
       nomorKontrak: contractNo,
+      hariPerjanjian: curDayName,
+      tanggalPerjanjian: `${curDateNum} ${curMonthName} ${curYear}`,
       hariTanggalPerjanjian: `${curDayName} ${curDateNum} (${terbilang(curDateNum)}) ${curMonthName} tahun ${curYear} (${terbilang(curYear)})`,
       tanggalKota: `Tangerang, ${curDateNum} ${curMonthName} ${curYear}`,
-      namaPerusahaan: perusahaanPihakPertama || "TNT Media",
-      alamatPerusahaan: "Gading Serpong, Tangerang",
+      tempatPerjanjian: "Tangerang",
+      namaPerusahaan: perusahaanPihakPertama || "PT TNT KREATIF DIGITAL",
+      alamatPerusahaan:
+        "Jalan Kavling Perkebunan Raya, RT 006 / RW 013, Panunggangan Barat, Kecamatan Cibodas, Kota Tangerang, Banten 15139",
+      namaDirekturTNT: "Stevani",
+      jabatanDirekturTNT: "Direktur",
       teleponPerusahaan: "+62 85178230404",
       emailPerusahaan: "tntmediaaffiliate@gmail.com",
       namaPicTNT: namaPihakPertama || "Safira",
@@ -105,12 +114,16 @@ export default function CreatorContractModal({
       rekeningKreator: "-",
       alamatKreator: "-",
       teleponKreator: noWhatsapp || "-",
+      nikKtp: nikKtp || "-",
       namaCampaign: campaignData.nama,
       namaBrand: campaignData.brandName || "Brand Partner",
+      jenisCampaign: "Fee",
       qtyVt: creatorData.qtyVt || 1,
       periodeTayang: `${curDateNum} - ${curDateNum + 5} ${curMonthName} ${curYear}`,
       biayaHonor: rateVal,
       terbilangHonor: terbilangStr,
+      feePerVt: creatorData.qtyVt ? Math.round(rateVal / creatorData.qtyVt) : rateVal,
+      skemaPembayaran: "H+14 dari selesai Campaign sampai dengan H+21 dari selesai Campaign",
       ketentuanPembayaran: `Honor PIHAK KEDUA akan dibayarkan oleh PIHAK PERTAMA 100% maksimal H+14 setelah upload video ke ${creatorData.qtyVt || 1}`,
       tanggalMulai: `${curDateNum} ${curMonthName} ${curYear}`,
       tanggalBerakhir: `${curDateNum} ${monthNames[(curMonth + 1) % 12]} ${curYear}`,
@@ -123,10 +136,11 @@ export default function CreatorContractModal({
     perusahaanPihakPertama,
     namaKreator,
     noWhatsapp,
+    nikKtp,
     customClauses
   ]);
 
-  const fileName = `Kontrak_${creatorData.username.replace("@", "")}_${campaignData.nama.replace(/\s+/g, "_")}.pdf`;
+  const fileName = `Perjanjian_Join_Campaign_${creatorData.username.replace("@", "")}_${campaignData.nama.replace(/\s+/g, "_")}.pdf`;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>

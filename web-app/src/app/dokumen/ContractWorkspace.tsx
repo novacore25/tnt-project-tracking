@@ -40,19 +40,33 @@ const PDFDownloadLink = dynamic(
 
 function terbilang(angka: number): string {
   const bilangan = [
-    "", "Satu", "Dua", "Tiga", "Empat", "Lima", "Enam", "Tujuh", "Delapan", "Sembilan", "Sepuluh", "Sebelas",
+    "", "satu", "dua", "tiga", "empat", "lima", "enam", "tujuh", "delapan", "sembilan", "sepuluh", "sebelas",
   ];
 
   if (angka < 12) return bilangan[angka];
-  if (angka < 20) return terbilang(angka - 10) + " Belas";
-  if (angka < 100) return terbilang(Math.floor(angka / 10)) + " Puluh " + terbilang(angka % 10);
-  if (angka < 200) return "Seratus " + terbilang(angka - 100);
-  if (angka < 1000) return terbilang(Math.floor(angka / 100)) + " Ratus " + terbilang(angka % 100);
-  if (angka < 2000) return "Seribu " + terbilang(angka - 1000);
-  if (angka < 1000000) return terbilang(Math.floor(angka / 1000)) + " Ribu " + terbilang(angka % 1000);
-  if (angka < 1000000000) return terbilang(Math.floor(angka / 1000000)) + " Juta " + terbilang(angka % 1000000);
-  if (angka < 1000000000000) return terbilang(Math.floor(angka / 1000000000)) + " Miliar " + terbilang(angka % 1000000000);
+  if (angka < 20) return terbilang(angka - 10) + " belas";
+  if (angka < 100) return terbilang(Math.floor(angka / 10)) + " puluh " + terbilang(angka % 10);
+  if (angka < 200) return "seratus " + terbilang(angka - 100);
+  if (angka < 1000) return terbilang(Math.floor(angka / 100)) + " ratus " + terbilang(angka % 100);
+  if (angka < 2000) return "seribu " + terbilang(angka - 1000);
+  if (angka < 1000000) return terbilang(Math.floor(angka / 1000)) + " ribu " + terbilang(angka % 1000);
+  if (angka < 1000000000) return terbilang(Math.floor(angka / 1000000)) + " juta " + terbilang(angka % 1000000);
+  if (angka < 1000000000000) return terbilang(Math.floor(angka / 1000000000)) + " miliar " + terbilang(angka % 1000000000);
   return angka.toString();
+}
+
+function getRomanMonth(m: number): string {
+  const romans = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"];
+  return romans[m] || "X";
+}
+
+function getInitials(name: string): string {
+  if (!name) return "TNT";
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 1) {
+    return parts[0].slice(0, 2).toUpperCase();
+  }
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
 interface ContractWorkspaceProps {
@@ -72,16 +86,19 @@ export default function ContractWorkspace({
   userName,
   onClearSelection,
 }: ContractWorkspaceProps) {
-  // Pihak Pertama state
-  const [namaPihakPertama, setNamaPihakPertama] = useState(userName || "PIC TNT Kreatif");
+  // Pihak Pertama state (PT TNT KREATIF DIGITAL)
+  const [namaPihakPertama, setNamaPihakPertama] = useState(userName || "Safira");
   const [jabatanPihakPertama, setJabatanPihakPertama] = useState("Campaign Specialist");
-  const [perusahaanPihakPertama, setPerusahaanPihakPertama] = useState("PT TNT Kreatif Nusantara");
+  const [perusahaanPihakPertama, setPerusahaanPihakPertama] = useState("PT TNT KREATIF DIGITAL");
+  const [namaDirekturTNT, setNamaDirekturTNT] = useState("Stevani");
+  const [jabatanDirekturTNT, setJabatanDirekturTNT] = useState("Direktur");
 
-  // Format Nomor Kontrak Template
+  // Format Nomor Kontrak Template: ___/JC-TNT/[inisial]/[bulan romawi]/2026
   const today = new Date();
   const yearStr = today.getFullYear();
-  const monthStr = String(today.getMonth() + 1).padStart(2, "0");
-  const [prefixNomor, setPrefixNomor] = useState(`TNT/KTR/${yearStr}/${monthStr}`);
+  const romanMonth = getRomanMonth(today.getMonth());
+  const drafterInitials = getInitials(userName || "Safira");
+  const [prefixNomor, setPrefixNomor] = useState(`JC-TNT/${drafterInitials}/${romanMonth}/${yearStr}`);
 
   // Klausul Khusus
   const [customClauses, setCustomClauses] = useState(
@@ -118,41 +135,69 @@ export default function ContractWorkspace({
     const curDateNum = today.getDate();
     const curMonthName = monthNames[curMonth];
 
-    const contractNo = `${prefixNomor}/${activeCreator.cc_id}`;
+    const seqStr = String(previewIndex + 1).padStart(3, "0");
+    const contractNo = `${seqStr}/${prefixNomor}`;
     const rateVal = Number(activeCreator.price) || 0;
     const terbilangStr = rateVal > 0 ? `${terbilang(rateVal).trim()} rupiah` : "nol rupiah";
 
     return {
       nomorKontrak: contractNo,
       hariTanggalPerjanjian: `${curDayName} ${curDateNum} (${terbilang(curDateNum)}) ${curMonthName} tahun ${curYear} (${terbilang(curYear)})`,
+      hariPerjanjian: curDayName,
+      tanggalPerjanjian: `${curDateNum} ${curMonthName} ${curYear}`,
       tanggalKota: `Tangerang, ${curDateNum} ${curMonthName} ${curYear}`,
-      namaPerusahaan: perusahaanPihakPertama || "TNT Media",
-      alamatPerusahaan: "Gading Serpong, Tangerang",
+      tempatPerjanjian: "Tangerang",
+      namaPerusahaan: perusahaanPihakPertama || "PT TNT KREATIF DIGITAL",
+      alamatPerusahaan: "Jalan Kavling Perkebunan Raya, RT 006 / RW 013, Panunggangan Barat, Kecamatan Cibodas, Kota Tangerang, Banten 15139",
+      namaDirekturTNT: namaDirekturTNT || "Stevani",
+      jabatanDirekturTNT: jabatanDirekturTNT || "Direktur",
       teleponPerusahaan: "+62 85178230404",
       emailPerusahaan: "tntmediaaffiliate@gmail.com",
       namaPicTNT: namaPihakPertama || "Safira",
+      jabatanPicTNT: jabatanPihakPertama || "Campaign Specialist",
+
       namaKreator: activeCreator.nama_lengkap || activeCreator.nama_asli || activeCreator.username,
       usernameTikTok: activeCreator.username,
-      rekeningKreator: "-",
-      alamatKreator: "-",
+      nikKtp: activeCreator.nik || "-",
+      alamatKreator: activeCreator.alamat || "-",
       teleponKreator: activeCreator.no_whatsapp || activeCreator.contact_nomor || "-",
+      emailKreator: activeCreator.email || "-",
+
+      namaBank: activeCreator.nama_bank || "-",
+      nomorRekening: activeCreator.no_rekening || "-",
+      atasNamaRekening: activeCreator.nama_rekening || activeCreator.nama_lengkap || activeCreator.username || "-",
+      rekeningKreator: activeCreator.no_rekening ? `${activeCreator.nama_bank || ""} ${activeCreator.no_rekening} a.n ${activeCreator.nama_rekening || activeCreator.nama_lengkap}` : "-",
+
       namaCampaign: selectedCampaign?.nama || "Campaign TNT",
       namaBrand: campaignBrandName || "Brand Partner",
+      jenisCampaign: "Fee",
       qtyVt: Number(activeCreator.qty_vt) || 1,
+      qtyPhotoSlide: 0,
+      qtyLive: 0,
+      durasiKonten: "30 - 60",
+      durasiKontenTerbilang: "tiga puluh sampai enam puluh",
       periodeTayang: `${curDateNum} - ${curDateNum + 5} ${curMonthName} ${curYear}`,
       biayaHonor: rateVal,
       terbilangHonor: terbilangStr,
+      skemaPembayaran: "H+14 dari selesai Campaign sampai dengan H+21 dari selesai Campaign",
       ketentuanPembayaran: `Honor PIHAK KEDUA akan dibayarkan oleh PIHAK PERTAMA 100% maksimal H+14 setelah upload video ke ${Number(activeCreator.qty_vt) || 1}`,
+      batasWaktuRevisi: "2 (dua)",
+      jangkaWaktuTayang: "60 (enam puluh)",
       tanggalMulai: `${curDateNum} ${curMonthName} ${curYear}`,
       tanggalBerakhir: `${curDateNum} ${monthNames[(curMonth + 1) % 12]} ${curYear}`,
+      catatanTambahan: customClauses,
       customClauses,
     };
   }, [
     activeCreator,
+    previewIndex,
     selectedCampaign,
     campaignBrandName,
     namaPihakPertama,
+    jabatanPihakPertama,
     perusahaanPihakPertama,
+    namaDirekturTNT,
+    jabatanDirekturTNT,
     prefixNomor,
     customClauses,
   ]);
@@ -184,35 +229,59 @@ export default function ContractWorkspace({
 
         const rateVal = Number(c.price) || 0;
         const terbilangStr = rateVal > 0 ? `${terbilang(rateVal).trim()} rupiah` : "nol rupiah";
+        const seqStr = String(i + 1).padStart(3, "0");
         const cData: CreatorContractData = {
-          nomorKontrak: `${prefixNomor}/${c.cc_id}`,
+          nomorKontrak: `${seqStr}/${prefixNomor}`,
           hariTanggalPerjanjian: `${curDayName} ${curDateNum} (${terbilang(curDateNum)}) ${curMonthName} tahun ${curYear} (${terbilang(curYear)})`,
+          hariPerjanjian: curDayName,
+          tanggalPerjanjian: `${curDateNum} ${curMonthName} ${curYear}`,
           tanggalKota: `Tangerang, ${curDateNum} ${curMonthName} ${curYear}`,
-          namaPerusahaan: perusahaanPihakPertama || "TNT Media",
-          alamatPerusahaan: "Gading Serpong, Tangerang",
+          tempatPerjanjian: "Tangerang",
+          namaPerusahaan: perusahaanPihakPertama || "PT TNT KREATIF DIGITAL",
+          alamatPerusahaan: "Jalan Kavling Perkebunan Raya, RT 006 / RW 013, Panunggangan Barat, Kecamatan Cibodas, Kota Tangerang, Banten 15139",
+          namaDirekturTNT: namaDirekturTNT || "Stevani",
+          jabatanDirekturTNT: jabatanDirekturTNT || "Direktur",
           teleponPerusahaan: "+62 85178230404",
           emailPerusahaan: "tntmediaaffiliate@gmail.com",
           namaPicTNT: namaPihakPertama || "Safira",
+          jabatanPicTNT: jabatanPihakPertama || "Campaign Specialist",
+
           namaKreator: c.nama_lengkap || c.nama_asli || c.username,
           usernameTikTok: c.username,
-          rekeningKreator: "-",
-          alamatKreator: "-",
+          nikKtp: c.nik || "-",
+          alamatKreator: c.alamat || "-",
           teleponKreator: c.no_whatsapp || c.contact_nomor || "-",
+          emailKreator: c.email || "-",
+
+          namaBank: c.nama_bank || "-",
+          nomorRekening: c.no_rekening || "-",
+          atasNamaRekening: c.nama_rekening || c.nama_lengkap || c.username || "-",
+          rekeningKreator: c.no_rekening ? `${c.nama_bank || ""} ${c.no_rekening} a.n ${c.nama_rekening || c.nama_lengkap}` : "-",
+
           namaCampaign: selectedCampaign?.nama || "Campaign TNT",
           namaBrand: campaignBrandName || "Brand Partner",
+          jenisCampaign: "Fee",
           qtyVt: Number(c.qty_vt) || 1,
+          qtyPhotoSlide: 0,
+          qtyLive: 0,
+          durasiKonten: "30 - 60",
+          durasiKontenTerbilang: "tiga puluh sampai enam puluh",
           periodeTayang: `${curDateNum} - ${curDateNum + 5} ${curMonthName} ${curYear}`,
           biayaHonor: rateVal,
           terbilangHonor: terbilangStr,
+          skemaPembayaran: "H+14 dari selesai Campaign sampai dengan H+21 dari selesai Campaign",
           ketentuanPembayaran: `Honor PIHAK KEDUA akan dibayarkan oleh PIHAK PERTAMA 100% maksimal H+14 setelah upload video ke ${Number(c.qty_vt) || 1}`,
+          batasWaktuRevisi: "2 (dua)",
+          jangkaWaktuTayang: "60 (enam puluh)",
           tanggalMulai: `${curDateNum} ${curMonthName} ${curYear}`,
           tanggalBerakhir: `${curDateNum} ${monthNames[(curMonth + 1) % 12]} ${curYear}`,
+          catatanTambahan: customClauses,
           customClauses,
         };
 
         const blob = await pdf(<CreatorContractPdfDocument data={cData} />).toBlob();
         const safeUname = c.username.replace(/[@\\/]/g, "").trim();
-        const fname = `Kontrak_${safeUname}_${c.cc_id}.pdf`;
+        const fname = `Kontrak_${safeUname}_${seqStr}.pdf`;
         zip.file(fname, blob);
       }
 
@@ -327,37 +396,48 @@ export default function ContractWorkspace({
                 type="text"
                 value={prefixNomor}
                 onChange={(e) => setPrefixNomor(e.target.value)}
-                placeholder="TNT/KTR/2026/10"
+                placeholder="JC-TNT/SF/X/2026"
                 className="w-full text-xs mt-1 px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:ring-1 focus:ring-blue-500 font-mono text-slate-800"
               />
               <span className="text-[10px] text-slate-400 mt-0.5 block">
-                Hasil akhir nomor: {prefixNomor}/[ID_Kreator]
+                Format: [No Urut]/{prefixNomor} (Contoh: 001/{prefixNomor})
               </span>
             </div>
 
             <div className="p-3 bg-slate-50/80 rounded-xl border border-slate-200/60 space-y-2.5">
               <span className="text-[11px] font-bold text-slate-700 uppercase flex items-center gap-1.5">
                 <Building className="w-3.5 h-3.5 text-blue-600" />
-                Data Pihak Pertama (TNT Agency)
+                Data Pihak Pertama (PT TNT KREATIF DIGITAL)
               </span>
 
-              <div>
-                <label className="text-[10px] font-medium text-slate-500">Nama Penandatangan</label>
-                <input
-                  type="text"
-                  value={namaPihakPertama}
-                  onChange={(e) => setNamaPihakPertama(e.target.value)}
-                  className="w-full text-xs mt-0.5 px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-slate-800 font-medium"
-                />
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] font-medium text-slate-500">Direktur Penandatangan</label>
+                  <input
+                    type="text"
+                    value={namaDirekturTNT}
+                    onChange={(e) => setNamaDirekturTNT(e.target.value)}
+                    className="w-full text-xs mt-0.5 px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-slate-800 font-medium"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-medium text-slate-500">Jabatan Direktur</label>
+                  <input
+                    type="text"
+                    value={jabatanDirekturTNT}
+                    onChange={(e) => setJabatanDirekturTNT(e.target.value)}
+                    className="w-full text-xs mt-0.5 px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-slate-800"
+                  />
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="text-[10px] font-medium text-slate-500">Jabatan</label>
+                  <label className="text-[10px] font-medium text-slate-500">PIC / Drafter TNT</label>
                   <input
                     type="text"
-                    value={jabatanPihakPertama}
-                    onChange={(e) => setJabatanPihakPertama(e.target.value)}
+                    value={namaPihakPertama}
+                    onChange={(e) => setNamaPihakPertama(e.target.value)}
                     className="w-full text-xs mt-0.5 px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-slate-800"
                   />
                 </div>
