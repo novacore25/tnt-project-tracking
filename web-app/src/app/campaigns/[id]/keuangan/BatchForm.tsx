@@ -19,6 +19,16 @@ export interface OperationalItem {
   notes_dari_pic: string;
 }
 
+function formatHistoryNominals(items: any[]): string {
+  if (!items || items.length === 0) return "";
+  if (items.length === 1) {
+    return formatRupiah(Number(items[0].nominal || 0));
+  }
+  return items
+    .map((item, idx) => `#${idx + 1} ${formatRupiah(Number(item.nominal || 0))}`)
+    .join(", ");
+}
+
 export function BatchForm({ 
   campaignId, 
   creators, 
@@ -752,14 +762,22 @@ export function BatchForm({
                           @{c.creators?.username}
                         </td>
                         <td className="px-4 py-2 text-right font-semibold text-slate-700 flex items-center justify-end gap-2 flex-wrap">
-                          {c.hasPendingPayment && (
-                            <span className="text-xs font-semibold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full" title={`Sedang diproses di ${c.pendingBatchLabel || 'Batch Lain'}`}>
-                              Sedang Diproses ({c.pendingBatchLabel || 'Batch Lain'})
-                            </span>
-                          )}
                           {(() => {
                             const history = creatorHistory[c.id] || [];
-                            const paidItems = history.filter((h: any) => h.status === 'paid');
+                            const paidItems = history
+                              .filter((h: any) => h.status === 'paid')
+                              .sort((a: any, b: any) => (new Date(a.date || 0).getTime() - new Date(b.date || 0).getTime()) || (a.id - b.id));
+
+                            const pendingItems = history
+                              .filter((h: any) => 
+                                h.status !== 'paid' && 
+                                h.status !== 'rejected' && 
+                                h.status !== 'cancelled' && 
+                                h.batch_status !== 'paid' && 
+                                h.batch_status !== 'cancelled'
+                              )
+                              .sort((a: any, b: any) => (new Date(a.date || 0).getTime() - new Date(b.date || 0).getTime()) || (a.id - b.id));
+
                             const paidTypes = paidItems.map((h: any) => h.payment_type);
                             const count50Awal = paidTypes.filter((t: string) => t === '50_awal').length;
                             const count50Akhir = paidTypes.filter((t: string) => t === '50_akhir').length;
@@ -767,23 +785,39 @@ export function BatchForm({
                             const totalPaid = paidItems.reduce((s: number, h: any) => s + Number(h.nominal || 0), 0);
                             const remaining = Math.max(0, Number(c.price || 0) - totalPaid);
 
-                            if (hasPending50) {
-                              return (
-                                <span className="text-[11px] font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-full">
-                                  Termin 1 Terbayar: {formatRupiah(totalPaid)} • Kurang: {formatRupiah(remaining)} (Termin 2)
-                                </span>
-                              );
-                            }
+                            return (
+                              <>
+                                {pendingItems.length > 0 ? (
+                                  <span 
+                                    className="text-xs font-semibold text-amber-800 bg-amber-100 border border-amber-200 px-2.5 py-0.5 rounded-full inline-flex items-center gap-1.5"
+                                    title={`Sedang diajukan di: ${pendingItems.map((p: any) => p.batch_label || 'Batch Lain').join(', ')}`}
+                                  >
+                                    <span>Ratecard Diajukan: {formatHistoryNominals(pendingItems)}</span>
+                                  </span>
+                                ) : c.hasPendingPayment ? (
+                                  <span 
+                                    className="text-xs font-semibold text-amber-800 bg-amber-100 border border-amber-200 px-2.5 py-0.5 rounded-full" 
+                                    title={`Sedang diproses di ${c.pendingBatchLabel || 'Batch Lain'}`}
+                                  >
+                                    Sedang Diproses ({c.pendingBatchLabel || 'Batch Lain'})
+                                  </span>
+                                ) : null}
 
-                            if (totalPaid > 0) {
-                              return (
-                                <span className="text-xs font-semibold text-emerald-800 bg-emerald-100 border border-emerald-200 px-2.5 py-0.5 rounded-full inline-flex items-center gap-1.5" title="Kreator ini sudah lunas. Dapat diajukan kembali untuk kerjasama repeat / order tambahan.">
-                                  <span>Ratecard Lunas: {formatRupiah(totalPaid)}</span>
-                                  <span className="text-[10px] text-emerald-600 font-bold uppercase tracking-wider">(Bisa Diajukan Lagi)</span>
-                                </span>
-                              );
-                            }
-                            return null;
+                                {hasPending50 ? (
+                                  <span className="text-[11px] font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-full">
+                                    Termin 1 Terbayar: {formatHistoryNominals(paidItems)} • Kurang: {formatRupiah(remaining)} (Termin 2)
+                                  </span>
+                                ) : paidItems.length > 0 ? (
+                                  <span 
+                                    className="text-xs font-semibold text-emerald-800 bg-emerald-100 border border-emerald-200 px-2.5 py-0.5 rounded-full inline-flex items-center gap-1.5" 
+                                    title="Kreator ini sudah lunas. Dapat diajukan kembali untuk kerjasama repeat / order tambahan."
+                                  >
+                                    <span>Ratecard Lunas: {formatHistoryNominals(paidItems)}</span>
+                                    <span className="text-[10px] text-emerald-600 font-bold uppercase tracking-wider">(Bisa Diajukan Lagi)</span>
+                                  </span>
+                                ) : null}
+                              </>
+                            );
                           })()}
                           <span>{formatRupiah(c.price)}</span>
                         </td>
