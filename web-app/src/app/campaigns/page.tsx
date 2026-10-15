@@ -4,7 +4,7 @@ import { useDatabaseStore } from "@/store/useDatabaseStore";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/Dialog";
 import Link from "next/link";
 import { useState, useRef, useEffect } from "react";
-import { Trash2, Archive, CheckCircle2, Activity, Lock, Plus, Search } from "lucide-react";
+import { Trash2, Archive, CheckCircle2, Activity, Lock, Plus, Search, Loader2 } from "lucide-react";
 import { useAuth } from "@/providers/AuthProvider";
 
 export default function CampaignsPage() {
@@ -39,8 +39,13 @@ export default function CampaignsPage() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen]);
-  const [formData, setFormData] = useState({
-    nama: '', brand_id: '', tipe_campaign: 'sales', campaign_group: 'Tim Campaign', start_date: '', end_date: '',
+  const initialFormData = {
+    nama: '',
+    brand_id: '',
+    tipe_campaign: 'sales',
+    campaign_group: 'Tim Campaign',
+    start_date: '',
+    end_date: '',
     target_gmv: '',
     target_video: '',
     target_creator: '',
@@ -54,60 +59,100 @@ export default function CampaignsPage() {
     target_creator_live_macro: '',
     target_creator_live_mega: '',
     target_views: '',
-    budget_creator_plafon: '', budget_ads_plafon: '', require_client_approval: false
-  });
+    budget_creator_plafon: '0',
+    budget_ads_plafon: '0',
+    require_client_approval: false
+  };
+
+  const [formData, setFormData] = useState(initialFormData);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isManager) return;
+    if (!isManager || isSubmitting) return;
 
-    const isDuplicate = campaigns.some(c => c.nama.toLowerCase() === formData.nama.toLowerCase());
+    if (!formData.nama.trim()) {
+      alert("⚠️ Harap isi Nama Campaign terlebih dahulu!");
+      return;
+    }
+
+    if (!formData.brand_id && (!isAddingNewBrand || !newBrandName.trim())) {
+      alert("⚠️ Harap pilih Brand atau buat brand baru!");
+      return;
+    }
+
+    if (!formData.start_date || !formData.end_date) {
+      alert("⚠️ Harap isi tanggal mulai (Start Date) dan tanggal selesai (End Date)!");
+      return;
+    }
+
+    const isDuplicate = campaigns.some(c => c.nama.toLowerCase() === formData.nama.trim().toLowerCase());
     if (isDuplicate) {
-      alert(`❌ Nama campaign "${formData.nama}" sudah ada!`);
+      alert(`❌ Nama campaign "${formData.nama.trim()}" sudah ada! Harap gunakan nama lain.`);
       return;
     }
     
-    let finalBrandId = Number(formData.brand_id);
-    
-    if (isAddingNewBrand && newBrandName.trim()) {
-      const newBrand = await addBrand({ nama: newBrandName.trim(), status: 'aktif' });
-      if (newBrand) {
-        finalBrandId = newBrand.id;
-      } else {
-        alert("Gagal membuat brand baru");
+    setIsSubmitting(true);
+    try {
+      let finalBrandId = Number(formData.brand_id);
+      
+      if (isAddingNewBrand && newBrandName.trim()) {
+        const newBrand = await addBrand({ nama: newBrandName.trim(), status: 'aktif' });
+        if (newBrand) {
+          finalBrandId = newBrand.id;
+        } else {
+          alert("❌ Gagal membuat brand baru.");
+          setIsSubmitting(false);
+          return;
+        }
+      } else if (!finalBrandId) {
+        alert("⚠️ Pilih brand atau buat brand baru!");
+        setIsSubmitting(false);
         return;
       }
-    } else if (!finalBrandId) {
-      alert("Pilih brand atau buat brand baru!");
-      return;
-    }
 
-    await addCampaign({
-      nama: formData.nama, brand_id: finalBrandId, tipe_campaign: formData.tipe_campaign as any,
-      start_date: formData.start_date, end_date: formData.end_date,
-      target_gmv: formData.target_gmv ? Number(formData.target_gmv) : null,
-      target_video: formData.target_video ? Number(formData.target_video) : null,
-      target_creator: formData.target_creator ? Number(formData.target_creator) : null,
-      target_creator_nano: formData.target_creator_nano ? Number(formData.target_creator_nano) : 0,
-      target_creator_micro: formData.target_creator_micro ? Number(formData.target_creator_micro) : 0,
-      target_creator_macro: formData.target_creator_macro ? Number(formData.target_creator_macro) : 0,
-      target_creator_mega: formData.target_creator_mega ? Number(formData.target_creator_mega) : 0,
-      target_creator_live: formData.target_creator_live ? Number(formData.target_creator_live) : null,
-      target_creator_live_nano: formData.target_creator_live_nano ? Number(formData.target_creator_live_nano) : 0,
-      target_creator_live_micro: formData.target_creator_live_micro ? Number(formData.target_creator_live_micro) : 0,
-      target_creator_live_macro: formData.target_creator_live_macro ? Number(formData.target_creator_live_macro) : 0,
-      target_creator_live_mega: formData.target_creator_live_mega ? Number(formData.target_creator_live_mega) : 0,
-      target_views: formData.target_views ? Number(formData.target_views) : null,
-      budget_creator_plafon: Number(formData.budget_creator_plafon || 0),
-      budget_ads_plafon: Number(formData.budget_ads_plafon || 0),
-      require_client_approval: formData.require_client_approval,
-      campaign_group: formData.campaign_group || 'Tim Campaign',
-      persiapan_14hari: null, vsa_gmv_max: null, pic: null, assist: null, file_concept_url: null, status: 'aktif', pin: null
-    });
-    setIsOpen(false);
-    setIsAddingNewBrand(false);
-    setNewBrandName('');
-    setFormData({ nama: '', brand_id: '', tipe_campaign: 'sales', campaign_group: 'Tim Campaign', start_date: '', end_date: '', target_gmv: '', target_video: '', target_creator: '', target_creator_nano: '', target_creator_micro: '', target_creator_macro: '', target_creator_mega: '', target_views: '', budget_creator_plafon: '', budget_ads_plafon: '', require_client_approval: false });
+      await addCampaign({
+        nama: formData.nama.trim(),
+        brand_id: finalBrandId,
+        tipe_campaign: formData.tipe_campaign as any,
+        start_date: formData.start_date,
+        end_date: formData.end_date,
+        target_gmv: formData.target_gmv ? Number(formData.target_gmv) : null,
+        target_video: formData.target_video ? Number(formData.target_video) : null,
+        target_creator: formData.target_creator ? Number(formData.target_creator) : null,
+        target_creator_nano: formData.target_creator_nano ? Number(formData.target_creator_nano) : 0,
+        target_creator_micro: formData.target_creator_micro ? Number(formData.target_creator_micro) : 0,
+        target_creator_macro: formData.target_creator_macro ? Number(formData.target_creator_macro) : 0,
+        target_creator_mega: formData.target_creator_mega ? Number(formData.target_creator_mega) : 0,
+        target_creator_live: formData.target_creator_live ? Number(formData.target_creator_live) : null,
+        target_creator_live_nano: formData.target_creator_live_nano ? Number(formData.target_creator_live_nano) : 0,
+        target_creator_live_micro: formData.target_creator_live_micro ? Number(formData.target_creator_live_micro) : 0,
+        target_creator_live_macro: formData.target_creator_live_macro ? Number(formData.target_creator_live_macro) : 0,
+        target_creator_live_mega: formData.target_creator_live_mega ? Number(formData.target_creator_live_mega) : 0,
+        target_views: formData.target_views ? Number(formData.target_views) : null,
+        budget_creator_plafon: Number(formData.budget_creator_plafon || 0),
+        budget_ads_plafon: Number(formData.budget_ads_plafon || 0),
+        require_client_approval: formData.require_client_approval,
+        campaign_group: formData.campaign_group || 'Tim Campaign',
+        persiapan_14hari: null,
+        vsa_gmv_max: null,
+        pic: null,
+        assist: null,
+        file_concept_url: null,
+        status: 'aktif',
+        pin: null
+      });
+
+      setIsOpen(false);
+      setIsAddingNewBrand(false);
+      setNewBrandName('');
+      setFormData(initialFormData);
+    } catch (err: any) {
+      console.error("Gagal menambahkan campaign:", err);
+      alert(`❌ Gagal membuat campaign: ${err.message || 'Terjadi kesalahan sistem'}`);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -142,7 +187,7 @@ export default function CampaignsPage() {
               <DialogHeader>
                 <DialogTitle>Tambah Campaign Baru</DialogTitle>
               </DialogHeader>
-              <form onSubmit={handleSubmit} className="space-y-4 py-4">
+              <form onSubmit={handleSubmit} noValidate className="space-y-4 py-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Nama Campaign</label>
@@ -281,8 +326,17 @@ export default function CampaignsPage() {
                   </div>
                 </div>
                 <div className="flex justify-end pt-4 gap-[10px]">
-                  <button type="button" className="btn btn-outline" onClick={() => setIsOpen(false)}>Batal</button>
-                  <button type="submit" className="btn btn-primary">Buat Campaign</button>
+                  <button type="button" disabled={isSubmitting} className="btn btn-outline" onClick={() => setIsOpen(false)}>Batal</button>
+                  <button type="submit" disabled={isSubmitting} className="btn btn-primary min-w-[140px] flex items-center justify-center gap-2">
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Menyimpan...</span>
+                      </>
+                    ) : (
+                      "Buat Campaign"
+                    )}
+                  </button>
                 </div>
               </form>
             </DialogContent>
