@@ -298,68 +298,32 @@ export default function PortalDashboardClient({ data, campaignId }: { data: any,
   };
 
   // ============================
-  // EXPORT TO EXCEL (XLSX) - LAPORAN LENGKAP & RAPIH UNTUK BRAND
+  // EXPORT TO EXCEL (EXCELJS) - LAPORAN LENGKAP, BERWARNA & BERGARIS UNTUK BRAND
   // ============================
   const handleExportExcel = async () => {
     setIsExporting(true);
     try {
-      const xlsxModule = await import('xlsx');
-      const XLSX = xlsxModule.default || xlsxModule;
-      const wb = XLSX.utils.book_new();
+      const ExcelJSModule = await import('exceljs');
+      const ExcelJS = (ExcelJSModule as any).default || ExcelJSModule;
+      const wb = new ExcelJS.Workbook();
+      wb.creator = 'TNT Project Tracking System';
+      wb.created = new Date();
 
-      // Helper untuk auto-fit lebar kolom
-      const applyAutoCols = (ws: any, rowsOrObjects: any[], isAoa: boolean = false) => {
-        const colWidths: number[] = [];
-        if (isAoa) {
-          (rowsOrObjects as any[][]).forEach(row => {
-            row.forEach((cell, idx) => {
-              const str = cell != null ? String(cell) : '';
-              colWidths[idx] = Math.max(colWidths[idx] || 0, str.length);
-            });
-          });
-        } else if (rowsOrObjects.length > 0) {
-          const keys = Object.keys(rowsOrObjects[0]);
-          keys.forEach((k, idx) => {
-            colWidths[idx] = k.length;
-          });
-          rowsOrObjects.forEach(obj => {
-            keys.forEach((k, idx) => {
-              const val = obj[k];
-              const str = val != null ? String(val) : '';
-              colWidths[idx] = Math.max(colWidths[idx] || 0, str.length);
-            });
-          });
-        }
-        ws['!cols'] = colWidths.map(w => ({ wch: Math.min(Math.max(w + 3, 11), 60) }));
+      // Style definitions
+      const thinBorder: any = {
+        top: { style: 'thin', color: { argb: 'FFD1D5DB' } },
+        left: { style: 'thin', color: { argb: 'FFD1D5DB' } },
+        bottom: { style: 'thin', color: { argb: 'FFD1D5DB' } },
+        right: { style: 'thin', color: { argb: 'FFD1D5DB' } }
       };
 
-      // Helper untuk memformat angka, mata uang, dan hyperlink pada worksheet
-      const formatSheetCells = (ws: any, options: { currencyCols?: string[]; numberCols?: string[]; linkCols?: string[] }) => {
-        if (!ws['!ref']) return;
-        const range = XLSX.utils.decode_range(ws['!ref']);
-        const headerMap: Record<number, string> = {};
-        for (let c = range.s.c; c <= range.e.c; c++) {
-          const cell = ws[XLSX.utils.encode_cell({ r: range.s.r, c })];
-          if (cell && cell.v != null) headerMap[c] = String(cell.v).trim();
-        }
-        for (let r = range.s.r + 1; r <= range.e.r; r++) {
-          for (let c = range.s.c; c <= range.e.c; c++) {
-            const addr = XLSX.utils.encode_cell({ r, c });
-            const cell = ws[addr];
-            if (!cell) continue;
-            const colName = headerMap[c] || '';
-            if (options.currencyCols?.includes(colName) && typeof cell.v === 'number') {
-              cell.z = '"Rp" #,##0';
-            } else if (options.numberCols?.includes(colName) && typeof cell.v === 'number') {
-              cell.z = '#,##0';
-            } else if (options.linkCols?.includes(colName) && typeof cell.v === 'string' && cell.v.startsWith('http')) {
-              cell.l = { Target: cell.v, Tooltip: 'Buka Video TikTok' };
-            }
-          }
-        }
+      const headerBorder: any = {
+        top: { style: 'thin', color: { argb: 'FF475569' } },
+        left: { style: 'thin', color: { argb: 'FF475569' } },
+        bottom: { style: 'medium', color: { argb: 'FF0F172A' } },
+        right: { style: 'thin', color: { argb: 'FF475569' } }
       };
 
-      // Helper format tanggal
       const formatDateStr = (d: any) => {
         if (!d) return '-';
         try {
@@ -369,70 +333,262 @@ export default function PortalDashboardClient({ data, campaignId }: { data: any,
         }
       };
 
+      // Helper pembuat sheet tabel berdesain rapi
+      const addStyledTableSheet = (
+        sheetName: string,
+        titleText: string,
+        headerColorArgb: string,
+        columns: {
+          header: string;
+          key: string;
+          width?: number;
+          align?: 'left' | 'center' | 'right';
+          isCurrency?: boolean;
+          isNumber?: boolean;
+          isLink?: boolean;
+        }[],
+        rows: any[]
+      ) => {
+        const ws = wb.addWorksheet(sheetName, {
+          views: [{ showGridLines: true }]
+        });
+
+        // 1. Title Banner
+        const titleRow = ws.addRow([titleText]);
+        titleRow.height = 30;
+        titleRow.getCell(1).font = { name: 'Calibri', size: 14, bold: true, color: { argb: 'FF0F172A' } };
+        titleRow.getCell(1).alignment = { vertical: 'middle', horizontal: 'left' };
+
+        // 2. Subtitle info
+        const subRow = ws.addRow([`Total: ${rows.length} Baris Data  |  Diexport: ${new Date().toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}`]);
+        subRow.height = 18;
+        subRow.getCell(1).font = { name: 'Calibri', size: 9.5, italic: true, color: { argb: 'FF64748B' } };
+        subRow.getCell(1).alignment = { vertical: 'middle', horizontal: 'left' };
+
+        ws.addRow([]); // Blank spacer
+
+        // 3. Table Header
+        const headerValues = columns.map(c => c.header);
+        const headerRow = ws.addRow(headerValues);
+        headerRow.height = 28;
+        headerRow.eachCell((cell: any, colIdx: number) => {
+          cell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: headerColorArgb }
+          };
+          cell.font = { name: 'Calibri', size: 10.5, bold: true, color: { argb: 'FFFFFFFF' } };
+          cell.alignment = {
+            vertical: 'middle',
+            horizontal: columns[colIdx - 1]?.align || 'left',
+            wrapText: true
+          };
+          cell.border = headerBorder;
+        });
+
+        // 4. Data Rows
+        rows.forEach((rowData, rIdx) => {
+          const rowValues = columns.map(c => rowData[c.key] ?? '-');
+          const r = ws.addRow(rowValues);
+          r.height = 22;
+          const isEven = rIdx % 2 === 1;
+          const rowBgColor = isEven ? 'FFF8FAFC' : 'FFFFFFFF';
+
+          r.eachCell((cell: any, colIdx: number) => {
+            const colDef = columns[colIdx - 1];
+            cell.fill = {
+              type: 'pattern',
+              pattern: 'solid',
+              fgColor: { argb: rowBgColor }
+            };
+            cell.border = thinBorder;
+            cell.font = { name: 'Calibri', size: 10, color: { argb: 'FF1E293B' } };
+            cell.alignment = {
+              vertical: 'middle',
+              horizontal: colDef?.align || 'left'
+            };
+
+            // Formatting
+            if (colDef?.isCurrency && typeof cell.value === 'number') {
+              cell.numFmt = '"Rp" #,##0';
+              if (cell.value > 0) {
+                cell.font = { name: 'Calibri', size: 10, bold: true, color: { argb: 'FF047857' } };
+              }
+            } else if (colDef?.isNumber && typeof cell.value === 'number') {
+              cell.numFmt = '#,##0';
+            } else if (colDef?.isLink && cell.value && String(cell.value).startsWith('http')) {
+              const url = String(cell.value);
+              cell.value = { text: 'Buka Video TikTok', hyperlink: url };
+              cell.font = { name: 'Calibri', size: 10, underline: true, color: { argb: 'FF2563EB' } };
+            }
+          });
+        });
+
+        // 5. Auto Column Widths
+        columns.forEach((col, idx) => {
+          let maxLen = col.header.length;
+          rows.forEach(r => {
+            const val = r[col.key];
+            const len = val != null ? String(val).length : 0;
+            if (len > maxLen) maxLen = len;
+          });
+          ws.getColumn(idx + 1).width = Math.min(Math.max(maxLen + 4, col.width || 12), 65);
+        });
+
+        return ws;
+      };
+
       // ─────────────────────────────────────────────
       // Sheet 1: Ringkasan Campaign (Executive Summary)
       // ─────────────────────────────────────────────
-      const summaryRows: any[][] = [
-        ['RINGKASAN PERFORMA CAMPAIGN'],
+      const wsSummary = wb.addWorksheet('Ringkasan Campaign', {
+        views: [{ showGridLines: true }]
+      });
+
+      // Title Banner
+      const titleRow = wsSummary.addRow(['RINGKASAN PERFORMA CAMPAIGN']);
+      titleRow.height = 32;
+      titleRow.getCell(1).font = { name: 'Calibri', size: 15, bold: true, color: { argb: 'FF0F172A' } };
+      titleRow.getCell(1).alignment = { vertical: 'middle', horizontal: 'left' };
+
+      const subRow = wsSummary.addRow(['Portal Resmi Brand Tracking System']);
+      subRow.height = 18;
+      subRow.getCell(1).font = { name: 'Calibri', size: 10, italic: true, color: { argb: 'FF64748B' } };
+
+      wsSummary.addRow([]); // Spacer
+
+      // Campaign Info Table
+      const infoData = [
         ['Nama Campaign', campaign?.nama || '-'],
         ['Tipe Campaign', (campaign?.tipe_campaign || '-').toUpperCase()],
-        ['Status', (campaign?.status || 'aktif').toUpperCase()],
+        ['Status Campaign', (campaign?.status || 'aktif').toUpperCase()],
         ['Periode Campaign', `${campaign?.start_date ? formatDateStr(campaign.start_date) : '-'} s/d ${campaign?.end_date ? formatDateStr(campaign.end_date) : '-'}`],
-        ['Waktu Export', new Date().toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })],
-        [],
-        ['INDIKATOR PENCAPAIAN UTAMA (KPI)', 'TARGET', 'REALISASI', 'PERSENTASE CAPAIAN'],
-        ['Total GMV Penjualan', Number(campaign?.target_gmv) || 0, totalAllGmv, `${percentGmv}%`],
-        ['GMV Penjualan Organik', '-', totalOrganic, '-'],
-        ['GMV Video Shopping Ads', '-', totalAdsGmv, '-'],
-        ['Total Capaian Video (VT)', Number(campaign?.target_video) || 0, totalCampaignVideos, `${percentVideo}%`],
-        ['Total Kreator Approved', Number(campaign?.target_creator) || 0, totalApprovedCreators, `${percentCapaiCreator}%`],
-        ['Total Livestream', Number(campaign?.target_live) || 0, totalCampaignLivestreams, '-'],
-        ['Total Video Views', Number(campaign?.target_views) || 0, totalCampaignViews, '-'],
-        ['Total Video Likes', '-', totalCampaignLikes, '-'],
-        ['Total Item Terjual (Pcs)', '-', totalItemsSold || 0, '-'],
-        [],
-        ['RINGKASAN PENJUALAN PER PRODUK / SKU'],
-        ['No', 'Product ID', 'Nama Produk', 'Total GMV', 'Item Terjual (Pcs)']
+        ['Waktu Export Data', new Date().toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })]
       ];
 
+      infoData.forEach(([label, val]) => {
+        const r = wsSummary.addRow([label, val]);
+        r.height = 22;
+        r.getCell(1).font = { name: 'Calibri', size: 10, bold: true, color: { argb: 'FF334155' } };
+        r.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
+        r.getCell(1).border = thinBorder;
+        r.getCell(2).font = { name: 'Calibri', size: 10, color: { argb: 'FF0F172A' } };
+        r.getCell(2).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFFFF' } };
+        r.getCell(2).border = thinBorder;
+      });
+
+      wsSummary.addRow([]); // Spacer
+
+      // Section 1: KPI
+      const kpiTitleRow = wsSummary.addRow(['INDIKATOR PENCAPAIAN UTAMA (KPI)']);
+      kpiTitleRow.height = 24;
+      kpiTitleRow.getCell(1).font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FF1E3A8A' } };
+
+      const kpiHeaderRow = wsSummary.addRow(['Indikator Metrik', 'Target Campaign', 'Realisasi Saat Ini', 'Persentase Capaian']);
+      kpiHeaderRow.height = 28;
+      kpiHeaderRow.eachCell((cell: any, cIdx: number) => {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A8A' } };
+        cell.font = { name: 'Calibri', size: 10.5, bold: true, color: { argb: 'FFFFFFFF' } };
+        cell.border = headerBorder;
+        cell.alignment = { vertical: 'middle', horizontal: cIdx === 1 ? 'left' : (cIdx === 4 ? 'center' : 'right') };
+      });
+
+      const kpiItems = [
+        { label: 'Total GMV Penjualan', target: Number(campaign?.target_gmv) || 0, realisasi: totalAllGmv, percent: `${percentGmv}%`, isCurrency: true },
+        { label: 'GMV Penjualan Organik', target: null, realisasi: totalOrganic, percent: '-', isCurrency: true },
+        { label: 'GMV Video Shopping Ads', target: null, realisasi: totalAdsGmv, percent: '-', isCurrency: true },
+        { label: 'Total Capaian Video (VT)', target: Number(campaign?.target_video) || 0, realisasi: totalCampaignVideos, percent: `${percentVideo}%`, isNumber: true },
+        { label: 'Total Kreator Approved', target: Number(campaign?.target_creator) || 0, realisasi: totalApprovedCreators, percent: `${percentCapaiCreator}%`, isNumber: true },
+        { label: 'Total Livestream', target: Number(campaign?.target_live) || 0, realisasi: totalCampaignLivestreams, percent: '-', isNumber: true },
+        { label: 'Total Video Views', target: Number(campaign?.target_views) || 0, realisasi: totalCampaignViews, percent: '-', isNumber: true },
+        { label: 'Total Video Likes', target: null, realisasi: totalCampaignLikes, percent: '-', isNumber: true },
+        { label: 'Total Item Terjual (Pcs)', target: null, realisasi: totalItemsSold || 0, percent: '-', isNumber: true }
+      ];
+
+      kpiItems.forEach((kpi, idx) => {
+        const r = wsSummary.addRow([
+          kpi.label,
+          kpi.target !== null ? kpi.target : '-',
+          kpi.realisasi,
+          kpi.percent
+        ]);
+        r.height = 22;
+        const rowBg = idx % 2 === 1 ? 'FFF8FAFC' : 'FFFFFFFF';
+
+        r.eachCell((cell: any, colIdx: number) => {
+          cell.border = thinBorder;
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: rowBg } };
+          cell.font = { name: 'Calibri', size: 10, color: { argb: 'FF1E293B' } };
+          cell.alignment = { vertical: 'middle', horizontal: colIdx === 1 ? 'left' : (colIdx === 4 ? 'center' : 'right') };
+
+          if (kpi.isCurrency && typeof cell.value === 'number') {
+            cell.numFmt = '"Rp" #,##0';
+            if (colIdx === 3) {
+              cell.font = { name: 'Calibri', size: 10, bold: true, color: { argb: 'FF047857' } };
+            }
+          } else if (kpi.isNumber && typeof cell.value === 'number') {
+            cell.numFmt = '#,##0';
+            if (colIdx === 3) {
+              cell.font = { name: 'Calibri', size: 10, bold: true };
+            }
+          }
+        });
+      });
+
+      wsSummary.addRow([]); // Spacer
+
+      // Section 2: SKU Performance
+      const skuTitleRow = wsSummary.addRow(['PERFORMA PENJUALAN PER PRODUK / SKU']);
+      skuTitleRow.height = 24;
+      skuTitleRow.getCell(1).font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FF334155' } };
+
+      const skuHeaderRow = wsSummary.addRow(['No', 'Product ID', 'Nama Produk', 'Total GMV', 'Item Terjual (Pcs)']);
+      skuHeaderRow.height = 28;
+      skuHeaderRow.eachCell((cell: any, cIdx: number) => {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF334155' } };
+        cell.font = { name: 'Calibri', size: 10.5, bold: true, color: { argb: 'FFFFFFFF' } };
+        cell.border = headerBorder;
+        cell.alignment = { vertical: 'middle', horizontal: cIdx === 1 ? 'center' : (cIdx === 4 || cIdx === 5 ? 'right' : 'left') };
+      });
+
       (salesPerProduct || []).forEach((p: any, idx: number) => {
-        summaryRows.push([
+        const r = wsSummary.addRow([
           idx + 1,
           p.product_id || '-',
           p.nama_produk || '-',
           Number(p.gmv) || 0,
           Number(p.items_sold) || 0
         ]);
+        r.height = 22;
+        const rowBg = idx % 2 === 1 ? 'FFF8FAFC' : 'FFFFFFFF';
+
+        r.eachCell((cell: any, colIdx: number) => {
+          cell.border = thinBorder;
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: rowBg } };
+          cell.font = { name: 'Calibri', size: 10, color: { argb: 'FF1E293B' } };
+          if (colIdx === 1) cell.alignment = { vertical: 'middle', horizontal: 'center' };
+          else if (colIdx === 2 || colIdx === 3) cell.alignment = { vertical: 'middle', horizontal: 'left' };
+          else cell.alignment = { vertical: 'middle', horizontal: 'right' };
+
+          if (colIdx === 4 && typeof cell.value === 'number') {
+            cell.numFmt = '"Rp" #,##0';
+            cell.font = { name: 'Calibri', size: 10, bold: true, color: { argb: 'FF047857' } };
+          } else if (colIdx === 5 && typeof cell.value === 'number') {
+            cell.numFmt = '#,##0';
+          }
+        });
       });
 
-      const wsSummary = XLSX.utils.aoa_to_sheet(summaryRows);
-      applyAutoCols(wsSummary, summaryRows, true);
-
-      // Format sel Summary khusus KPI
-      const summaryRange = XLSX.utils.decode_range(wsSummary['!ref'] || 'A1:A1');
-      for (let r = 8; r <= 10; r++) {
-        const cTarget = wsSummary[XLSX.utils.encode_cell({ r, c: 1 })];
-        const cRealisasi = wsSummary[XLSX.utils.encode_cell({ r, c: 2 })];
-        if (cTarget && typeof cTarget.v === 'number') cTarget.z = '"Rp" #,##0';
-        if (cRealisasi && typeof cRealisasi.v === 'number') cRealisasi.z = '"Rp" #,##0';
-      }
-      for (let r = 11; r <= 16; r++) {
-        const cTarget = wsSummary[XLSX.utils.encode_cell({ r, c: 1 })];
-        const cRealisasi = wsSummary[XLSX.utils.encode_cell({ r, c: 2 })];
-        if (cTarget && typeof cTarget.v === 'number') cTarget.z = '#,##0';
-        if (cRealisasi && typeof cRealisasi.v === 'number') cRealisasi.z = '#,##0';
-      }
-      // Format SKU rows
-      for (let r = 19; r <= summaryRange.e.r; r++) {
-        const cGmv = wsSummary[XLSX.utils.encode_cell({ r, c: 3 })];
-        const cQty = wsSummary[XLSX.utils.encode_cell({ r, c: 4 })];
-        if (cGmv && typeof cGmv.v === 'number') cGmv.z = '"Rp" #,##0';
-        if (cQty && typeof cQty.v === 'number') cQty.z = '#,##0';
-      }
-      XLSX.utils.book_append_sheet(wb, wsSummary, 'Ringkasan Campaign');
+      wsSummary.columns = [
+        { width: 28 },
+        { width: 28 },
+        { width: 45 },
+        { width: 22 },
+        { width: 20 }
+      ];
 
       // ─────────────────────────────────────────────
-      // Sheet 2: Performa Bulanan (Monthly Stats)
+      // Sheet 2: Performa Bulanan (Monthly Breakdown)
       // ─────────────────────────────────────────────
       const monthlyRows = (data.monthlyStats || []).map((m: any) => {
         let monthLabel = m.month || '-';
@@ -442,25 +598,31 @@ export default function PortalDashboardClient({ data, campaignId }: { data: any,
         } catch {}
 
         return {
-          'Bulan': monthLabel,
-          'Total GMV': Number(m.gmvTotal) || 0,
-          'Sales Organik': Number(m.gmvOrganic) || 0,
-          'Video Shopping Ads': Number(m.gmvAds) || 0,
-          'Video Diposting (VT)': Number(m.totalVideos) || 0,
-          'Kreator Aktif VT': Number(m.totalVideoCreators) || 0,
-          'Sesi Livestream': Number(m.totalLiveSessions) || 0
+          month: monthLabel,
+          gmvTotal: Number(m.gmvTotal) || 0,
+          gmvOrganic: Number(m.gmvOrganic) || 0,
+          gmvAds: Number(m.gmvAds) || 0,
+          totalVideos: Number(m.totalVideos) || 0,
+          totalVideoCreators: Number(m.totalVideoCreators) || 0,
+          totalLiveSessions: Number(m.totalLiveSessions) || 0
         };
       });
 
-      const wsMonthly = XLSX.utils.json_to_sheet(monthlyRows.length > 0 ? monthlyRows : [{ 'Info': 'Tidak ada data bulanan' }]);
-      if (monthlyRows.length > 0) {
-        applyAutoCols(wsMonthly, monthlyRows);
-        formatSheetCells(wsMonthly, {
-          currencyCols: ['Total GMV', 'Sales Organik', 'Video Shopping Ads'],
-          numberCols: ['Video Diposting (VT)', 'Kreator Aktif VT', 'Sesi Livestream']
-        });
-      }
-      XLSX.utils.book_append_sheet(wb, wsMonthly, 'Performa Bulanan');
+      addStyledTableSheet(
+        'Performa Bulanan',
+        'PERFORMA BULANAN CAMPAIGN',
+        'FF3730A3', // Deep Indigo
+        [
+          { header: 'Bulan', key: 'month', width: 20, align: 'left' },
+          { header: 'Total GMV', key: 'gmvTotal', width: 22, align: 'right', isCurrency: true },
+          { header: 'Sales Organik', key: 'gmvOrganic', width: 22, align: 'right', isCurrency: true },
+          { header: 'Video Shopping Ads', key: 'gmvAds', width: 22, align: 'right', isCurrency: true },
+          { header: 'Video Diposting (VT)', key: 'totalVideos', width: 20, align: 'right', isNumber: true },
+          { header: 'Kreator Aktif VT', key: 'totalVideoCreators', width: 18, align: 'right', isNumber: true },
+          { header: 'Sesi Livestream', key: 'totalLiveSessions', width: 18, align: 'right', isNumber: true }
+        ],
+        monthlyRows
+      );
 
       // ─────────────────────────────────────────────
       // Sheet 3: Listing Kreator (All & Approved)
@@ -470,35 +632,51 @@ export default function PortalDashboardClient({ data, campaignId }: { data: any,
         const gmvAds = Number(cc.gmv_ads) || 0;
         const totGmv = gmvOrg + gmvAds;
         return {
-          'No': idx + 1,
-          'Username': cc.creators?.username || cc.username || 'Unknown',
-          'Nama Kreator': cc.creators?.nama_asli || cc.nama_asli || '-',
-          'Tier': cc.tier || 'Nano',
-          'Level': cc.level || '-',
-          'Followers': Number(cc.followers) || 0,
-          'Tipe Konten': cc.content_type || '-',
-          'Target VT': Number(cc.qty_vt) || 0,
-          'Target Live': Number(cc.qty_live) || 0,
-          'Status Internal': cc.approval === 'approved' ? 'Approved' : (cc.approval === 'alternate' ? 'Alternate' : 'Pending'),
-          'Status Approval Brand': cc.client_approval === 'approved' ? 'Approved' : (cc.client_approval === 'rejected' ? 'Rejected' : 'Pending Review'),
-          'Total GMV': totGmv,
-          'GMV Organik': gmvOrg,
-          'GMV Ads': gmvAds,
-          'Item Terjual': Number(cc.items_sold) || 0,
-          'Total Video (VT)': Number(cc.total_vt) || 0,
-          'Total Livestream': Number(cc.total_livestreams) || 0
+          no: idx + 1,
+          username: cc.creators?.username || cc.username || 'Unknown',
+          nama_asli: cc.creators?.nama_asli || cc.nama_asli || '-',
+          tier: cc.tier || 'Nano',
+          level: cc.level || '-',
+          followers: Number(cc.followers) || 0,
+          content_type: cc.content_type || '-',
+          qty_vt: Number(cc.qty_vt) || 0,
+          qty_live: Number(cc.qty_live) || 0,
+          status_internal: cc.approval === 'approved' ? 'Approved' : (cc.approval === 'alternate' ? 'Alternate' : 'Pending'),
+          status_client: cc.client_approval === 'approved' ? 'Approved' : (cc.client_approval === 'rejected' ? 'Rejected' : 'Pending Review'),
+          total_gmv: totGmv,
+          gmv_organic: gmvOrg,
+          gmv_ads: gmvAds,
+          items_sold: Number(cc.items_sold) || 0,
+          total_vt: Number(cc.total_vt) || 0,
+          total_livestreams: Number(cc.total_livestreams) || 0
         };
       });
 
-      const wsCreators = XLSX.utils.json_to_sheet(creatorRows.length > 0 ? creatorRows : [{ 'Info': 'Tidak ada data kreator' }]);
-      if (creatorRows.length > 0) {
-        applyAutoCols(wsCreators, creatorRows);
-        formatSheetCells(wsCreators, {
-          currencyCols: ['Total GMV', 'GMV Organik', 'GMV Ads'],
-          numberCols: ['No', 'Followers', 'Target VT', 'Target Live', 'Item Terjual', 'Total Video (VT)', 'Total Livestream']
-        });
-      }
-      XLSX.utils.book_append_sheet(wb, wsCreators, 'Listing Kreator');
+      addStyledTableSheet(
+        'Listing Kreator',
+        'DAFTAR KREATOR & PERFORMA',
+        'FF065F46', // Deep Emerald
+        [
+          { header: 'No', key: 'no', width: 8, align: 'center', isNumber: true },
+          { header: 'Username Kreator', key: 'username', width: 24, align: 'left' },
+          { header: 'Nama Lengkap', key: 'nama_asli', width: 24, align: 'left' },
+          { header: 'Tier', key: 'tier', width: 12, align: 'center' },
+          { header: 'Level', key: 'level', width: 10, align: 'center' },
+          { header: 'Followers', key: 'followers', width: 16, align: 'right', isNumber: true },
+          { header: 'Tipe Konten', key: 'content_type', width: 16, align: 'center' },
+          { header: 'Target VT', key: 'qty_vt', width: 12, align: 'right', isNumber: true },
+          { header: 'Target Live', key: 'qty_live', width: 12, align: 'right', isNumber: true },
+          { header: 'Status Internal', key: 'status_internal', width: 16, align: 'center' },
+          { header: 'Status Approval Brand', key: 'status_client', width: 20, align: 'center' },
+          { header: 'Total GMV', key: 'total_gmv', width: 20, align: 'right', isCurrency: true },
+          { header: 'GMV Organik', key: 'gmv_organic', width: 20, align: 'right', isCurrency: true },
+          { header: 'GMV Ads', key: 'gmv_ads', width: 20, align: 'right', isCurrency: true },
+          { header: 'Item Terjual', key: 'items_sold', width: 14, align: 'right', isNumber: true },
+          { header: 'Total Video (VT)', key: 'total_vt', width: 16, align: 'right', isNumber: true },
+          { header: 'Total Livestream', key: 'total_livestreams', width: 16, align: 'right', isNumber: true }
+        ],
+        creatorRows
+      );
 
       // ─────────────────────────────────────────────
       // Sheet 4: Katalog Video & VT (All Videos)
@@ -525,30 +703,38 @@ export default function PortalDashboardClient({ data, campaignId }: { data: any,
           }
 
           videoRows.push({
-            'No': vCounter++,
-            'Kreator': crUsername,
-            'Tanggal Posting': postDate,
-            'Link Video TikTok': v.link_video || '-',
-            'Video ID': v.content_uid ? String(v.content_uid).replace(/^video_/, '') : '-',
-            'Konsep': v.concept || '-',
-            'Views': Number(v.views) || 0,
-            'Likes': Number(v.likes) || 0,
-            'Sales GMV': Number(v.gmv) || 0,
-            'Sumber Data': v.isAuto ? 'Auto-Sync TikTok' : 'Input Manual PIC'
+            no: vCounter++,
+            creator: crUsername,
+            post_time: postDate,
+            link_video: v.link_video || '-',
+            content_uid: v.content_uid ? String(v.content_uid).replace(/^video_/, '') : '-',
+            concept: v.concept || '-',
+            views: Number(v.views) || 0,
+            likes: Number(v.likes) || 0,
+            gmv: Number(v.gmv) || 0,
+            source: v.isAuto ? 'Auto-Sync TikTok' : 'Input Manual PIC'
           });
         });
       });
 
-      const wsVideos = XLSX.utils.json_to_sheet(videoRows.length > 0 ? videoRows : [{ 'Info': 'Tidak ada data video' }]);
-      if (videoRows.length > 0) {
-        applyAutoCols(wsVideos, videoRows);
-        formatSheetCells(wsVideos, {
-          currencyCols: ['Sales GMV'],
-          numberCols: ['No', 'Views', 'Likes'],
-          linkCols: ['Link Video TikTok']
-        });
-      }
-      XLSX.utils.book_append_sheet(wb, wsVideos, 'Katalog Video & VT');
+      addStyledTableSheet(
+        'Katalog Video & VT',
+        'KATALOG VIDEO TIKTOK & VT',
+        'FF5B21B6', // Deep Violet
+        [
+          { header: 'No', key: 'no', width: 8, align: 'center', isNumber: true },
+          { header: 'Kreator', key: 'creator', width: 24, align: 'left' },
+          { header: 'Tanggal Posting', key: 'post_time', width: 22, align: 'center' },
+          { header: 'Link Video TikTok', key: 'link_video', width: 35, align: 'left', isLink: true },
+          { header: 'Video ID / UID', key: 'content_uid', width: 24, align: 'center' },
+          { header: 'Konsep', key: 'concept', width: 18, align: 'left' },
+          { header: 'Views', key: 'views', width: 16, align: 'right', isNumber: true },
+          { header: 'Likes', key: 'likes', width: 14, align: 'right', isNumber: true },
+          { header: 'Sales GMV', key: 'gmv', width: 20, align: 'right', isCurrency: true },
+          { header: 'Sumber Data', key: 'source', width: 20, align: 'center' }
+        ],
+        videoRows
+      );
 
       // ─────────────────────────────────────────────
       // Sheet 5: Sesi Livestream (Actual Lives)
@@ -567,29 +753,39 @@ export default function PortalDashboardClient({ data, campaignId }: { data: any,
         }
 
         return {
-          'No': idx + 1,
-          'Kreator': l.creator_username || 'Unknown',
-          'Judul Livestream': l.livestream_name || '-',
-          'Tanggal & Waktu': startTimeFormatted,
-          'Durasi': l.duration_str || '-',
-          'Room ID': l.content_uid || '-',
-          'Views': views,
-          'Likes': Number(l.video_likes) || 0,
-          'Orders': Number(l.orders) || 0,
-          'GMV Live': gmv,
-          'GPM (GMV per 1K Views)': gpm
+          no: idx + 1,
+          creator: l.creator_username || 'Unknown',
+          name: l.livestream_name || '-',
+          start_time: startTimeFormatted,
+          duration: l.duration_str || '-',
+          content_uid: l.content_uid || '-',
+          views: views,
+          likes: Number(l.video_likes) || 0,
+          orders: Number(l.orders) || 0,
+          gmv: gmv,
+          gpm: gpm
         };
       });
 
-      const wsLive = XLSX.utils.json_to_sheet(liveRows.length > 0 ? liveRows : [{ 'Info': 'Tidak ada data livestream' }]);
-      if (liveRows.length > 0) {
-        applyAutoCols(wsLive, liveRows);
-        formatSheetCells(wsLive, {
-          currencyCols: ['GMV Live', 'GPM (GMV per 1K Views)'],
-          numberCols: ['No', 'Views', 'Likes', 'Orders']
-        });
-      }
-      XLSX.utils.book_append_sheet(wb, wsLive, 'Sesi Livestream');
+      addStyledTableSheet(
+        'Sesi Livestream',
+        'SESI LIVESTREAM CAMPAIGN',
+        'FF9F1239', // Dark Rose
+        [
+          { header: 'No', key: 'no', width: 8, align: 'center', isNumber: true },
+          { header: 'Kreator', key: 'creator', width: 24, align: 'left' },
+          { header: 'Judul Livestream', key: 'name', width: 30, align: 'left' },
+          { header: 'Tanggal & Waktu', key: 'start_time', width: 22, align: 'center' },
+          { header: 'Durasi', key: 'duration', width: 16, align: 'center' },
+          { header: 'Room ID', key: 'content_uid', width: 24, align: 'center' },
+          { header: 'Views', key: 'views', width: 16, align: 'right', isNumber: true },
+          { header: 'Likes', key: 'likes', width: 14, align: 'right', isNumber: true },
+          { header: 'Orders', key: 'orders', width: 12, align: 'right', isNumber: true },
+          { header: 'GMV Live', key: 'gmv', width: 20, align: 'right', isCurrency: true },
+          { header: 'GPM (GMV / 1K Views)', key: 'gpm', width: 24, align: 'right', isCurrency: true }
+        ],
+        liveRows
+      );
 
       // ─────────────────────────────────────────────
       // Sheet 6: Sampel & Pengiriman (Logistik)
@@ -613,39 +809,65 @@ export default function PortalDashboardClient({ data, campaignId }: { data: any,
         ].filter(Boolean).join(', ');
 
         return {
-          'No': idx + 1,
-          'Username Kreator': cc?.creators?.username || addr.creator_username || 'Unknown',
-          'Nama Penerima': addr.nama_penerima || '-',
-          'No WhatsApp': cc?.no_whatsapp || addr.no_whatsapp || '-',
-          'Produk / SKU': skuNames || '-',
-          'Alamat Lengkap': fullAddress || '-',
-          'Provinsi': addr.provinsi || '-',
-          'Kota / Kabupaten': addr.kabupaten_kota || '-',
-          'Kecamatan': addr.kecamatan || '-',
-          'Kelurahan': addr.kelurahan || '-',
-          'Kode Pos': addr.kode_pos || '-',
-          'Kurir Ekspedisi': addr.ekspedisi || '-',
-          'Nomor Resi': addr.resi || '-',
-          'Tanggal Kirim': tglKirim,
-          'Status Pengiriman': addr.proses || 'Belum diproses',
-          'Catatan': addr.notes || '-'
+          no: idx + 1,
+          username: cc?.creators?.username || addr.creator_username || 'Unknown',
+          nama_penerima: addr.nama_penerima || '-',
+          no_whatsapp: cc?.no_whatsapp || addr.no_whatsapp || '-',
+          skus: skuNames || '-',
+          alamat_lengkap: fullAddress || '-',
+          provinsi: addr.provinsi || '-',
+          kabupaten_kota: addr.kabupaten_kota || '-',
+          kecamatan: addr.kecamatan || '-',
+          kelurahan: addr.kelurahan || '-',
+          kode_pos: addr.kode_pos || '-',
+          ekspedisi: addr.ekspedisi || '-',
+          resi: addr.resi || '-',
+          tanggal_kirim: tglKirim,
+          proses: addr.proses || 'Belum diproses',
+          notes: addr.notes || '-'
         };
       });
 
-      const wsSamples = XLSX.utils.json_to_sheet(sampleRows.length > 0 ? sampleRows : [{ 'Info': 'Tidak ada data sampel' }]);
-      if (sampleRows.length > 0) {
-        applyAutoCols(wsSamples, sampleRows);
-        formatSheetCells(wsSamples, {
-          numberCols: ['No']
-        });
-      }
-      XLSX.utils.book_append_sheet(wb, wsSamples, 'Sampel & Pengiriman');
+      addStyledTableSheet(
+        'Sampel & Pengiriman',
+        'LOGISTIK PENGIRIMAN SAMPEL',
+        'FF334155', // Slate
+        [
+          { header: 'No', key: 'no', width: 8, align: 'center', isNumber: true },
+          { header: 'Username Kreator', key: 'username', width: 22, align: 'left' },
+          { header: 'Nama Penerima', key: 'nama_penerima', width: 22, align: 'left' },
+          { header: 'No WhatsApp', key: 'no_whatsapp', width: 18, align: 'center' },
+          { header: 'Produk / SKU', key: 'skus', width: 30, align: 'left' },
+          { header: 'Alamat Lengkap', key: 'alamat_lengkap', width: 45, align: 'left' },
+          { header: 'Provinsi', key: 'provinsi', width: 18, align: 'left' },
+          { header: 'Kota / Kabupaten', key: 'kabupaten_kota', width: 20, align: 'left' },
+          { header: 'Kecamatan', key: 'kecamatan', width: 18, align: 'left' },
+          { header: 'Kelurahan', key: 'kelurahan', width: 18, align: 'left' },
+          { header: 'Kode Pos', key: 'kode_pos', width: 12, align: 'center' },
+          { header: 'Kurir Ekspedisi', key: 'ekspedisi', width: 16, align: 'center' },
+          { header: 'Nomor Resi', key: 'resi', width: 24, align: 'center' },
+          { header: 'Tanggal Kirim', key: 'tanggal_kirim', width: 16, align: 'center' },
+          { header: 'Status Pengiriman', key: 'proses', width: 20, align: 'center' },
+          { header: 'Catatan', key: 'notes', width: 24, align: 'left' }
+        ],
+        sampleRows
+      );
 
-      // Generate nama file rapih & trigger download
+      // Generate buffer & trigger browser download
       const cleanName = (campaign?.nama || 'Campaign').replace(/[\\/:*?"<>|]/g, '_').trim();
       const exportDate = new Date().toISOString().slice(0, 10);
-      XLSX.writeFile(wb, `${cleanName}_Laporan_Lengkap_Portal_${exportDate}.xlsx`);
-      showToast("Berhasil mengekspor Laporan Lengkap Excel!", "success");
+      const buffer = await wb.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = downloadUrl;
+      a.download = `${cleanName}_Laporan_Lengkap_Portal_${exportDate}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(downloadUrl);
+
+      showToast("Berhasil mengekspor Laporan Excel Berdesain Lengkap!", "success");
 
     } catch (err) {
       console.error("Failed to export excel:", err);
