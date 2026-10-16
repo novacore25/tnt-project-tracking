@@ -298,7 +298,7 @@ export default function PortalDashboardClient({ data, campaignId }: { data: any,
   };
 
   // ============================
-  // EXPORT TO EXCEL (XLSX)
+  // EXPORT TO EXCEL (XLSX) - LAPORAN LENGKAP & RAPIH UNTUK BRAND
   // ============================
   const handleExportExcel = async () => {
     setIsExporting(true);
@@ -307,90 +307,346 @@ export default function PortalDashboardClient({ data, campaignId }: { data: any,
       const XLSX = xlsxModule.default || xlsxModule;
       const wb = XLSX.utils.book_new();
 
-    // Sheet 1: Summary
-    const summaryRows = [
-      ['Campaign', campaign.nama],
-      ['Periode', `${new Date(campaign.start_date).toLocaleDateString('id-ID')} - ${new Date(campaign.end_date).toLocaleDateString('id-ID')}`],
-      ['Total GMV', totalAllGmv],
-      ['Total Views', totalCampaignViews],
-      ['Total Video', totalCampaignVideos],
-      ['Total Livestream', totalCampaignLivestreams],
-      ['Total Kreator Approved', totalApprovedCreators],
-      ['Total Item Sold', totalItemsSold || 0],
-      [],
-      ['Top 5 Product ID by GMV'],
-      ['Product ID', 'Nama Produk', 'GMV', 'Items Sold'],
-      ...(salesPerProduct || []).slice(0, 5).map((p: any) => [p.product_id, p.nama_produk, p.gmv, p.items_sold])
-    ];
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(summaryRows), 'Summary');
+      // Helper untuk auto-fit lebar kolom
+      const applyAutoCols = (ws: any, rowsOrObjects: any[], isAoa: boolean = false) => {
+        const colWidths: number[] = [];
+        if (isAoa) {
+          (rowsOrObjects as any[][]).forEach(row => {
+            row.forEach((cell, idx) => {
+              const str = cell != null ? String(cell) : '';
+              colWidths[idx] = Math.max(colWidths[idx] || 0, str.length);
+            });
+          });
+        } else if (rowsOrObjects.length > 0) {
+          const keys = Object.keys(rowsOrObjects[0]);
+          keys.forEach((k, idx) => {
+            colWidths[idx] = k.length;
+          });
+          rowsOrObjects.forEach(obj => {
+            keys.forEach((k, idx) => {
+              const val = obj[k];
+              const str = val != null ? String(val) : '';
+              colWidths[idx] = Math.max(colWidths[idx] || 0, str.length);
+            });
+          });
+        }
+        ws['!cols'] = colWidths.map(w => ({ wch: Math.min(Math.max(w + 3, 11), 60) }));
+      };
 
-    // Sheet 2: Listing Kreator (Approved Only)
-    const creatorRows = approvalList.filter((cc: any) => cc.approval === 'approved').map((cc: any) => ({
-      'Username': cc.creators?.username || 'Unknown',
-      'Followers': cc.followers || 0,
-      'Level': cc.level || '-',
-      'Tier': cc.tier || '-',
-      'Tipe Konten': cc.content_type || '-',
-      'Progress Sampel': cc.sample_progress || '-',
-      'Status Approval': cc.client_approval || '-',
-      'GMV Organic': cc.gmv_organic || 0,
-      'GMV Ads': cc.gmv_ads || 0,
-      'Total GMV': (cc.gmv_organic || 0) + (cc.gmv_ads || 0),
-      'Item Sold': cc.items_sold || 0,
-      'Total VT': cc.total_vt || 0,
-      'Total Livestream': cc.total_livestreams || 0
-    }));
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(creatorRows), 'Listing Kreator');
+      // Helper untuk memformat angka, mata uang, dan hyperlink pada worksheet
+      const formatSheetCells = (ws: any, options: { currencyCols?: string[]; numberCols?: string[]; linkCols?: string[] }) => {
+        if (!ws['!ref']) return;
+        const range = XLSX.utils.decode_range(ws['!ref']);
+        const headerMap: Record<number, string> = {};
+        for (let c = range.s.c; c <= range.e.c; c++) {
+          const cell = ws[XLSX.utils.encode_cell({ r: range.s.r, c })];
+          if (cell && cell.v != null) headerMap[c] = String(cell.v).trim();
+        }
+        for (let r = range.s.r + 1; r <= range.e.r; r++) {
+          for (let c = range.s.c; c <= range.e.c; c++) {
+            const addr = XLSX.utils.encode_cell({ r, c });
+            const cell = ws[addr];
+            if (!cell) continue;
+            const colName = headerMap[c] || '';
+            if (options.currencyCols?.includes(colName) && typeof cell.v === 'number') {
+              cell.z = '"Rp" #,##0';
+            } else if (options.numberCols?.includes(colName) && typeof cell.v === 'number') {
+              cell.z = '#,##0';
+            } else if (options.linkCols?.includes(colName) && typeof cell.v === 'string' && cell.v.startsWith('http')) {
+              cell.l = { Target: cell.v, Tooltip: 'Buka Video TikTok' };
+            }
+          }
+        }
+      };
 
-    // Sheet 3: Video & Konten
-    const videoRows: any[] = [];
-    (videos || []).forEach((vGroup: any) => {
-      (vGroup.videos || []).forEach((v: any) => {
-        videoRows.push({
-          'Kreator': vGroup.creator_username,
-          'Link Video': v.link_video || '-',
-          'Views': v.views || 0,
-          'Likes': v.likes || 0,
-          'GMV': v.gmv || 0,
-          'Auto Tracked': v.isAuto ? 'Ya' : 'Tidak'
+      // Helper format tanggal
+      const formatDateStr = (d: any) => {
+        if (!d) return '-';
+        try {
+          return new Date(d).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
+        } catch {
+          return String(d);
+        }
+      };
+
+      // ─────────────────────────────────────────────
+      // Sheet 1: Ringkasan Campaign (Executive Summary)
+      // ─────────────────────────────────────────────
+      const summaryRows: any[][] = [
+        ['RINGKASAN PERFORMA CAMPAIGN'],
+        ['Nama Campaign', campaign?.nama || '-'],
+        ['Tipe Campaign', (campaign?.tipe_campaign || '-').toUpperCase()],
+        ['Status', (campaign?.status || 'aktif').toUpperCase()],
+        ['Periode Campaign', `${campaign?.start_date ? formatDateStr(campaign.start_date) : '-'} s/d ${campaign?.end_date ? formatDateStr(campaign.end_date) : '-'}`],
+        ['Waktu Export', new Date().toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })],
+        [],
+        ['INDIKATOR PENCAPAIAN UTAMA (KPI)', 'TARGET', 'REALISASI', 'PERSENTASE CAPAIAN'],
+        ['Total GMV Penjualan', Number(campaign?.target_gmv) || 0, totalAllGmv, `${percentGmv}%`],
+        ['GMV Penjualan Organik', '-', totalOrganic, '-'],
+        ['GMV Video Shopping Ads', '-', totalAdsGmv, '-'],
+        ['Total Capaian Video (VT)', Number(campaign?.target_video) || 0, totalCampaignVideos, `${percentVideo}%`],
+        ['Total Kreator Approved', Number(campaign?.target_creator) || 0, totalApprovedCreators, `${percentCapaiCreator}%`],
+        ['Total Livestream', Number(campaign?.target_live) || 0, totalCampaignLivestreams, '-'],
+        ['Total Video Views', Number(campaign?.target_views) || 0, totalCampaignViews, '-'],
+        ['Total Video Likes', '-', totalCampaignLikes, '-'],
+        ['Total Item Terjual (Pcs)', '-', totalItemsSold || 0, '-'],
+        [],
+        ['RINGKASAN PENJUALAN PER PRODUK / SKU'],
+        ['No', 'Product ID', 'Nama Produk', 'Total GMV', 'Item Terjual (Pcs)']
+      ];
+
+      (salesPerProduct || []).forEach((p: any, idx: number) => {
+        summaryRows.push([
+          idx + 1,
+          p.product_id || '-',
+          p.nama_produk || '-',
+          Number(p.gmv) || 0,
+          Number(p.items_sold) || 0
+        ]);
+      });
+
+      const wsSummary = XLSX.utils.aoa_to_sheet(summaryRows);
+      applyAutoCols(wsSummary, summaryRows, true);
+
+      // Format sel Summary khusus KPI
+      const summaryRange = XLSX.utils.decode_range(wsSummary['!ref'] || 'A1:A1');
+      for (let r = 8; r <= 10; r++) {
+        const cTarget = wsSummary[XLSX.utils.encode_cell({ r, c: 1 })];
+        const cRealisasi = wsSummary[XLSX.utils.encode_cell({ r, c: 2 })];
+        if (cTarget && typeof cTarget.v === 'number') cTarget.z = '"Rp" #,##0';
+        if (cRealisasi && typeof cRealisasi.v === 'number') cRealisasi.z = '"Rp" #,##0';
+      }
+      for (let r = 11; r <= 16; r++) {
+        const cTarget = wsSummary[XLSX.utils.encode_cell({ r, c: 1 })];
+        const cRealisasi = wsSummary[XLSX.utils.encode_cell({ r, c: 2 })];
+        if (cTarget && typeof cTarget.v === 'number') cTarget.z = '#,##0';
+        if (cRealisasi && typeof cRealisasi.v === 'number') cRealisasi.z = '#,##0';
+      }
+      // Format SKU rows
+      for (let r = 19; r <= summaryRange.e.r; r++) {
+        const cGmv = wsSummary[XLSX.utils.encode_cell({ r, c: 3 })];
+        const cQty = wsSummary[XLSX.utils.encode_cell({ r, c: 4 })];
+        if (cGmv && typeof cGmv.v === 'number') cGmv.z = '"Rp" #,##0';
+        if (cQty && typeof cQty.v === 'number') cQty.z = '#,##0';
+      }
+      XLSX.utils.book_append_sheet(wb, wsSummary, 'Ringkasan Campaign');
+
+      // ─────────────────────────────────────────────
+      // Sheet 2: Performa Bulanan (Monthly Stats)
+      // ─────────────────────────────────────────────
+      const monthlyRows = (data.monthlyStats || []).map((m: any) => {
+        let monthLabel = m.month || '-';
+        try {
+          const d = new Date(m.month + '-01');
+          monthLabel = d.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+        } catch {}
+
+        return {
+          'Bulan': monthLabel,
+          'Total GMV': Number(m.gmvTotal) || 0,
+          'Sales Organik': Number(m.gmvOrganic) || 0,
+          'Video Shopping Ads': Number(m.gmvAds) || 0,
+          'Video Diposting (VT)': Number(m.totalVideos) || 0,
+          'Kreator Aktif VT': Number(m.totalVideoCreators) || 0,
+          'Sesi Livestream': Number(m.totalLiveSessions) || 0
+        };
+      });
+
+      const wsMonthly = XLSX.utils.json_to_sheet(monthlyRows.length > 0 ? monthlyRows : [{ 'Info': 'Tidak ada data bulanan' }]);
+      if (monthlyRows.length > 0) {
+        applyAutoCols(wsMonthly, monthlyRows);
+        formatSheetCells(wsMonthly, {
+          currencyCols: ['Total GMV', 'Sales Organik', 'Video Shopping Ads'],
+          numberCols: ['Video Diposting (VT)', 'Kreator Aktif VT', 'Sesi Livestream']
+        });
+      }
+      XLSX.utils.book_append_sheet(wb, wsMonthly, 'Performa Bulanan');
+
+      // ─────────────────────────────────────────────
+      // Sheet 3: Listing Kreator (All & Approved)
+      // ─────────────────────────────────────────────
+      const creatorRows = (approvalList || []).map((cc: any, idx: number) => {
+        const gmvOrg = Number(cc.gmv_organic) || 0;
+        const gmvAds = Number(cc.gmv_ads) || 0;
+        const totGmv = gmvOrg + gmvAds;
+        return {
+          'No': idx + 1,
+          'Username': cc.creators?.username || cc.username || 'Unknown',
+          'Nama Kreator': cc.creators?.nama_asli || cc.nama_asli || '-',
+          'Tier': cc.tier || 'Nano',
+          'Level': cc.level || '-',
+          'Followers': Number(cc.followers) || 0,
+          'Tipe Konten': cc.content_type || '-',
+          'Target VT': Number(cc.qty_vt) || 0,
+          'Target Live': Number(cc.qty_live) || 0,
+          'Status Internal': cc.approval === 'approved' ? 'Approved' : (cc.approval === 'alternate' ? 'Alternate' : 'Pending'),
+          'Status Approval Brand': cc.client_approval === 'approved' ? 'Approved' : (cc.client_approval === 'rejected' ? 'Rejected' : 'Pending Review'),
+          'Total GMV': totGmv,
+          'GMV Organik': gmvOrg,
+          'GMV Ads': gmvAds,
+          'Item Terjual': Number(cc.items_sold) || 0,
+          'Total Video (VT)': Number(cc.total_vt) || 0,
+          'Total Livestream': Number(cc.total_livestreams) || 0
+        };
+      });
+
+      const wsCreators = XLSX.utils.json_to_sheet(creatorRows.length > 0 ? creatorRows : [{ 'Info': 'Tidak ada data kreator' }]);
+      if (creatorRows.length > 0) {
+        applyAutoCols(wsCreators, creatorRows);
+        formatSheetCells(wsCreators, {
+          currencyCols: ['Total GMV', 'GMV Organik', 'GMV Ads'],
+          numberCols: ['No', 'Followers', 'Target VT', 'Target Live', 'Item Terjual', 'Total Video (VT)', 'Total Livestream']
+        });
+      }
+      XLSX.utils.book_append_sheet(wb, wsCreators, 'Listing Kreator');
+
+      // ─────────────────────────────────────────────
+      // Sheet 4: Katalog Video & VT (All Videos)
+      // ─────────────────────────────────────────────
+      const videoRows: any[] = [];
+      let vCounter = 1;
+      (validVideos || []).forEach((creatorGroup: any) => {
+        const crUsername = creatorGroup.creator_username || 'Unknown';
+        (creatorGroup.videos || []).forEach((v: any) => {
+          if (!v.link_video && !v.content_uid) return;
+          let postDate = '-';
+          if (v.post_time) {
+            try {
+              postDate = new Date(v.post_time).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+            } catch {
+              postDate = String(v.post_time);
+            }
+          } else if (v.created_at) {
+            try {
+              postDate = new Date(v.created_at).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
+            } catch {
+              postDate = String(v.created_at);
+            }
+          }
+
+          videoRows.push({
+            'No': vCounter++,
+            'Kreator': crUsername,
+            'Tanggal Posting': postDate,
+            'Link Video TikTok': v.link_video || '-',
+            'Video ID': v.content_uid ? String(v.content_uid).replace(/^video_/, '') : '-',
+            'Konsep': v.concept || '-',
+            'Views': Number(v.views) || 0,
+            'Likes': Number(v.likes) || 0,
+            'Sales GMV': Number(v.gmv) || 0,
+            'Sumber Data': v.isAuto ? 'Auto-Sync TikTok' : 'Input Manual PIC'
+          });
         });
       });
-    });
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(videoRows.length > 0 ? videoRows : [{ 'Info': 'Tidak ada data video' }]), 'Video & Konten');
 
-    // Sheet 4: Sampel & Resi
-    const sampleRows = (samples || []).map((addr: any, idx: number) => {
-      const cc = approvalList.find((c: any) => c.id === addr.campaign_creator_id);
-      
-      const skuNames = (cc?.assigned_sku_ids || []).map((id: number) => {
-        const sku = skus?.find((s: any) => s.id === id);
-        return sku ? sku.nama_produk : '';
-      }).filter(Boolean).join(', ');
+      const wsVideos = XLSX.utils.json_to_sheet(videoRows.length > 0 ? videoRows : [{ 'Info': 'Tidak ada data video' }]);
+      if (videoRows.length > 0) {
+        applyAutoCols(wsVideos, videoRows);
+        formatSheetCells(wsVideos, {
+          currencyCols: ['Sales GMV'],
+          numberCols: ['No', 'Views', 'Likes'],
+          linkCols: ['Link Video TikTok']
+        });
+      }
+      XLSX.utils.book_append_sheet(wb, wsVideos, 'Katalog Video & VT');
 
-      return {
-        'No': idx + 1,
-        'Product': skuNames || '',
-        'Username': cc?.creators?.username || addr.creator_username || 'Unknown',
-        'No Whatsapp': cc?.no_whatsapp || '-',
-        'Nama Penerima': addr.nama_penerima || '',
-        'Nama Jalan': addr.nama_jalan || '',
-        'Provinsi': addr.provinsi || '',
-        'Kabupaten/Kota': addr.kabupaten_kota || '',
-        'Kecamatan': addr.kecamatan || '',
-        'Kelurahan': addr.kelurahan || '',
-        'Kode Pos': addr.kode_pos || '',
-        'Tanggal Kirim': addr.tanggal_kirim ? new Date(addr.tanggal_kirim).toLocaleDateString('id-ID') : '',
-        'Resi': addr.resi || '',
-        'Ekspedisi': addr.ekspedisi || '',
-        'Notes': addr.notes || '',
-        'Status': addr.proses || 'Belum diproses'
-      };
-    });
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sampleRows.length > 0 ? sampleRows : [{ 'Info': 'Tidak ada data sampel' }]), 'Sampel & Resi');
+      // ─────────────────────────────────────────────
+      // Sheet 5: Sesi Livestream (Actual Lives)
+      // ─────────────────────────────────────────────
+      const liveRows = (data.actualLives || []).map((l: any, idx: number) => {
+        const views = Number(l.video_views) || 0;
+        const gmv = Number(l.gmv) || 0;
+        const gpm = views > 0 ? Math.round((gmv / views) * 1000) : 0;
+        let startTimeFormatted = '-';
+        if (l.start_time) {
+          try {
+            startTimeFormatted = new Date(l.start_time).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+          } catch {
+            startTimeFormatted = String(l.start_time);
+          }
+        }
 
-    // Write and download
-    XLSX.writeFile(wb, `${campaign.nama}_Portal_Export_${new Date().toLocaleDateString('id-ID').replace(/\//g, '-')}.xlsx`);
-    
+        return {
+          'No': idx + 1,
+          'Kreator': l.creator_username || 'Unknown',
+          'Judul Livestream': l.livestream_name || '-',
+          'Tanggal & Waktu': startTimeFormatted,
+          'Durasi': l.duration_str || '-',
+          'Room ID': l.content_uid || '-',
+          'Views': views,
+          'Likes': Number(l.video_likes) || 0,
+          'Orders': Number(l.orders) || 0,
+          'GMV Live': gmv,
+          'GPM (GMV per 1K Views)': gpm
+        };
+      });
+
+      const wsLive = XLSX.utils.json_to_sheet(liveRows.length > 0 ? liveRows : [{ 'Info': 'Tidak ada data livestream' }]);
+      if (liveRows.length > 0) {
+        applyAutoCols(wsLive, liveRows);
+        formatSheetCells(wsLive, {
+          currencyCols: ['GMV Live', 'GPM (GMV per 1K Views)'],
+          numberCols: ['No', 'Views', 'Likes', 'Orders']
+        });
+      }
+      XLSX.utils.book_append_sheet(wb, wsLive, 'Sesi Livestream');
+
+      // ─────────────────────────────────────────────
+      // Sheet 6: Sampel & Pengiriman (Logistik)
+      // ─────────────────────────────────────────────
+      const sampleRows = (samples || []).map((addr: any, idx: number) => {
+        const cc = approvalList?.find((c: any) => c.id === addr.campaign_creator_id);
+        const skuNames = (cc?.assigned_sku_ids || []).map((id: number) => {
+          const sku = skus?.find((s: any) => s.id === id);
+          return sku ? sku.nama_produk : '';
+        }).filter(Boolean).join(', ');
+
+        const tglKirim = addr.tanggal_kirim ? formatDateStr(addr.tanggal_kirim) : '-';
+
+        const fullAddress = [
+          addr.nama_jalan,
+          addr.kelurahan ? `Kel. ${addr.kelurahan}` : '',
+          addr.kecamatan ? `Kec. ${addr.kecamatan}` : '',
+          addr.kabupaten_kota,
+          addr.provinsi,
+          addr.kode_pos
+        ].filter(Boolean).join(', ');
+
+        return {
+          'No': idx + 1,
+          'Username Kreator': cc?.creators?.username || addr.creator_username || 'Unknown',
+          'Nama Penerima': addr.nama_penerima || '-',
+          'No WhatsApp': cc?.no_whatsapp || addr.no_whatsapp || '-',
+          'Produk / SKU': skuNames || '-',
+          'Alamat Lengkap': fullAddress || '-',
+          'Provinsi': addr.provinsi || '-',
+          'Kota / Kabupaten': addr.kabupaten_kota || '-',
+          'Kecamatan': addr.kecamatan || '-',
+          'Kelurahan': addr.kelurahan || '-',
+          'Kode Pos': addr.kode_pos || '-',
+          'Kurir Ekspedisi': addr.ekspedisi || '-',
+          'Nomor Resi': addr.resi || '-',
+          'Tanggal Kirim': tglKirim,
+          'Status Pengiriman': addr.proses || 'Belum diproses',
+          'Catatan': addr.notes || '-'
+        };
+      });
+
+      const wsSamples = XLSX.utils.json_to_sheet(sampleRows.length > 0 ? sampleRows : [{ 'Info': 'Tidak ada data sampel' }]);
+      if (sampleRows.length > 0) {
+        applyAutoCols(wsSamples, sampleRows);
+        formatSheetCells(wsSamples, {
+          numberCols: ['No']
+        });
+      }
+      XLSX.utils.book_append_sheet(wb, wsSamples, 'Sampel & Pengiriman');
+
+      // Generate nama file rapih & trigger download
+      const cleanName = (campaign?.nama || 'Campaign').replace(/[\\/:*?"<>|]/g, '_').trim();
+      const exportDate = new Date().toISOString().slice(0, 10);
+      XLSX.writeFile(wb, `${cleanName}_Laporan_Lengkap_Portal_${exportDate}.xlsx`);
+      showToast("Berhasil mengekspor Laporan Lengkap Excel!", "success");
+
     } catch (err) {
       console.error("Failed to export excel:", err);
       showToast("Gagal mengekspor file Excel.", "error");
