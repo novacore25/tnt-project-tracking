@@ -272,7 +272,8 @@ export async function fetchDailyPerformancePageDataAction(campaignId: number) {
       `).catch(() => []) as Promise<any[]>,
       db.execute(sql`
         SELECT 
-          v.id, v.campaign_creator_id, v.created_at, v.link_video, v.content_uid, v.views, v.likes,
+          v.id, v.campaign_creator_id, v.created_at, v.link_video, v.content_uid,
+          0 as views, 0 as likes,
           c.username as creator_username
         FROM videos v
         JOIN campaign_creators cc ON v.campaign_creator_id = cc.id

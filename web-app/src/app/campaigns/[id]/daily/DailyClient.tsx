@@ -570,6 +570,7 @@ export default function CampaignDailyPerformanceClient({ campaignId }: { campaig
           }
 
           const username = (v.creator_username || 'unknown').toLowerCase().trim();
+          if (approvedUsernameSet.size > 0 && username !== 'unknown' && !approvedUsernameSet.has(username)) return;
 
           initGroup(uploadDateStr);
           grouped[uploadDateStr].videos.add(videoId);
