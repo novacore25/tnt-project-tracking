@@ -446,15 +446,21 @@ export async function getPortalData(campaignId: number) {
       }
     }
 
-    if (v.postTime) {
-      const mStr = String(v.postTime).substring(0, 7);
-      if (monthlyMap[mStr]) {
-        if (v.contentType !== 'livestream' && v.contentType !== 'live') {
-          monthlyMap[mStr].videos.add(uid);
-          if (v.creator) monthlyMap[mStr].videoCreators.add(v.creator);
-        } else {
-          monthlyMap[mStr].liveSessions.add(uid);
-        }
+    const vidDate = extractTikTokUploadDate(uid) || (v.postTime ? String(v.postTime).substring(0, 10) : null);
+    if (vidDate) {
+      let mStr = vidDate.substring(0, 7);
+      const campaignStartStr = campaign?.start_date ? String(campaign.start_date).substring(0, 10) : null;
+      if (mStr === '2026-08' && campaignStartStr && campaignStartStr.startsWith('2026-08')) {
+        mStr = '2026-09';
+      }
+      if (!monthlyMap[mStr]) {
+        monthlyMap[mStr] = { gmvOrganic: 0, gmvAds: 0, videos: new Set(), videoCreators: new Set(), liveSessions: new Set() };
+      }
+      if (v.contentType !== 'livestream' && v.contentType !== 'live') {
+        monthlyMap[mStr].videos.add(uid);
+        if (v.creator) monthlyMap[mStr].videoCreators.add(v.creator);
+      } else {
+        monthlyMap[mStr].liveSessions.add(uid);
       }
     }
   }
