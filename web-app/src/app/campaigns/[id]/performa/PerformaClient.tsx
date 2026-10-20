@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { TrendingUp, BarChart3, Activity, ArrowUpDown, ChevronDown, ChevronRight, ChevronUp, Edit2, Check, X, Loader2, Eye, Users, PlaySquare, Download, ShoppingCart, ExternalLink, Package, Trophy, PlayCircle } from "lucide-react";
+import { TrendingUp, BarChart3, Activity, ArrowUpDown, ChevronDown, ChevronRight, ChevronUp, Edit2, Check, X, Loader2, Eye, EyeOff, SlidersHorizontal, RotateCcw, Users, PlaySquare, Download, ShoppingCart, ExternalLink, Package, Trophy, PlayCircle } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { exportToCSV } from "@/utils/exportCsv";
@@ -45,6 +45,78 @@ export default function CampaignPerformaClient({ campaignId }: { campaignId: num
   const [masterConcepts, setMasterConcepts] = useState<any[]>([]);
   const [selectedConcept, setSelectedConcept] = useState<any>(null);
   const [aliasMap, setAliasMap] = useState<Record<string, string>>({});
+
+  // Column Visibility for "Performa per Kreator" Table
+  const [visibleColumns, setVisibleColumns] = useState<{
+    creator: boolean;
+    views: boolean;
+    totalVt: boolean;
+    totalLive: boolean;
+    itemsSoldOrg: boolean;
+    itemsSoldAds: boolean;
+    gmvOrganic: boolean;
+    gmvAds: boolean;
+    totalGmv: boolean;
+  }>({
+    creator: true,
+    views: true,
+    totalVt: true,
+    totalLive: true,
+    itemsSoldOrg: true,
+    itemsSoldAds: true,
+    gmvOrganic: true,
+    gmvAds: true,
+    totalGmv: true,
+  });
+  const [showColumnDropdown, setShowColumnDropdown] = useState(false);
+  const columnDropdownRef = React.useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('performa_creator_visible_cols');
+      if (saved) {
+        setVisibleColumns(prev => ({ ...prev, ...JSON.parse(saved) }));
+      }
+    } catch (e) {}
+  }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (columnDropdownRef.current && !columnDropdownRef.current.contains(event.target as Node)) {
+        setShowColumnDropdown(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const toggleColumn = (key: keyof typeof visibleColumns) => {
+    setVisibleColumns(prev => {
+      const next = { ...prev, [key]: !prev[key] };
+      try {
+        localStorage.setItem('performa_creator_visible_cols', JSON.stringify(next));
+      } catch (e) {}
+      return next;
+    });
+  };
+
+  const resetColumns = () => {
+    const reset = {
+      creator: true,
+      views: true,
+      totalVt: true,
+      totalLive: true,
+      itemsSoldOrg: true,
+      itemsSoldAds: true,
+      gmvOrganic: true,
+      gmvAds: true,
+      totalGmv: true,
+    };
+    setVisibleColumns(reset);
+    try {
+      localStorage.removeItem('performa_creator_visible_cols');
+    } catch (e) {}
+  };
 
   // Top 10 Leaderboard & Concepts Showcase States
   const [top10Tab, setTop10Tab] = useState<'gmv' | 'views' | 'er' | 'itemsSold'>('gmv');
@@ -1064,6 +1136,22 @@ export default function CampaignPerformaClient({ campaignId }: { campaignId: num
       videos: cVideos
     };
   }).sort((a, b) => b.total_gmv - a.total_gmv || b.total_views - a.total_views);
+
+  const availableColumns = [
+    { key: 'creator' as const, label: 'Creator' },
+    ...(isAwareness ? [{ key: 'views' as const, label: 'Views' }] : []),
+    { key: 'totalVt' as const, label: 'Total VT' },
+    { key: 'totalLive' as const, label: 'Total Live' },
+    ...(!isAwareness ? [
+      { key: 'itemsSoldOrg' as const, label: 'Item Sold (Org)' },
+      { key: 'itemsSoldAds' as const, label: 'Item Sold (Ads)' },
+    ] : []),
+    { key: 'gmvOrganic' as const, label: 'GMV Organik' },
+    { key: 'gmvAds' as const, label: 'GMV Ads' },
+    { key: 'totalGmv' as const, label: 'Total GMV' },
+  ];
+  const hiddenColumnsCount = availableColumns.filter(c => !visibleColumns[c.key]).length;
+  const visibleColSpan = Math.max(1, availableColumns.filter(c => visibleColumns[c.key]).length);
 
   return (
     <div className="space-y-[32px]">
@@ -2095,105 +2183,323 @@ export default function CampaignPerformaClient({ campaignId }: { campaignId: num
             Performa per Kreator (Approved)
             {isRefreshing && <Loader2 className="w-4 h-4 text-indigo-500 animate-spin" />}
           </h3>
-          <input 
-            type="text" 
-            placeholder="Cari username..." 
-            value={searchQuery} 
-            onChange={e => setSearchQuery(e.target.value)} 
-            className="input min-w-[200px]"
-          />
+          <div className="flex items-center gap-2.5 flex-wrap">
+            {/* Atur Kolom Popover Button */}
+            <div className="relative" ref={columnDropdownRef}>
+              <button
+                type="button"
+                onClick={() => setShowColumnDropdown(prev => !prev)}
+                className={`inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg border transition-all ${
+                  hiddenColumnsCount > 0 
+                    ? 'bg-indigo-50 border-indigo-200 text-indigo-700 shadow-xs' 
+                    : 'bg-white border-line text-slate-700 hover:bg-slate-50'
+                }`}
+                title="Atur kolom yang ingin ditampilkan atau disembunyikan untuk screenshot"
+              >
+                <SlidersHorizontal className="w-3.5 h-3.5 text-indigo-600" />
+                <span>Atur Kolom</span>
+                {hiddenColumnsCount > 0 && (
+                  <span className="bg-indigo-600 text-white text-[10px] font-bold px-1.5 py-0.2 rounded-full">
+                    {hiddenColumnsCount} hidden
+                  </span>
+                )}
+                <ChevronDown className="w-3.5 h-3.5 opacity-60" />
+              </button>
+
+              {showColumnDropdown && (
+                <div className="absolute right-0 mt-2 w-64 bg-white border border-slate-200 rounded-xl shadow-xl z-50 p-3 space-y-2 animate-in fade-in zoom-in-95 duration-150">
+                  <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                    <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                      <Eye className="w-3.5 h-3.5 text-indigo-600" /> Visibilitas Kolom
+                    </span>
+                    <button
+                      type="button"
+                      onClick={resetColumns}
+                      className="text-[11px] text-indigo-600 hover:text-indigo-800 font-semibold flex items-center gap-1"
+                      title="Tampilkan semua kolom"
+                    >
+                      <RotateCcw className="w-3 h-3" /> Reset Semua
+                    </button>
+                  </div>
+
+                  <p className="text-[11px] text-slate-500 leading-tight">
+                    Hilangkan centang untuk menyembunyikan kolom sebelum screenshot:
+                  </p>
+
+                  <div className="space-y-1 max-h-64 overflow-y-auto pt-1">
+                    {availableColumns.map(col => (
+                      <label
+                        key={col.key}
+                        className="flex items-center justify-between p-1.5 hover:bg-slate-50 rounded-lg cursor-pointer text-xs select-none transition-colors"
+                      >
+                        <span className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={visibleColumns[col.key]}
+                            onChange={() => toggleColumn(col.key)}
+                            className="w-4 h-4 rounded text-indigo-600 border-slate-300 focus:ring-indigo-500 cursor-pointer"
+                          />
+                          <span className={visibleColumns[col.key] ? 'font-medium text-slate-800' : 'text-slate-400 line-through'}>
+                            {col.label}
+                          </span>
+                        </span>
+                        {visibleColumns[col.key] ? (
+                          <Eye className="w-3.5 h-3.5 text-slate-400" />
+                        ) : (
+                          <EyeOff className="w-3.5 h-3.5 text-rose-500" />
+                        )}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <input 
+              type="text" 
+              placeholder="Cari username..." 
+              value={searchQuery} 
+              onChange={e => setSearchQuery(e.target.value)} 
+              className="input min-w-[200px]"
+            />
+          </div>
         </div>
         <div className="tbl-wrap !border-0 !rounded-none">
           <table className="w-full">
             <thead className="border-b border-line">
               <tr className="hover:bg-transparent">
-                <th className="py-[16px] cursor-pointer hover:bg-slate-50 transition-colors select-none" onClick={() => handleSort('username')}>Creator <ArrowUpDown className="w-3 h-3 inline ml-[4px]"/></th>
-                
-                {isAwareness && (
-                  <th className="py-[16px] text-center cursor-pointer hover:bg-slate-50 transition-colors select-none" onClick={() => handleSort('videoViews')}>Views <ArrowUpDown className="w-3 h-3 inline ml-[4px]"/></th>
+                {visibleColumns.creator && (
+                  <th className="py-[16px] cursor-pointer hover:bg-slate-50 transition-colors select-none group" onClick={() => handleSort('username')}>
+                    <div className="flex items-center justify-between gap-1">
+                      <span>Creator <ArrowUpDown className="w-3 h-3 inline ml-[4px]"/></span>
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); toggleColumn('creator'); }}
+                        className="opacity-0 group-hover:opacity-100 p-1 hover:bg-slate-200 rounded text-slate-400 hover:text-rose-600 transition-opacity"
+                        title="Sembunyikan kolom Creator"
+                      >
+                        <EyeOff className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </th>
                 )}
                 
-                <th className="py-[16px] text-center cursor-pointer hover:bg-slate-50 transition-colors select-none" onClick={() => handleSort('totalVt')}>Total VT <ArrowUpDown className="w-3 h-3 inline ml-[4px]"/></th>
-                <th className="py-[16px] text-center cursor-pointer hover:bg-slate-50 transition-colors select-none" onClick={() => handleSort('totalLive')}>Total Live <ArrowUpDown className="w-3 h-3 inline ml-[4px]"/></th>
-                
-                {!isAwareness && (
-                  <>
-                    <th className="py-[16px] text-center cursor-pointer hover:bg-slate-50 transition-colors select-none">Item Sold (Org)</th>
-                    <th className="py-[16px] text-center cursor-pointer hover:bg-slate-50 transition-colors select-none">Item Sold (Ads)</th>
-                  </>
+                {isAwareness && visibleColumns.views && (
+                  <th className="py-[16px] text-center cursor-pointer hover:bg-slate-50 transition-colors select-none group" onClick={() => handleSort('videoViews')}>
+                    <div className="flex items-center justify-center gap-1">
+                      <span>Views <ArrowUpDown className="w-3 h-3 inline ml-[4px]"/></span>
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); toggleColumn('views'); }}
+                        className="opacity-0 group-hover:opacity-100 p-1 hover:bg-slate-200 rounded text-slate-400 hover:text-rose-600 transition-opacity"
+                        title="Sembunyikan kolom Views"
+                      >
+                        <EyeOff className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </th>
                 )}
                 
-                <th className="py-[16px] text-right cursor-pointer hover:bg-slate-50 transition-colors select-none" onClick={() => handleSort('gmvOrganic')}>GMV Organik <ArrowUpDown className="w-3 h-3 inline ml-[4px]"/></th>
+                {visibleColumns.totalVt && (
+                  <th className="py-[16px] text-center cursor-pointer hover:bg-slate-50 transition-colors select-none group" onClick={() => handleSort('totalVt')}>
+                    <div className="flex items-center justify-center gap-1">
+                      <span>Total VT <ArrowUpDown className="w-3 h-3 inline ml-[4px]"/></span>
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); toggleColumn('totalVt'); }}
+                        className="opacity-0 group-hover:opacity-100 p-1 hover:bg-slate-200 rounded text-slate-400 hover:text-rose-600 transition-opacity"
+                        title="Sembunyikan kolom Total VT"
+                      >
+                        <EyeOff className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </th>
+                )}
+
+                {visibleColumns.totalLive && (
+                  <th className="py-[16px] text-center cursor-pointer hover:bg-slate-50 transition-colors select-none group" onClick={() => handleSort('totalLive')}>
+                    <div className="flex items-center justify-center gap-1">
+                      <span>Total Live <ArrowUpDown className="w-3 h-3 inline ml-[4px]"/></span>
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); toggleColumn('totalLive'); }}
+                        className="opacity-0 group-hover:opacity-100 p-1 hover:bg-slate-200 rounded text-slate-400 hover:text-rose-600 transition-opacity"
+                        title="Sembunyikan kolom Total Live"
+                      >
+                        <EyeOff className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </th>
+                )}
                 
-                <th className="py-[16px] text-right cursor-pointer hover:bg-slate-50 transition-colors select-none" onClick={() => handleSort('gmvAds')}>GMV Ads <ArrowUpDown className="w-3 h-3 inline ml-[4px]"/></th>
-                <th className="py-[16px] text-right cursor-pointer hover:bg-slate-50 transition-colors select-none" onClick={() => handleSort('totalGmv')}>Total GMV <ArrowUpDown className="w-3 h-3 inline ml-[4px]"/></th>
+                {!isAwareness && visibleColumns.itemsSoldOrg && (
+                  <th className="py-[16px] text-center cursor-pointer hover:bg-slate-50 transition-colors select-none group">
+                    <div className="flex items-center justify-center gap-1">
+                      <span>Item Sold (Org)</span>
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); toggleColumn('itemsSoldOrg'); }}
+                        className="opacity-0 group-hover:opacity-100 p-1 hover:bg-slate-200 rounded text-slate-400 hover:text-rose-600 transition-opacity"
+                        title="Sembunyikan kolom Item Sold (Org)"
+                      >
+                        <EyeOff className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </th>
+                )}
+
+                {!isAwareness && visibleColumns.itemsSoldAds && (
+                  <th className="py-[16px] text-center cursor-pointer hover:bg-slate-50 transition-colors select-none group">
+                    <div className="flex items-center justify-center gap-1">
+                      <span>Item Sold (Ads)</span>
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); toggleColumn('itemsSoldAds'); }}
+                        className="opacity-0 group-hover:opacity-100 p-1 hover:bg-slate-200 rounded text-slate-400 hover:text-rose-600 transition-opacity"
+                        title="Sembunyikan kolom Item Sold (Ads)"
+                      >
+                        <EyeOff className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </th>
+                )}
+                
+                {visibleColumns.gmvOrganic && (
+                  <th className="py-[16px] text-right cursor-pointer hover:bg-slate-50 transition-colors select-none group" onClick={() => handleSort('gmvOrganic')}>
+                    <div className="flex items-center justify-end gap-1">
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); toggleColumn('gmvOrganic'); }}
+                        className="opacity-0 group-hover:opacity-100 p-1 hover:bg-slate-200 rounded text-slate-400 hover:text-rose-600 transition-opacity"
+                        title="Sembunyikan kolom GMV Organik"
+                      >
+                        <EyeOff className="w-3 h-3" />
+                      </button>
+                      <span>GMV Organik <ArrowUpDown className="w-3 h-3 inline ml-[4px]"/></span>
+                    </div>
+                  </th>
+                )}
+                
+                {visibleColumns.gmvAds && (
+                  <th className="py-[16px] text-right cursor-pointer hover:bg-slate-50 transition-colors select-none group" onClick={() => handleSort('gmvAds')}>
+                    <div className="flex items-center justify-end gap-1">
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); toggleColumn('gmvAds'); }}
+                        className="opacity-0 group-hover:opacity-100 p-1 hover:bg-slate-200 rounded text-slate-400 hover:text-rose-600 transition-opacity"
+                        title="Sembunyikan kolom GMV Ads"
+                      >
+                        <EyeOff className="w-3 h-3" />
+                      </button>
+                      <span>GMV Ads <ArrowUpDown className="w-3 h-3 inline ml-[4px]"/></span>
+                    </div>
+                  </th>
+                )}
+
+                {visibleColumns.totalGmv && (
+                  <th className="py-[16px] text-right cursor-pointer hover:bg-slate-50 transition-colors select-none group" onClick={() => handleSort('totalGmv')}>
+                    <div className="flex items-center justify-end gap-1">
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); toggleColumn('totalGmv'); }}
+                        className="opacity-0 group-hover:opacity-100 p-1 hover:bg-slate-200 rounded text-slate-400 hover:text-rose-600 transition-opacity"
+                        title="Sembunyikan kolom Total GMV"
+                      >
+                        <EyeOff className="w-3 h-3" />
+                      </button>
+                      <span>Total GMV <ArrowUpDown className="w-3 h-3 inline ml-[4px]"/></span>
+                    </div>
+                  </th>
+                )}
               </tr>
             </thead>
             <tbody>
               {filteredCreatorStats.length === 0 ? (
                 <tr>
-                  <td colSpan={isAwareness ? 8 : 8} className="text-center py-[32px] text-text-soft">Belum ada data kreator yang di-approve atau cocok dengan pencarian.</td>
+                  <td colSpan={visibleColSpan} className="text-center py-[32px] text-text-soft">Belum ada data kreator yang di-approve atau cocok dengan pencarian.</td>
+                </tr>
+              ) : availableColumns.every(col => !visibleColumns[col.key]) ? (
+                <tr>
+                  <td colSpan={visibleColSpan} className="text-center py-[32px] text-text-soft">
+                    Semua kolom sedang disembunyikan. <button type="button" onClick={resetColumns} className="text-indigo-600 font-bold underline ml-1 hover:text-indigo-800">Tampilkan Kembali Semua Kolom</button>
+                  </td>
                 </tr>
               ) : (
                 paginatedStats.map((c) => (
-                  <tr key={c.id} className="transition-all duration-300 border-b border-line">
-                    <td>
-                      <div className="flex flex-col gap-1 items-start">
-                        <Link href={`/creator-pool/${c.creator_id}`} className="font-semibold text-blue-600 hover:underline">
-                          @{c.username}
-                        </Link>
-                        {c.concepts && c.concepts.length > 0 && (
-                          <div className="flex flex-wrap gap-1 mt-0.5">
-                            {c.concepts.map((conceptNumber: string) => (
-                              <button 
-                                key={conceptNumber} 
-                                onClick={() => {
-                                  const found = masterConcepts.find(mc => String(mc.no_konsep) === String(conceptNumber));
-                                  if (found) setSelectedConcept(found);
-                                }}
-                                className="text-[10px] font-bold bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded border border-indigo-100/50 leading-none hover:bg-indigo-100 transition-colors"
-                              >
-                                Konsep #{conceptNumber}
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </td>
+                  <tr key={c.id} className="transition-all duration-300 border-b border-line hover:bg-slate-50/70">
+                    {visibleColumns.creator && (
+                      <td>
+                        <div className="flex flex-col gap-1 items-start">
+                          <Link href={`/creator-pool/${c.creator_id}`} className="font-semibold text-blue-600 hover:underline">
+                            @{c.username}
+                          </Link>
+                          {c.concepts && c.concepts.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-0.5">
+                              {c.concepts.map((conceptNumber: string) => (
+                                <button 
+                                  key={conceptNumber} 
+                                  onClick={() => {
+                                    const found = masterConcepts.find(mc => String(mc.no_konsep) === String(conceptNumber));
+                                    if (found) setSelectedConcept(found);
+                                  }}
+                                  className="text-[10px] font-bold bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded border border-indigo-100/50 leading-none hover:bg-indigo-100 transition-colors"
+                                >
+                                  Konsep #{conceptNumber}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                    )}
                     
-                    {isAwareness && (
+                    {isAwareness && visibleColumns.views && (
                       <td className="text-center font-bold text-indigo-700 bg-indigo-50/30">
                         {formatCompactNumber(c.videoViews)}
                       </td>
                     )}
                     
-                    <td className="text-center text-text font-medium">
-                      {c.totalVt}
-                    </td>
-                    <td className="text-center text-rose-500 font-medium">
-                      {c.totalLive}
-                    </td>
-                    
-                    {!isAwareness && (
-                      <>
-                        <td className="text-center font-bold text-text">
-                          {c.itemsSold} pcs
-                        </td>
-                        <td className="text-center font-bold text-emerald-600">
-                          {c.itemsSoldAds || 0} pcs
-                        </td>
-                      </>
+                    {visibleColumns.totalVt && (
+                      <td className="text-center text-text font-medium">
+                        {c.totalVt}
+                      </td>
+                    )}
+
+                    {visibleColumns.totalLive && (
+                      <td className="text-center text-rose-500 font-medium">
+                        {c.totalLive}
+                      </td>
                     )}
                     
-                    <td className="text-right text-text-soft">
-                      Rp {c.gmvOrganic.toLocaleString()}
-                    </td>
-                    <td className="text-right text-text-soft">
-                      Rp {c.gmvAds.toLocaleString()}
-                    </td>
-                    <td className="text-right font-bold text-text">
-                      Rp {c.totalGmv.toLocaleString()}
-                    </td>
+                    {!isAwareness && visibleColumns.itemsSoldOrg && (
+                      <td className="text-center font-bold text-text">
+                        {c.itemsSold} pcs
+                      </td>
+                    )}
+
+                    {!isAwareness && visibleColumns.itemsSoldAds && (
+                      <td className="text-center font-bold text-emerald-600">
+                        {c.itemsSoldAds || 0} pcs
+                      </td>
+                    )}
+                    
+                    {visibleColumns.gmvOrganic && (
+                      <td className="text-right text-text-soft">
+                        Rp {c.gmvOrganic.toLocaleString()}
+                      </td>
+                    )}
+
+                    {visibleColumns.gmvAds && (
+                      <td className="text-right text-text-soft">
+                        Rp {c.gmvAds.toLocaleString()}
+                      </td>
+                    )}
+
+                    {visibleColumns.totalGmv && (
+                      <td className="text-right font-bold text-text">
+                        Rp {c.totalGmv.toLocaleString()}
+                      </td>
+                    )}
                   </tr>
                 ))
               )}
