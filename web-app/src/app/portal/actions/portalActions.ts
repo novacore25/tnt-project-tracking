@@ -794,8 +794,8 @@ export async function getPortalData(campaignId: number) {
 
   const salesPerProduct = Array.from(skuSalesMap.values()).sort((a, b) => b.gmv - a.gmv);
 
-  // Status counts (matching internal: approved = approved + alternate, pending = pending)
-  const approvedCreatorsCount = rawCc.filter((cc: any) => cc.approval === 'approved' || cc.approval === 'alternate').length;
+  // Status counts (matching internal & vw_campaign_summary: approved = approved only, pending = pending)
+  const approvedCreatorsCount = rawCc.filter((cc: any) => cc.approval === 'approved').length;
   const pendingCreatorsCount = rawCc.filter((cc: any) => cc.approval === 'pending').length;
 
   // 9. Performance Ratios & Metrics
