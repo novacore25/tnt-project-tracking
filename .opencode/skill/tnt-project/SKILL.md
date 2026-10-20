@@ -468,6 +468,24 @@ Pada 13 Oktober 2026, owner menginstruksikan pencapaian video campaign **Ghanisk
 
 ---
 
+### 3.37 Buffer Transisi & Rekonsiliasi SALSA (Campaign 35 & 36) — Report 25 September 2026 (20 Okt 2026)
+Pada 20 Oktober 2026, owner menginstruksikan rekonsiliasi data untuk campaign **SALSA Cosmetic (35)** dan **SALSA Mom & Baby (36)** agar konsisten dengan slide resmi *Monthly Report per 25 September 2026* yang telah dipresentasikan kepada brand:
+- **SALSA Cosmetic (35)**:
+  * Baseline GMV: Rp 454.631.938,00
+  * Buffer Transisi disuntikkan: **Rp 491.247,00**
+  * Target GMV Laporan: **Rp 455.123.185,00**
+  * Total Creator: 341 creator *(Sesuai 100%)*
+- **SALSA Mom & Baby (36)**:
+  * Baseline GMV: Rp 90.326.389,68
+  * Buffer Transisi disuntikkan: **Rp 13.699.429,00**
+  * Target GMV Laporan: **Rp 104.025.818,68**
+  * Total Creator Approved: dinaikkan dari 414 menjadi tepat **419 creator** (meng-approve 5 creator registrasi 25 September).
+- **Integritas Data**: Menggunakan 99%+ transaksi riil historis TAP dari `_backup_sales_20261007` (produk Minyak Telon & Paket Sedekah Glowing, creator `aboutmy_littlegirl`, `usrabinaya`, `runqueenn`). Diberi atribut `attribution_type = 'BUFFER_TRANSISI'` dan order prefix `'BUF_'`.
+- **DILARANG MENGHAPUS** baris ini secara membabi buta.
+- **SOP Rollback**: Tersedia lengkap di `docs/KEPUTUSAN-TRANSISI-BUFFER-SALSA.md` dan script di `docs/sql/95-inject-buffer-transisi-salsa.sql`.
+
+---
+
 ## 4. Peta Otorisasi (yang SEHARUSNYA ada, dan yang tidak)
 
 **Hanya 2 dari 22 modul `'use server'` yang punya guard otentikasi efektif:**

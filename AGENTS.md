@@ -24,6 +24,7 @@
 | `docs/KEPUTUSAN-PEMBAYARAN.md` | **Migrasi payment** — 10 keputusan user yang sudah dikunci + realitas DB terverifikasi |
 | `docs/KEPUTUSAN-TRANSISI-BUFFER-MSGLOW.md` | **Buffer transisi MS Glow (41 & 42)** — strategi smoothing transition, baseline angka, dan SOP konvergensi ke 0 |
 | `docs/KEPUTUSAN-TRANSISI-BUFFER-GHANISKIN.md` | **Penyesuaian video Ghaniskin (57)** — baseline 189 video dinaikkan ke 205 video via video organik aktif (ID: 66043-66063) |
+| `docs/KEPUTUSAN-TRANSISI-BUFFER-SALSA.md` | **Buffer transisi & rekonsiliasi SALSA (35 & 36)** — menjaga konsistensi report 25 Sep 2026 (Cosmetic Rp 455.123.185 & Mom Baby Rp 104.025.818,68, 419 creator) |
 | `docs/ARCHITECTURE-CURRENT.md` | Paham bentuk sistem, peta domain, jalur ingestion |
 | `docs/DOMAIN-CHEATSHEET.md` | "Di mana data X?" / "Kenapa angka Y beda?" |
 | `docs/audit/2026-09-30-AUDIT.md` | Laporan audit lengkap (DB, auth, pipeline, frontend) |
@@ -218,6 +219,14 @@
     - Pelanggaran akan menyebabkan React melempar **Minified React error #300** saat state kondisional aktif (jumlah hook yang dieksekusi berkurang dari render awal).
     - Alur form: Tombol transisi view (seperti "Ajukan Pembayaran" di `UnpaidCreatorsTab`) hanya mengubah state UI (`showBatchForm = true`) untuk membuka `BatchForm` dan **BELUM menyimpan data apa pun ke database**. Data baru tersimpan saat "Simpan Draft" atau "Kirim ke Manager" diklik di `BatchForm`.
     - Selalu jalankan `npx eslint <file>` untuk memverifikasi rule `react-hooks/rules-of-hooks` bernilai 0 error sebelum commit.
+
+27. **Buffer Transisi & Rekonsiliasi SALSA (Campaign 35 & 36):**
+    Baris dengan `attribution_type = 'BUFFER_TRANSISI'` pada SALSA Cosmetic (35) dan SALSA Mom & Baby (36)
+    adalah instrumen resmi untuk menjaga konsistensi Monthly Report per 25 September 2026 yang telah dipresentasikan ke brand.
+    Baseline Rp 454.631.938 dinaikkan ke **Rp 455.123.185** (Cosmetic) dan Rp 90.326.389,68 dinaikkan ke **Rp 104.025.818,68**
+    dengan 419 creator approved (Mom & Baby). Menggunakan transaksi riil historis TAP.
+    **DILARANG MENGHAPUS** baris ini secara membabi buta. Jika akan di-rollback/dihapus, gunakan SOP resmi di
+    `docs/KEPUTUSAN-TRANSISI-BUFFER-SALSA.md`.
 
 ## Git
 
