@@ -1394,6 +1394,14 @@
         <span>⏭️ Skip Duplikat: <strong id="tnt-session-skipped" style="color:#38bdf8;">0</strong></span>
       </div>
 
+      <div style="background:rgba(255,255,255,0.05);padding:8px 10px;border-radius:10px;border:1px solid rgba(255,255,255,0.08);margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;">
+        <label for="tnt-toggle-contacts" style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:11px;color:#f1f5f9;font-weight:600;user-select:none;">
+          <input type="checkbox" id="tnt-toggle-contacts" checked style="width:16px;height:16px;accent-color:#4f46e5;cursor:pointer;">
+          <span>💬 Buka Kontak (IM Chat)</span>
+        </label>
+        <span id="tnt-toggle-hint" style="font-size:10px;color:#34d399;font-weight:700;">Lengkap (WA/Email)</span>
+      </div>
+
       <div id="tnt-status-box" style="background:rgba(79,70,229,0.15);border:1px solid rgba(99,102,241,0.3);color:#e2e8f0;padding:8px 10px;border-radius:8px;margin-bottom:12px;font-size:11px;line-height:1.4;min-height:34px;">
         Siap melakukan scraping kreator TikTok Partner Center.
       </div>
@@ -1423,6 +1431,32 @@
     `;
 
     document.body.appendChild(panelRoot);
+
+    // Load & listen toggle opsi Buka Kontak (IM Chat)
+    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+      chrome.storage.local.get(['tnt_opt_scrape_contacts'], (res) => {
+        const isChecked = res.tnt_opt_scrape_contacts !== false; // default true
+        const chk = document.getElementById('tnt-toggle-contacts');
+        const hint = document.getElementById('tnt-toggle-hint');
+        if (chk) chk.checked = isChecked;
+        if (hint) {
+          hint.textContent = isChecked ? 'Lengkap (WA/Email)' : '⚡ Cepat (Detail Saja)';
+          hint.style.color = isChecked ? '#34d399' : '#f59e0b';
+        }
+      });
+    }
+
+    document.getElementById('tnt-toggle-contacts')?.addEventListener('change', (e) => {
+      const isChecked = e.target.checked;
+      const hint = document.getElementById('tnt-toggle-hint');
+      if (hint) {
+        hint.textContent = isChecked ? 'Lengkap (WA/Email)' : '⚡ Cepat (Detail Saja)';
+        hint.style.color = isChecked ? '#34d399' : '#f59e0b';
+      }
+      if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+        chrome.storage.local.set({ tnt_opt_scrape_contacts: isChecked });
+      }
+    });
 
     document.getElementById('tnt-btn-sync-book').addEventListener('click', () => {
       updateFloatingStatus('🔄 Mengambil daftar username dari Staging Creator...');
@@ -1673,6 +1707,27 @@
         const headerContact = extractHeaderContactInfo();
         if (headerContact.email && !scrapedData.email) scrapedData.email = headerContact.email;
         if (headerContact.no_whatsapp && !scrapedData.no_whatsapp) scrapedData.no_whatsapp = headerContact.no_whatsapp;
+
+        // Cek opsi Buka Kontak (IM Chat) yang dipilih user di panel
+        let shouldScrapeContacts = true;
+        if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+          const optStore = await new Promise((resolve) => {
+            chrome.storage.local.get(['tnt_opt_scrape_contacts'], (r) => resolve(r || {}));
+          });
+          shouldScrapeContacts = optStore.tnt_opt_scrape_contacts !== false;
+        }
+
+        // JIKA OPSI KONTAK TIDAK DICENTANG (MODE CEPAT):
+        // Langsung simpan analitik & tutup tab seketika tanpa membuka IM Chat!
+        if (!shouldScrapeContacts) {
+          updateFloatingStatus(`⚡ Mode Cepat: Menyimpan @${scrapedData.username} & lanjut kreator berikutnya...`);
+          safeSendMessage({
+            action: 'SCRAPE_DETAIL_SUCCESS',
+            payload: scrapedData,
+            closeTab: true,
+          });
+          return;
+        }
 
         sessionStorage.setItem('tnt_pending_creator_scrape', JSON.stringify(scrapedData));
         if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
