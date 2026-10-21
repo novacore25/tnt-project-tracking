@@ -235,8 +235,11 @@ async function pushQueueToStaging(customQueue) {
     });
   }
 
-  // Kosongkan antrean lokal setelah dikirim ke Staging
-  await setStorage({ [STORAGE_KEYS.QUEUE]: [] });
+  // Simpan salinan cadangan terakhir agar data selalu aman
+  await setStorage({
+    tnt_last_sent_queue: queue,
+    [STORAGE_KEYS.QUEUE]: [],
+  });
   await updateAutoState({
     hasStoppedWithQueue: false,
     statusMessage: `🚀 ${queue.length} kreator berhasil dikirim ke Staging Creator!`,

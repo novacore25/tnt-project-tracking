@@ -136,9 +136,11 @@ export default function StagingCreatorPage() {
         return;
       }
 
-      localStorage.removeItem('tnt_staging_incoming_batch');
+      setImportingBatch(true);
       const res = await upsertStagingCreatorsBatchAction(parsed);
       if (res?.success) {
+        // Hanya hapus batch dari localStorage setelah server action BERHASIL
+        localStorage.removeItem('tnt_staging_incoming_batch');
         setBannerMessage({
           type: 'success',
           text: `Berhasil menambahkan ${res.upsertedCount} kreator dari ekstensi TNT Scrapping Creator ke Staging!`,
@@ -147,9 +149,18 @@ export default function StagingCreatorPage() {
       }
     } catch (err: unknown) {
       console.error('Gagal memproses batch dari ekstensi:', err);
+      const errMsg = err instanceof Error ? err.message : String(err);
+
+      // Jika error 'Server Action was not found on the server' (karena aplikasi baru di-deploy ke VPS):
+      // Refresh halaman otomatis agar browser memuat bundle JS terbaru dengan action ID baru!
+      if (errMsg.includes('was not found on the server') || errMsg.includes('Server Action')) {
+        window.location.reload();
+        return;
+      }
+
       setBannerMessage({
         type: 'error',
-        text: err instanceof Error ? err.message : 'Gagal memproses kiriman data dari ekstensi.',
+        text: errMsg || 'Gagal memproses kiriman data dari ekstensi.',
       });
     } finally {
       setImportingBatch(false);
