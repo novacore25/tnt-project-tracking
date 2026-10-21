@@ -742,8 +742,32 @@
     const exactBtn =
       document.querySelector('button[data-e2e="efbe2e11-4d42-b98a"]') ||
       document.querySelector('#workbench-container button[data-e2e="efbe2e11-4d42-b98a"]') ||
-      document.querySelector('div[data-e2e="2cc1c2ec-0582-15cc"] button');
+      document.querySelector('div[data-e2e="2cc1c2ec-0582-15cc"] button') ||
+      document.querySelector('div[class*="basicInfoContainer"] button') ||
+      document.querySelector('#workbench-container div[class*="basicInfo"] button');
     if (exactBtn) return exactBtn;
+
+    // 2. Cari tombol di area basic info panel kanan (workbench) yang bukan tombol teks 'invite' / 'leads'
+    const workbench =
+      document.querySelector('#workbench-container') ||
+      document.querySelector('div[data-e2e="ad5a2677-54bf-3441"]');
+    if (workbench) {
+      const buttons = Array.from(workbench.querySelectorAll('button'));
+      for (const btn of buttons) {
+        const txt = (btn.textContent || '').trim().toLowerCase();
+        // Tombol kontak hanya berisi ikon tanpa teks panjang
+        if (!txt.includes('invite') && !txt.includes('leads') && !txt.includes('send') && txt.length < 5) {
+          if (
+            btn.querySelector('svg') ||
+            btn.querySelector('img') ||
+            btn.classList.contains('arco-btn-secondary') ||
+            btn.classList.contains('m4b-button')
+          ) {
+            return btn;
+          }
+        }
+      }
+    }
 
     const byAttr = document.querySelector(
       'button[aria-label*="contact" i], button[title*="contact" i], button[aria-label*="kontak" i], button[title*="kontak" i]'
@@ -786,158 +810,171 @@
       }
     }
 
-    // Fallback ke tombol di area sidebar profil kanan
-    const rightSidebar = Array.from(document.querySelectorAll('div, aside, section')).find((el) => {
-      const rect = el.getBoundingClientRect();
-      return rect.right >= window.innerWidth - 30 && rect.left > window.innerWidth * 0.55 && rect.height > 250;
-    });
-    if (rightSidebar) {
-      const btn = rightSidebar.querySelector('button.arco-btn-primary, button:has(svg)');
-      if (btn) return btn;
-    }
-
     return null;
   }
 
   /**
    * Menunggu loading IM chat room selesai, lalu mengklik Contact Info dan mengekstrak nomor WA & Email.
-   * Sistem dirancang pintar: polling setiap 350ms hingga 25 detik agar menyesuaikan kecepatan loading TikTok.
+   * Sistem dirancang pintar: polling setiap 350ms, otomatis skip jika kreator tidak memiliki tombol kontak,
+   * dan dijamin selalu menutup tab serta lanjut ke antrean berikutnya.
    */
   async function waitAndScrapeImContactInfo(pendingData, notify = () => {}) {
     notify(`⏳ Menunggu IM roomchat @${pendingData.username} selesai dimuat...`);
 
     let elapsed = 0;
-    const maxTimeout = 25000;
+    const maxTimeout = 20000;
     let roundBtn = null;
+    let workbenchLoaded = false;
+    let workbenchWaitCount = 0;
 
-    while (elapsed < maxTimeout) {
-      if (isCaptchaPresent()) {
-        notify('⏸️ Captcha terdeteksi pada IM. Silakan selesaikan puzzle...');
-        safeSendMessage({ action: 'DETAIL_TAB_CAPTCHA_DETECTED' });
-        await sleep(1000);
-        continue;
+    try {
+      while (elapsed < maxTimeout) {
+        // Gunakan isCaptchaVisible() yang terdefinisi
+        if (typeof isCaptchaVisible === 'function' && isCaptchaVisible()) {
+          notify('⏸️ Captcha terdeteksi pada IM. Silakan selesaikan puzzle...');
+          safeSendMessage({ action: 'DETAIL_TAB_CAPTCHA_DETECTED' });
+          await sleep(1000);
+          continue;
+        }
+
+        // Cek apakah panel profil kanan (workbench) sudah selesai ter-render
+        const workbench =
+          document.querySelector('#workbench-container') ||
+          document.querySelector('div[data-e2e="ad5a2677-54bf-3441"]') ||
+          document.querySelector('div[class*="basicInfoContainer"]');
+
+        if (workbench) {
+          workbenchLoaded = true;
+          roundBtn = findImContactRoundButton();
+          if (roundBtn) {
+            break;
+          }
+          workbenchWaitCount += 350;
+          // Jika panel workbench sudah tampil penuh selama 4 detik namun tidak ada tombol chat -> skip
+          if (workbenchWaitCount >= 4000) {
+            break;
+          }
+        }
+
+        elapsed += 350;
+        notify(
+          `⏳ Menunggu IM roomchat @${pendingData.username} selesai dimuat (${Math.round(
+            elapsed / 1000
+          )}s)...`
+        );
+        await sleep(350);
       }
 
-      roundBtn = findImContactRoundButton();
-      if (roundBtn) {
-        break;
+      if (!roundBtn) {
+        if (workbenchLoaded) {
+          notify(`ℹ️ @${pendingData.username} tidak mencantumkan tombol kontak di IM. Melanjutkan...`);
+        } else {
+          notify(`⚠️ IM roomchat @${pendingData.username} timeout. Melanjutkan antrean...`);
+        }
+        return;
       }
 
-      elapsed += 350;
-      notify(`⏳ Menunggu IM roomchat @${pendingData.username} selesai dimuat (${Math.round(elapsed / 1000)}s)...`);
-      await sleep(350);
-    }
+      notify(`💬 Roomchat & profil @${pendingData.username} siap! Membuka Contact Info...`);
+      await sleep(randomBetween(400, 700));
+      simulateHumanClick(roundBtn);
 
-    if (!roundBtn) {
-      notify(`⚠️ IM roomchat tidak memuat tombol kontak dalam 25s. Menyimpan data profil dasar...`);
+      // Tunggu modal "Contact Info" muncul (hingga 5 detik)
+      let modalWait = 0;
+      let modalEl = null;
+      while (modalWait < 5000) {
+        modalEl =
+          document.querySelector('.arco-modal') ||
+          document.querySelector('div[role="dialog"]') ||
+          document.querySelector('.arco-modal-content');
+        if (
+          modalEl &&
+          (modalEl.querySelector('div[data-e2e="0813a01f-c400-7bbc"]') ||
+            modalEl.querySelector('.arco-modal-title') ||
+            (modalEl.innerText && modalEl.innerText.toLowerCase().includes('contact')))
+        ) {
+          break;
+        }
+        await sleep(250);
+        modalWait += 250;
+      }
+
+      // 1. Ekstraksi spesifik dari baris data-e2e terverifikasi dari TikTok Partner Center
+      if (modalEl) {
+        const contactRows = modalEl.querySelectorAll('div[data-e2e="0813a01f-c400-7bbc"]');
+        contactRows.forEach((row) => {
+          const label = (
+            row.querySelector('span[data-e2e="874d2990-4769-42bc"]')?.textContent || ''
+          ).trim().toLowerCase();
+          const val = (
+            row.querySelector('div[data-e2e="73c486d0-8321-37aa"] .inner-content')?.textContent ||
+            row.querySelector('div[data-e2e="73c486d0-8321-37aa"]')?.textContent ||
+            ''
+          ).trim();
+
+          if (label.includes('email') || val.includes('@')) {
+            const em = val.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i);
+            if (em) pendingData.email = em[1].trim().toLowerCase();
+          } else if (
+            label.includes('phone') ||
+            label.includes('wa') ||
+            label.includes('tel') ||
+            label.includes('kontak') ||
+            val.match(/(?:\+?62|08)\d{8,15}/)
+          ) {
+            const rawDigits = val.replace(/\D/g, '');
+            if (rawDigits.length >= 9 && rawDigits.length <= 16) {
+              pendingData.no_whatsapp = rawDigits.startsWith('0') ? '62' + rawDigits.slice(1) : rawDigits;
+            }
+          }
+        });
+      }
+
+      // 2. Fallback regex jika data belum lengkap
+      const modalText = modalEl ? modalEl.innerText : document.body.innerText || '';
+      if (!pendingData.email) {
+        const emailMatch = modalText.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i);
+        if (emailMatch) {
+          pendingData.email = emailMatch[1].trim().toLowerCase();
+        }
+      }
+
+      if (!pendingData.no_whatsapp) {
+        const phoneMatch =
+          modalText.match(/(?:phone|telepon|hp|no|wa|whatsapp)?[:\s]*((?:\+?62|08)[0-9\s-]{8,18})/i) ||
+          modalText.match(/(?:\+?62|08)[0-9\s-]{8,18}/);
+        if (phoneMatch) {
+          const rawDigits = phoneMatch[1].replace(/\D/g, '');
+          if (rawDigits.length >= 9 && rawDigits.length <= 16) {
+            pendingData.no_whatsapp = rawDigits.startsWith('0') ? '62' + rawDigits.slice(1) : rawDigits;
+          }
+        }
+      }
+
+      // Tutup modal menggunakan selektor resmi TikTok
+      const closeBtn = document.querySelector(
+        '.arco-modal-close-icon, span.arco-icon-hover.arco-modal-close-icon, span[aria-label="Close"]'
+      );
+      if (closeBtn) simulateHumanClick(closeBtn);
+
+      notify(`✅ Kontak @${pendingData.username}: WA: ${pendingData.no_whatsapp || '-'} | Email: ${pendingData.email || '-'}`);
+    } catch (err) {
+      console.error('Error during IM contact scrape:', err);
+      notify(`⚠️ Error ekstraksi IM: ${err?.message || err}. Menyimpan data profil...`);
+    } finally {
       sessionStorage.removeItem('tnt_pending_creator_scrape');
       if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
         chrome.storage.local.remove('tnt_pending_creator_scrape');
       }
+
+      await sleep(randomBetween(400, 700));
+
+      // DIJAMIN SELALU TERTUTUP: Tab IM ditutup dan sinyal lanjut ke antrean berikutnya dikirim!
       safeSendMessage({
         action: 'SCRAPE_DETAIL_SUCCESS',
         payload: pendingData,
         closeTab: true,
       });
-      return;
     }
-
-    notify(`💬 Roomchat & profil @${pendingData.username} siap! Membuka Contact Info...`);
-    await sleep(randomBetween(400, 700));
-    simulateHumanClick(roundBtn);
-
-    // Tunggu modal "Contact Info" muncul (hingga 5 detik)
-    let modalWait = 0;
-    let modalEl = null;
-    while (modalWait < 5000) {
-      modalEl =
-        document.querySelector('.arco-modal') ||
-        document.querySelector('div[role="dialog"]') ||
-        document.querySelector('.arco-modal-content');
-      if (
-        modalEl &&
-        (modalEl.querySelector('div[data-e2e="0813a01f-c400-7bbc"]') ||
-          modalEl.querySelector('.arco-modal-title') ||
-          (modalEl.innerText && modalEl.innerText.toLowerCase().includes('contact')))
-      ) {
-        break;
-      }
-      await sleep(250);
-      modalWait += 250;
-    }
-
-    // 1. Ekstraksi spesifik dari baris data-e2e terverifikasi dari TikTok Partner Center
-    if (modalEl) {
-      const contactRows = modalEl.querySelectorAll('div[data-e2e="0813a01f-c400-7bbc"]');
-      contactRows.forEach((row) => {
-        const label = (
-          row.querySelector('span[data-e2e="874d2990-4769-42bc"]')?.textContent || ''
-        ).trim().toLowerCase();
-        const val = (
-          row.querySelector('div[data-e2e="73c486d0-8321-37aa"] .inner-content')?.textContent ||
-          row.querySelector('div[data-e2e="73c486d0-8321-37aa"]')?.textContent ||
-          ''
-        ).trim();
-
-        if (label.includes('email') || val.includes('@')) {
-          const em = val.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i);
-          if (em) pendingData.email = em[1].trim().toLowerCase();
-        } else if (
-          label.includes('phone') ||
-          label.includes('wa') ||
-          label.includes('tel') ||
-          label.includes('kontak') ||
-          val.match(/(?:\+?62|08)\d{8,15}/)
-        ) {
-          const rawDigits = val.replace(/\D/g, '');
-          if (rawDigits.length >= 9 && rawDigits.length <= 16) {
-            pendingData.no_whatsapp = rawDigits.startsWith('0') ? '62' + rawDigits.slice(1) : rawDigits;
-          }
-        }
-      });
-    }
-
-    // 2. Fallback regex jika data belum lengkap
-    const modalText = modalEl ? modalEl.innerText : document.body.innerText || '';
-    if (!pendingData.email) {
-      const emailMatch = modalText.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i);
-      if (emailMatch) {
-        pendingData.email = emailMatch[1].trim().toLowerCase();
-      }
-    }
-
-    if (!pendingData.no_whatsapp) {
-      const phoneMatch =
-        modalText.match(/(?:phone|telepon|hp|no|wa|whatsapp)?[:\s]*((?:\+?62|08)[0-9\s-]{8,18})/i) ||
-        modalText.match(/(?:\+?62|08)[0-9\s-]{8,18}/);
-      if (phoneMatch) {
-        const rawDigits = phoneMatch[1].replace(/\D/g, '');
-        if (rawDigits.length >= 9 && rawDigits.length <= 16) {
-          pendingData.no_whatsapp = rawDigits.startsWith('0') ? '62' + rawDigits.slice(1) : rawDigits;
-        }
-      }
-    }
-
-    // Tutup modal menggunakan selektor resmi TikTok
-    const closeBtn = document.querySelector(
-      '.arco-modal-close-icon, span.arco-icon-hover.arco-modal-close-icon, span[aria-label="Close"]'
-    );
-    if (closeBtn) simulateHumanClick(closeBtn);
-
-    notify(`✅ Kontak @${pendingData.username}: WA: ${pendingData.no_whatsapp || '-'} | Email: ${pendingData.email || '-'}`);
-
-    sessionStorage.removeItem('tnt_pending_creator_scrape');
-    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
-      chrome.storage.local.remove('tnt_pending_creator_scrape');
-    }
-
-    await sleep(randomBetween(500, 800));
-
-    safeSendMessage({
-      action: 'SCRAPE_DETAIL_SUCCESS',
-      payload: pendingData,
-      closeTab: true,
-    });
   }
 
   // ============================================================================
