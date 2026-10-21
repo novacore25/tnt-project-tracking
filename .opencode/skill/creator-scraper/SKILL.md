@@ -16,10 +16,10 @@ description: Panduan teknis lengkap, peta selektor DOM TikTok Partner Center, ru
 2. **`display_name` $\neq$ `nama_asli`:**
    - Nama profil di TikTok (misal `Willie Salim`) wajib disimpan ke kolom **`display_name`**.
    - Kolom **`nama_asli`** khusus untuk nama legal sesuai KTP/NPWP/Kontrak. Jangan pernah menimpa `nama_asli` dengan `display_name` hasil scrape.
-3. **3 Field yang DILARANG Di-scrape/Disimpan:**
+3. **Field Bio dan Teks Mentah:**
    - **Bio** (tidak diambil)
-   - **Email** (tidak diambil)
    - **`gmv_raw_text`** (tidak disimpan; langsung simpan hasil kalkulasi ke `gmv_30d` + tag `gmv_status` `'RIIL'` atau `'ESTIMASI'`).
+   - **Kontak (WhatsApp & Email):** Diekstrak otomatis melalui **IM Chat Room $\rightarrow$ Modal "Contact Info"** dan header profil bisnis. Simpan ke kolom `no_whatsapp` dan `email`.
 4. **Jebakan Huruf `"M"` (Rupiah vs Non-Rupiah):**
    - Pada teks **Rupiah (`Rp6,0M`)**: huruf **`M` = Miliar ($\times 10^9$)**, desimal memakai koma (`,`).
    - Pada teks **Non-Rupiah (`74.5M` followers / views / items sold)**: huruf **`M` = Million / Juta ($\times 10^6$)**, desimal memakai titik (`.`).
@@ -115,6 +115,27 @@ const CREATOR_DETAIL_SELECTORS = {
   ]
 };
 ```
+
+### 2.3 Halaman *IM Chat Room* (`/partner/im?shop_id=...&creator_id=...`) & Modal Contact Info
+
+```javascript
+const IM_CONTACT_SELECTORS = {
+  // Tombol bulat biru Contact Info di panel profil kanan IM chat
+  contactRoundButton: 'button.arco-btn-circle, button.arco-btn-shape-circle, button[class*="circle"]',
+  // Modal dialog Contact Info (Arco Design)
+  contactModal: '.arco-modal, div[role="dialog"], .arco-modal-content',
+  // Tombol close modal
+  modalCloseBtn: '.arco-modal-close-icon, button[aria-label="Close"]',
+};
+```
+- **Alur Kerja Smart-Wait:**
+  1. Halaman detail selesai mengekstrak metrik 30D $\rightarrow$ simpan payload ke `sessionStorage` & `chrome.storage.local`.
+  2. Tab yang sama dialihkan ke `/partner/im?shop_id={pid}&creator_id={cid}&market=4&enter_from=find_creator_detail`.
+  3. Tunggu hingga panel kanan IM chat termuat (polling pintar 350ms, timeout 25s; adaptif koneksi cepat vs lambat).
+  4. Begitu tombol bulat biru kontak muncul di panel kanan $\rightarrow$ klik otomatis.
+  5. Tunggu modal *Contact Info* muncul $\rightarrow$ ekstrak nomor telepon/WhatsApp (`no_whatsapp`) dan email (`email`).
+  6. Kirim `SCRAPE_DETAIL_SUCCESS` dengan `closeTab: true` $\rightarrow$ tutup tab IM otomatis $\rightarrow$ background script menginstruksikan list tab membuka kreator berikutnya!
+
 
 ---
 
