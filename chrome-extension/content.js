@@ -705,9 +705,9 @@
     if (raw.startsWith('62')) return raw;
     // Nomor HP Indonesia diawali 8 (operator: 81, 82, 83, 85, 87, 88, 89)
     if (/^8[1235789]\d{7,11}$/.test(raw)) return '62' + raw;
-    if (raw.startsWith('8') && raw.length >= 10 && raw.length <= 13) return '62' + raw;
+    if (raw.startsWith('8') && !raw.startsWith('86') && raw.length >= 10 && raw.length <= 13) return '62' + raw;
 
-    // Nomor luar negeri lainnya (misal 6012..., 1415..., 6591...): simpan seluruh angka apa adanya
+    // Nomor luar negeri lainnya tanpa tanda + (misal 6012..., 1415..., 6591..., 8613...): simpan seluruh angka murni apa adanya
     return raw;
   }
 
