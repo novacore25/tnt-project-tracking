@@ -6,6 +6,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const queueCount = document.getElementById('queue-count');
   const knownCount = document.getElementById('known-count');
   const syncBtn = document.getElementById('sync-book-btn');
+  const clearBookBtn = document.getElementById('clear-book-btn');
   const syncMsg = document.getElementById('sync-msg');
   const clearBtn = document.getElementById('clear-all-btn');
   const sendBtn = document.getElementById('send-all-btn');
@@ -91,6 +92,17 @@ document.addEventListener('DOMContentLoaded', () => {
           showMessage(`⚠️ ${res?.error || 'Gagal sinkronisasi Buku Catatan.'}`);
         }
       });
+    };
+  }
+
+  if (clearBookBtn) {
+    clearBookBtn.onclick = () => {
+      if (confirm('Yakin ingin menghapus seluruh Buku Catatan di ekstensi?')) {
+        chrome.runtime.sendMessage({ action: 'CLEAR_KNOWN_USERNAMES' }, () => {
+          showMessage('🗑️ Buku Catatan dikosongkan (0 username).');
+          reloadFromStorage();
+        });
+      }
     };
   }
 

@@ -254,6 +254,19 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       return;
     }
 
+    if (action === 'CLEAR_KNOWN_USERNAMES') {
+      await setStorage({
+        [STORAGE_KEYS.KNOWN_USERNAMES]: [],
+        [STORAGE_KEYS.KNOWN_UPDATED_AT]: null,
+      });
+      const nextState = await updateAutoState({
+        skippedCountSession: 0,
+        statusMessage: '🗑️ Buku Catatan berhasil dikosongkan (0 username).',
+      });
+      sendResponse({ success: true, count: 0, state: nextState });
+      return;
+    }
+
     if (action === 'PASSIVE_UPDATE_KNOWN_USERNAMES') {
       const incoming = Array.isArray(request.usernames) ? request.usernames : [];
       const storage = await getStorage([STORAGE_KEYS.QUEUE]);
@@ -293,8 +306,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
     if (action === 'START_AUTO_SCRAPE') {
       const listTabId = sender?.tab?.id || request.tabId || null;
-      // Sinkronisasi Buku Catatan otomatis di awal jika memungkinkan (tanpa memblokir jika gagal)
-      await syncKnownUsernamesFromTntTab(false).catch(() => {});
 
       const newState = await updateAutoState({
         isRunning: true,

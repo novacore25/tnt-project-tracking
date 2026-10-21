@@ -841,9 +841,14 @@
       </div>
 
       <div style="display:flex;flex-direction:column;gap:8px;">
-        <button id="tnt-btn-sync-book" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.18);background:rgba(255,255,255,0.07);color:#f8fafc;font-weight:600;font-size:11px;cursor:pointer;">
-          🔄 Ambil Buku Catatan dari Staging
-        </button>
+        <div style="display:flex;gap:6px;">
+          <button id="tnt-btn-sync-book" style="flex:1;padding:8px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.18);background:rgba(255,255,255,0.07);color:#f8fafc;font-weight:600;font-size:11px;cursor:pointer;">
+            🔄 Ambil Buku Catatan
+          </button>
+          <button id="tnt-btn-clear-book" title="Kosongkan Buku Catatan di Ekstensi" style="padding:8px 10px;border-radius:8px;border:1px solid rgba(244,63,94,0.35);background:rgba(244,63,94,0.14);color:#fda4af;font-weight:600;font-size:11px;cursor:pointer;">
+            🗑️ Hapus Catatan
+          </button>
+        </div>
 
         <button id="tnt-btn-start" style="width:100%;padding:10px 12px;border-radius:10px;border:none;background:linear-gradient(135deg,#4f46e5,#6366f1);color:#fff;font-weight:700;font-size:13px;cursor:pointer;box-shadow:0 4px 12px rgba(79,70,229,0.4);">
           ▶️ Mulai Auto-Scrape (Tanpa Henti)
@@ -870,6 +875,20 @@
         } else {
           updateFloatingStatus(`⚠️ ${res?.error || 'Gagal sinkronisasi Buku Catatan.'}`);
         }
+      });
+    });
+
+    document.getElementById('tnt-btn-clear-book').addEventListener('click', () => {
+      chrome.runtime.sendMessage({ action: 'CLEAR_KNOWN_USERNAMES' }, () => {
+        // Reset tanda skip pada kartu yang sedang tampil di halaman agar bisa di-scrape ulang
+        document.querySelectorAll(FIND_CREATORS_SELECTORS.rowItem).forEach((row) => {
+          row.removeAttribute('data-tnt-processed');
+          row.style.outline = '';
+          const b = row.querySelector('.tnt-row-badge');
+          if (b) b.remove();
+        });
+        updateFloatingStatus('🗑️ Buku Catatan dikosongkan (0 username).');
+        syncPanelWithBackground();
       });
     });
 
