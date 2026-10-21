@@ -1,6 +1,6 @@
 import React from "react";
 import Link from "next/link";
-import { ChevronDown, ChevronRight, Trash2, Edit2, Loader2, PlayCircle, Info, AlertCircle, Plus, RotateCw, Save, X, FileText } from "lucide-react";
+import { ChevronDown, ChevronRight, Trash2, Edit2, Loader2, PlayCircle, Info, AlertCircle, Plus, RotateCw, Save, X, FileText, Video, Radio, MapPin } from "lucide-react";
 import { formatAbbreviated, formatDateTime, formatDateTimeShort, formatRupiah } from "@/utils/formatters";
 import { getCreatorType, getJenisKerjasama, getConceptColor } from "@/utils/computed";
 import { MultiSelect } from "@/components/MultiSelect";
@@ -16,6 +16,8 @@ const areEqual = (prev: any, next: any) => {
     prev.isSelected === next.isSelected &&
     prev.isBatchSaving === next.isBatchSaving &&
     prev.cc === next.cc &&
+    prev.creator === next.creator &&
+    prev.snapshot === next.snapshot &&
     prev.creatorVideos === next.creatorVideos &&
     prev.hasAccess === next.hasAccess &&
     prev.updateVideoConcept === next.updateVideoConcept &&
@@ -227,23 +229,49 @@ export const CreatorRow = React.memo(({
         <td className="text-center font-medium text-[13px] text-text-soft">
           {index + 1}
         </td>
-        <td className="relative">
-          <div className="flex items-center gap-[8px]">
-            <Link href={`/creator-pool/${creator.id}`} className="font-semibold text-p300 hover:underline block">
-              @{creator.username}
-            </Link>
-            {(!cc.added_by || cc.tier === 'Auto-Detect') && <span className="px-[6px] py-[2px] bg-yellow-100 text-yellow-800 text-[10px] font-bold rounded-full">AUTO</span>}
-          </div>
-          <div className="flex items-center gap-2 mt-[4px]">
-            <a href={creator.link_account || `https://www.tiktok.com/@${creator.username}`} target="_blank" rel="noopener noreferrer" className="inline-block hover:opacity-80 transition-opacity shrink-0">
-              <img src="/logo-tiktok-landscape-button.svg" alt="TikTok" className="h-[20px]" />
-            </a>
-            {creator.creator_contacts?.find((c: any) => c.status === 'aktif')?.nomor && (
-              <a href={`https://wa.me/${creator.creator_contacts.find((c: any) => c.status === 'aktif').nomor.replace(/^0/, '62').replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer" className="text-[11px] text-emerald-600 hover:underline flex items-center gap-1 font-medium bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100">
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
-                {creator.creator_contacts.find((c: any) => c.status === 'aktif').nomor}
-              </a>
+        <td className="relative min-w-[210px]">
+          <div className="flex items-start gap-2.5">
+            {creator.avatar_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={creator.avatar_url}
+                alt={creator.username}
+                className="w-9 h-9 rounded-full object-cover border border-slate-200 shrink-0 mt-0.5"
+              />
+            ) : (
+              <div className="w-9 h-9 rounded-full bg-indigo-100 text-indigo-700 font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">
+                {String(creator.username || '?').charAt(0).toUpperCase()}
+              </div>
             )}
+            <div className="min-w-0">
+              <div className="flex items-center gap-[6px] flex-wrap">
+                <Link href={`/creator-pool/${creator.id}`} className="font-semibold text-p300 hover:underline block">
+                  @{creator.username}
+                </Link>
+                {(!cc.added_by || cc.tier === 'Auto-Detect') && <span className="px-[6px] py-[2px] bg-yellow-100 text-yellow-800 text-[10px] font-bold rounded-full">AUTO</span>}
+              </div>
+              {creator.display_name && (
+                <div className="text-[11px] text-slate-600 font-medium truncate max-w-[160px]" title={creator.display_name}>
+                  {creator.display_name}
+                </div>
+              )}
+              <div className="flex items-center gap-1.5 mt-[4px] flex-wrap">
+                <a href={creator.link_account || `https://www.tiktok.com/@${creator.username}`} target="_blank" rel="noopener noreferrer" className="inline-block hover:opacity-80 transition-opacity shrink-0">
+                  <img src="/logo-tiktok-landscape-button.svg" alt="TikTok" className="h-[18px]" />
+                </a>
+                {creator.mcn && (
+                  <span className="px-1.5 py-0.5 bg-purple-50 text-purple-700 border border-purple-200 rounded-full text-[10px] font-medium truncate max-w-[130px]" title={creator.mcn}>
+                    🏢 {creator.mcn}
+                  </span>
+                )}
+                {creator.creator_contacts?.find((c: any) => c.status === 'aktif')?.nomor && (
+                  <a href={`https://wa.me/${creator.creator_contacts.find((c: any) => c.status === 'aktif').nomor.replace(/^0/, '62').replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer" className="text-[11px] text-emerald-600 hover:underline flex items-center gap-1 font-medium bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100">
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                    {creator.creator_contacts.find((c: any) => c.status === 'aktif').nomor}
+                  </a>
+                )}
+              </div>
+            </div>
           </div>
           {(managerNotes.length > 0 || picNotes.length > 0) && (
             <div className="absolute bottom-1 left-[120px] flex gap-3 max-w-[480px] text-left z-10 opacity-90 group-hover:opacity-100 transition-opacity">
@@ -324,9 +352,10 @@ export const CreatorRow = React.memo(({
         <td>
           <div className="flex items-center gap-1 max-w-[200px]">
             <div className="flex flex-wrap gap-1">
-              {creator.creator_niches?.map((cn: any, idx: number) => (
-                cn.niches?.nama ? <span key={idx} className="bg-slate-100 text-slate-600 px-[6px] py-[2px] rounded text-[10px] whitespace-nowrap">{cn.niches.nama}</span> : null
-              ))}
+              {creator.creator_niches?.map((cn: any, idx: number) => {
+                const nicheName = cn.niches?.nama || cn.nama;
+                return nicheName ? <span key={idx} className="bg-indigo-50 text-indigo-700 border border-indigo-200 px-[6px] py-[2px] rounded-full text-[10px] font-medium whitespace-nowrap">{nicheName}</span> : null;
+              })}
               {(!creator.creator_niches || creator.creator_niches.length === 0) && (
                 <span className="text-slate-400 text-[10px] italic">Kosong</span>
               )}
@@ -561,7 +590,7 @@ export const CreatorRow = React.memo(({
             )}
           </td>
         )}
-        <td className="text-right">
+        <td className="text-right min-w-[140px]">
           {activeEditingField === `gmv_30d` ? (
             <input 
               type="number" 
@@ -573,15 +602,35 @@ export const CreatorRow = React.memo(({
               className="input w-24 !p-[4px] text-right text-[13px]"
             />
           ) : (
-            <span 
-              className={`text-[13px] font-semibold cursor-pointer hover:bg-blue-50 px-1 py-0.5 rounded ${hasPending && pendingChange?.gmv_30d !== undefined ? 'text-amber-700' : 'text-text'}`}
-              onClick={() => hasAccess && setEditingCellId(`${cc.id}-gmv_30d`)}
-            >
-              {(getPendingValue(cc.id, 'gmv_30d', snapshot?.gmv_30d || 0) as number) > 0 ? formatAbbreviated(getPendingValue(cc.id, 'gmv_30d', snapshot?.gmv_30d || 0) as number, true) : '-'}
-            </span>
+            <div className="flex flex-col items-end gap-0.5">
+              <div className="flex items-center gap-1 justify-end">
+                <span 
+                  className={`text-[13px] font-bold cursor-pointer hover:bg-blue-50 px-1 py-0.5 rounded ${hasPending && pendingChange?.gmv_30d !== undefined ? 'text-amber-700' : 'text-slate-900'}`}
+                  onClick={() => hasAccess && setEditingCellId(`${cc.id}-gmv_30d`)}
+                >
+                  {(getPendingValue(cc.id, 'gmv_30d', snapshot?.gmv_30d || 0) as number) > 0 ? formatAbbreviated(getPendingValue(cc.id, 'gmv_30d', snapshot?.gmv_30d || 0) as number, true) : '-'}
+                </span>
+                {snapshot?.gmv_status && (
+                  <span
+                    className={`px-1 py-0.5 text-[9px] font-bold rounded uppercase ${
+                      snapshot.gmv_status === 'ESTIMASI'
+                        ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                        : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                    }`}
+                  >
+                    {snapshot.gmv_status}
+                  </span>
+                )}
+              </div>
+              {Number(snapshot?.pct_showcase) > 0 && (
+                <div className="text-[10px] text-amber-700 font-medium">
+                  🛍️ Cards ({Number(snapshot.pct_showcase)}%): {formatAbbreviated(Number(snapshot?.gmv_30d_showcase || 0), true)}
+                </div>
+              )}
+            </div>
           )}
         </td>
-        <td className="text-right">
+        <td className="text-right min-w-[125px]">
           {activeEditingField === `gmv_30d_video` ? (
             <input 
               type="number" 
@@ -593,15 +642,20 @@ export const CreatorRow = React.memo(({
               className="input w-24 !p-[4px] text-right text-[13px]"
             />
           ) : (
-            <span 
-              className={`text-[13px] font-semibold cursor-pointer hover:bg-blue-50 px-1 py-0.5 rounded ${hasPending && pendingChange?.gmv_30d_video !== undefined ? 'text-amber-700' : 'text-text'}`}
-              onClick={() => hasAccess && setEditingCellId(`${cc.id}-gmv_30d_video`)}
-            >
-              {(getPendingValue(cc.id, 'gmv_30d_video', snapshot?.gmv_30d_video || 0) as number) > 0 ? formatAbbreviated(getPendingValue(cc.id, 'gmv_30d_video', snapshot?.gmv_30d_video || 0) as number, true) : '-'}
-            </span>
+            <div className="flex flex-col items-end gap-0.5">
+              <span 
+                className={`text-[13px] font-semibold cursor-pointer hover:bg-blue-50 px-1 py-0.5 rounded ${hasPending && pendingChange?.gmv_30d_video !== undefined ? 'text-amber-700' : 'text-text'}`}
+                onClick={() => hasAccess && setEditingCellId(`${cc.id}-gmv_30d_video`)}
+              >
+                {(getPendingValue(cc.id, 'gmv_30d_video', snapshot?.gmv_30d_video || 0) as number) > 0 ? formatAbbreviated(getPendingValue(cc.id, 'gmv_30d_video', snapshot?.gmv_30d_video || 0) as number, true) : '-'}
+              </span>
+              {snapshot?.pct_video !== null && snapshot?.pct_video !== undefined && (
+                <span className="text-[10px] text-blue-600 font-semibold">🎬 Video ({Number(snapshot.pct_video)}%)</span>
+              )}
+            </div>
           )}
         </td>
-        <td className="text-right">
+        <td className="text-right min-w-[125px]">
           {activeEditingField === `gmv_30d_live` ? (
             <input 
               type="number" 
@@ -613,13 +667,139 @@ export const CreatorRow = React.memo(({
               className="input w-24 !p-[4px] text-right text-[13px]"
             />
           ) : (
-            <span 
-              className={`text-[13px] font-semibold cursor-pointer hover:bg-blue-50 px-1 py-0.5 rounded ${hasPending && pendingChange?.gmv_30d_live !== undefined ? 'text-amber-700' : 'text-text'}`}
-              onClick={() => hasAccess && setEditingCellId(`${cc.id}-gmv_30d_live`)}
-            >
-              {(getPendingValue(cc.id, 'gmv_30d_live', snapshot?.gmv_30d_live || 0) as number) > 0 ? formatAbbreviated(getPendingValue(cc.id, 'gmv_30d_live', snapshot?.gmv_30d_live || 0) as number, true) : '-'}
-            </span>
+            <div className="flex flex-col items-end gap-0.5">
+              <span 
+                className={`text-[13px] font-semibold cursor-pointer hover:bg-blue-50 px-1 py-0.5 rounded ${hasPending && pendingChange?.gmv_30d_live !== undefined ? 'text-amber-700' : 'text-text'}`}
+                onClick={() => hasAccess && setEditingCellId(`${cc.id}-gmv_30d_live`)}
+              >
+                {(getPendingValue(cc.id, 'gmv_30d_live', snapshot?.gmv_30d_live || 0) as number) > 0 ? formatAbbreviated(getPendingValue(cc.id, 'gmv_30d_live', snapshot?.gmv_30d_live || 0) as number, true) : '-'}
+              </span>
+              {snapshot?.pct_live !== null && snapshot?.pct_live !== undefined && (
+                <span className="text-[10px] text-rose-600 font-semibold">🔴 LIVE ({Number(snapshot.pct_live)}%)</span>
+              )}
+            </div>
           )}
+        </td>
+        {/* Kolom Staging 1: Metrik Sales & Kolaborasi */}
+        <td className="min-w-[180px] text-[11px] text-slate-700 space-y-0.5">
+          {snapshot?.items_sold_30d != null || snapshot?.gpm_30d != null || snapshot?.avg_commission_rate != null ? (
+            <>
+              <div>
+                Items Sold: <strong className="text-slate-900">{Number(snapshot?.items_sold_30d || 0).toLocaleString('id-ID')}</strong>
+              </div>
+              <div>
+                GPM: <strong className="text-slate-900">{Number(snapshot?.gpm_30d || 0) > 0 ? formatAbbreviated(Number(snapshot.gpm_30d), true) : '-'}</strong>
+              </div>
+              {(snapshot?.gmv_per_customer_min || snapshot?.gmv_per_customer_max) && (
+                <div>
+                  GMV/Cust:{' '}
+                  <strong className="text-slate-900">
+                    {formatAbbreviated(Number(snapshot?.gmv_per_customer_min || 0), false)} - {formatAbbreviated(Number(snapshot?.gmv_per_customer_max || 0), false)}
+                  </strong>
+                </div>
+              )}
+              <div>
+                Avg Komisi: <strong className="text-slate-900">{snapshot?.avg_commission_rate ?? 0}%</strong>
+              </div>
+              <div className="pt-0.5 border-t border-slate-100 flex items-center gap-1.5 text-[10px]">
+                <span>Produk: <strong>{snapshot?.products_promoted_count || 0}</strong></span>
+                <span>•</span>
+                <span>Collab: <strong>{snapshot?.brand_collaborations_count || 0}</strong></span>
+              </div>
+            </>
+          ) : (
+            <span className="text-slate-400 italic text-[11px]">-</span>
+          )}
+        </td>
+        {/* Kolom Staging 2: Performa Video & LIVE */}
+        <td className="min-w-[195px] text-[11px] space-y-1.5">
+          {snapshot?.videos_count_30d != null || snapshot?.avg_video_views != null || snapshot?.live_streams_count_30d != null || snapshot?.avg_live_views != null ? (
+            <>
+              <div className="bg-blue-50/60 border border-blue-100 rounded-md p-1.5 space-y-0.5">
+                <div className="font-bold text-blue-800 flex items-center gap-1 text-[10px]">
+                  <Video className="w-3 h-3" />
+                  <span>Video ({snapshot?.videos_count_30d || 0} VT)</span>
+                </div>
+                <div className="text-slate-700 text-[10px]">
+                  Views: <strong>{formatAbbreviated(Number(snapshot?.avg_video_views || 0), false)}</strong> • ER: <strong>{snapshot?.avg_video_engagement_rate ?? 0}%</strong>
+                </div>
+                <div className="text-slate-600 text-[10px]">
+                  GPM: <strong>{Number(snapshot?.video_gpm || 0) > 0 ? formatAbbreviated(Number(snapshot.video_gpm), true) : '-'}</strong>
+                </div>
+              </div>
+              <div className="bg-rose-50/60 border border-rose-100 rounded-md p-1.5 space-y-0.5">
+                <div className="font-bold text-rose-800 flex items-center gap-1 text-[10px]">
+                  <Radio className="w-3 h-3" />
+                  <span>LIVE ({snapshot?.live_streams_count_30d || 0} Sesi)</span>
+                </div>
+                <div className="text-slate-700 text-[10px]">
+                  Views: <strong>{formatAbbreviated(Number(snapshot?.avg_live_views || 0), false)}</strong> • ER: <strong>{snapshot?.avg_live_engagement_rate ?? 0}%</strong>
+                </div>
+                <div className="text-slate-600 text-[10px]">
+                  GPM: <strong>{Number(snapshot?.live_gpm || 0) > 0 ? formatAbbreviated(Number(snapshot.live_gpm), true) : '-'}</strong>
+                </div>
+              </div>
+            </>
+          ) : (
+            <span className="text-slate-400 italic text-[11px]">-</span>
+          )}
+        </td>
+        {/* Kolom Staging 3: Demografi & Top 5 Lokasi */}
+        <td className="min-w-[220px] text-[11px] space-y-1.5">
+          {(() => {
+            const topLocs: Array<{ loc: string; pct: number }> = Array.isArray(snapshot?.top_locations)
+              ? snapshot.top_locations
+              : typeof snapshot?.top_locations === 'string'
+              ? (() => {
+                  try {
+                    return JSON.parse(snapshot.top_locations);
+                  } catch {
+                    return [];
+                  }
+                })()
+              : [];
+            const hasDemo = snapshot?.audience_female_pct != null || snapshot?.audience_male_pct != null || snapshot?.audience_age || topLocs.length > 0;
+            if (!hasDemo) return <span className="text-slate-400 italic text-[11px]">-</span>;
+            return (
+              <>
+                <div className="flex flex-wrap items-center gap-1">
+                  {snapshot?.audience_female_pct != null && (
+                    <span className="px-1.5 py-0.5 bg-pink-50 text-pink-700 border border-pink-200 rounded text-[10px] font-semibold">
+                      👩 {snapshot.audience_female_pct}%
+                    </span>
+                  )}
+                  {snapshot?.audience_male_pct != null && (
+                    <span className="px-1.5 py-0.5 bg-sky-50 text-sky-700 border border-sky-200 rounded text-[10px] font-semibold">
+                      👨 {snapshot.audience_male_pct}%
+                    </span>
+                  )}
+                  {snapshot?.audience_age && (
+                    <span className="px-1.5 py-0.5 bg-slate-100 text-slate-700 rounded text-[10px] font-semibold">
+                      🎂 {snapshot.audience_age}
+                    </span>
+                  )}
+                </div>
+                {topLocs.length > 0 && (
+                  <div className="space-y-0.5">
+                    <div className="text-[9px] font-semibold text-slate-400 uppercase flex items-center gap-0.5">
+                      <MapPin className="w-2.5 h-2.5" />
+                      <span>Top 5 Lokasi</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {topLocs.slice(0, 5).map((item, idx) => (
+                        <span
+                          key={idx}
+                          className="px-1.5 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded text-[9px] font-semibold"
+                        >
+                          {item.loc} {item.pct}%
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            );
+          })()}
         </td>
         <td className="text-right">
           {hasAccess ? (
@@ -646,7 +826,7 @@ export const CreatorRow = React.memo(({
         <tr className="bg-slate-50 hover:bg-slate-50">
           <td></td>
           <td></td>
-          <td colSpan={isClientApprovalRequired ? 10 : 8} className="p-0 border-b-0">
+          <td colSpan={isClientApprovalRequired ? 21 : 19} className="p-0 border-b-0">
             <div className="py-[16px] pr-[16px]">
               <div className="bg-white border border-line rounded-[12px] p-[16px]">
                 <div className="flex items-center justify-between mb-[12px]">

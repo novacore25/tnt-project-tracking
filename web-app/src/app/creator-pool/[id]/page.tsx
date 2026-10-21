@@ -97,14 +97,24 @@ export default function CreatorProfilePage() {
     return b.id - a.id;
   }) || [];
   const latestSnapshot = snapshots[0] || null;
-  const mergedProfile = snapshots.reduce((acc, curr) => ({
-    followers: acc.followers ?? curr.followers,
-    tier: acc.tier ?? curr.tier,
-    audience_age: acc.audience_age ?? curr.audience_age,
-    level: acc.level ?? curr.level,
-    ratecard: acc.ratecard ?? curr.ratecard,
-    gmv_30d: acc.gmv_30d ?? curr.gmv_30d,
-  }), { followers: null, tier: null, audience_age: null, level: null, ratecard: null, gmv_30d: null } as any);
+  const mergedProfile = snapshots.reduce((acc, curr) => {
+    const next = { ...acc };
+    for (const [k, v] of Object.entries(curr || {})) {
+      if (v === null || v === undefined || v === '') continue;
+      if (
+        (k === 'followers' || k === 'gmv_30d' || k === 'gmv_30d_video' || k === 'gmv_30d_live') &&
+        (next[k] === 0 || next[k] === '0') &&
+        Number(v) > 0
+      ) {
+        next[k] = v;
+        continue;
+      }
+      if (next[k] === null || next[k] === undefined) {
+        next[k] = v;
+      }
+    }
+    return next;
+  }, { followers: null, tier: null, audience_age: null, level: null, ratecard: null, gmv_30d: null } as any);
 
   const latestCampaignPrice = useMemo(() => {
     if (!localData?.ccs || localData.ccs.length === 0) return null;
@@ -813,7 +823,15 @@ export default function CreatorProfilePage() {
                 Kelola Alias
               </button>
             </div>
-            <p className="text-slate-500 mt-0.5">{creator.nama_asli || 'Nama asli belum diisi'}</p>
+            <div className="flex items-center gap-2 mt-1 flex-wrap text-sm">
+              {creator.display_name && (
+                <span className="font-semibold text-slate-700" title="Display Name TikTok">
+                  {creator.display_name}
+                </span>
+              )}
+              {creator.display_name && <span className="text-slate-300">•</span>}
+              <span className="text-slate-500">KTP: {creator.nama_asli || 'Nama asli belum diisi'}</span>
+            </div>
           </div>
         </div>
         <div className="ml-auto flex gap-2">
@@ -1131,6 +1149,173 @@ export default function CreatorProfilePage() {
             </div>
           </div>
         )}
+      </div>
+
+      {/* Analitik & Demografi TikTok Partner Center (30D Terakhir) */}
+      <div className="ccard">
+        <div className="p-[16px] border-b border-line mb-[16px] flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h3 className="font-bold text-[16px] text-slate-900">Analitik & Demografi TikTok Partner Center (30D Terakhir)</h3>
+            <p className="text-[12px] text-slate-500">Data metrik performa, sales channel, dan demografi dari hasil scraping Staging Creator</p>
+          </div>
+          {mergedProfile.tanggal_update && (
+            <span className="text-xs px-2.5 py-1 bg-slate-100 text-slate-600 rounded-full font-medium">
+              Update Terakhir: {new Date(mergedProfile.tanggal_update).toLocaleDateString('id-ID')}
+            </span>
+          )}
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          {/* Blok 1: Total GMV 30D & Sales Channel */}
+          <div className="bg-slate-50/80 border border-slate-200/80 rounded-xl p-3.5 space-y-2">
+            <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Total GMV 30D & Channel</div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-lg font-extrabold text-slate-900">
+                {Number(mergedProfile.gmv_30d || 0) > 0 ? `Rp ${Math.round(toNum(mergedProfile.gmv_30d)).toLocaleString('id-ID')}` : '-'}
+              </span>
+              {mergedProfile.gmv_status && (
+                <span
+                  className={`px-1.5 py-0.5 text-[10px] font-bold rounded uppercase ${
+                    mergedProfile.gmv_status === 'ESTIMASI'
+                      ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                      : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                  }`}
+                >
+                  {mergedProfile.gmv_status}
+                </span>
+              )}
+            </div>
+            <div className="space-y-1 text-xs bg-white p-2.5 rounded-lg border border-slate-100">
+              <div className="flex items-center justify-between">
+                <span className="text-rose-600 font-semibold">🔴 LIVE ({toNum(mergedProfile.pct_live)}%):</span>
+                <span className="font-bold text-slate-800">
+                  {Number(mergedProfile.gmv_30d_live || 0) > 0 ? formatAbbreviated(toNum(mergedProfile.gmv_30d_live), true) : '-'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-blue-600 font-semibold">🎬 Video ({toNum(mergedProfile.pct_video)}%):</span>
+                <span className="font-bold text-slate-800">
+                  {Number(mergedProfile.gmv_30d_video || 0) > 0 ? formatAbbreviated(toNum(mergedProfile.gmv_30d_video), true) : '-'}
+                </span>
+              </div>
+              {toNum(mergedProfile.pct_showcase) > 0 && (
+                <div className="flex items-center justify-between">
+                  <span className="text-amber-700 font-semibold">🛍️ Cards ({toNum(mergedProfile.pct_showcase)}%):</span>
+                  <span className="font-bold text-slate-800">
+                    {formatAbbreviated(toNum(mergedProfile.gmv_30d_showcase), true)}
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Blok 2: Metrik Sales & Kolaborasi */}
+          <div className="bg-slate-50/80 border border-slate-200/80 rounded-xl p-3.5 space-y-1.5 text-xs text-slate-700">
+            <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Metrik Sales & Kolaborasi</div>
+            <div className="flex justify-between">
+              <span className="text-slate-500">Items Sold (30D):</span>
+              <strong className="text-slate-900">{toNum(mergedProfile.items_sold_30d).toLocaleString('id-ID')} pcs</strong>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500">GPM (30D):</span>
+              <strong className="text-slate-900">
+                {toNum(mergedProfile.gpm_30d) > 0 ? `Rp ${Math.round(toNum(mergedProfile.gpm_30d)).toLocaleString('id-ID')}` : '-'}
+              </strong>
+            </div>
+            {(mergedProfile.gmv_per_customer_min || mergedProfile.gmv_per_customer_max) && (
+              <div className="flex justify-between">
+                <span className="text-slate-500">GMV / Customer:</span>
+                <strong className="text-slate-900">
+                  {formatAbbreviated(toNum(mergedProfile.gmv_per_customer_min), false)} - {formatAbbreviated(toNum(mergedProfile.gmv_per_customer_max), false)}
+                </strong>
+              </div>
+            )}
+            <div className="flex justify-between">
+              <span className="text-slate-500">Avg. Komisi:</span>
+              <strong className="text-slate-900">{mergedProfile.avg_commission_rate ?? 0}%</strong>
+            </div>
+            <div className="pt-1.5 border-t border-slate-200 flex items-center justify-between text-[11px]">
+              <span>Produk: <strong>{mergedProfile.products_promoted_count || 0}</strong></span>
+              <span>Brand Collab: <strong>{mergedProfile.brand_collaborations_count || 0}</strong></span>
+            </div>
+          </div>
+
+          {/* Blok 3: Performa Video & LIVE */}
+          <div className="bg-slate-50/80 border border-slate-200/80 rounded-xl p-3.5 space-y-2 text-xs">
+            <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Performa Video & LIVE (30D)</div>
+            <div className="bg-blue-50/70 border border-blue-100 rounded-lg p-2 space-y-0.5">
+              <div className="font-bold text-blue-800 flex items-center justify-between">
+                <span>🎬 Video ({mergedProfile.videos_count_30d || 0} VT)</span>
+                <span>ER: {mergedProfile.avg_video_engagement_rate ?? 0}%</span>
+              </div>
+              <div className="text-slate-700 text-[11px]">
+                Avg Views: <strong>{formatAbbreviated(toNum(mergedProfile.avg_video_views), false)}</strong> • GPM: <strong>{toNum(mergedProfile.video_gpm) > 0 ? formatAbbreviated(toNum(mergedProfile.video_gpm), true) : '-'}</strong>
+              </div>
+            </div>
+            <div className="bg-rose-50/70 border border-rose-100 rounded-lg p-2 space-y-0.5">
+              <div className="font-bold text-rose-800 flex items-center justify-between">
+                <span>🔴 LIVE ({mergedProfile.live_streams_count_30d || 0} Sesi)</span>
+                <span>ER: {mergedProfile.avg_live_engagement_rate ?? 0}%</span>
+              </div>
+              <div className="text-slate-700 text-[11px]">
+                Avg Views: <strong>{formatAbbreviated(toNum(mergedProfile.avg_live_views), false)}</strong> • GPM: <strong>{toNum(mergedProfile.live_gpm) > 0 ? formatAbbreviated(toNum(mergedProfile.live_gpm), true) : '-'}</strong>
+              </div>
+            </div>
+          </div>
+
+          {/* Blok 4: Demografi & Top 5 Lokasi */}
+          <div className="bg-slate-50/80 border border-slate-200/80 rounded-xl p-3.5 space-y-2 text-xs">
+            <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Demografi & Top 5 Lokasi</div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {mergedProfile.audience_female_pct != null && (
+                <span className="px-2 py-0.5 bg-pink-50 text-pink-700 border border-pink-200 rounded font-semibold text-[11px]">
+                  👩 Female {mergedProfile.audience_female_pct}%
+                </span>
+              )}
+              {mergedProfile.audience_male_pct != null && (
+                <span className="px-2 py-0.5 bg-sky-50 text-sky-700 border border-sky-200 rounded font-semibold text-[11px]">
+                  👨 Male {mergedProfile.audience_male_pct}%
+                </span>
+              )}
+              {mergedProfile.audience_age && (
+                <span className="px-2 py-0.5 bg-slate-200/70 text-slate-800 rounded font-semibold text-[11px]">
+                  🎂 Dominan {mergedProfile.audience_age}
+                </span>
+              )}
+            </div>
+            {(() => {
+              const topLocs: Array<{ loc: string; pct: number }> = Array.isArray(mergedProfile.top_locations)
+                ? mergedProfile.top_locations
+                : typeof mergedProfile.top_locations === 'string'
+                ? (() => {
+                    try {
+                      return JSON.parse(mergedProfile.top_locations);
+                    } catch {
+                      return [];
+                    }
+                  })()
+                : [];
+              return (
+                <div className="space-y-1 pt-1">
+                  <div className="text-[10px] font-semibold text-slate-400 uppercase">📍 Top 5 Lokasi Audience</div>
+                  {topLocs.length > 0 ? (
+                    <div className="flex flex-wrap gap-1">
+                      {topLocs.slice(0, 5).map((item, idx) => (
+                        <span
+                          key={idx}
+                          className="px-2 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded text-[10px] font-semibold"
+                        >
+                          {item.loc} {item.pct}%
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="text-slate-400 italic text-[11px]">Belum ada data lokasi</span>
+                  )}
+                </div>
+              );
+            })()}
+          </div>
+        </div>
       </div>
 
       <div className="grid gap-6 md:grid-cols-3">

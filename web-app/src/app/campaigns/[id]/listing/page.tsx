@@ -45,8 +45,33 @@ import {
 
 const PAGE_SIZE = 100;
 
-const extractCampaignSnapshot = (creator: any, campaignCreatedAt?: string) => {
-  const snaps = creator?.creator_snapshots || [];
+const mergeSnapshotFields = (orderedSnaps: any[]) => {
+  const result: any = {};
+  for (const snap of orderedSnaps) {
+    if (!snap) continue;
+    for (const [k, v] of Object.entries(snap)) {
+      if (v === null || v === undefined || v === '') continue;
+      if (
+        (k === 'followers' || k === 'gmv_30d' || k === 'gmv_30d_video' || k === 'gmv_30d_live') &&
+        (result[k] === 0 || result[k] === '0') &&
+        Number(v) > 0
+      ) {
+        result[k] = v;
+        continue;
+      }
+      if (result[k] === null || result[k] === undefined) {
+        result[k] = v;
+      }
+    }
+  }
+  return result;
+};
+
+const extractCampaignSnapshot = (creator: any, campaignCreatedAt?: string, campaignId?: number) => {
+  const rawSnaps = creator?.creator_snapshots || [];
+  if (rawSnaps.length === 0) return {};
+  const snaps = rawSnaps.filter((s: any) => !s?.campaign_id || !campaignId || Number(s.campaign_id) === Number(campaignId));
+  // Sort by date DESC, then by id DESC (newest first) — snaps already filtered above
   if (snaps.length === 0) return {};
   
   // Sort by date DESC, then by id DESC (newest first)
@@ -56,6 +81,13 @@ const extractCampaignSnapshot = (creator: any, campaignCreatedAt?: string) => {
     return b.id - a.id;
   });
 
+  if (campaignId) {
+    const campaignSnaps = sortedSnaps.filter((s: any) => Number(s.campaign_id) === Number(campaignId));
+    const globalSnaps = sortedSnaps.filter((s: any) => !s.campaign_id);
+    if (campaignSnaps.length > 0) {
+      return mergeSnapshotFields([...campaignSnaps, ...globalSnaps]);
+    }
+  }
   if (campaignCreatedAt) {
     const cDate = new Date(campaignCreatedAt).toISOString().split('T')[0];
     const cTime = new Date(campaignCreatedAt).getTime();
@@ -68,55 +100,20 @@ const extractCampaignSnapshot = (creator: any, campaignCreatedAt?: string) => {
     });
 
     if (sameDateSnap) {
-      // Use same-date snapshot as primary, fill nulls from older snapshots
       const olderSnaps = sortedSnaps.filter((s: any) => {
         const sTime = new Date(s.tanggal_update || s.created_at || 0).getTime();
         return sTime <= cTime + gracePeriod && s.id !== sameDateSnap.id;
       });
-      
-      return [sameDateSnap, ...olderSnaps].reduce((acc: any, curr: any) => ({
-        followers: acc.followers ?? curr.followers,
-        tier: acc.tier ?? curr.tier,
-        audience_age: acc.audience_age ?? curr.audience_age,
-        level: acc.level ?? curr.level,
-        ratecard: acc.ratecard ?? curr.ratecard,
-        gmv_30d: acc.gmv_30d ?? curr.gmv_30d,
-        gmv_30d_video: acc.gmv_30d_video ?? curr.gmv_30d_video,
-        gmv_30d_live: acc.gmv_30d_live ?? curr.gmv_30d_live,
-      }), { followers: null, tier: null, audience_age: null, level: null, ratecard: null, gmv_30d: null, gmv_30d_video: null, gmv_30d_live: null } as any);
+      // Include sortedSnaps at the tail so any new 30D analytics/demographic fields from Staging are always populated
+      return mergeSnapshotFields([sameDateSnap, ...olderSnaps, ...sortedSnaps]);
     }
 
-    // Priority 2: Find closest snapshot before campaign date + grace period
-    const targetSnap = sortedSnaps.find((s: any) => {
-      const sTime = new Date(s.tanggal_update || s.created_at || 0).getTime();
-      return sTime <= cTime + gracePeriod;
-    });
-    const baseSnap = targetSnap || sortedSnaps[sortedSnaps.length - 1];
-    const targetSnaps = sortedSnaps.slice(sortedSnaps.indexOf(baseSnap));
-
-    return targetSnaps.reduce((acc: any, curr: any) => ({
-      followers: acc.followers ?? curr.followers,
-      tier: acc.tier ?? curr.tier,
-      audience_age: acc.audience_age ?? curr.audience_age,
-      level: acc.level ?? curr.level,
-      ratecard: acc.ratecard ?? curr.ratecard,
-      gmv_30d: acc.gmv_30d ?? curr.gmv_30d,
-      gmv_30d_video: acc.gmv_30d_video ?? curr.gmv_30d_video,
-      gmv_30d_live: acc.gmv_30d_live ?? curr.gmv_30d_live,
-    }), { followers: null, tier: null, audience_age: null, level: null, ratecard: null, gmv_30d: null, gmv_30d_video: null, gmv_30d_live: null } as any);
+    // Priority 2: Merge newest snapshots first so Staging updates immediately reflect, falling back to older snapshots
+    return mergeSnapshotFields(sortedSnaps);
   }
 
   // No campaignCreatedAt — just use the latest snapshot
-  return sortedSnaps.reduce((acc: any, curr: any) => ({
-    followers: acc.followers ?? curr.followers,
-    tier: acc.tier ?? curr.tier,
-    audience_age: acc.audience_age ?? curr.audience_age,
-    level: acc.level ?? curr.level,
-    ratecard: acc.ratecard ?? curr.ratecard,
-    gmv_30d: acc.gmv_30d ?? curr.gmv_30d,
-    gmv_30d_video: acc.gmv_30d_video ?? curr.gmv_30d_video,
-    gmv_30d_live: acc.gmv_30d_live ?? curr.gmv_30d_live,
-  }), { followers: null, tier: null, audience_age: null, level: null, ratecard: null, gmv_30d: null, gmv_30d_video: null, gmv_30d_live: null } as any);
+  return mergeSnapshotFields(sortedSnaps);
 };
 
 export default function CampaignListingPage() {
@@ -229,7 +226,7 @@ function CampaignListingContent() {
   const setCellChange = (ccId: number, field: string, value: any, cc: any) => {
     setPendingChanges(prev => {
       const next = new Map(prev);
-      const snap = extractCampaignSnapshot(cc.creators, cc.created_at);
+      const snap = extractCampaignSnapshot(cc.creators, cc.created_at, campaignId);
       const existing = next.get(ccId) || {
         original: {
           price: cc.price,
@@ -358,6 +355,7 @@ function CampaignListingContent() {
 
             await useDatabaseStore.getState().addCreatorSnapshot({
               creator_id: change.original.creator_id,
+              campaign_id: campaignId,
               tanggal_update: change.original.cc_created_at || new Date().toISOString(),
               followers: newFollowers,
               level: newLevel,
@@ -1709,7 +1707,7 @@ function CampaignListingContent() {
 
       const formattedData = allData.map((cc: any, index: number) => {
         const creator = cc.creators || {};
-        const snapshot = extractCampaignSnapshot(creator, cc.created_at);
+        const snapshot = extractCampaignSnapshot(creator, cc.created_at, campaignId);
         
         const addedByName = staffProfiles.find(p => p.id === cc.added_by)?.nama || 'System';
         
@@ -1838,7 +1836,7 @@ function CampaignListingContent() {
 
   // Pre-calculate snapshots to prevent severe O(N log N) performance degradation during sorting
   displayData = displayData.map((c: any) => {
-      c._cachedSnapshot = c._cachedSnapshot || extractCampaignSnapshot(c.creators, c.created_at);
+      c._cachedSnapshot = c._cachedSnapshot || extractCampaignSnapshot(c.creators, c.created_at, campaignId);
       return c;
   });
 
@@ -2828,6 +2826,9 @@ function CampaignListingContent() {
               </th>
               <th className="text-right">GMV (Video)</th>
               <th className="text-right">GMV (Live)</th>
+              <th className="min-w-[180px]">Metrik Sales & Kolaborasi</th>
+              <th className="min-w-[195px]">Performa Video & LIVE</th>
+              <th className="min-w-[220px]">Demografi & Top 5 Lokasi</th>
               <th className="text-right">Aksi</th>
             </tr>
           </thead>
@@ -2835,7 +2836,7 @@ function CampaignListingContent() {
             {(() => {
               return displayData.length === 0 && !isLoading ? (
               <tr>
-                <td colSpan={isClientApprovalRequired ? 14 : 12} className="text-center py-[32px] text-text-soft">
+                <td colSpan={isClientApprovalRequired ? 23 : 21} className="text-center py-[32px] text-text-soft">
                   Belum ada creator di campaign ini.
                 </td>
               </tr>

@@ -465,3 +465,20 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
   return true;
 });
+
+// Saat ekstensi di-install / di-reload di chrome://extensions, otomatis re-inject content.js
+// ke semua tab TikTok Partner Center yang sedang terbuka agar tidak terjadi "Extension context invalidated"
+chrome.runtime.onInstalled.addListener(() => {
+  chrome.tabs.query({ url: ['*://partner.tiktokshop.com/*'] }, (tabs) => {
+    for (const tab of tabs || []) {
+      if (tab.id) {
+        chrome.scripting
+          .executeScript({
+            target: { tabId: tab.id },
+            files: ['content.js'],
+          })
+          .catch(() => {});
+      }
+    }
+  });
+});

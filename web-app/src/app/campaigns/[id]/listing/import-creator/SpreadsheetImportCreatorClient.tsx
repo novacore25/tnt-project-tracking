@@ -103,12 +103,11 @@ const hasGmv = (r: SpreadsheetRow) =>
   Number(r.gmv_30_days) > 0 || Number(r.gmv_30_days_video) > 0 || Number(r.gmv_30_days_live) > 0;
 const hasQty = (r: SpreadsheetRow) => Number(r.qty_vt) > 0 || Number(r.qty_live) > 0;
 
-/** Nama kolom yang masih kurang, untuk ditampilkan di kolom Keterangan. */
+/** Nama kolom yang masih kurang, untuk ditampilkan di kolom Keterangan.
+ * Catatan: Kolom No WA, Followers, Level, dan GMV bersifat opsional saat import —
+ * jika dikosongkan oleh PIC, sistem otomatis mengambil snapshot & profil terbaru per metrik dari Creator Pool. */
 const missingColumns = (r: SpreadsheetRow): string[] => {
   const m: string[] = [];
-  if (!hasWa(r)) m.push('No WA');
-  if (!hasFollowers(r)) m.push('Followers');
-  if (!hasGmv(r)) m.push('Minimal 1 GMV');
   if (!hasQty(r)) m.push('Qty VT / Qty Live');
   return m;
 };
@@ -416,97 +415,10 @@ export default function SpreadsheetImportCreatorClient() {
       }
       
       setRows(rederiveRows(newRows));
-      
-      // Auto-fill historical data for pasted usernames
-      const pastedUsernames = parsedRows.map((r, i) => {
-        const usernameIdx = columns.indexOf('username');
-        if (usernameIdx !== -1 && startColIdx <= usernameIdx && usernameIdx < startColIdx + r.length) {
-           return newRows[startRowIdx + i].username;
-        }
-        return null;
-      }).filter(Boolean) as string[];
-      
-      const uniqueUsernames = Array.from(new Set(pastedUsernames));
-      if (uniqueUsernames.length > 0) {
-        try {
-          const { data: dbCreators } = await fetchCreatorsWithSnapshotsForImportAction(uniqueUsernames);
-            
-          if (dbCreators && dbCreators.length > 0) {
-            const creatorIds = dbCreators.map((c: any) => c.id);
-            const { data: ccDatas } = await fetchCampaignCreatorsForImportAction(campaignId, creatorIds);
-              
-            setRows(prev => {
-              const updatedRows = [...prev];
-              let hasChanges = false;
-              
-              for (let i = 0; i < parsedRows.length; i++) {
-                const rowIdx = startRowIdx + i;
-                const row = { ...updatedRows[rowIdx] };
-                const uname = row.username;
-                if (!uname) continue;
-                
-                const dbCreator = dbCreators.find((c: any) => c.username.toLowerCase() === uname.toLowerCase());
-                if (!dbCreator) continue;
-                
-                const snaps = (dbCreator.creator_snapshots || []).sort((a: any, b: any) => b.id - a.id);
-                const lastSnap = snaps[0] || {};
-                const activeContact = (dbCreator.creator_contacts || []).find((c: any) => c.status === 'aktif');
-                const ccData = (ccDatas || []).find((c: any) => c.creator_id === dbCreator.id);
-                
-                let rowUpdated = false;
-                
-                const checkAndUpdate = (field: keyof SpreadsheetRow, newVal: any) => {
-                  if (newVal !== undefined && newVal !== null && newVal !== '') {
-                    const strVal = newVal.toString();
-                    const isDefault = 
-                      !row[field] || 
-                      (field === 'qty_vt' && row[field] === '1') || 
-                      (field === 'qty_live' && row[field] === '0') || 
-                      (field === 'rate_card' && row[field] === '0') ||
-                      row[field] === '0';
-                      
-                    if (isDefault && row[field] !== strVal) {
-                      (row as any)[field] = strVal;
-                      rowUpdated = true;
-                    }
-                  }
-                };
 
-                if (activeContact?.nomor) checkAndUpdate('no_wa', activeContact.nomor);
-                if (lastSnap.followers) checkAndUpdate('followers', lastSnap.followers);
-                if (lastSnap.level) checkAndUpdate('level', lastSnap.level);
-                if (lastSnap.gmv_30d) checkAndUpdate('gmv_30_days', lastSnap.gmv_30d);
-                if (lastSnap.gmv_30d_video) checkAndUpdate('gmv_30_days_video', lastSnap.gmv_30d_video);
-                if (lastSnap.gmv_30d_live) checkAndUpdate('gmv_30_days_live', lastSnap.gmv_30d_live);
-                
-                if (ccData) {
-                  if (ccData.price) checkAndUpdate('rate_card', ccData.price);
-                  if (ccData.qty_vt !== undefined) checkAndUpdate('qty_vt', ccData.qty_vt);
-                  if (ccData.qty_live !== undefined) checkAndUpdate('qty_live', ccData.qty_live);
-                  
-                  const vt = Number(row.qty_vt) || 0;
-                  const live = Number(row.qty_live) || 0;
-                  row.content_type = determineContentType(vt, live);
-                } else if (lastSnap.ratecard) {
-                  checkAndUpdate('rate_card', lastSnap.ratecard);
-                }
-                
-                if (rowUpdated) {
-                  updatedRows[rowIdx] = row;
-                  hasChanges = true;
-                }
-              }
-              
-              return hasChanges ? rederiveRows(updatedRows) : prev;
-            });
-          }
-        } catch (e) {
-          console.error("Auto-fill on paste error:", e);
-        }
-      }
-
-      // Past selesai: cek ke database diam-diam supaya status duplicate /
-      // kelengkapan akurat dan sel yang bermasalah langsung merah.
+      // Paste selesai: cek ke database diam-diam supaya status duplicate /
+      // kelengkapan akurat. Autofill tidak dijalankan otomatis agar input manual PIC terjaga
+      // (gunakan tombol 🪄 Auto per kolom jika ingin menarik data dari Creator Pool).
       scheduleVerify();
     }
   };
@@ -514,72 +426,7 @@ export default function SpreadsheetImportCreatorClient() {
   const handleUsernameBlur = async (idx: number, val: string) => {
     const uname = val.replace(/^@/, '').toLowerCase().trim();
     if (!uname) return;
-    
-    try {
-      // Fetch DB
-      const { data: dbCreators } = await fetchCreatorsWithSnapshotsForImportAction([uname]);
-      const dbCreator = (dbCreators || [])[0];
-        
-      if (!dbCreator) return;
-      
-      const snaps = (dbCreator.creator_snapshots || []).sort((a: any, b: any) => b.id - a.id);
-      const lastSnap = snaps[0] || {};
-      const activeContact = (dbCreator.creator_contacts || []).find((c: any) => c.status === 'aktif');
-      
-      const { data: ccDatas } = await fetchCampaignCreatorsForImportAction(campaignId, [dbCreator.id]);
-      const ccData = (ccDatas || [])[0];
-
-      setRows(prev => {
-        const newRows = [...prev];
-        const row = { ...newRows[idx] };
-        
-        let updated = false;
-        
-        const checkAndUpdate = (field: keyof SpreadsheetRow, newVal: any) => {
-          if (newVal !== undefined && newVal !== null && newVal !== '') {
-            const strVal = newVal.toString();
-            const isDefault = 
-              !row[field] || 
-              (field === 'qty_vt' && row[field] === '1') || 
-              (field === 'qty_live' && row[field] === '0') || 
-              (field === 'rate_card' && row[field] === '0') ||
-              row[field] === '0';
-              
-            if (isDefault && row[field] !== strVal) {
-              (row as any)[field] = strVal;
-              updated = true;
-            }
-          }
-        };
-
-        if (activeContact?.nomor) checkAndUpdate('no_wa', activeContact.nomor);
-        if (lastSnap.followers) checkAndUpdate('followers', lastSnap.followers);
-        if (lastSnap.level) checkAndUpdate('level', lastSnap.level);
-        if (lastSnap.gmv_30d) checkAndUpdate('gmv_30_days', lastSnap.gmv_30d);
-        if (lastSnap.gmv_30d_video) checkAndUpdate('gmv_30_days_video', lastSnap.gmv_30d_video);
-        if (lastSnap.gmv_30d_live) checkAndUpdate('gmv_30_days_live', lastSnap.gmv_30d_live);
-        
-        if (ccData) {
-          if (ccData.price) checkAndUpdate('rate_card', ccData.price);
-          if (ccData.qty_vt !== undefined) checkAndUpdate('qty_vt', ccData.qty_vt);
-          if (ccData.qty_live !== undefined) checkAndUpdate('qty_live', ccData.qty_live);
-          
-          const vt = Number(row.qty_vt) || 0;
-          const live = Number(row.qty_live) || 0;
-          row.content_type = determineContentType(vt, live);
-        } else if (lastSnap.ratecard) {
-          checkAndUpdate('rate_card', lastSnap.ratecard);
-        }
-
-        if (updated) {
-          newRows[idx] = row;
-          return newRows;
-        }
-        return prev;
-      });
-    } catch (e) {
-      console.error(e);
-    }
+    scheduleVerify();
   };
 
   // Auto-verify: begitu data di-paste atau username diubah, data dicek diam-diam
@@ -622,50 +469,130 @@ export default function SpreadsheetImportCreatorClient() {
     setRows(rederiveRows(newRows));
   };
 
-  const handleAutofillRatecard = async () => {
-    const validRows = rows.filter(r => r && (r.username || '').trim() !== '' && (!r.rate_card || r.rate_card === '0'));
-    if (validRows.length === 0) {
-      alert("Semua kreator sudah memiliki Rate Card > 0, atau tidak ada Username yang diisi.");
+  type AutofillTargetField =
+    | 'all'
+    | 'no_wa'
+    | 'followers'
+    | 'level'
+    | 'gmv_30_days'
+    | 'gmv_30_days_video'
+    | 'gmv_30_days_live'
+    | 'rate_card';
+
+  const handleAutofillColumn = async (targetField: AutofillTargetField = 'all') => {
+    const rowsWithUsername = rows.filter(r => r && (r.username || '').trim() !== '');
+    if (rowsWithUsername.length === 0) {
+      alert("Masukkan minimal 1 Username terlebih dahulu di tabel.");
       return;
     }
-    
+
+    const fieldLabelMap: Record<AutofillTargetField, string> = {
+      all: 'Semua Kolom',
+      no_wa: 'No WA',
+      followers: 'Followers',
+      level: 'Level',
+      gmv_30_days: 'GMV 30 Days',
+      gmv_30_days_video: 'GMV 30D (Video)',
+      gmv_30_days_live: 'GMV 30D (Live)',
+      rate_card: 'Rate Card',
+    };
+
     setIsAutoDetecting(true);
     try {
-      const usernames = validRows.map(r => (r.username || '').trim());
+      const usernames = Array.from(new Set(rowsWithUsername.map(r => (r.username || '').trim())));
       const { data: matchedCreators } = await fetchCreatorsWithSnapshotsForImportAction(usernames);
-        
+
       if (matchedCreators && matchedCreators.length > 0) {
-        setRows(currentRows => {
-          const newRows = [...currentRows];
-          let updatedCount = 0;
-          
-          for (let i = 0; i < newRows.length; i++) {
-            const row = newRows[i];
-            if (!row) continue;
-            const uname = (row.username || '').trim();
-            if (!uname || (row.rate_card && row.rate_card !== '0')) continue;
-            
-            const matched = matchedCreators.find((c: any) => c && (c.username || '').toLowerCase() === uname.toLowerCase());
-            if (!matched) continue;
-            
-            const snaps = (matched.creator_snapshots || []).sort((a: any, b: any) => b.id - a.id);
-            const mergedRatecard = snaps.reduce((acc: any, curr: any) => acc ?? curr.ratecard, null);
-            
-            if (mergedRatecard !== null && mergedRatecard > 0) {
-               newRows[i].rate_card = mergedRatecard.toString();
-               updatedCount++;
+        const creatorIds = matchedCreators.map((c: any) => c.id);
+        const { data: ccDatas } = await fetchCampaignCreatorsForImportAction(campaignId, creatorIds);
+
+        let updatedRowsCount = 0;
+        const newRows = [...rows];
+
+        for (let i = 0; i < newRows.length; i++) {
+          const row = newRows[i];
+          if (!row) continue;
+          const uname = (row.username || '').trim();
+          if (!uname) continue;
+
+          const matched = matchedCreators.find(
+            (c: any) => c && (c.username || '').toLowerCase() === uname.toLowerCase()
+          );
+          if (!matched) continue;
+
+          const snaps = [...(matched.creator_snapshots || [])].sort((a: any, b: any) => b.id - a.id);
+          const pickLatestSnapVal = (key: string) => {
+            for (const s of snaps) {
+              if (s && s[key] !== undefined && s[key] !== null && Number(s[key]) > 0) {
+                return String(s[key]);
+              }
             }
+            return '';
+          };
+
+          const activeContact =
+            (matched.creator_contacts || []).find((c: any) => c.status === 'aktif') ||
+            (matched.creator_contacts || [])[0];
+          const ccData = (ccDatas || []).find((c: any) => c.creator_id === matched.id);
+
+          const updatedRow = { ...row };
+          let rowChanged = false;
+
+          const applyField = (field: keyof SpreadsheetRow, val: string) => {
+            if (!val || val === '0') return;
+            const current = (updatedRow[field] || '').toString().trim();
+            const isEmptyOrZero = !current || current === '0' || current === '-';
+            // Jika user klik autofill spesifik 1 kolom, isi kolom yang masih kosong/0; jika sudah ada isinya biarkan kecuali masih 0/kosong
+            if (isEmptyOrZero && current !== val) {
+              (updatedRow as any)[field] = val;
+              rowChanged = true;
+            }
+          };
+
+          if (targetField === 'all' || targetField === 'no_wa') {
+            if (activeContact?.nomor) applyField('no_wa', String(activeContact.nomor).trim());
           }
-          if (updatedCount > 0) alert(`Berhasil autofill ratecard untuk ${updatedCount} kreator.`);
-          else alert("Tidak ada data ratecard terbaru yang ditemukan untuk di-autofill.");
-          return newRows;
-        });
+          if (targetField === 'all' || targetField === 'followers') {
+            applyField('followers', pickLatestSnapVal('followers'));
+          }
+          if (targetField === 'all' || targetField === 'level') {
+            applyField('level', pickLatestSnapVal('level'));
+          }
+          if (targetField === 'all' || targetField === 'gmv_30_days') {
+            applyField('gmv_30_days', pickLatestSnapVal('gmv_30d'));
+          }
+          if (targetField === 'all' || targetField === 'gmv_30_days_video') {
+            applyField('gmv_30_days_video', pickLatestSnapVal('gmv_30d_video'));
+          }
+          if (targetField === 'all' || targetField === 'gmv_30_days_live') {
+            applyField('gmv_30_days_live', pickLatestSnapVal('gmv_30d_live'));
+          }
+          if (targetField === 'all' || targetField === 'rate_card') {
+            const rcVal =
+              ccData?.price && Number(ccData.price) > 0
+                ? String(ccData.price)
+                : pickLatestSnapVal('ratecard');
+            applyField('rate_card', rcVal);
+          }
+
+          if (rowChanged) {
+            newRows[i] = updatedRow;
+            updatedRowsCount++;
+          }
+        }
+
+        if (updatedRowsCount > 0) {
+          setRows(rederiveRows(newRows));
+          alert(`Berhasil autofill ${fieldLabelMap[targetField]} dari Creator Pool untuk ${updatedRowsCount} baris kreator.`);
+        } else {
+          alert(`Tidak ditemukan data ${fieldLabelMap[targetField]} baru di Creator Pool untuk baris yang masih kosong.`);
+        }
       } else {
-        alert("Tidak ada data ratecard terbaru yang ditemukan untuk di-autofill.");
+        alert("Username yang ada di tabel belum ditemukan di database Creator Pool.");
       }
     } catch (err) {
       console.error(err);
-      alert("Gagal melakukan autofill ratecard.");
+      alert(`Gagal melakukan autofill ${fieldLabelMap[targetField]}.`);
     }
     setIsAutoDetecting(false);
   };
@@ -917,38 +844,8 @@ export default function SpreadsheetImportCreatorClient() {
 
       if (dbCreator) {
         row.creatorId = dbCreator.id;
-        const snaps = (dbCreator.creator_snapshots || []).sort((a: any, b: any) => b.id - a.id);
-        const lastSnap = snaps[0] || {};
-        const activeContact = (dbCreator.creator_contacts || []).find((c: any) => c.status === 'aktif');
-        
-        const checkAndUpdate = (field: keyof SpreadsheetRow, newVal: any) => {
-          if (newVal !== undefined && newVal !== null && newVal !== '') {
-            const strVal = newVal.toString();
-            const isDefault = 
-              !row[field] || 
-              (field === 'qty_vt' && row[field] === '1') || 
-              (field === 'qty_live' && row[field] === '0') || 
-              (field === 'rate_card' && row[field] === '0') ||
-              row[field] === '0';
-              
-            if (isDefault && row[field] !== strVal) {
-              (row as any)[field] = strVal;
-            }
-          }
-        };
-
-        if (activeContact?.nomor) checkAndUpdate('no_wa', activeContact.nomor);
-        if (lastSnap.followers) checkAndUpdate('followers', lastSnap.followers);
-        if (lastSnap.level) checkAndUpdate('level', lastSnap.level);
-        if (lastSnap.gmv_30d) checkAndUpdate('gmv_30_days', lastSnap.gmv_30d);
-        if (lastSnap.gmv_30d_video) checkAndUpdate('gmv_30_days_video', lastSnap.gmv_30d_video);
-        if (lastSnap.gmv_30d_live) checkAndUpdate('gmv_30_days_live', lastSnap.gmv_30d_live);
         
         if (campaignCreator) {
-          if (campaignCreator.price) checkAndUpdate('rate_card', campaignCreator.price);
-          if (campaignCreator.qty_vt !== undefined) checkAndUpdate('qty_vt', campaignCreator.qty_vt);
-          if (campaignCreator.qty_live !== undefined) checkAndUpdate('qty_live', campaignCreator.qty_live);
-          
           const vt = Number(row.qty_vt) || 0;
           const live = Number(row.qty_live) || 0;
           row.content_type = determineContentType(vt, live);
@@ -960,21 +857,10 @@ export default function SpreadsheetImportCreatorClient() {
           hasDuplicates = true;
           row.errorMsg = undefined;
         } else {
-          if (lastSnap.ratecard) checkAndUpdate('rate_card', lastSnap.ratecard);
-          
-          const hasNoWa = Boolean(row.no_wa && row.no_wa.trim() && row.no_wa.trim() !== '-');
-          const hasFollowers = Boolean(row.followers && Number(row.followers) > 0);
-          const hasGmv = Boolean((row.gmv_30_days && Number(row.gmv_30_days) > 0) || 
-                                 (row.gmv_30_days_video && Number(row.gmv_30_days_video) > 0) || 
-                                 (row.gmv_30_days_live && Number(row.gmv_30_days_live) > 0));
-
-          if (!hasNoWa || !hasFollowers || !hasGmv) {
+          const missing = missingColumns(row);
+          if (missing.length > 0) {
             row.status = 'incomplete';
             hasIncompletes = true;
-            const missing: string[] = [];
-            if (!hasNoWa) missing.push('No WA');
-            if (!hasFollowers) missing.push('Followers');
-            if (!hasGmv) missing.push('Minimal 1 GMV');
             row.errorMsg = `${missing.join(', ')} wajib diisi`;
           } else {
             row.status = 'baru';
@@ -982,19 +868,10 @@ export default function SpreadsheetImportCreatorClient() {
           }
         }
       } else {
-        const hasNoWa = Boolean(row.no_wa && row.no_wa.trim() && row.no_wa.trim() !== '-');
-        const hasFollowers = Boolean(row.followers && Number(row.followers) > 0);
-        const hasGmv = Boolean((row.gmv_30_days && Number(row.gmv_30_days) > 0) || 
-                               (row.gmv_30_days_video && Number(row.gmv_30_days_video) > 0) || 
-                               (row.gmv_30_days_live && Number(row.gmv_30_days_live) > 0));
-
-        if (!hasNoWa || !hasFollowers || !hasGmv) {
+        const missing = missingColumns(row);
+        if (missing.length > 0) {
           row.status = 'incomplete';
           hasIncompletes = true;
-          const missing: string[] = [];
-          if (!hasNoWa) missing.push('No WA');
-          if (!hasFollowers) missing.push('Followers');
-          if (!hasGmv) missing.push('Minimal 1 GMV');
           row.errorMsg = `${missing.join(', ')} wajib diisi`;
         } else {
           row.status = 'baru';
@@ -1177,9 +1054,31 @@ export default function SpreadsheetImportCreatorClient() {
     }
   };
 
-  const TableHeader = ({ title, width }: { title: string, width?: string }) => (
+  const TableHeader = ({
+    title,
+    width,
+    autofillField,
+  }: {
+    title: string;
+    width?: string;
+    autofillField?: AutofillTargetField;
+  }) => (
     <th className={`px-2 py-2 text-left font-semibold text-slate-600 border-b border-r border-slate-300 bg-slate-100 whitespace-nowrap text-xs shadow-sm sticky top-0 z-10 ${width || 'w-48'}`}>
-      {title}
+      <div className="flex items-center justify-between gap-1">
+        <span>{title}</span>
+        {autofillField && (
+          <button
+            type="button"
+            onClick={() => handleAutofillColumn(autofillField)}
+            disabled={isAutoDetecting || isImporting}
+            title={`Autofill kolom ${title.replace(' *', '')} dari Creator Pool`}
+            className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-[10px] font-bold transition-colors cursor-pointer disabled:opacity-40"
+          >
+            <Wand2 className="w-2.5 h-2.5" />
+            <span>Auto</span>
+          </button>
+        )}
+      </div>
     </th>
   );
 
@@ -1213,8 +1112,8 @@ export default function SpreadsheetImportCreatorClient() {
         </div>
         
         <div className="flex items-center gap-3">
-          <Button variant="outline" onClick={handleAutofillRatecard} disabled={isAutoDetecting} className="text-blue-600 border-blue-200 hover:bg-blue-50">
-            <Wand2 className="w-4 h-4 mr-2" /> Autofill Ratecard
+          <Button variant="outline" onClick={() => handleAutofillColumn('all')} disabled={isAutoDetecting} className="text-blue-600 border-blue-200 hover:bg-blue-50">
+            <Wand2 className="w-4 h-4 mr-2" /> Autofill Semua Kolom
           </Button>
           <Button variant="outline" onClick={clearAll} className="text-slate-600 bg-white shadow-sm hover:bg-slate-50">
             Bersihkan
@@ -1329,13 +1228,13 @@ export default function SpreadsheetImportCreatorClient() {
                 <tr>
                   <th className="w-12 px-2 py-2 bg-slate-100 border-b border-r border-slate-300 sticky top-0 z-10 text-center text-xs font-semibold text-slate-500">No</th>
                   <TableHeader title="Username *" width="w-48" />
-                  <TableHeader title="No WA *" width="w-40" />
-                  <TableHeader title="Followers *" width="w-32" />
-                  <TableHeader title="Level" width="w-24" />
-                  <TableHeader title="GMV 30 Days *" width="w-40" />
-                  <TableHeader title="GMV 30D (Video)" width="w-32" />
-                  <TableHeader title="GMV 30D (Live)" width="w-32" />
-                  <TableHeader title="Rate Card (Rp)" width="w-40" />
+                  <TableHeader title="No WA" width="w-40" autofillField="no_wa" />
+                  <TableHeader title="Followers" width="w-32" autofillField="followers" />
+                  <TableHeader title="Level" width="w-24" autofillField="level" />
+                  <TableHeader title="GMV 30 Days" width="w-40" autofillField="gmv_30_days" />
+                  <TableHeader title="GMV 30D (Video)" width="w-32" autofillField="gmv_30_days_video" />
+                  <TableHeader title="GMV 30D (Live)" width="w-32" autofillField="gmv_30_days_live" />
+                  <TableHeader title="Rate Card (Rp)" width="w-40" autofillField="rate_card" />
                   <TableHeader title="Qty VT *" width="w-24" />
                   <TableHeader title="Qty Live *" width="w-24" />
                   <TableHeader title="Tipe Konten" width="w-32" />
@@ -1369,92 +1268,60 @@ export default function SpreadsheetImportCreatorClient() {
                       </td>
                       
                       <td className="relative p-0 border-b border-r border-slate-300 group">
-                        {(() => {
-                          const isNoWaMissing = (row.status === 'incomplete' || row.status === 'error') && (!row.no_wa || !row.no_wa.trim() || row.no_wa.trim() === '-');
-                          return (
-                            <input 
-                              type="text" 
-                              value={row.no_wa || ''} 
-                              onChange={(e) => updateCell(idx, 'no_wa', e.target.value)} 
-                              onPaste={(e) => handlePaste(e, idx, 'no_wa')} 
-                              placeholder={isNoWaMissing ? 'Wajib isi' : ''}
-                              className={`w-full h-full min-h-[36px] px-3 py-1 outline-none text-sm transition-colors w-40 ${isNoWaMissing ? 'bg-rose-50/80 text-rose-900 border-2 border-rose-400 placeholder-rose-400 font-medium' : 'focus:bg-blue-50'}`} 
-                            />
-                          );
-                        })()}
+                        <input 
+                          type="text" 
+                          value={row.no_wa || ''} 
+                          onChange={(e) => updateCell(idx, 'no_wa', e.target.value)} 
+                          onPaste={(e) => handlePaste(e, idx, 'no_wa')} 
+                          placeholder={row.username ? 'Auto Pool jika kosong' : ''}
+                          className="w-full h-full min-h-[36px] px-3 py-1 outline-none text-sm transition-colors w-40 focus:bg-blue-50 placeholder-slate-300" 
+                        />
                       </td>
                       
                       <td className="relative p-0 border-b border-r border-slate-300 group">
-                        {(() => {
-                          const isFollowersMissing = (row.status === 'incomplete' || row.status === 'error') && (!row.followers || Number(row.followers) <= 0);
-                          return (
-                            <input 
-                              type="text" 
-                              value={row.followers || ''} 
-                              onChange={(e) => updateCell(idx, 'followers', e.target.value)} 
-                              onPaste={(e) => handlePaste(e, idx, 'followers')} 
-                              placeholder={isFollowersMissing ? 'Wajib isi' : ''}
-                              className={`w-full h-full min-h-[36px] px-3 py-1 outline-none text-sm transition-colors w-32 ${isFollowersMissing ? 'bg-rose-50/80 text-rose-900 border-2 border-rose-400 placeholder-rose-400 font-medium' : 'focus:bg-blue-50'}`} 
-                            />
-                          );
-                        })()}
+                        <input 
+                          type="text" 
+                          value={row.followers || ''} 
+                          onChange={(e) => updateCell(idx, 'followers', e.target.value)} 
+                          onPaste={(e) => handlePaste(e, idx, 'followers')} 
+                          placeholder={row.username ? 'Auto Pool' : ''}
+                          className="w-full h-full min-h-[36px] px-3 py-1 outline-none text-sm transition-colors w-32 focus:bg-blue-50 placeholder-slate-300" 
+                        />
                       </td>
 
                       <td className="relative p-0 border-b border-r border-slate-300 group">
-                        <input type="text" value={row.level || ''} onChange={(e) => updateCell(idx, 'level', e.target.value)} onPaste={(e) => handlePaste(e, idx, 'level')} className={`w-full h-full min-h-[36px] px-3 py-1 outline-none text-sm transition-colors focus:bg-blue-50 w-24`} />
+                        <input type="text" value={row.level || ''} onChange={(e) => updateCell(idx, 'level', e.target.value)} onPaste={(e) => handlePaste(e, idx, 'level')} placeholder={row.username ? 'Auto' : ''} className="w-full h-full min-h-[36px] px-3 py-1 outline-none text-sm transition-colors focus:bg-blue-50 w-24 placeholder-slate-300" />
                       </td>
                       
                       <td className="relative p-0 border-b border-r border-slate-300 group">
-                        {(() => {
-                          const isGmvMissing = (row.status === 'incomplete' || row.status === 'error') && 
-                            (!row.gmv_30_days || Number(row.gmv_30_days) <= 0) && 
-                            (!row.gmv_30_days_video || Number(row.gmv_30_days_video) <= 0) && 
-                            (!row.gmv_30_days_live || Number(row.gmv_30_days_live) <= 0);
-                          return (
-                            <input 
-                              type="text" 
-                              value={row.gmv_30_days || ''} 
-                              onChange={(e) => updateCell(idx, 'gmv_30_days', e.target.value)} 
-                              onPaste={(e) => handlePaste(e, idx, 'gmv_30_days')} 
-                              placeholder={isGmvMissing ? 'Min 1 GMV wajib' : ''}
-                              className={`w-full h-full min-h-[36px] px-3 py-1 outline-none text-sm transition-colors w-40 ${isGmvMissing ? 'bg-rose-50/80 text-rose-900 border-2 border-rose-400 placeholder-rose-400 font-medium' : 'focus:bg-blue-50'}`} 
-                            />
-                          );
-                        })()}
+                        <input 
+                          type="text" 
+                          value={row.gmv_30_days || ''} 
+                          onChange={(e) => updateCell(idx, 'gmv_30_days', e.target.value)} 
+                          onPaste={(e) => handlePaste(e, idx, 'gmv_30_days')} 
+                          placeholder={row.username ? 'Auto Pool jika kosong' : ''}
+                          className="w-full h-full min-h-[36px] px-3 py-1 outline-none text-sm transition-colors w-40 focus:bg-blue-50 placeholder-slate-300" 
+                        />
                       </td>
                       <td className="relative p-0 border-b border-r border-slate-300 group">
-                        {(() => {
-                          const isGmvMissing = (row.status === 'incomplete' || row.status === 'error') && 
-                            (!row.gmv_30_days || Number(row.gmv_30_days) <= 0) && 
-                            (!row.gmv_30_days_video || Number(row.gmv_30_days_video) <= 0) && 
-                            (!row.gmv_30_days_live || Number(row.gmv_30_days_live) <= 0);
-                          return (
-                            <input 
-                              type="text" 
-                              value={row.gmv_30_days_video || ''} 
-                              onChange={(e) => updateCell(idx, 'gmv_30_days_video', e.target.value)} 
-                              onPaste={(e) => handlePaste(e, idx, 'gmv_30_days_video')} 
-                              className={`w-full h-full min-h-[36px] px-3 py-1 outline-none text-sm transition-colors w-32 ${isGmvMissing ? 'bg-rose-50/50 text-rose-900 border border-rose-300' : 'focus:bg-blue-50'}`} 
-                            />
-                          );
-                        })()}
+                        <input 
+                          type="text" 
+                          value={row.gmv_30_days_video || ''} 
+                          onChange={(e) => updateCell(idx, 'gmv_30_days_video', e.target.value)} 
+                          onPaste={(e) => handlePaste(e, idx, 'gmv_30_days_video')} 
+                          placeholder={row.username ? 'Auto Pool' : ''}
+                          className="w-full h-full min-h-[36px] px-3 py-1 outline-none text-sm transition-colors w-32 focus:bg-blue-50 placeholder-slate-300" 
+                        />
                       </td>
                       <td className="relative p-0 border-b border-r border-slate-300 group">
-                        {(() => {
-                          const isGmvMissing = (row.status === 'incomplete' || row.status === 'error') && 
-                            (!row.gmv_30_days || Number(row.gmv_30_days) <= 0) && 
-                            (!row.gmv_30_days_video || Number(row.gmv_30_days_video) <= 0) && 
-                            (!row.gmv_30_days_live || Number(row.gmv_30_days_live) <= 0);
-                          return (
-                            <input 
-                              type="text" 
-                              value={row.gmv_30_days_live || ''} 
-                              onChange={(e) => updateCell(idx, 'gmv_30_days_live', e.target.value)} 
-                              onPaste={(e) => handlePaste(e, idx, 'gmv_30_days_live')} 
-                              className={`w-full h-full min-h-[36px] px-3 py-1 outline-none text-sm transition-colors w-32 ${isGmvMissing ? 'bg-rose-50/50 text-rose-900 border border-rose-300' : 'focus:bg-blue-50'}`} 
-                            />
-                          );
-                        })()}
+                        <input 
+                          type="text" 
+                          value={row.gmv_30_days_live || ''} 
+                          onChange={(e) => updateCell(idx, 'gmv_30_days_live', e.target.value)} 
+                          onPaste={(e) => handlePaste(e, idx, 'gmv_30_days_live')} 
+                          placeholder={row.username ? 'Auto Pool' : ''}
+                          className="w-full h-full min-h-[36px] px-3 py-1 outline-none text-sm transition-colors w-32 focus:bg-blue-50 placeholder-slate-300" 
+                        />
                       </td>
                       
                       <td className="relative p-0 border-b border-r border-slate-300 group">

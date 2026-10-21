@@ -58,7 +58,7 @@ export async function fetchCreatorsPaginated(params: {
 
   if (search && search.trim()) {
     const s = `%${search.trim().replace(/^@/, '')}%`;
-    whereConditions.push(sql`(cr.username ILIKE ${s} OR cr.nama_asli ILIKE ${s})`);
+    whereConditions.push(sql`(cr.username ILIKE ${s} OR cr.nama_asli ILIKE ${s} OR cr.display_name ILIKE ${s} OR cr.mcn ILIKE ${s})`);
   }
 
   if (filterAddedBy) {
@@ -105,12 +105,9 @@ export async function fetchCreatorsPaginated(params: {
   const [rows, countRes] = await Promise.all([
     db.execute(sql`
       SELECT 
-        cr.id, cr.username, cr.nama_asli, cr.link_account, cr.created_at, cr.added_by, cr.last_updated_by,
+        cr.id, cr.username, cr.nama_asli, cr.display_name, cr.mcn, cr.avatar_url, cr.link_account, cr.created_at, cr.added_by, cr.last_updated_by,
         (
-          SELECT json_agg(json_build_object(
-            'id', cs.id, 'audience_age', cs.audience_age, 'level', cs.level,
-            'tanggal_update', cs.tanggal_update, 'followers', cs.followers, 'tier', cs.tier
-          ) ORDER BY cs.tanggal_update DESC, cs.id DESC)
+          SELECT json_agg(to_jsonb(cs) ORDER BY cs.tanggal_update DESC, cs.id DESC)
           FROM creator_snapshots cs
           WHERE cs.creator_id = cr.id
         ) as creator_snapshots,

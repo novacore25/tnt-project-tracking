@@ -1834,7 +1834,7 @@ export async function fetchListingPagePaginatedAction(params: {
     const data = await db.execute(sql`
       SELECT 
         cc.*,
-        c.id as creator_db_id, c.username, c.nama_asli, c.link_account,
+        c.id as creator_db_id, c.username, c.nama_asli, c.display_name, c.mcn, c.avatar_url, c.link_account,
         p_add.nama as added_by_name, p_app.nama as approved_by_name, p_rej.nama as not_approved_by_name,
         (
           SELECT json_agg(jsonb_build_object('id', ct.id, 'nomor', ct.nomor, 'status', ct.status))
@@ -1842,12 +1842,12 @@ export async function fetchListingPagePaginatedAction(params: {
           WHERE ct.creator_id = cc.creator_id
         ) as creator_contacts,
         (
-          SELECT json_agg(jsonb_build_object('id', cs.id, 'audience_age', cs.audience_age, 'level', cs.level, 'gmv_30d', cs.gmv_30d, 'gmv_30d_video', cs.gmv_30d_video, 'gmv_30d_live', cs.gmv_30d_live, 'tanggal_update', cs.tanggal_update, 'followers', cs.followers, 'tier', cs.tier, 'ratecard', cs.ratecard))
+          SELECT json_agg(to_jsonb(cs) ORDER BY cs.tanggal_update DESC, cs.id DESC)
           FROM creator_snapshots cs 
           WHERE cs.creator_id = cc.creator_id
         ) as creator_snapshots,
         (
-          SELECT json_agg(jsonb_build_object('niche_id', cn.niche_id, 'nama', n.nama))
+          SELECT json_agg(jsonb_build_object('niche_id', cn.niche_id, 'nama', n.nama, 'niches', jsonb_build_object('nama', n.nama)))
           FROM creator_niches cn 
           LEFT JOIN niches n ON cn.niche_id = n.id 
           WHERE cn.creator_id = cc.creator_id
@@ -1894,6 +1894,9 @@ export async function fetchListingPagePaginatedAction(params: {
         id: r.creator_db_id,
         username: r.username,
         nama_asli: r.nama_asli,
+        display_name: r.display_name,
+        mcn: r.mcn,
+        avatar_url: r.avatar_url,
         link_account: r.link_account,
         creator_contacts: r.creator_contacts || [],
         creator_snapshots: r.creator_snapshots || [],
@@ -1944,7 +1947,7 @@ export async function fetchCreatorSnapshotsBatchAction(creatorIds: number[]) {
   if (!creatorIds || creatorIds.length === 0) return { success: true, data: [] };
   try {
     const data = await db.execute(sql`
-      SELECT DISTINCT ON (creator_id) id, creator_id, followers, gmv_30d, gmv_30d_video, gmv_30d_live, tier, ratecard, level, audience_age, tanggal_update
+      SELECT DISTINCT ON (creator_id) *
       FROM creator_snapshots WHERE creator_id IN ${sqlInList(creatorIds)}
       ORDER BY creator_id, id DESC
     `) as any[];
@@ -2126,18 +2129,9 @@ export async function fetchCreatorsWithSnapshotsForImportAction(usernames: strin
   try {
     const data = await db.execute(sql`
       SELECT
-        c.id, c.username,
+        c.id, c.username, c.display_name, c.mcn, c.avatar_url,
         COALESCE(
-          (SELECT json_agg(json_build_object(
-            'id', cs.id,
-            'ratecard', cs.ratecard,
-            'followers', cs.followers,
-            'gmv_30d', cs.gmv_30d,
-            'gmv_30d_video', cs.gmv_30d_video,
-            'gmv_30d_live', cs.gmv_30d_live,
-            'level', cs.level,
-            'tanggal_update', cs.tanggal_update
-          ) ORDER BY cs.id DESC)
+          (SELECT json_agg(to_jsonb(cs) ORDER BY cs.id DESC)
            FROM creator_snapshots cs WHERE cs.creator_id = c.id), '[]'::json
         ) as creator_snapshots,
         COALESCE(
@@ -2245,6 +2239,7 @@ export async function saveCreatorImportBatchAction(params: {
   const { campaignId, isClientApprovalRequired, picName, picId, rows } = params;
   let successCount = 0;
   const errors: any[] = [];
+  await db.execute(sql`ALTER TABLE creator_snapshots ADD COLUMN IF NOT EXISTS campaign_id integer`);
 
   for (const row of rows) {
     try {
@@ -2292,21 +2287,34 @@ export async function saveCreatorImportBatchAction(params: {
       const rowRatecard = Number(row.rate_card ?? row.ratecard) || 0;
 
       // Check existing snapshot
-      const snapRows = await db.execute(sql`SELECT id, followers, gmv_30d, gmv_30d_video, gmv_30d_live, ratecard, level FROM creator_snapshots WHERE creator_id = ${cid} ORDER BY id DESC LIMIT 1`) as any[];
-      const lastSnap = snapRows[0];
+      const snapRows = await db.execute(sql`SELECT id, campaign_id, followers, gmv_30d, gmv_30d_video, gmv_30d_live, ratecard, level FROM creator_snapshots WHERE creator_id = ${cid} AND (campaign_id IS NULL OR campaign_id = ${campaignId}) ORDER BY (CASE WHEN campaign_id = ${campaignId} THEN 0 ELSE 1 END) ASC, tanggal_update DESC NULLS LAST, id DESC`) as any[];
+      const lastSnap: any = {};
+      for (const s of snapRows) {
+        if (!lastSnap.followers && Number(s.followers) > 0) lastSnap.followers = Number(s.followers);
+        if (!lastSnap.gmv_30d && Number(s.gmv_30d) > 0) lastSnap.gmv_30d = Number(s.gmv_30d);
+        if (!lastSnap.gmv_30d_video && Number(s.gmv_30d_video) > 0) lastSnap.gmv_30d_video = Number(s.gmv_30d_video);
+        if (!lastSnap.gmv_30d_live && Number(s.gmv_30d_live) > 0) lastSnap.gmv_30d_live = Number(s.gmv_30d_live);
+        if (!lastSnap.ratecard && Number(s.ratecard) > 0) lastSnap.ratecard = Number(s.ratecard);
+        if ((lastSnap.level === undefined || lastSnap.level === null) && s.level !== null && s.level !== undefined) lastSnap.level = Number(s.level);
+      }
       const newFollowers = rowFollowers || (lastSnap?.followers || 0);
       const newGmv = rowGmv || (lastSnap?.gmv_30d || 0);
       const newGmvVid = rowGmvVid || (lastSnap?.gmv_30d_video || 0);
       const newGmvLive = rowGmvLive || (lastSnap?.gmv_30d_live || 0);
       const newRateCard = rowRatecard || (lastSnap?.ratecard || 0);
-      const newLevel = row.level !== undefined && row.level !== null ? Number(row.level) : (lastSnap?.level ?? null);
+      const newLevel = row.level !== undefined && row.level !== null && Number(row.level) > 0 ? Number(row.level) : (lastSnap?.level ?? null);
+      const effectiveTier = newFollowers >= 1000000 ? 'Mega' : newFollowers >= 100000 ? 'Macro' : newFollowers >= 10000 ? 'Micro' : 'Nano';
+      const existingCampSnap = snapRows.find((s: any) => Number(s.campaign_id) === Number(campaignId));
+      if (existingCampSnap) {
+        await db.execute(sql`UPDATE creator_snapshots SET followers = ${newFollowers}, gmv_30d = ${newGmv}, gmv_30d_video = ${newGmvVid}, gmv_30d_live = ${newGmvLive}, ratecard = ${newRateCard}, tier = ${effectiveTier}, level = ${newLevel}, tanggal_update = CURRENT_DATE, updated_by = ${picName || 'System'} WHERE id = ${existingCampSnap.id}`);
+      }
       
       // Insert snapshot if changed or no existing snapshot
-      if (!lastSnap || lastSnap.followers !== newFollowers || lastSnap.gmv_30d !== newGmv ||
-          lastSnap.ratecard !== newRateCard || lastSnap.level !== newLevel) {
+      if (!existingCampSnap) {
+        // insert campaign-scoped snapshot
         await db.execute(sql`
-          INSERT INTO creator_snapshots (creator_id, followers, gmv_30d, gmv_30d_video, gmv_30d_live, ratecard, tier, level, tanggal_update, updated_by)
-          VALUES (${cid}, ${newFollowers}, ${newGmv}, ${newGmvVid}, ${newGmvLive}, ${newRateCard}, ${row.tier || 'Nano'}, ${newLevel}, CURRENT_DATE, ${picName || 'System'})
+          INSERT INTO creator_snapshots (creator_id, campaign_id, followers, gmv_30d, gmv_30d_video, gmv_30d_live, ratecard, tier, level, tanggal_update, updated_by)
+          VALUES (${cid}, ${campaignId}, ${newFollowers}, ${newGmv}, ${newGmvVid}, ${newGmvLive}, ${newRateCard}, ${effectiveTier}, ${newLevel}, CURRENT_DATE, ${picName || 'System'})
         `);
       }
       
@@ -2331,8 +2339,8 @@ export async function saveCreatorImportBatchAction(params: {
       
       // Upsert campaign_creator
       const updateData = {
-        tier: row.tier || 'Nano',
-        price: newRateCard,
+        tier: effectiveTier || row.tier || 'Nano',
+        price: rowRatecard,
         qty_vt: Number(row.qty_vt) || 0,
         qty_live: Number(row.qty_live) || 0,
         content_type: row.content_type || 'Video',

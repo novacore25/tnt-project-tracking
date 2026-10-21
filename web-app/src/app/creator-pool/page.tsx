@@ -2,6 +2,7 @@
 
 import { useDatabaseStore } from "@/store/useDatabaseStore";
 import { getCreatorType } from "@/utils/computed";
+import { formatAbbreviated } from "@/utils/formatters";
 import { useRouter } from "next/navigation";
 import { Search, Loader2, Download, Users } from "lucide-react";
 import Link from "next/link";
@@ -238,7 +239,11 @@ export default function CreatorPoolPage() {
             tier: acc.tier ?? curr.tier,
             level: acc.level ?? curr.level,
             gmv_30d: acc.gmv_30d ?? curr.gmv_30d,
+            gmv_status: acc.gmv_status ?? curr.gmv_status,
             audience_age: acc.audience_age ?? curr.audience_age,
+            audience_female_pct: acc.audience_female_pct ?? curr.audience_female_pct,
+            audience_male_pct: acc.audience_male_pct ?? curr.audience_male_pct,
+            top_locations: acc.top_locations ?? curr.top_locations,
             ratecard: acc.ratecard ?? curr.ratecard,
           }), {} as any);
           const tier = snapshot?.tier || 'Unknown';
@@ -248,36 +253,112 @@ export default function CreatorPoolPage() {
           else if(tier.toLowerCase() === 'nano' || tier.toLowerCase() === 'unknown') tierClass = 'tier-nano';
 
           const cNiches = (creator.creator_niches || []).map((cn:any) => niches.find(n => n.id === cn.niche_id)?.nama).filter(Boolean);
+          const topLocs: Array<{ loc: string; pct: number }> = Array.isArray(snapshot?.top_locations)
+            ? snapshot.top_locations
+            : typeof snapshot?.top_locations === 'string'
+            ? (() => {
+                try {
+                  return JSON.parse(snapshot.top_locations);
+                } catch {
+                  return [];
+                }
+              })()
+            : [];
 
           return (
             <Link key={creator.id} href={`/creator-pool/${creator.id}`} className="block h-full group">
               <div className="ccard h-full flex flex-col group-hover:border-p300 group-hover:shadow-md transition-all duration-150">
-                <div className="ctop">
-                  <div>
-                    <div className="cname">@{creator.username}</div>
-                    {creator.nama_asli && <div className="text-[13px] text-text-soft truncate max-w-[180px] mt-[2px]">{creator.nama_asli}</div>}
+                <div className="ctop items-start gap-3">
+                  <div className="flex items-start gap-2.5 min-w-0">
+                    {creator.avatar_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={creator.avatar_url}
+                        alt={creator.username}
+                        className="w-10 h-10 rounded-full object-cover border border-slate-200 shrink-0"
+                      />
+                    ) : (
+                      <div className="w-10 h-10 rounded-full bg-indigo-100 text-indigo-700 font-bold text-sm flex items-center justify-center shrink-0">
+                        {String(creator.username || '?').charAt(0).toUpperCase()}
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <div className="cname truncate">@{creator.username}</div>
+                      {creator.display_name && (
+                        <div className="text-[12px] text-slate-600 font-medium truncate max-w-[180px]">
+                          {creator.display_name}
+                        </div>
+                      )}
+                      {creator.nama_asli && (
+                        <div className="text-[11px] text-text-soft truncate max-w-[180px] mt-[1px]">
+                          KTP: {creator.nama_asli}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  <span className={`tier ${tierClass}`}>{tier}</span>
+                  <span className={`tier ${tierClass} shrink-0`}>{tier}</span>
                 </div>
                 
-                <div className="flex gap-[6px] mb-[16px] flex-wrap">
+                <div className="flex gap-[6px] mb-[12px] flex-wrap">
                   {cNiches.map((niche: string, idx: number) => (
                     <span key={idx} className="tag">{niche}</span>
                   ))}
+                  {creator.mcn && (
+                    <span className="px-2 py-0.5 bg-purple-50 text-purple-700 border border-purple-200 rounded-full text-[10px] font-medium">
+                      🏢 {creator.mcn}
+                    </span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 bg-slate-50/80 border border-slate-100 rounded-lg p-2.5 mb-2.5 text-xs">
+                  <div>
+                    <div className="text-[10px] text-slate-400 uppercase font-semibold">Followers</div>
+                    <div className="font-bold text-slate-800">{formatAbbreviated(Number(snapshot?.followers || 0), false)}</div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-slate-400 uppercase font-semibold flex items-center gap-1">
+                      <span>GMV 30D</span>
+                      {snapshot?.gmv_status && (
+                        <span className={`px-1 py-0 text-[9px] font-bold rounded ${snapshot.gmv_status === 'ESTIMASI' ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}`}>
+                          {snapshot.gmv_status}
+                        </span>
+                      )}
+                    </div>
+                    <div className="font-bold text-emerald-700">
+                      {Number(snapshot?.gmv_30d || 0) > 0 ? formatAbbreviated(Number(snapshot.gmv_30d), true) : '-'}
+                    </div>
+                  </div>
                 </div>
 
                 <div className="cstats mt-auto">
                   <div>
-                    <div className="lbl">Audience Age</div>
-                    <div className="vl text-p400">{snapshot?.audience_age || '-'}</div>
+                    <div className="lbl">Audience & Gender</div>
+                    <div className="vl text-p400 text-[13px] flex items-center gap-1 flex-wrap">
+                      <span>{snapshot?.audience_age || '-'}</span>
+                      {snapshot?.audience_female_pct != null && (
+                        <span className="text-[10px] px-1.5 py-0.5 bg-pink-50 text-pink-700 rounded font-semibold">
+                          👩 {snapshot.audience_female_pct}%
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <div>
                     <div className="lbl">Level</div>
                     <div className="vl text-g400">{snapshot?.level ? `Level ${snapshot.level}` : '-'}</div>
                   </div>
                 </div>
+
+                {topLocs.length > 0 && (
+                  <div className="mt-2.5 pt-2 border-t border-slate-100 flex flex-wrap gap-1">
+                    {topLocs.slice(0, 3).map((loc, idx) => (
+                      <span key={idx} className="px-1.5 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded text-[9px] font-semibold">
+                        {loc.loc} {loc.pct}%
+                      </span>
+                    ))}
+                  </div>
+                )}
                 
-                <div className="mt-[16px] text-[11px] text-text-mute flex justify-between font-medium">
+                <div className="mt-[14px] text-[11px] text-text-mute flex justify-between font-medium">
                   <span>Input: {creator.created_at ? new Date(creator.created_at).toLocaleDateString('id-ID') : '-'}</span>
                   <span>PIC: {creator.added_by ? profileMap.get(creator.added_by) || creator.added_by : 'System'}</span>
                 </div>

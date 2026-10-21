@@ -1,6 +1,78 @@
 (() => {
-  if (window.__TNT_SCRAPING_CREATOR_LOADED__) return;
+  const currentRuntimeId =
+    typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id
+      ? chrome.runtime.id
+      : 'active';
+  if (
+    window.__TNT_SCRAPING_CREATOR_LOADED__ &&
+    window.__TNT_SCRAPING_CREATOR_RUNTIME_ID__ === currentRuntimeId
+  ) {
+    return;
+  }
   window.__TNT_SCRAPING_CREATOR_LOADED__ = true;
+  window.__TNT_SCRAPING_CREATOR_RUNTIME_ID__ = currentRuntimeId;
+
+  // Jika ekstensi baru saja di-reload, hapus panel lama agar listener baru yang aktif
+  const stalePanel = document.getElementById('tnt-scraping-creator-panel');
+  if (stalePanel) stalePanel.remove();
+
+  function isExtensionContextValid() {
+    try {
+      return Boolean(typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function safeSendMessage(message, callback) {
+    if (!isExtensionContextValid()) {
+      isListLoopActive = false;
+      waitingForDetailTab = false;
+      const box = document.getElementById('tnt-status-box');
+      if (box) {
+        box.textContent =
+          '🔄 Ekstensi baru saja di-reload/update. Silakan refresh (F5) halaman TikTok ini.';
+      }
+      if (typeof callback === 'function') {
+        callback({
+          success: false,
+          error: 'Ekstensi baru di-reload — silakan refresh (F5) halaman ini.',
+        });
+      }
+      return;
+    }
+    try {
+      chrome.runtime.sendMessage(message, (res) => {
+        try {
+          const err = chrome.runtime?.lastError;
+          if (err && String(err.message || '').toLowerCase().includes('context invalidated')) {
+            isListLoopActive = false;
+            waitingForDetailTab = false;
+            const box = document.getElementById('tnt-status-box');
+            if (box) {
+              box.textContent =
+                '🔄 Ekstensi baru saja di-reload/update. Silakan refresh (F5) halaman TikTok ini.';
+            }
+          }
+        } catch (_) {}
+        if (typeof callback === 'function') callback(res);
+      });
+    } catch (e) {
+      isListLoopActive = false;
+      waitingForDetailTab = false;
+      const box = document.getElementById('tnt-status-box');
+      if (box) {
+        box.textContent =
+          '🔄 Ekstensi baru saja di-reload/update. Silakan refresh (F5) halaman TikTok ini.';
+      }
+      if (typeof callback === 'function') {
+        callback({
+          success: false,
+          error: 'Ekstensi baru di-reload — silakan refresh (F5) halaman ini.',
+        });
+      }
+    }
+  }
 
   // ============================================================================
   // 1. SELEKTOR DOM TERVERIFIKASI (TikTok Partner Center)
@@ -296,26 +368,46 @@
       }
     }
 
-    // Strategi 2: Simulasi Sweep Vertikal pada <canvas>
+    // Strategi 2: Simulasi Sweep Vertikal pada <canvas> (Pastikan scroll berhenti dulu)
+    container.scrollIntoView({ behavior: 'instant', block: 'center' });
+    await sleep(220);
+
     const canvas = container.querySelector('canvas');
     if (!canvas) return [];
-    const rect = canvas.getBoundingClientRect();
-    if (rect.height < 20 || rect.width < 20) return [];
 
     const locationsMap = new Map();
-    const steps = 10;
+    const steps = 16;
     for (let i = 0; i < steps; i++) {
+      const rect = canvas.getBoundingClientRect();
+      if (rect.height < 20 || rect.width < 20) break;
+
       const clientX = rect.left + rect.width * 0.35;
       const clientY = rect.top + (rect.height / steps) * (i + 0.5);
-      canvas.dispatchEvent(new MouseEvent('mousemove', { clientX, clientY, bubbles: true }));
-      await sleep(45);
+      const eventInit = {
+        clientX,
+        clientY,
+        bubbles: true,
+        cancelable: true,
+        view: window,
+      };
 
-      const titleEl = container.querySelector(CREATOR_DETAIL_SELECTORS.chartTooltipTitle);
-      const valEl = container.querySelector(CREATOR_DETAIL_SELECTORS.chartTooltipItem);
+      canvas.dispatchEvent(new PointerEvent('pointerenter', eventInit));
+      canvas.dispatchEvent(new MouseEvent('mouseenter', eventInit));
+      canvas.dispatchEvent(new PointerEvent('pointermove', eventInit));
+      canvas.dispatchEvent(new MouseEvent('mousemove', eventInit));
+      await sleep(55);
+
+      const titleEl =
+        container.querySelector(CREATOR_DETAIL_SELECTORS.chartTooltipTitle) ||
+        document.querySelector(CREATOR_DETAIL_SELECTORS.chartTooltipTitle);
+      const valEl =
+        container.querySelector(CREATOR_DETAIL_SELECTORS.chartTooltipItem) ||
+        document.querySelector(CREATOR_DETAIL_SELECTORS.chartTooltipItem);
       const locName = titleEl?.textContent?.trim();
       const pctVal = parseFloat((valEl?.textContent || '').replace(/[^0-9.]/g, ''));
       if (locName && Number.isFinite(pctVal) && !locationsMap.has(locName)) {
         locationsMap.set(locName, Math.round(pctVal * 100) / 100);
+        if (locationsMap.size >= 5) break;
       }
     }
 
@@ -343,7 +435,7 @@
       if (isCaptchaVisible()) {
         if (!wasPausedCaptcha) {
           wasPausedCaptcha = true;
-          chrome.runtime.sendMessage({ action: 'DETAIL_TAB_CAPTCHA_DETECTED' });
+          safeSendMessage({ action: 'DETAIL_TAB_CAPTCHA_DETECTED' });
         }
         notify('⏸️ CAPTCHA TERDETEKSI! Geser puzzle secara manual untuk melanjutkan otomatis...');
         await sleep(1000);
@@ -352,7 +444,7 @@
 
       if (wasPausedCaptcha) {
         wasPausedCaptcha = false;
-        chrome.runtime.sendMessage({ action: 'DETAIL_TAB_CAPTCHA_RESOLVED' });
+        safeSendMessage({ action: 'DETAIL_TAB_CAPTCHA_RESOLVED' });
       }
 
       const usernameEl = document.querySelector(CREATOR_DETAIL_SELECTORS.username);
@@ -670,7 +762,7 @@
     if (!isListLoopActive || waitingForDetailTab) return;
 
     const fullStatus = await new Promise((resolve) => {
-      chrome.runtime.sendMessage({ action: 'GET_FULL_STATUS' }, (res) => resolve(res || {}));
+      safeSendMessage({ action: 'GET_FULL_STATUS' }, (res) => resolve(res || {}));
     });
 
     if (!fullStatus?.state?.isRunning) {
@@ -724,7 +816,7 @@
       if (knownSet.has(cleanUsername)) {
         row.setAttribute('data-tnt-processed', 'true');
         badgeRowCard(row, `⏭️ Sudah di Staging (@${cleanUsername})`, '#10b981', '#10b981');
-        chrome.runtime.sendMessage({
+        safeSendMessage({
           action: 'RECORD_SKIPPED_DUPLICATE',
           username: cleanUsername,
           count: 1,
@@ -754,7 +846,7 @@
         return;
       }
 
-      chrome.runtime.sendMessage({
+      safeSendMessage({
         action: 'CARD_CLICKED_WAITING_DETAIL',
         username: cleanUsername,
       });
@@ -764,8 +856,9 @@
       // Watchdog: jika dalam 25 detik tidak ada sinyal balik (dan tidak sedang pause captcha), lanjut pindai
       if (detailWatchdogTimer) clearTimeout(detailWatchdogTimer);
       detailWatchdogTimer = setTimeout(async () => {
+        if (!isExtensionContextValid()) return;
         const check = await new Promise((resolve) => {
-          chrome.runtime.sendMessage({ action: 'GET_FULL_STATUS' }, (res) => resolve(res || {}));
+          safeSendMessage({ action: 'GET_FULL_STATUS' }, (res) => resolve(res || {}));
         });
         if (check?.state?.isRunning && !check?.state?.isPausedCaptcha && waitingForDetailTab) {
           waitingForDetailTab = false;
@@ -868,7 +961,7 @@
 
     document.getElementById('tnt-btn-sync-book').addEventListener('click', () => {
       updateFloatingStatus('🔄 Mengambil daftar username dari Staging Creator...');
-      chrome.runtime.sendMessage({ action: 'SYNC_KNOWN_USERNAMES' }, (res) => {
+      safeSendMessage({ action: 'SYNC_KNOWN_USERNAMES' }, (res) => {
         if (res && res.success) {
           updateFloatingStatus(`✅ Buku Catatan sinkron: ${res.count} username tercatat.`);
           syncPanelWithBackground();
@@ -879,7 +972,7 @@
     });
 
     document.getElementById('tnt-btn-clear-book').addEventListener('click', () => {
-      chrome.runtime.sendMessage({ action: 'CLEAR_KNOWN_USERNAMES' }, () => {
+      safeSendMessage({ action: 'CLEAR_KNOWN_USERNAMES' }, () => {
         // Reset tanda skip pada kartu yang sedang tampil di halaman agar bisa di-scrape ulang
         document.querySelectorAll(FIND_CREATORS_SELECTORS.rowItem).forEach((row) => {
           row.removeAttribute('data-tnt-processed');
@@ -899,7 +992,7 @@
         return;
       }
 
-      chrome.runtime.sendMessage({ action: 'START_AUTO_SCRAPE' }, (res) => {
+      safeSendMessage({ action: 'START_AUTO_SCRAPE' }, (res) => {
         if (res && res.success) {
           isListLoopActive = true;
           waitingForDetailTab = false;
@@ -913,7 +1006,7 @@
       isListLoopActive = false;
       waitingForDetailTab = false;
       if (detailWatchdogTimer) clearTimeout(detailWatchdogTimer);
-      chrome.runtime.sendMessage({ action: 'STOP_AUTO_SCRAPE' }, () => {
+      safeSendMessage({ action: 'STOP_AUTO_SCRAPE' }, () => {
         syncPanelWithBackground();
       });
     });
@@ -924,7 +1017,7 @@
         btn.disabled = true;
         btn.textContent = '⏳ Mengirim ke Staging Creator...';
       }
-      chrome.runtime.sendMessage({ action: 'PUSH_TO_STAGING' }, (res) => {
+      safeSendMessage({ action: 'PUSH_TO_STAGING' }, (res) => {
         if (btn) btn.disabled = false;
         if (res && res.success) {
           updateFloatingStatus(`🚀 Berhasil mengirim ${res.count} kreator ke Staging Creator!`);
@@ -1013,7 +1106,7 @@
   }
 
   function syncPanelWithBackground() {
-    chrome.runtime.sendMessage({ action: 'GET_FULL_STATUS' }, (res) => {
+    safeSendMessage({ action: 'GET_FULL_STATUS' }, (res) => {
       if (res) refreshFloatingPanelUI(res);
     });
   }
@@ -1021,7 +1114,7 @@
   async function runManualSingleDetailScrape() {
     try {
       const data = await waitAndScrapeCreatorDetailPage(updateFloatingStatus);
-      chrome.runtime.sendMessage(
+      safeSendMessage(
         { action: 'SCRAPE_DETAIL_SUCCESS', payload: data, closeTab: false },
         () => {
           updateFloatingStatus(
@@ -1063,7 +1156,7 @@
   async function bootstrapTikTokPartnerPage() {
     ensureFloatingPanel();
     const fullStatus = await new Promise((resolve) => {
-      chrome.runtime.sendMessage({ action: 'GET_FULL_STATUS' }, (res) => resolve(res || {}));
+      safeSendMessage({ action: 'GET_FULL_STATUS' }, (res) => resolve(res || {}));
     });
     refreshFloatingPanelUI(fullStatus);
 
@@ -1073,7 +1166,7 @@
       // Tab Detail ini dibuka otomatis oleh Auto-Scrape -> langsung jalankan ekstraksi & tutup tab setelah beres!
       try {
         const scrapedData = await waitAndScrapeCreatorDetailPage(updateFloatingStatus);
-        chrome.runtime.sendMessage({
+        safeSendMessage({
           action: 'SCRAPE_DETAIL_SUCCESS',
           payload: scrapedData,
           closeTab: true,

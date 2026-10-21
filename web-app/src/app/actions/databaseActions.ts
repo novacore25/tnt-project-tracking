@@ -188,17 +188,71 @@ export async function updateCreatorAction(id: number, updates: any) {
   }
 }
 
+let snapshotCampaignColEnsured = false;
+async function ensureSnapshotCampaignColumn() {
+  if (snapshotCampaignColEnsured) return;
+  try {
+    await db.execute(sql`ALTER TABLE creator_snapshots ADD COLUMN IF NOT EXISTS campaign_id integer`);
+    snapshotCampaignColEnsured = true;
+  } catch {
+    // ignore
+  }
+}
+
 export async function addCreatorSnapshotAction(snapshot: any) {
   const denied = await requireUserOrError();
   if (denied) return { success: false, error: denied.message } as any;
   try {
-    // Check for same-date snapshot
-    const snapshotDate = snapshot.tanggal_update ? new Date(snapshot.tanggal_update).toISOString().split('T')[0] : null;
+    await ensureSnapshotCampaignColumn();
+    const snapshotDate = snapshot.tanggal_update ? new Date(snapshot.tanggal_update).toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
+    const campId = snapshot.campaign_id ? Number(snapshot.campaign_id) : null;
+
+    if (campId) {
+      // Campaign-scoped snapshot: hanya meng-update data di campaign ini saja tanpa merusak campaign lain
+      const existingCampSnap = await db.execute(sql`
+        SELECT * FROM creator_snapshots
+        WHERE creator_id = ${snapshot.creator_id}
+          AND campaign_id = ${campId}
+        ORDER BY id DESC
+        LIMIT 1
+      `) as any[];
+
+      if (existingCampSnap.length > 0) {
+        const targetId = existingCampSnap[0].id;
+        const [updated] = await db.execute(sql`
+          UPDATE creator_snapshots SET
+            followers = COALESCE(${snapshot.followers ?? null}, followers),
+            level = COALESCE(${snapshot.level ?? null}, level),
+            gmv_30d = COALESCE(${snapshot.gmv_30d ?? null}, gmv_30d),
+            gmv_30d_video = COALESCE(${snapshot.gmv_30d_video ?? null}, gmv_30d_video),
+            gmv_30d_live = COALESCE(${snapshot.gmv_30d_live ?? null}, gmv_30d_live),
+            tier = COALESCE(${snapshot.tier ?? null}, tier),
+            audience_age = COALESCE(${snapshot.audience_age ?? null}, audience_age),
+            ratecard = COALESCE(${snapshot.ratecard ?? null}, ratecard),
+            updated_by = COALESCE(${snapshot.updated_by ?? null}, updated_by)
+          WHERE id = ${targetId}
+          RETURNING *
+        `) as any[];
+        return { success: true, data: updated, mode: 'updated' };
+      }
+
+      const [insertedCamp] = await db.execute(sql`
+        INSERT INTO creator_snapshots (creator_id, campaign_id, tanggal_update, followers, level, gmv_30d, gmv_30d_video, gmv_30d_live, tier, audience_age, ratecard, updated_by)
+        VALUES (${snapshot.creator_id}, ${campId}, ${snapshotDate},
+                ${snapshot.followers ?? null}, ${snapshot.level ?? null}, ${snapshot.gmv_30d ?? null},
+                ${snapshot.gmv_30d_video ?? null}, ${snapshot.gmv_30d_live ?? null},
+                ${snapshot.tier ?? null}, ${snapshot.audience_age ?? null}, ${snapshot.ratecard ?? null},
+                ${snapshot.updated_by ?? null})
+        RETURNING *
+      `) as any[];
+      return { success: true, data: insertedCamp, mode: 'inserted' };
+    }
 
     if (snapshotDate) {
       const existing = await db.execute(sql`
         SELECT * FROM creator_snapshots
         WHERE creator_id = ${snapshot.creator_id}
+          AND campaign_id IS NULL
           AND DATE(tanggal_update) = ${snapshotDate}
         LIMIT 1
       `) as any[];
@@ -227,7 +281,7 @@ export async function addCreatorSnapshotAction(snapshot: any) {
     // Insert new snapshot
     const [data] = await db.execute(sql`
       INSERT INTO creator_snapshots (creator_id, tanggal_update, followers, level, gmv_30d, gmv_30d_video, gmv_30d_live, tier, audience_age, ratecard, updated_by)
-      VALUES (${snapshot.creator_id}, ${snapshot.tanggal_update || new Date().toISOString().split('T')[0]},
+      VALUES (${snapshot.creator_id}, ${snapshotDate},
               ${snapshot.followers || null}, ${snapshot.level || null}, ${snapshot.gmv_30d || null},
               ${snapshot.gmv_30d_video || null}, ${snapshot.gmv_30d_live || null},
               ${snapshot.tier || null}, ${snapshot.audience_age || null}, ${snapshot.ratecard || null},
