@@ -703,6 +703,11 @@
    * Mencari tombol chat (ikon speech bubble) di sebelah tombol 'Invite' / 'Undang' di header detail kreator.
    */
   function findDetailChatButton() {
+    const exact = document.querySelector(
+      'button[data-e2e="7c3eed8f-42a4-eb88"], button[data-e2e*="7c3eed8f"]'
+    );
+    if (exact) return exact;
+
     const byHref = document.querySelector('a[href*="/partner/im"], a[href*="creator_id="]');
     if (byHref) return byHref;
 
@@ -1600,6 +1605,7 @@
       }
 
       if (pendingData) {
+        safeSendMessage({ action: 'IM_TAB_ACTIVE', username: pendingData.username });
         await waitAndScrapeImContactInfo(pendingData, updateFloatingStatus);
       }
       return;
@@ -1616,45 +1622,29 @@
 
         sessionStorage.setItem('tnt_pending_creator_scrape', JSON.stringify(scrapedData));
         if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
-          chrome.storage.local.set({ tnt_pending_creator_scrape: scrapedData });
+          await new Promise((resolve) => {
+            chrome.storage.local.set({ tnt_pending_creator_scrape: scrapedData }, resolve);
+          });
         }
 
         updateFloatingStatus(`💬 Membuka IM Chat room @${scrapedData.username} untuk mengambil Kontak...`);
 
-        const urlParams = new URLSearchParams(window.location.search);
-        const cid = urlParams.get('cid') || scrapedData.tiktok_cid || '';
-        const pid =
-          urlParams.get('partner_id') ||
-          urlParams.get('pid') ||
-          urlParams.get('shop_id') ||
-          '7495000000000000000';
-        const fallbackImUrl = `https://partner.tiktokshop.com/partner/im?shop_id=${pid}&creator_id=${cid}&market=4&enter_from=find_creator_detail`;
-
         const chatBtn = findDetailChatButton();
         if (chatBtn) {
-          if (chatBtn.tagName.toLowerCase() === 'a' && chatBtn.href) {
-            window.location.href = chatBtn.href;
-          } else {
-            const origOpen = window.open;
-            window.open = function (url) {
-              if (url && (String(url).includes('/partner/im') || String(url).includes('creator_id'))) {
-                window.location.href = url;
-                return window;
-              }
-              return origOpen.apply(this, arguments);
-            };
+          // Klik tombol chat di header detail yang membuka tab IM baru di browser
+          simulateHumanClick(chatBtn);
 
-            chatBtn.removeAttribute('target');
-            simulateHumanClick(chatBtn);
-
-            setTimeout(() => {
-              if (!window.location.pathname.includes('/partner/im')) {
-                window.location.href = fallbackImUrl;
-              }
-            }, 1200);
-          }
+          // Beri jeda 900ms agar tab IM baru terbuka, lalu sinyal ke background untuk menutup tab detail ini!
+          await sleep(900);
+          safeSendMessage({ action: 'DETAIL_TAB_OPENED_IM', username: scrapedData.username });
         } else {
-          window.location.href = fallbackImUrl;
+          // Jika kreator ini benar-benar tidak memiliki tombol chat di header detail
+          updateFloatingStatus(`ℹ️ @${scrapedData.username} tidak memiliki tombol chat. Menyimpan data...`);
+          safeSendMessage({
+            action: 'SCRAPE_DETAIL_SUCCESS',
+            payload: scrapedData,
+            closeTab: true,
+          });
         }
       } catch (err) {
         updateFloatingStatus(`❌ Error ekstraksi detail: ${err?.message || err}`);

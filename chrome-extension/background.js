@@ -11,6 +11,7 @@ const DEFAULT_AUTO_STATE = {
   hasStoppedWithQueue: false,
   listTabId: null,
   activeDetailTabId: null,
+  activeImTabId: null,
   currentUsername: null,
   scrapedCountSession: 0,
   skippedCountSession: 0,
@@ -384,6 +385,30 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       return;
     }
 
+    if (action === 'DETAIL_TAB_OPENED_IM') {
+      const detailTabId = sender?.tab?.id || null;
+      await updateAutoState({
+        activeDetailTabId: null,
+        statusMessage: `💬 Membuka IM Chat room @${request.username}...`,
+      });
+      // Tutup tab detail sekarang karena IM tab baru sudah dibuka oleh TikTok!
+      if (detailTabId) {
+        chrome.tabs.remove(detailTabId).catch(() => {});
+      }
+      sendResponse({ success: true });
+      return;
+    }
+
+    if (action === 'IM_TAB_ACTIVE') {
+      const imTabId = sender?.tab?.id || null;
+      await updateAutoState({
+        activeImTabId: imTabId,
+        statusMessage: `🔍 Membuka Contact Info @${request.username}...`,
+      });
+      sendResponse({ success: true });
+      return;
+    }
+
     if (action === 'SCRAPE_DETAIL_SUCCESS') {
       const creator = request.payload;
       const detailTabId = sender?.tab?.id || null;
@@ -424,6 +449,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       const nextState = await updateAutoState({
         isPausedCaptcha: false,
         activeDetailTabId: null,
+        activeImTabId: null,
         currentUsername: null,
         scrapedCountSession: newScrapedCount,
         statusMessage: `✅ Berhasil scrape @${cleanUser} (Total antrean: ${filteredQueue.length})`,
@@ -466,18 +492,24 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   return true;
 });
 
-// Jika tab detail / worker ditutup (baik otomatis atau manual oleh user), langsung bebaskan Find Creators!
+// Jika tab IM ditutup, atau jika tab detail ditutup tanpa membuka IM, langsung bebaskan Find Creators!
 chrome.tabs.onRemoved.addListener(async (tabId) => {
   const state = await getAutoState();
-  if (state.isRunning && (state.activeDetailTabId === tabId || state.currentUsername)) {
-    await updateAutoState({
-      activeDetailTabId: null,
-      currentUsername: null,
-      isPausedCaptcha: false,
-      statusMessage: 'Melanjutkan antrean kreator berikutnya...',
-    });
-    if (state.listTabId) {
-      chrome.tabs.sendMessage(state.listTabId, { action: 'CONTINUE_NEXT_CARD' }).catch(() => {});
+  if (state.isRunning) {
+    const isImTabClosed = Boolean(state.activeImTabId && state.activeImTabId === tabId);
+    const isDetailTabClosedWithoutIm = Boolean(!state.activeImTabId && state.activeDetailTabId === tabId);
+
+    if (isImTabClosed || isDetailTabClosedWithoutIm) {
+      await updateAutoState({
+        activeDetailTabId: null,
+        activeImTabId: null,
+        currentUsername: null,
+        isPausedCaptcha: false,
+        statusMessage: 'Melanjutkan antrean kreator berikutnya...',
+      });
+      if (state.listTabId) {
+        chrome.tabs.sendMessage(state.listTabId, { action: 'CONTINUE_NEXT_CARD' }).catch(() => {});
+      }
     }
   }
 });
