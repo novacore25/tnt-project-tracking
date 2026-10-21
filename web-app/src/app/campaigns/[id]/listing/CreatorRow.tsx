@@ -229,44 +229,134 @@ export const CreatorRow = React.memo(({
         <td className="text-center font-medium text-[13px] text-text-soft">
           {index + 1}
         </td>
-        <td className="relative min-w-[210px]">
+        <td className="relative min-w-[240px]">
           <div className="flex items-start gap-2.5">
             {creator.avatar_url ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={creator.avatar_url}
                 alt={creator.username}
-                className="w-9 h-9 rounded-full object-cover border border-slate-200 shrink-0 mt-0.5"
+                className="w-10 h-10 rounded-full object-cover border border-slate-200 shrink-0 mt-0.5"
               />
             ) : (
-              <div className="w-9 h-9 rounded-full bg-indigo-100 text-indigo-700 font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">
+              <div className="w-10 h-10 rounded-full bg-indigo-100 text-indigo-700 font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">
                 {String(creator.username || '?').charAt(0).toUpperCase()}
               </div>
             )}
-            <div className="min-w-0">
-              <div className="flex items-center gap-[6px] flex-wrap">
-                <Link href={`/creator-pool/${creator.id}`} className="font-semibold text-p300 hover:underline block">
+            <div className="min-w-0 space-y-1">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <Link href={`/creator-pool/${creator.id}`} className="font-bold text-slate-900 hover:text-indigo-600 inline-flex items-center gap-1 text-[13px]">
                   @{creator.username}
                 </Link>
-                {(!cc.added_by || cc.tier === 'Auto-Detect') && <span className="px-[6px] py-[2px] bg-yellow-100 text-yellow-800 text-[10px] font-bold rounded-full">AUTO</span>}
+                {activeEditingField === `level` ? (
+                  <input 
+                    type="number" 
+                    min="1"
+                    autoFocus
+                    defaultValue={getPendingValue(cc.id, 'level', snapshot?.level || '')}
+                    onBlur={e => { setCellChange(cc.id, 'level', Number(e.target.value), cc); setEditingCellId(null); }}
+                    onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                    className="input w-14 !p-[2px] text-center text-[10px] font-bold"
+                  />
+                ) : (
+                  <span 
+                    onClick={() => hasAccess && setEditingCellId(`${cc.id}-level`)}
+                    className="px-1.5 py-0.5 text-[10px] font-bold bg-amber-100 text-amber-800 rounded cursor-pointer hover:bg-amber-200"
+                    title="Klik untuk edit level"
+                  >
+                    LVL {getPendingValue(cc.id, 'level', snapshot?.level || '-') || '-'}
+                  </span>
+                )}
+                {(!cc.added_by || cc.tier === 'Auto-Detect') && (
+                  <span className="px-1.5 py-0.5 bg-yellow-100 text-yellow-800 text-[10px] font-bold rounded-full">AUTO</span>
+                )}
               </div>
+
               {creator.display_name && (
-                <div className="text-[11px] text-slate-600 font-medium truncate max-w-[160px]" title={creator.display_name}>
+                <div className="text-[11px] text-slate-600 font-medium truncate max-w-[190px]" title={creator.display_name}>
                   {creator.display_name}
                 </div>
               )}
-              <div className="flex items-center gap-1.5 mt-[4px] flex-wrap">
-                <a href={creator.link_account || `https://www.tiktok.com/@${creator.username}`} target="_blank" rel="noopener noreferrer" className="inline-block hover:opacity-80 transition-opacity shrink-0">
-                  <img src="/logo-tiktok-landscape-button.svg" alt="TikTok" className="h-[18px]" />
-                </a>
-                {creator.mcn && (
+
+              {/* Followers & Tier */}
+              <div className="text-[11px] font-semibold text-slate-700 flex items-center gap-1">
+                <span>Followers:</span>
+                {activeEditingField === `followers` ? (
+                  <input 
+                    type="number" 
+                    min="0"
+                    autoFocus
+                    defaultValue={getPendingValue(cc.id, 'followers', snapshot?.followers || 0)}
+                    onBlur={e => { setCellChange(cc.id, 'followers', e.target.value === '' ? '' : Number(e.target.value), cc); setEditingCellId(null); }}
+                    onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                    className="input w-20 !p-[2px] text-right text-[11px]"
+                  />
+                ) : (
+                  <span 
+                    className={`font-bold text-indigo-700 cursor-pointer hover:underline ${hasPending && pendingChange?.followers !== undefined ? 'text-amber-700' : ''}`}
+                    onClick={() => hasAccess && setEditingCellId(`${cc.id}-followers`)}
+                    title="Klik untuk edit followers"
+                  >
+                    {formatAbbreviated(Number(getPendingValue(cc.id, 'followers', snapshot?.followers || 0)), false)}
+                  </span>
+                )}
+                <span className="text-slate-400 font-normal">
+                  ({(() => {
+                    const f = getPendingValue(cc.id, 'followers', snapshot?.followers);
+                    if (f !== undefined && f !== null && Number(f) > 0) {
+                      const numF = Number(f);
+                      if (numF < 10000) return 'Nano';
+                      if (numF < 100000) return 'Micro';
+                      if (numF < 1000000) return 'Macro';
+                      return 'Mega';
+                    }
+                    return snapshot?.tier || cc.tier || '-';
+                  })()})
+                </span>
+              </div>
+
+              {/* Niche & MCN badges */}
+              <div className="flex flex-wrap items-center gap-1 pt-0.5">
+                {creator.creator_niches?.map((cn: any, idx: number) => {
+                  const nicheName = cn.niches?.nama || cn.nama;
+                  return nicheName ? (
+                    <span key={idx} className="bg-indigo-50 text-indigo-700 border border-indigo-200 px-1.5 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap">
+                      {nicheName}
+                    </span>
+                  ) : null;
+                })}
+                {hasAccess && (
+                  <button 
+                    onClick={() => {
+                      setNicheEditCreatorId(creator.id);
+                      setNicheEditForm(creator.creator_niches?.map((cn: any) => cn.niche_id) || []);
+                      setNicheModalOpen(true);
+                    }}
+                    className="p-0.5 hover:bg-slate-100 rounded text-slate-400 hover:text-blue-600 transition-colors shrink-0"
+                    title="Edit Niche"
+                  >
+                    <Edit2 className="w-2.5 h-2.5" />
+                  </button>
+                )}
+                {creator.mcn ? (
                   <span className="px-1.5 py-0.5 bg-purple-50 text-purple-700 border border-purple-200 rounded-full text-[10px] font-medium truncate max-w-[130px]" title={creator.mcn}>
                     🏢 {creator.mcn}
                   </span>
+                ) : (
+                  <span className="px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded-full text-[10px]">
+                    Tanpa MCN
+                  </span>
                 )}
+              </div>
+
+              {/* Contact & Links */}
+              <div className="flex items-center gap-1.5 pt-0.5 flex-wrap">
+                <a href={creator.link_account || `https://www.tiktok.com/@${creator.username}`} target="_blank" rel="noopener noreferrer" className="inline-block hover:opacity-80 transition-opacity shrink-0">
+                  <img src="/logo-tiktok-landscape-button.svg" alt="TikTok" className="h-[16px]" />
+                </a>
                 {creator.creator_contacts?.find((c: any) => c.status === 'aktif')?.nomor && (
-                  <a href={`https://wa.me/${creator.creator_contacts.find((c: any) => c.status === 'aktif').nomor.replace(/^0/, '62').replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer" className="text-[11px] text-emerald-600 hover:underline flex items-center gap-1 font-medium bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100">
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                  <a href={`https://wa.me/${creator.creator_contacts.find((c: any) => c.status === 'aktif').nomor.replace(/^0/, '62').replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer" className="text-[10px] text-emerald-600 hover:underline flex items-center gap-1 font-medium bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100">
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
                     {creator.creator_contacts.find((c: any) => c.status === 'aktif').nomor}
                   </a>
                 )}
@@ -276,22 +366,22 @@ export const CreatorRow = React.memo(({
           {(managerNotes.length > 0 || picNotes.length > 0) && (
             <div className="absolute bottom-1 left-[120px] flex gap-3 max-w-[480px] text-left z-10 opacity-90 group-hover:opacity-100 transition-opacity">
               {managerNotes.length > 0 && (
-                <div className="overflow-hidden whitespace-nowrap border border-orange-200 bg-orange-50/90 rounded px-1.5 py-0.5" title="Klik row untuk detail notes Manager">
+                <div className="overflow-hidden whitespace-nowrap border border-orange-200 bg-orange-50/90 rounded px-1.5 py-0.5" title="Detail notes Manager">
                   <div className="animate-marquee inline-block text-[10px] text-orange-700 font-medium">
                     {managerNotes.map((n: any, i: number) => (
                       <span key={i} className="mr-4">
-                        <span className="font-bold">[Manager{n.created_at ? ` - ${new Date(n.created_at).toLocaleDateString('id-ID', {day:'numeric', month:'numeric'})}` : ''}]</span> {n.isi}
+                        <span className="font-bold">[Manager]</span> {n.isi}
                       </span>
                     ))}
                   </div>
                 </div>
               )}
               {picNotes.length > 0 && (
-                <div className="overflow-hidden whitespace-nowrap border border-blue-200 bg-blue-50/90 rounded px-1.5 py-0.5" title="Klik row untuk detail notes PIC">
+                <div className="overflow-hidden whitespace-nowrap border border-blue-200 bg-blue-50/90 rounded px-1.5 py-0.5" title="Detail notes PIC">
                   <div className="animate-marquee inline-block text-[10px] text-blue-700 font-medium">
                     {picNotes.map((n: any, i: number) => (
                       <span key={i} className="mr-4">
-                        <span className="font-bold">[PIC{n.created_at ? ` - ${new Date(n.created_at).toLocaleDateString('id-ID', {day:'numeric', month:'numeric'})}` : ''}]</span> {n.isi}
+                        <span className="font-bold">[PIC]</span> {n.isi}
                       </span>
                     ))}
                   </div>
@@ -300,166 +390,85 @@ export const CreatorRow = React.memo(({
             </div>
           )}
         </td>
-        <td className="text-right">
-          {activeEditingField === `followers` ? (
-            <input 
-              type="number" 
-              min="0"
-              autoFocus
-              defaultValue={getPendingValue(cc.id, 'followers', snapshot?.followers || 0)}
-              onBlur={e => { setCellChange(cc.id, 'followers', e.target.value === '' ? '' : Number(e.target.value), cc); setEditingCellId(null); }}
-              onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-              className="input w-20 !p-[4px] text-right text-[13px]"
-            />
-          ) : (
-            <span 
-              className={`text-[13px] font-medium cursor-pointer hover:bg-blue-50 px-1 py-0.5 rounded ${hasPending && pendingChange?.followers !== undefined ? 'text-amber-700' : 'text-text'}`}
-              onClick={() => hasAccess && setEditingCellId(`${cc.id}-followers`)}
-            >{formatAbbreviated(getPendingValue(cc.id, 'followers', snapshot?.followers || 0) as number, false)}</span>
-          )}
-        </td>
-        <td className="text-right text-[13px] font-medium text-text">
-          {(() => {
-            const f = getPendingValue(cc.id, 'followers', snapshot?.followers);
-            if (f !== undefined && f !== null) {
-              const numF = Number(f);
-              if (numF < 10000) return 'Nano';
-              if (numF < 100000) return 'Micro';
-              if (numF < 1000000) return 'Macro';
-              return 'Mega';
-            }
-            return snapshot?.tier || '-';
-          })()}
-        </td>
-        <td className="text-center">
-          {activeEditingField === `level` ? (
-            <input 
-              type="number" 
-              min="1"
-              autoFocus
-              defaultValue={getPendingValue(cc.id, 'level', snapshot?.level || '')}
-              onBlur={e => { setCellChange(cc.id, 'level', Number(e.target.value), cc); setEditingCellId(null); }}
-              onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-              className="input w-16 !p-[4px] text-center text-[13px]"
-            />
-          ) : (
-            <span 
-              className={`text-[13px] font-medium cursor-pointer hover:bg-blue-50 px-1 py-0.5 rounded ${hasPending && pendingChange?.level !== undefined ? 'text-amber-700' : 'text-text'}`}
-              onClick={() => hasAccess && setEditingCellId(`${cc.id}-level`)}
-            >{(getPendingValue(cc.id, 'level', snapshot?.level || '') as string) || '-'}</span>
-          )}
-        </td>
-        <td>
-          <div className="flex items-center gap-1 max-w-[200px]">
-            <div className="flex flex-wrap gap-1">
-              {creator.creator_niches?.map((cn: any, idx: number) => {
-                const nicheName = cn.niches?.nama || cn.nama;
-                return nicheName ? <span key={idx} className="bg-indigo-50 text-indigo-700 border border-indigo-200 px-[6px] py-[2px] rounded-full text-[10px] font-medium whitespace-nowrap">{nicheName}</span> : null;
-              })}
-              {(!creator.creator_niches || creator.creator_niches.length === 0) && (
-                <span className="text-slate-400 text-[10px] italic">Kosong</span>
-              )}
-            </div>
-            {hasAccess && (
-              <button 
-                onClick={() => {
-                  setNicheEditCreatorId(creator.id);
-                  setNicheEditForm(creator.creator_niches?.map((cn: any) => cn.niche_id) || []);
-                  setNicheModalOpen(true);
-                }}
-                className="p-1 hover:bg-slate-100 rounded text-slate-400 hover:text-blue-600 transition-colors shrink-0"
-                title="Edit Niche"
+
+        {/* Kolom 2: KERJASAMA & SOW */}
+        <td className="min-w-[200px] text-[11px] space-y-1.5">
+          <div className="flex items-center justify-between">
+            <span className="font-semibold text-slate-600">
+              {getJenisKerjasama(getPendingValue(cc.id, 'price', cc.price))}:
+            </span>
+            {activeEditingField === `price` ? (
+              <input 
+                type="number" 
+                autoFocus
+                defaultValue={getPendingValue(cc.id, 'price', cc.price)}
+                onBlur={e => { setCellChange(cc.id, 'price', Number(e.target.value), cc); setEditingCellId(null); }}
+                onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                className="input w-24 !p-[2px] text-right text-[11px]"
+              />
+            ) : (
+              <span 
+                className={`font-bold cursor-pointer hover:bg-blue-50 px-1 py-0.5 rounded ${hasPending && pendingChange?.price !== undefined ? 'text-amber-700' : 'text-slate-900'}`}
+                onClick={() => hasAccess && setEditingCellId(`${cc.id}-price`)}
+                title="Klik untuk edit Price (Rp)"
               >
-                <Edit2 className="w-3 h-3" />
-              </button>
+                {formatRupiah(getPendingValue(cc.id, 'price', cc.price))}
+              </span>
             )}
           </div>
-        </td>
-        <td>
-          <div className="text-[12px] text-text">
-            {formatDateTime(cc.created_at)}
-          </div>
-          <div className="text-[11px] text-text-soft mt-[2px]">
-            Oleh: {cc.added_by_profile?.nama || 'System'}
-          </div>
-        </td>
-        <td className="capitalize text-[13px] font-medium">
-          {getJenisKerjasama(getPendingValue(cc.id, 'price', cc.price))}
-        </td>
-        <td>
-          {activeEditingField === `price` ? (
-            <input 
-              type="number" 
-              autoFocus
-              defaultValue={getPendingValue(cc.id, 'price', cc.price)}
-              onBlur={e => { setCellChange(cc.id, 'price', Number(e.target.value), cc); setEditingCellId(null); }}
-              onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-              className="input w-24 !p-[4px]"
-            />
-          ) : (
-            <span 
-              className={`text-[13px] font-semibold cursor-pointer hover:bg-blue-50 px-1 py-0.5 rounded ${hasPending && pendingChange?.price !== undefined ? 'text-amber-700' : 'text-text'}`}
-              onClick={() => hasAccess && setEditingCellId(`${cc.id}-price`)}
-            >{formatRupiah(getPendingValue(cc.id, 'price', cc.price))}</span>
-          )}
-        </td>
-        <td>
-          {activeEditingField === `qty_vt` ? (
-            <input 
-              type="number" 
-              min="1"
-              autoFocus
-              defaultValue={getPendingValue(cc.id, 'qty_vt', cc.qty_vt)}
-              onBlur={e => { setCellChange(cc.id, 'qty_vt', Number(e.target.value), cc); setEditingCellId(null); }}
-              onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-              className="input w-16 !p-[4px] text-center"
-            />
-          ) : (
-            <span 
-              className={`text-[13px] font-medium cursor-pointer hover:bg-blue-50 px-1 py-0.5 rounded ${hasPending && pendingChange?.qty_vt !== undefined ? 'text-amber-700' : ''}`}
-              onClick={() => hasAccess && setEditingCellId(`${cc.id}-qty_vt`)}
-            >{getPendingValue(cc.id, 'qty_vt', cc.qty_vt)}</span>
-          )}
-        </td>
-        <td>
-          {activeEditingField === `qty_live` ? (
-            <input 
-              type="number" 
-              min="0"
-              autoFocus
-              defaultValue={getPendingValue(cc.id, 'qty_live', cc.qty_live || 0)}
-              onBlur={e => { setCellChange(cc.id, 'qty_live', Number(e.target.value), cc); setEditingCellId(null); }}
-              onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-              className="input w-16 !p-[4px] text-center"
-            />
-          ) : (
-            <span 
-              className={`text-[13px] font-medium cursor-pointer hover:bg-blue-50 px-1 py-0.5 rounded ${hasPending && pendingChange?.qty_live !== undefined ? 'text-amber-700' : ''}`}
-              onClick={() => hasAccess && setEditingCellId(`${cc.id}-qty_live`)}
-            >{getPendingValue(cc.id, 'qty_live', cc.qty_live || 0)}</span>
-          )}
-        </td>
-        <td>
-          {(() => {
-            const qVt = Number(getPendingValue(cc.id, 'qty_vt', cc.qty_vt)) || 0;
-            const qLive = Number(getPendingValue(cc.id, 'qty_live', cc.qty_live || 0)) || 0;
-            let autoContentType = '-';
-            if (qVt > 0 && qLive > 0) autoContentType = 'Video & Live';
-            else if (qVt > 0 && qLive === 0) autoContentType = 'Video';
-            else if (qVt === 0 && qLive > 0) autoContentType = 'Live';
 
-            const hasChange = hasPending && (pendingChange?.content_type !== undefined || pendingChange?.qty_vt !== undefined || pendingChange?.qty_live !== undefined);
+          {/* SOW */}
+          <div className="flex items-center gap-2 bg-slate-50 p-1.5 rounded border border-slate-100">
+            <div className="flex items-center gap-1">
+              <span className="text-blue-700 font-bold">🎬</span>
+              {activeEditingField === `qty_vt` ? (
+                <input 
+                  type="number" 
+                  min="0"
+                  autoFocus
+                  defaultValue={getPendingValue(cc.id, 'qty_vt', cc.qty_vt)}
+                  onBlur={e => { setCellChange(cc.id, 'qty_vt', Number(e.target.value), cc); setEditingCellId(null); }}
+                  onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                  className="input w-12 !p-[1px] text-center text-[10px]"
+                />
+              ) : (
+                <span 
+                  className="font-bold text-slate-800 cursor-pointer hover:underline"
+                  onClick={() => hasAccess && setEditingCellId(`${cc.id}-qty_vt`)}
+                  title="Klik untuk edit Qty VT"
+                >
+                  {getPendingValue(cc.id, 'qty_vt', cc.qty_vt)} VT
+                </span>
+              )}
+            </div>
+            <span className="text-slate-300">•</span>
+            <div className="flex items-center gap-1">
+              <span className="text-rose-600 font-bold">🔴</span>
+              {activeEditingField === `qty_live` ? (
+                <input 
+                  type="number" 
+                  min="0"
+                  autoFocus
+                  defaultValue={getPendingValue(cc.id, 'qty_live', cc.qty_live || 0)}
+                  onBlur={e => { setCellChange(cc.id, 'qty_live', Number(e.target.value), cc); setEditingCellId(null); }}
+                  onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                  className="input w-12 !p-[1px] text-center text-[10px]"
+                />
+              ) : (
+                <span 
+                  className="font-bold text-slate-800 cursor-pointer hover:underline"
+                  onClick={() => hasAccess && setEditingCellId(`${cc.id}-qty_live`)}
+                  title="Klik untuk edit Qty Live"
+                >
+                  {getPendingValue(cc.id, 'qty_live', cc.qty_live || 0)} Live
+                </span>
+              )}
+            </div>
+          </div>
 
-            return (
-              <span className={`text-[13px] font-medium px-1 py-0.5 rounded ${hasChange ? 'text-amber-700' : 'text-text'}`}>
-                {autoContentType}
-              </span>
-            );
-          })()}
-        </td>
-        <td className="min-w-[150px]">
+          {/* Assigned Products / SKU */}
           {activeEditingField === `produk` ? (
-             <div className="w-full">
+            <div className="w-full">
               <MultiSelect 
                 options={campaignSkus.map((s: any) => ({ id: s.id, label: s.nama_produk }))}
                 selectedIds={(getPendingValue(cc.id, 'assigned_sku_ids', cc.assigned_sku_ids || []) as number[])}
@@ -470,32 +479,35 @@ export const CreatorRow = React.memo(({
               <button onClick={() => setEditingCellId(null)} className="text-[10px] text-blue-600 mt-1 hover:underline">Tutup</button>
             </div>
           ) : (
-             <div 
-               className={`flex flex-wrap gap-1 cursor-pointer hover:bg-blue-50 rounded p-1 ${hasPending && pendingChange?.assigned_sku_ids !== undefined ? 'ring-1 ring-amber-300' : ''}`}
-               onClick={() => hasAccess && setEditingCellId(`${cc.id}-produk`)}
-             >
-               {(() => {
-                 const skuIds = getPendingValue(cc.id, 'assigned_sku_ids', cc.assigned_sku_ids || []) as number[];
-                 return skuIds && skuIds.length > 0 ? (
-                   skuIds.map((skuId: number) => {
-                     const sku = campaignSkus.find((s: any) => s.id === skuId);
-                     return sku ? <span key={skuId} className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 text-[11px] px-2 py-0.5 rounded border border-blue-100">{sku.nama_produk}</span> : null;
-                   })
-                 ) : (
-                   <span className="text-[11px] text-slate-400 italic">Belum di-set</span>
-                 );
-               })()}
-             </div>
+            <div 
+              className={`flex flex-wrap gap-1 cursor-pointer hover:bg-blue-50 rounded p-1 ${hasPending && pendingChange?.assigned_sku_ids !== undefined ? 'ring-1 ring-amber-300' : ''}`}
+              onClick={() => hasAccess && setEditingCellId(`${cc.id}-produk`)}
+              title="Klik untuk pilih produk"
+            >
+              {(() => {
+                const skuIds = getPendingValue(cc.id, 'assigned_sku_ids', cc.assigned_sku_ids || []) as number[];
+                return skuIds && skuIds.length > 0 ? (
+                  skuIds.map((skuId: number) => {
+                    const sku = campaignSkus.find((s: any) => s.id === skuId);
+                    return sku ? <span key={skuId} className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 text-[10px] px-1.5 py-0.5 rounded border border-blue-100">{sku.nama_produk}</span> : null;
+                  })
+                ) : (
+                  <span className="text-[10px] text-slate-400 italic">Pilih Produk...</span>
+                );
+              })()}
+            </div>
           )}
         </td>
-        <td>
+
+        {/* Kolom 3: STATUS & PIC */}
+        <td className="min-w-[150px] text-center text-[11px] space-y-1">
           {activeEditingField === `approval` ? (
             <select 
               autoFocus
               value={getPendingValue(cc.id, 'approval', cc.approval) as string}
               onChange={e => { setCellChange(cc.id, 'approval', e.target.value, cc); setEditingCellId(null); }}
               onBlur={() => setEditingCellId(null)}
-              className="select !p-[4px]"
+              className="select !p-[4px] text-xs"
             >
               <option value="pending">Pending</option>
               <option value="approved">Approved</option>
@@ -516,20 +528,20 @@ export const CreatorRow = React.memo(({
                 
                 if (isApprovalPending) {
                   name = profile?.nama || 'Unknown';
-                  dateStr = formatDateTime(new Date());
+                  dateStr = formatDateTimeShort(new Date());
                 } else if (approvalVal === 'pending') {
                   name = staffProfiles.find((p: any) => p.id === cc.added_by)?.nama || cc.added_by_profile?.nama || 'System';
-                  dateStr = cc.created_at ? formatDateTime(cc.created_at) : '-';
+                  dateStr = cc.created_at ? formatDateTimeShort(cc.created_at) : '-';
                 } else if (approvalVal === 'approved') {
                   name = staffProfiles.find((p: any) => p.id === (cc.approved_by || cc.added_by))?.nama || cc.approved_by_profile?.nama || cc.added_by_profile?.nama || 'System';
-                  dateStr = (cc.approved_at || cc.created_at) ? formatDateTime(cc.approved_at || cc.created_at) : '-';
+                  dateStr = (cc.approved_at || cc.created_at) ? formatDateTimeShort(cc.approved_at || cc.created_at) : '-';
                 } else if (approvalVal === 'not_approved' || approvalVal === 'alternate') {
                   name = staffProfiles.find((p: any) => p.id === (cc.not_approved_by || cc.added_by))?.nama || cc.not_approved_by_profile?.nama || cc.added_by_profile?.nama || 'System';
-                  dateStr = (cc.not_approved_at || cc.created_at) ? formatDateTime(cc.not_approved_at || cc.created_at) : '-';
+                  dateStr = (cc.not_approved_at || cc.created_at) ? formatDateTimeShort(cc.not_approved_at || cc.created_at) : '-';
                 }
 
                 return (
-                  <div className="w-full flex flex-col items-center" data-version="v5">
+                  <div className="w-full flex flex-col items-center">
                     <span className={`badge ${
                       approvalVal === 'approved' ? 'b-approved' : 
                       approvalVal === 'not_approved' ? 'b-rejected' : 
@@ -546,141 +558,110 @@ export const CreatorRow = React.memo(({
               })()}
             </div>
           )}
+
+          {isClientApprovalRequired && (
+            <div className="pt-1 border-t border-slate-100 flex flex-col items-center">
+              <span 
+                className={`text-[9px] font-bold px-1.5 py-0.5 rounded cursor-pointer ${
+                  (getPendingValue(cc.id, 'client_approval', cc.client_approval) as string) === 'approved' ? 'bg-emerald-100 text-emerald-800' : 
+                  (getPendingValue(cc.id, 'client_approval', cc.client_approval) as string) === 'rejected' ? 'bg-rose-100 text-rose-800' : 'bg-slate-100 text-slate-700'
+                }`}
+                onClick={() => hasAccess && setEditingCellId(`${cc.id}-client_approval`)}
+                title="Client Approval"
+              >
+                Klien: {(getPendingValue(cc.id, 'client_approval', cc.client_approval) as string) || 'Pending'}
+              </span>
+            </div>
+          )}
         </td>
-        {isClientApprovalRequired && (
-          <td className="text-[12px] text-text max-w-[200px]">
-            {cc.notes_client ? (
-              <p className="whitespace-pre-wrap break-words leading-tight">{cc.notes_client}</p>
-            ) : (
-              <span className="text-slate-400 italic text-[11px]">Belum ada notes</span>
-            )}
-          </td>
-        )}
-        {isClientApprovalRequired && (
-          <td>
-            {activeEditingField === `client_approval` ? (
-              <select 
+
+        {/* Kolom 4: TOTAL GMV 30D & SALES CHANNEL */}
+        <td className="min-w-[220px] p-2 space-y-1.5 text-[11px]">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {activeEditingField === `gmv_30d` ? (
+              <input 
+                type="number" 
+                min="0"
                 autoFocus
-                value={getPendingValue(cc.id, 'client_approval', cc.client_approval || 'not_required') as string}
-                onChange={e => { setCellChange(cc.id, 'client_approval', e.target.value, cc); setEditingCellId(null); }}
-                onBlur={() => setEditingCellId(null)}
-                className="select !p-[4px]"
-              >
-                <option value="pending">Pending</option>
-                <option value="approved">Approved</option>
-                <option value="rejected">Rejected</option>
-              </select>
+                defaultValue={getPendingValue(cc.id, 'gmv_30d', snapshot?.gmv_30d || 0)}
+                onBlur={e => { setCellChange(cc.id, 'gmv_30d', Number(e.target.value), cc); setEditingCellId(null); }}
+                onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                className="input w-24 !p-[2px] text-right text-[12px] font-bold"
+              />
             ) : (
-              <div className="flex flex-col items-center">
+              <span 
+                className={`text-sm font-extrabold cursor-pointer hover:bg-blue-50 px-1 py-0.5 rounded ${hasPending && pendingChange?.gmv_30d !== undefined ? 'text-amber-700' : 'text-slate-900'}`}
+                onClick={() => hasAccess && setEditingCellId(`${cc.id}-gmv_30d`)}
+                title="Klik untuk edit Total GMV"
+              >
+                {(getPendingValue(cc.id, 'gmv_30d', snapshot?.gmv_30d || 0) as number) > 0 ? formatRupiah(getPendingValue(cc.id, 'gmv_30d', snapshot?.gmv_30d || 0) as number) : '-'}
+              </span>
+            )}
+            <span
+              className={`px-1.5 py-0.5 text-[10px] font-bold rounded uppercase ${
+                snapshot?.gmv_status === 'ESTIMASI'
+                  ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                  : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+              }`}
+            >
+              {snapshot?.gmv_status || 'RIIL'}
+            </span>
+          </div>
+
+          <div className="space-y-1 text-[11px] bg-slate-50 p-2 rounded-lg border border-slate-100">
+            <div className="flex items-center justify-between">
+              <span className="text-rose-600 font-semibold">🔴 LIVE ({Number(snapshot?.pct_live || 0)}%):</span>
+              {activeEditingField === `gmv_30d_live` ? (
+                <input 
+                  type="number" 
+                  min="0"
+                  autoFocus
+                  defaultValue={getPendingValue(cc.id, 'gmv_30d_live', snapshot?.gmv_30d_live || 0)}
+                  onBlur={e => { setCellChange(cc.id, 'gmv_30d_live', Number(e.target.value), cc); setEditingCellId(null); }}
+                  onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                  className="input w-20 !p-[1px] text-right text-[10px]"
+                />
+              ) : (
                 <span 
-                  className={`badge cursor-pointer hover:opacity-80 ${
-                    (getPendingValue(cc.id, 'client_approval', cc.client_approval) as string) === 'approved' ? 'b-success' : 
-                    (getPendingValue(cc.id, 'client_approval', cc.client_approval) as string) === 'rejected' ? 'b-destructive' : 'b-neutral'
-                  } ${hasPending && pendingChange?.client_approval !== undefined ? 'ring-1 ring-amber-300' : ''}`}
-                  onClick={() => hasAccess && setEditingCellId(`${cc.id}-client_approval`)}
+                  className="font-bold text-slate-800 cursor-pointer hover:underline"
+                  onClick={() => hasAccess && setEditingCellId(`${cc.id}-gmv_30d_live`)}
+                  title="Klik untuk edit GMV Live"
                 >
-                  {(getPendingValue(cc.id, 'client_approval', cc.client_approval) as string) === 'not_required' ? 'Pending' : (getPendingValue(cc.id, 'client_approval', cc.client_approval) as string)}
+                  {formatRupiah(Number(getPendingValue(cc.id, 'gmv_30d_live', snapshot?.gmv_30d_live || 0)))}
                 </span>
-                {hasPending && pendingChange?.client_approval !== undefined && (
-                  <div className="text-[10px] text-amber-600 mt-1 flex items-center justify-center gap-1 font-medium">
-                    <Loader2 className="w-3 h-3 animate-spin" /> {isBatchSaving ? 'Menyimpan...' : 'Menunggu save...'}
-                  </div>
-                )}
+              )}
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-blue-600 font-semibold">🎬 Video ({Number(snapshot?.pct_video || 0)}%):</span>
+              {activeEditingField === `gmv_30d_video` ? (
+                <input 
+                  type="number" 
+                  min="0"
+                  autoFocus
+                  defaultValue={getPendingValue(cc.id, 'gmv_30d_video', snapshot?.gmv_30d_video || 0)}
+                  onBlur={e => { setCellChange(cc.id, 'gmv_30d_video', Number(e.target.value), cc); setEditingCellId(null); }}
+                  onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                  className="input w-20 !p-[1px] text-right text-[10px]"
+                />
+              ) : (
+                <span 
+                  className="font-bold text-slate-800 cursor-pointer hover:underline"
+                  onClick={() => hasAccess && setEditingCellId(`${cc.id}-gmv_30d_video`)}
+                  title="Klik untuk edit GMV Video"
+                >
+                  {formatRupiah(Number(getPendingValue(cc.id, 'gmv_30d_video', snapshot?.gmv_30d_video || 0)))}
+                </span>
+              )}
+            </div>
+            {Number(snapshot?.pct_showcase) > 0 && (
+              <div className="flex items-center justify-between">
+                <span className="text-amber-700 font-semibold">🛍️ Cards ({Number(snapshot.pct_showcase)}%):</span>
+                <span className="font-bold text-slate-800">{formatRupiah(Number(snapshot?.gmv_30d_showcase || 0))}</span>
               </div>
             )}
-          </td>
-        )}
-        <td className="text-right min-w-[140px]">
-          {activeEditingField === `gmv_30d` ? (
-            <input 
-              type="number" 
-              min="0"
-              autoFocus
-              defaultValue={getPendingValue(cc.id, 'gmv_30d', snapshot?.gmv_30d || 0)}
-              onBlur={e => { setCellChange(cc.id, 'gmv_30d', Number(e.target.value), cc); setEditingCellId(null); }}
-              onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-              className="input w-24 !p-[4px] text-right text-[13px]"
-            />
-          ) : (
-            <div className="flex flex-col items-end gap-0.5">
-              <div className="flex items-center gap-1 justify-end">
-                <span 
-                  className={`text-[13px] font-bold cursor-pointer hover:bg-blue-50 px-1 py-0.5 rounded ${hasPending && pendingChange?.gmv_30d !== undefined ? 'text-amber-700' : 'text-slate-900'}`}
-                  onClick={() => hasAccess && setEditingCellId(`${cc.id}-gmv_30d`)}
-                >
-                  {(getPendingValue(cc.id, 'gmv_30d', snapshot?.gmv_30d || 0) as number) > 0 ? formatAbbreviated(getPendingValue(cc.id, 'gmv_30d', snapshot?.gmv_30d || 0) as number, true) : '-'}
-                </span>
-                {snapshot?.gmv_status && (
-                  <span
-                    className={`px-1 py-0.5 text-[9px] font-bold rounded uppercase ${
-                      snapshot.gmv_status === 'ESTIMASI'
-                        ? 'bg-amber-100 text-amber-800 border border-amber-300'
-                        : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                    }`}
-                  >
-                    {snapshot.gmv_status}
-                  </span>
-                )}
-              </div>
-              {Number(snapshot?.pct_showcase) > 0 && (
-                <div className="text-[10px] text-amber-700 font-medium">
-                  🛍️ Cards ({Number(snapshot.pct_showcase)}%): {formatAbbreviated(Number(snapshot?.gmv_30d_showcase || 0), true)}
-                </div>
-              )}
-            </div>
-          )}
+          </div>
         </td>
-        <td className="text-right min-w-[125px]">
-          {activeEditingField === `gmv_30d_video` ? (
-            <input 
-              type="number" 
-              min="0"
-              autoFocus
-              defaultValue={getPendingValue(cc.id, 'gmv_30d_video', snapshot?.gmv_30d_video || 0)}
-              onBlur={e => { setCellChange(cc.id, 'gmv_30d_video', Number(e.target.value), cc); setEditingCellId(null); }}
-              onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-              className="input w-24 !p-[4px] text-right text-[13px]"
-            />
-          ) : (
-            <div className="flex flex-col items-end gap-0.5">
-              <span 
-                className={`text-[13px] font-semibold cursor-pointer hover:bg-blue-50 px-1 py-0.5 rounded ${hasPending && pendingChange?.gmv_30d_video !== undefined ? 'text-amber-700' : 'text-text'}`}
-                onClick={() => hasAccess && setEditingCellId(`${cc.id}-gmv_30d_video`)}
-              >
-                {(getPendingValue(cc.id, 'gmv_30d_video', snapshot?.gmv_30d_video || 0) as number) > 0 ? formatAbbreviated(getPendingValue(cc.id, 'gmv_30d_video', snapshot?.gmv_30d_video || 0) as number, true) : '-'}
-              </span>
-              {snapshot?.pct_video !== null && snapshot?.pct_video !== undefined && (
-                <span className="text-[10px] text-blue-600 font-semibold">🎬 Video ({Number(snapshot.pct_video)}%)</span>
-              )}
-            </div>
-          )}
-        </td>
-        <td className="text-right min-w-[125px]">
-          {activeEditingField === `gmv_30d_live` ? (
-            <input 
-              type="number" 
-              min="0"
-              autoFocus
-              defaultValue={getPendingValue(cc.id, 'gmv_30d_live', snapshot?.gmv_30d_live || 0)}
-              onBlur={e => { setCellChange(cc.id, 'gmv_30d_live', Number(e.target.value), cc); setEditingCellId(null); }}
-              onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-              className="input w-24 !p-[4px] text-right text-[13px]"
-            />
-          ) : (
-            <div className="flex flex-col items-end gap-0.5">
-              <span 
-                className={`text-[13px] font-semibold cursor-pointer hover:bg-blue-50 px-1 py-0.5 rounded ${hasPending && pendingChange?.gmv_30d_live !== undefined ? 'text-amber-700' : 'text-text'}`}
-                onClick={() => hasAccess && setEditingCellId(`${cc.id}-gmv_30d_live`)}
-              >
-                {(getPendingValue(cc.id, 'gmv_30d_live', snapshot?.gmv_30d_live || 0) as number) > 0 ? formatAbbreviated(getPendingValue(cc.id, 'gmv_30d_live', snapshot?.gmv_30d_live || 0) as number, true) : '-'}
-              </span>
-              {snapshot?.pct_live !== null && snapshot?.pct_live !== undefined && (
-                <span className="text-[10px] text-rose-600 font-semibold">🔴 LIVE ({Number(snapshot.pct_live)}%)</span>
-              )}
-            </div>
-          )}
-        </td>
-        {/* Kolom Staging 1: Metrik Sales & Kolaborasi */}
+{/* Kolom Staging 1: Metrik Sales & Kolaborasi */}
         <td className="min-w-[180px] text-[11px] text-slate-700 space-y-0.5">
           {snapshot?.items_sold_30d != null || snapshot?.gpm_30d != null || snapshot?.avg_commission_rate != null ? (
             <>
@@ -826,7 +807,7 @@ export const CreatorRow = React.memo(({
         <tr className="bg-slate-50 hover:bg-slate-50">
           <td></td>
           <td></td>
-          <td colSpan={isClientApprovalRequired ? 21 : 19} className="p-0 border-b-0">
+          <td colSpan={9} className="p-0 border-b-0">
             <div className="py-[16px] pr-[16px]">
               <div className="bg-white border border-line rounded-[12px] p-[16px]">
                 <div className="flex items-center justify-between mb-[12px]">

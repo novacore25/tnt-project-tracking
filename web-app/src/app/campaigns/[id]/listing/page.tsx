@@ -43,7 +43,7 @@ import {
   deleteSingleDuplicateCampaignCreatorAction,
 } from "@/app/actions/campaignPageActions";
 
-const PAGE_SIZE = 100;
+const PAGE_SIZE = 40;
 
 const mergeSnapshotFields = (orderedSnaps: any[]) => {
   const result: any = {};
@@ -2766,77 +2766,39 @@ function CampaignListingContent() {
                   />
                 )}
               </th>
-              <th className="w-10"></th>
+              <th className="w-8"></th>
               <th className="w-12 text-center text-text-soft">No.</th>
-              <th>
+              <th className="min-w-[240px]">
                 <button onClick={() => toggleSort('username')} className="flex items-center text-left font-semibold hover:text-p300 transition-colors">
-                  Creator <SortIcon col="username" />
+                  Profil Kreator & MCN <SortIcon col="username" />
                 </button>
               </th>
-              <th className="text-right">
-                <button onClick={() => toggleSort('followers')} className="flex items-center justify-end font-semibold hover:text-p300 transition-colors w-full">
-                  Followers <SortIcon col="followers" />
+              <th className="min-w-[200px]">
+                <button onClick={() => toggleSort('price')} className="flex items-center text-left font-semibold hover:text-p300 transition-colors">
+                  Kerjasama & SOW <SortIcon col="price" />
                 </button>
               </th>
-              <th className="text-right">
-                <button onClick={() => toggleSort('tier')} className="flex items-center justify-end font-semibold hover:text-p300 transition-colors w-full">
-                  Tier <SortIcon col="tier" />
+              <th className="min-w-[150px] text-center">
+                <button onClick={() => toggleSort('approval')} className="flex items-center justify-center font-semibold hover:text-p300 transition-colors w-full">
+                  Status & PIC <SortIcon col="approval" />
                 </button>
               </th>
-              <th className="text-center">
-                <button onClick={() => toggleSort('level')} className="flex items-center justify-center font-semibold hover:text-p300 transition-colors w-full">
-                  Level <SortIcon col="level" />
+              <th className="min-w-[220px]">
+                <button onClick={() => toggleSort('gmv')} className="flex items-center font-semibold hover:text-p300 transition-colors">
+                  Total GMV 30D & Channel <SortIcon col="gmv" />
                 </button>
               </th>
-              <th>Niche</th>
-              <th>Tanggal & PIC</th>
-              <th>Kerjasama</th>
-              <th>
-                <button onClick={() => toggleSort('price')} className="flex items-center font-semibold hover:text-p300 transition-colors">
-                  Price (Rp) <SortIcon col="price" />
-                </button>
-              </th>
-              <th>
-                <button onClick={() => toggleSort('qty_vt')} className="flex items-center font-semibold hover:text-p300 transition-colors">
-                  Qty VT SOW <SortIcon col="qty_vt" />
-                </button>
-              </th>
-              <th>
-                <button onClick={() => toggleSort('qty_live')} className="flex items-center font-semibold hover:text-p300 transition-colors">
-                  Qty Live SOW <SortIcon col="qty_live" />
-                </button>
-              </th>
-              <th>
-                <button onClick={() => toggleSort('content_type')} className="flex items-center font-semibold hover:text-p300 transition-colors">
-                  Tipe Konten <SortIcon col="content_type" />
-                </button>
-              </th>
-              <th>Produk</th>
-              <th>
-                <button onClick={() => toggleSort('approval')} className="flex items-center font-semibold hover:text-p300 transition-colors">
-                  Approval <SortIcon col="approval" />
-                </button>
-              </th>
-              {isClientApprovalRequired && <th>Notes Client</th>}
-              {isClientApprovalRequired && <th>Client Status</th>}
-              <th className="text-right">
-                <button onClick={() => toggleSort('gmv')} className="flex items-center justify-end font-semibold hover:text-p300 transition-colors w-full">
-                  GMV Creator <SortIcon col="gmv" />
-                </button>
-              </th>
-              <th className="text-right">GMV (Video)</th>
-              <th className="text-right">GMV (Live)</th>
               <th className="min-w-[180px]">Metrik Sales & Kolaborasi</th>
               <th className="min-w-[195px]">Performa Video & LIVE</th>
               <th className="min-w-[220px]">Demografi & Top 5 Lokasi</th>
-              <th className="text-right">Aksi</th>
+              <th className="text-right w-16">Aksi</th>
             </tr>
           </thead>
           <tbody>
             {(() => {
               return displayData.length === 0 && !isLoading ? (
               <tr>
-                <td colSpan={isClientApprovalRequired ? 23 : 21} className="text-center py-[32px] text-text-soft">
+                <td colSpan={11} className="text-center py-[32px] text-text-soft">
                   Belum ada creator di campaign ini.
                 </td>
               </tr>
