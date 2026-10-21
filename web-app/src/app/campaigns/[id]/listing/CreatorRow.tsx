@@ -489,7 +489,18 @@ export const CreatorRow = React.memo(({
                 return skuIds && skuIds.length > 0 ? (
                   skuIds.map((skuId: number) => {
                     const sku = campaignSkus.find((s: any) => s.id === skuId);
-                    return sku ? <span key={skuId} className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 text-[10px] px-1.5 py-0.5 rounded border border-blue-100">{sku.nama_produk}</span> : null;
+                    if (!sku) return null;
+                    const fullName = sku.nama_produk || '';
+                    const shortName = fullName.length > 32 ? fullName.slice(0, 32) + '...' : fullName;
+                    return (
+                      <span 
+                        key={skuId} 
+                        className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 text-[10px] px-1.5 py-0.5 rounded border border-blue-100 max-w-[210px] truncate cursor-help"
+                        title={fullName}
+                      >
+                        📦 {shortName}
+                      </span>
+                    );
                   })
                 ) : (
                   <span className="text-[10px] text-slate-400 italic">Pilih Produk...</span>
