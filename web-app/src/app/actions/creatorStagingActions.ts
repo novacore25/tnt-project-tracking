@@ -173,6 +173,13 @@ export async function ensureCreatorStagingSchema() {
     await db.execute(sql`ALTER TABLE creator_snapshots ADD COLUMN IF NOT EXISTS top_locations jsonb DEFAULT '[]'::jsonb;`);
     await db.execute(sql`ALTER TABLE creator_snapshots ADD COLUMN IF NOT EXISTS gmv_by_category jsonb DEFAULT '[]'::jsonb;`);
 
+    // Bersihkan nomor telepon palsu dari artefak scraping HTML TikTok jika ada
+    await db.execute(sql`
+      UPDATE creator_staging
+      SET no_whatsapp = NULL
+      WHERE no_whatsapp IN ('1624253435', '621624253435');
+    `).catch(() => {});
+
     schemaEnsured = true;
   } catch (err) {
     console.error('ensureCreatorStagingSchema error:', err);
@@ -353,7 +360,10 @@ export async function upsertStagingCreatorsBatchAction(items: StagingCreatorReco
     const linkAccount = `https://www.tiktok.com/@${username}`;
     const avatarUrl = raw.avatar_url ? String(raw.avatar_url).trim() : null;
     const mcn = raw.mcn && String(raw.mcn).trim() !== '--' ? String(raw.mcn).trim() : null;
-    const noWhatsapp = raw.no_whatsapp ? String(raw.no_whatsapp).trim() : null;
+    let noWhatsapp = raw.no_whatsapp ? String(raw.no_whatsapp).trim() : null;
+    if (noWhatsapp === '1624253435' || noWhatsapp === '621624253435') {
+      noWhatsapp = null;
+    }
     const email = raw.email ? String(raw.email).trim().toLowerCase() : null;
     const level = raw.level ? parseInt(String(raw.level).replace(/\D/g, ''), 10) || null : null;
     const followers = raw.followers ? Math.round(Number(raw.followers)) || 0 : 0;
