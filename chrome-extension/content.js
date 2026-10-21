@@ -1177,40 +1177,48 @@
 
   /**
    * Mengambil semua kartu profil kreator individual dari grid Find Creators.
-   * Satu baris grid berisi 3 kartu individual: fungsi ini menjamin SEMUA 3 KARTU per baris
-   * terdeteksi dan diproses satu per satu, bukan hanya kartu pertama di baris tersebut.
+   * Satu baris grid TikTok selalu berisi 3 kartu individual (row.children): fungsi ini menjamin SEMUA 3 KARTU per baris
+   * terdeteksi dan diproses satu per satu secara berurutan, bukan hanya kartu pertama di baris tersebut.
    */
   function getAllCreatorCardElements() {
-    const usernameSpans = Array.from(document.querySelectorAll(FIND_CREATORS_SELECTORS.username));
     const cardItems = [];
+    const rows = Array.from(document.querySelectorAll(FIND_CREATORS_SELECTORS.rowItem));
 
-    for (const uSpan of usernameSpans) {
-      // Cari container kartu individual untuk kreator ini
-      let cardEl =
-        uSpan.closest('div[data-e2e="0fca897b-b18b-1087"]') ||
-        uSpan.closest('div[class*="Card"]') ||
-        uSpan.closest('div[class*="card"]');
+    for (const row of rows) {
+      // Di dalam 1 baris grid TikTok selalu ada 3 kartu profil individual (row.children)
+      const children = Array.from(row.children);
+      for (const card of children) {
+        const usernameSpan = card.querySelector(FIND_CREATORS_SELECTORS.username);
+        // Pastikan elemen anak ini adalah kartu yang valid (memiliki username)
+        if (usernameSpan) {
+          const clickTarget =
+            card.querySelector(FIND_CREATORS_SELECTORS.cardClickTarget) ||
+            card.querySelector('div[class*="cursor-pointer"]') ||
+            card;
 
-      if (!cardEl) {
-        // Cari container tingkat kartu (anak langsung dari baris/grid)
-        let curr = uSpan.parentElement;
-        while (
-          curr &&
-          curr.parentElement &&
-          !curr.parentElement.getAttribute('data-e2e')?.includes('e8faf26e')
-        ) {
-          curr = curr.parentElement;
+          cardItems.push({
+            cardEl: card,
+            usernameSpan,
+            clickTarget,
+          });
         }
-        cardEl = curr || uSpan.parentElement;
       }
+    }
 
-      const clickTarget = cardEl?.querySelector(FIND_CREATORS_SELECTORS.cardClickTarget) || uSpan;
-
-      cardItems.push({
-        cardEl: cardEl || uSpan,
-        usernameSpan: uSpan,
-        clickTarget,
-      });
+    // Fallback jika struktur grid berbeda: ambil dari semua username span
+    if (cardItems.length === 0) {
+      const usernameSpans = Array.from(document.querySelectorAll(FIND_CREATORS_SELECTORS.username));
+      for (const uSpan of usernameSpans) {
+        let card =
+          uSpan.closest('div[class*="cursor-pointer"]') ||
+          uSpan.closest('div[class*="rounded-8"]') ||
+          uSpan.parentElement?.parentElement;
+        cardItems.push({
+          cardEl: card || uSpan,
+          usernameSpan: uSpan,
+          clickTarget: card || uSpan,
+        });
+      }
     }
 
     return cardItems;
@@ -1430,13 +1438,12 @@
 
     document.getElementById('tnt-btn-clear-book').addEventListener('click', () => {
       safeSendMessage({ action: 'CLEAR_KNOWN_USERNAMES' }, () => {
-        // Reset tanda skip pada kartu yang sedang tampil di halaman agar bisa di-scrape ulang
-        document.querySelectorAll(FIND_CREATORS_SELECTORS.rowItem).forEach((row) => {
-          row.removeAttribute('data-tnt-processed');
-          row.style.outline = '';
-          const b = row.querySelector('.tnt-row-badge');
-          if (b) b.remove();
+        // Reset tanda skip pada semua kartu yang sedang tampil di halaman agar bisa di-scrape ulang
+        document.querySelectorAll('[data-tnt-processed]').forEach((el) => {
+          el.removeAttribute('data-tnt-processed');
+          el.style.outline = '';
         });
+        document.querySelectorAll('.tnt-row-badge').forEach((b) => b.remove());
         updateFloatingStatus('🗑️ Buku Catatan dikosongkan (0 username).');
         syncPanelWithBackground();
       });
