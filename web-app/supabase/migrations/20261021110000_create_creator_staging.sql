@@ -65,7 +65,7 @@ CREATE TABLE IF NOT EXISTS creator_staging (
     -- Metadata Staging & Promosi ke Creator Pool
     status_staging text NOT NULL DEFAULT 'staged' CHECK (status_staging IN ('staged', 'promoted', 'archived')),
     promoted_creator_id integer REFERENCES creators(id) ON DELETE SET NULL,
-    scraped_by text REFERENCES profiles(id) ON DELETE SET NULL,
+    scraped_by text,
     scraped_at timestamptz NOT NULL DEFAULT now(),
     updated_at timestamptz NOT NULL DEFAULT now()
 );

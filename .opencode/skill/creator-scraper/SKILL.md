@@ -24,9 +24,10 @@ description: Panduan teknis lengkap, peta selektor DOM TikTok Partner Center, ru
    - Pada teks **Rupiah (`Rp6,0M`)**: huruf **`M` = Miliar ($\times 10^9$)**, desimal memakai koma (`,`).
    - Pada teks **Non-Rupiah (`74.5M` followers / views / items sold)**: huruf **`M` = Million / Juta ($\times 10^6$)**, desimal memakai titik (`.`).
    - **WAJIB** pisahkan fungsi `parseIdrCurrency()` dan `parseCompactCount()`.
-5. **Buku Catatan Anti-Duplikat (`knownUsernames`):**
-   - Sebelum mulai scraping, ekstensi mengambil seluruh daftar `username` yang sudah ada di **Staging Creator** (`creator_staging` UNION `creators`).
-   - Saat memindai kartu di halaman *Find Creators*, jika `username` sudah ada di `knownUsernames`, **JANGAN KLIK kartu tersebut** — langsung tandai selesai dan lanjut ke kartu berikutnya.
+5. **Buku Catatan Anti-Duplikat (`knownUsernames` — Khusus Staging):**
+   - Sebelum mulai scraping, ekstensi mengambil seluruh daftar `username` yang sudah ada **khusus di tabel `creator_staging` saja** (bukan `creators` utama).
+   - Tujuan scraping ini adalah memasukkan semua kreator ke **Staging Creator** terlebih dahulu; nanti saat diputuskan masuk ke Creator Pool utama (`creators`), data kreator utama akan di-**update** (bukan digantikan/dihapus).
+   - Saat memindai kartu di halaman *Find Creators*, jika `username` sudah ada di `knownUsernames` (`creator_staging`), **JANGAN KLIK kartu tersebut** — langsung tandai selesai dan lanjut ke kartu berikutnya.
 6. **Simpan ke Local Storage Dulu $\rightarrow$ Tombol "Tambahkan ke Staging":**
    - Selama proses auto-scrape berjalan, setiap kreator yang berhasil di-scrape disimpan ke `chrome.storage.local` (`tnt_staged_queue`) dan username-nya langsung ditambahkan ke `knownUsernames` lokal.
    - Saat user menekan tombol **⏹️ STOP Scraping**, tampilkan tombol **"🚀 Tambahkan ke Staging"** yang mengirim batch tersebut ke database `creator_staging`.

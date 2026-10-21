@@ -256,25 +256,21 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
     if (action === 'PASSIVE_UPDATE_KNOWN_USERNAMES') {
       const incoming = Array.isArray(request.usernames) ? request.usernames : [];
-      if (incoming.length > 0) {
-        const storage = await getStorage([STORAGE_KEYS.KNOWN_USERNAMES, STORAGE_KEYS.QUEUE]);
-        const existing = storage[STORAGE_KEYS.KNOWN_USERNAMES] || [];
-        const queue = storage[STORAGE_KEYS.QUEUE] || [];
-        const merged = Array.from(
-          new Set([
-            ...existing,
+      const storage = await getStorage([STORAGE_KEYS.QUEUE]);
+      const queue = storage[STORAGE_KEYS.QUEUE] || [];
+      const merged = Array.from(
+        new Set(
+          [
             ...incoming.map((u) => String(u).trim().toLowerCase()),
             ...queue.map((c) => String(c?.username || '').trim().toLowerCase()),
-          ].filter(Boolean))
-        );
-        await setStorage({
-          [STORAGE_KEYS.KNOWN_USERNAMES]: merged,
-          [STORAGE_KEYS.KNOWN_UPDATED_AT]: new Date().toISOString(),
-        });
-        sendResponse({ success: true, count: merged.length });
-      } else {
-        sendResponse({ success: false });
-      }
+          ].filter(Boolean)
+        )
+      );
+      await setStorage({
+        [STORAGE_KEYS.KNOWN_USERNAMES]: merged,
+        [STORAGE_KEYS.KNOWN_UPDATED_AT]: new Date().toISOString(),
+      });
+      sendResponse({ success: true, count: merged.length });
       return;
     }
 

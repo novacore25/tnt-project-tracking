@@ -176,7 +176,7 @@
       if (scriptEl && scriptEl.textContent) {
         try {
           const parsed = JSON.parse(scriptEl.textContent);
-          if (Array.isArray(parsed.usernames) && parsed.usernames.length > 0) {
+          if (Array.isArray(parsed.usernames)) {
             chrome.runtime.sendMessage({
               action: 'PASSIVE_UPDATE_KNOWN_USERNAMES',
               usernames: parsed.usernames,

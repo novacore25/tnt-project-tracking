@@ -65,12 +65,10 @@ export default function StagingCreatorPage() {
   const [distinctNiches, setDistinctNiches] = useState<string[]>([]);
   const [knownBook, setKnownBook] = useState<{
     stagingCount: number;
-    poolCount: number;
     totalKnown: number;
     usernames: string[];
   }>({
     stagingCount: 0,
-    poolCount: 0,
     totalKnown: 0,
     usernames: [],
   });
@@ -324,14 +322,14 @@ export default function StagingCreatorPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-xs">
           <div className="flex items-center justify-between text-slate-500 text-xs font-semibold uppercase">
-            <span>Buku Catatan Anti-Duplikat</span>
+            <span>Buku Catatan (Khusus Staging)</span>
             <BookOpen className="w-4 h-4 text-indigo-600" />
           </div>
           <div className="text-2xl font-bold text-slate-900 mt-1">
             {knownBook.totalKnown.toLocaleString('id-ID')} <span className="text-sm font-normal text-slate-500">username</span>
           </div>
           <div className="text-xs text-slate-500 mt-1">
-            Staging: <strong>{knownBook.stagingCount}</strong> • Pool: <strong>{knownBook.poolCount}</strong> (otomatis di-skip saat scrape)
+            Hanya kreator di <strong>Staging</strong> yang di-skip saat scrape
           </div>
         </div>
 

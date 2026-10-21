@@ -125,7 +125,7 @@ export async function ensureCreatorStagingSchema() {
           gmv_by_category jsonb DEFAULT '[]'::jsonb,
           status_staging text NOT NULL DEFAULT 'staged' CHECK (status_staging IN ('staged', 'promoted', 'archived')),
           promoted_creator_id integer REFERENCES creators(id) ON DELETE SET NULL,
-          scraped_by text REFERENCES profiles(id) ON DELETE SET NULL,
+          scraped_by text,
           scraped_at timestamptz NOT NULL DEFAULT now(),
           updated_at timestamptz NOT NULL DEFAULT now()
       );
@@ -176,27 +176,29 @@ export async function ensureCreatorStagingSchema() {
   }
 }
 
+/**
+ * Mengambil daftar username KHUSUS yang ada di tabel creator_staging sebagai Buku Catatan Anti-Duplikat.
+ * Kreator yang baru ada di Creator Pool utama tetap ikut di-scrape ke Staging agar nanti saat dipromosikan
+ * ke Creator Pool utama dapat meng-update data kreator utama tersebut.
+ */
 export async function fetchKnownCreatorUsernamesAction() {
   await requireAuthenticatedUser();
   await ensureCreatorStagingSchema();
 
-  const [stagingRows, poolRows, aliasRows] = await Promise.all([
-    db.execute(sql`SELECT LOWER(TRIM(username)) as u FROM creator_staging WHERE username IS NOT NULL`).catch(() => []),
-    db.execute(sql`SELECT LOWER(TRIM(username)) as u FROM creators WHERE username IS NOT NULL`).catch(() => []),
-    db.execute(sql`SELECT LOWER(TRIM(alias_username)) as u FROM creator_aliases WHERE alias_username IS NOT NULL`).catch(() => []),
-  ]);
+  const stagingRows = await db
+    .execute(sql`SELECT LOWER(TRIM(username)) as u FROM creator_staging WHERE username IS NOT NULL`)
+    .catch(() => []);
 
-  const stagingUsernames = (stagingRows as unknown as Array<{ u?: string }>).map((r) => r.u || '').filter(Boolean);
-  const poolUsernames = (poolRows as unknown as Array<{ u?: string }>).map((r) => r.u || '').filter(Boolean);
-  const aliasUsernames = (aliasRows as unknown as Array<{ u?: string }>).map((r) => r.u || '').filter(Boolean);
-
-  const allSet = new Set<string>([...stagingUsernames, ...poolUsernames, ...aliasUsernames]);
+  const stagingUsernames = Array.from(
+    new Set(
+      (stagingRows as unknown as Array<{ u?: string }>).map((r) => r.u || '').filter(Boolean)
+    )
+  );
 
   return {
     stagingCount: stagingUsernames.length,
-    poolCount: poolUsernames.length,
-    totalKnown: allSet.size,
-    usernames: Array.from(allSet),
+    totalKnown: stagingUsernames.length,
+    usernames: stagingUsernames,
   };
 }
 
@@ -270,7 +272,7 @@ export async function fetchStagingCreatorsAction(params: {
           SELECT 1 FROM creators cr WHERE LOWER(cr.username) = LOWER(cs.username)
         ) as exists_in_pool
       FROM creator_staging cs
-      LEFT JOIN profiles p ON cs.scraped_by = p.id
+      LEFT JOIN profiles p ON p.id::text = cs.scraped_by
       ${whereClause}
       ${orderClause}
       LIMIT ${pageSize} OFFSET ${offset}
@@ -334,7 +336,7 @@ export async function upsertStagingCreatorsBatchAction(items: StagingCreatorReco
     return { success: true, upsertedCount: 0, usernames: [] };
   }
 
-  const profileId = user.id || null;
+  const profileId = user.id ? String(user.id) : null;
   let upsertedCount = 0;
   const processedUsernames: string[] = [];
 
@@ -484,6 +486,11 @@ export async function upsertStagingCreatorsBatchAction(items: StagingCreatorReco
   };
 }
 
+/**
+ * Memindahkan / Meng-update kreator terpilih dari creator_staging ke Creator Pool utama (creators).
+ * Jika kreator sudah ada di creators, data kreator utama di-UPDATE (tanpa menggantikan/menghapus
+ * data legal KTP, rekening, kontrak, atau kontak lama), dan snapshot metrik terbaru ditambahkan.
+ */
 export async function promoteStagingToCreatorPoolAction(stagingIds: number[]) {
   const user = await requireAuthenticatedUser();
   await ensureCreatorStagingSchema();
@@ -503,6 +510,7 @@ export async function promoteStagingToCreatorPoolAction(stagingIds: number[]) {
     const username = String(s.username).trim().toLowerCase().replace(/^@/, '');
     const linkAccount = s.link_account || `https://www.tiktok.com/@${username}`;
 
+    // 1. Upsert ke tabel creators: meng-update field profil TikTok tanpa menghapus nama_asli KTP / data finansial
     const cRes = await db.execute(sql`
       INSERT INTO creators (
         username, display_name, tiktok_cid, link_account, mcn, avatar_url, no_whatsapp, added_by, status
@@ -520,7 +528,7 @@ export async function promoteStagingToCreatorPoolAction(stagingIds: number[]) {
       ON CONFLICT (lower(username)) DO UPDATE SET
         display_name = COALESCE(EXCLUDED.display_name, creators.display_name),
         tiktok_cid = COALESCE(EXCLUDED.tiktok_cid, creators.tiktok_cid),
-        link_account = EXCLUDED.link_account,
+        link_account = COALESCE(EXCLUDED.link_account, creators.link_account),
         mcn = COALESCE(EXCLUDED.mcn, creators.mcn),
         avatar_url = COALESCE(EXCLUDED.avatar_url, creators.avatar_url),
         no_whatsapp = COALESCE(EXCLUDED.no_whatsapp, creators.no_whatsapp),
@@ -545,6 +553,7 @@ export async function promoteStagingToCreatorPoolAction(stagingIds: number[]) {
     const gmvByCatStr =
       typeof s.gmv_by_category === 'string' ? s.gmv_by_category : JSON.stringify(s.gmv_by_category || []);
 
+    // 2. Tambahkan snapshot metrik terbaru ke creator_snapshots (histori snapshot lama tetap utuh)
     await db.execute(sql`
       INSERT INTO creator_snapshots (
         creator_id, tanggal_update, followers, level, tier,
@@ -571,14 +580,20 @@ export async function promoteStagingToCreatorPoolAction(stagingIds: number[]) {
       )
     `);
 
+    // 3. Tambahkan kontak WhatsApp jika belum ada (tanpa menghapus nomor yang sudah ada)
     if (s.no_whatsapp) {
-      await db.execute(sql`DELETE FROM creator_contacts WHERE creator_id = ${creatorId}`);
-      await db.execute(sql`
-        INSERT INTO creator_contacts (creator_id, nomor, status, tanggal_mulai)
-        VALUES (${creatorId}, ${s.no_whatsapp}, 'aktif', CURRENT_DATE)
-      `);
+      const existingContact = (await db.execute(sql`
+        SELECT id FROM creator_contacts WHERE creator_id = ${creatorId} AND nomor = ${s.no_whatsapp} LIMIT 1
+      `)) as unknown as Array<{ id?: number }>;
+      if (!existingContact || existingContact.length === 0) {
+        await db.execute(sql`
+          INSERT INTO creator_contacts (creator_id, nomor, status, tanggal_mulai)
+          VALUES (${creatorId}, ${s.no_whatsapp}, 'aktif', CURRENT_DATE)
+        `);
+      }
     }
 
+    // 4. Tambahkan/update niche utama tanpa menghapus niche yang sudah ada
     if (s.primary_niche) {
       const nRes = await db.execute(sql`
         INSERT INTO niches (nama) VALUES (${s.primary_niche})
@@ -591,11 +606,12 @@ export async function promoteStagingToCreatorPoolAction(stagingIds: number[]) {
         await db.execute(sql`
           INSERT INTO creator_niches (creator_id, niche_id, peringkat)
           VALUES (${creatorId}, ${nicheId}, 1)
-          ON CONFLICT DO NOTHING
+          ON CONFLICT (creator_id, niche_id) DO UPDATE SET peringkat = EXCLUDED.peringkat
         `);
       }
     }
 
+    // 5. Tandai baris di creator_staging sebagai 'promoted'
     await db.execute(sql`
       UPDATE creator_staging
       SET status_staging = 'promoted', promoted_creator_id = ${creatorId}, updated_at = NOW()
