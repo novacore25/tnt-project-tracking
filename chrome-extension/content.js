@@ -467,12 +467,12 @@
       waitedMs += 400;
     }
 
-    // Scroll bertahap ke bawah agar seluruh section lazy-load (#collaborations_tab, #followers_tab, #trends_tab) ter-render 100%
-    notify('📜 Menggulir halaman agar seluruh grafik & demografi ter-load 100%...');
+    // Scroll bertahap ke bawah agar section metrik & demografi ter-render (#collaborations_tab & #followers_tab)
+    // HINDARI scroll ke #trends_tab agar puluhan video viral tidak dimuat ke RAM browser
+    notify('📜 Menggulir halaman agar grafik penjualan & demografi ter-load 100%...');
     const sections = [
       CREATOR_DETAIL_SELECTORS.collaborationsSection,
       CREATOR_DETAIL_SELECTORS.followersSection,
-      CREATOR_DETAIL_SELECTORS.trendsSection,
     ];
 
     for (const sel of sections) {
@@ -1766,10 +1766,34 @@
       if (detailWatchdogTimer) clearTimeout(detailWatchdogTimer);
       waitingForDetailTab = false;
       syncPanelWithBackground();
-      // Tanpa jeda statis 2 detik: langsung pindai dan klik kartu berikutnya!
-      if (isListLoopActive) {
-        scanAndProcessNextCreatorCard();
-      }
+
+      // PROTEKSI ANTI-OOM CHROME:
+      // Chrome V8 heap memiliki batas native memory ~2GB yang terakumulasi setelah ~70 tab dibuka-tutup.
+      // Solusi: Setiap 30 kreator, tab Find Creators me-refresh halamannya sendiri (Soft Reload).
+      // Reload ini seketika memusnahkan seluruh 2GB garbage RAM dan memulihkan proses ke 60MB!
+      safeSendMessage({ action: 'GET_FULL_STATUS' }, async (fullStatus) => {
+        const sessionCount = fullStatus?.state?.scrapedCountSession || 0;
+        const lastPurge = parseInt(sessionStorage.getItem('tnt_last_ram_purge_count') || '0', 10);
+
+        if (sessionCount >= 30 && sessionCount - lastPurge >= 30) {
+          sessionStorage.setItem('tnt_last_ram_purge_count', String(sessionCount));
+          const scroller = getScrollContainer();
+          if (scroller) {
+            sessionStorage.setItem('tnt_restore_scroll_top', String(scroller.scrollTop || 0));
+          }
+          updateFloatingStatus(
+            `🧹 Auto RAM Recycling (${sessionCount} kreator): Me-refresh tab untuk mengosongkan 2GB memori browser...`
+          );
+          await sleep(1000);
+          window.location.reload();
+          return;
+        }
+
+        if (isListLoopActive) {
+          scanAndProcessNextCreatorCard();
+        }
+      });
+
       sendResponse({ ok: true });
       return;
     }
@@ -1888,6 +1912,18 @@
         mediaPruneInterval = setInterval(() => freezeAndPruneMedia(), 2500);
       }
       freezeAndPruneMedia();
+
+      // Jika baru saja Auto RAM Purge, pulihkan scroll position
+      const savedScroll = sessionStorage.getItem('tnt_restore_scroll_top');
+      if (savedScroll) {
+        sessionStorage.removeItem('tnt_restore_scroll_top');
+        const scroller = getScrollContainer();
+        if (scroller) {
+          scroller.scrollTop = Number(savedScroll) || 0;
+          await sleep(600);
+        }
+      }
+
       scanAndProcessNextCreatorCard();
     } else {
       // Pada kondisi standby pun lakukan pembersihan media agar tab tetap enteng
