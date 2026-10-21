@@ -685,17 +685,29 @@
    * Normalisasi nomor telepon / WhatsApp:
    * - Format Indonesia (08, 8, 62, +62): distandarkan menjadi 628xxxxxxxxxx
    * - Format Luar Negeri (selain 08/8/62, misal +1, +60, +65, dsb): simpan seluruh angka apa adanya
+   * 
+   * @param {string} text - Teks input
+   * @param {boolean} isDedicatedContactLine - Jika true (baris modal kontak), izinkan angka murni. Jika false (teks bebas/body/bio), WAJIB ada kata kunci (wa/whatsapp/telp/kontak/phone).
    */
-  function normalizeIndonesianPhone(text) {
+  function normalizeIndonesianPhone(text, isDedicatedContactLine = false) {
     if (!text) return null;
-    const match =
-      text.match(/(?:whatsapp|wa|phone|kontak|telp|hp)?[:\s]*(\+?[0-9][0-9\s-]{7,18})/i) ||
-      text.match(/(\+?[0-9][0-9\s-]{7,18})/);
+
+    let match = null;
+    if (isDedicatedContactLine) {
+      // Khusus baris terisolir di dalam modal Contact Info resmi TikTok
+      match =
+        text.match(/(?:whatsapp|wa|phone|kontak|telp|hp)?[:\s]*(\+?[0-9][0-9\s-]{7,18})/i) ||
+        text.match(/(\+?[0-9][0-9\s-]{7,18})/);
+    } else {
+      // Teks halaman bebas / bio: WAJIB didahului kata kunci kontak agar angka acak UI/timestamp tidak terambil!
+      match = text.match(/(?:whatsapp|wa|phone|kontak|telp|hp)[:\s]*(\+?[0-9][0-9\s-]{7,18})/i);
+    }
+
     if (!match) return null;
 
     const matchedStr = (match[1] || match[0]).trim();
     const raw = matchedStr.replace(/\D/g, '');
-    if (raw.length < 7 || raw.length > 17) return null;
+    if (raw.length < 8 || raw.length > 17) return null;
 
     // Jika diawali '+' eksplisit internasional tapi bukan +62 (misal +60 Malaysia, +1 USA, +86 China, dsb)
     if (matchedStr.startsWith('+') && !raw.startsWith('62')) {
@@ -716,12 +728,13 @@
 
   /**
    * Ekstraksi informasi kontak yang mungkin ada langsung di teks header halaman profil kreator.
+   * Hanya mengambil jika secara eksplisit terdapat kata kunci WA/Email di teks.
    */
   function extractHeaderContactInfo() {
     const text = document.body ? document.body.innerText || '' : '';
     const emailMatch = text.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i);
     const email = emailMatch ? emailMatch[1].trim().toLowerCase() : null;
-    const no_whatsapp = normalizeIndonesianPhone(text);
+    const no_whatsapp = normalizeIndonesianPhone(text, false);
     return { email, no_whatsapp };
   }
 
@@ -981,7 +994,7 @@
             if (em) pendingData.email = em[1].trim().toLowerCase();
           }
 
-          const parsedWa = normalizeIndonesianPhone(rowText);
+          const parsedWa = normalizeIndonesianPhone(rowText, true);
           if (parsedWa && !pendingData.no_whatsapp) {
             pendingData.no_whatsapp = parsedWa;
           }
@@ -998,7 +1011,7 @@
       }
 
       if (!pendingData.no_whatsapp) {
-        pendingData.no_whatsapp = normalizeIndonesianPhone(modalText);
+        pendingData.no_whatsapp = normalizeIndonesianPhone(modalText, true);
       }
 
       // Tutup modal menggunakan selektor resmi TikTok
@@ -1770,10 +1783,6 @@
       try {
         const scrapedData = await waitAndScrapeCreatorDetailPage(updateFloatingStatus);
 
-        const headerContact = extractHeaderContactInfo();
-        if (headerContact.email && !scrapedData.email) scrapedData.email = headerContact.email;
-        if (headerContact.no_whatsapp && !scrapedData.no_whatsapp) scrapedData.no_whatsapp = headerContact.no_whatsapp;
-
         // Cek opsi Buka Kontak (IM Chat) yang dipilih user di panel
         let shouldScrapeContacts = true;
         if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
@@ -1784,8 +1793,10 @@
         }
 
         // JIKA OPSI KONTAK TIDAK DICENTANG (MODE CEPAT):
-        // Langsung simpan analitik & tutup tab seketika tanpa membuka IM Chat!
+        // Jangan pernah sentuh kontak / jangan ambil angka acak! Langsung simpan analitik & tutup tab seketika.
         if (!shouldScrapeContacts) {
+          scrapedData.no_whatsapp = null;
+          scrapedData.email = null;
           updateFloatingStatus(`⚡ Mode Cepat: Menyimpan @${scrapedData.username} & lanjut kreator berikutnya...`);
           safeSendMessage({
             action: 'SCRAPE_DETAIL_SUCCESS',
@@ -1794,6 +1805,10 @@
           });
           return;
         }
+
+        const headerContact = extractHeaderContactInfo();
+        if (headerContact.email && !scrapedData.email) scrapedData.email = headerContact.email;
+        if (headerContact.no_whatsapp && !scrapedData.no_whatsapp) scrapedData.no_whatsapp = headerContact.no_whatsapp;
 
         sessionStorage.setItem('tnt_pending_creator_scrape', JSON.stringify(scrapedData));
         if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
