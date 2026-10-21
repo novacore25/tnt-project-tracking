@@ -426,6 +426,9 @@
       if (typeof statusCallback === 'function') statusCallback(msg);
     };
 
+    // Bebaskan memori tab detail dari video showcase TikTok yang berat
+    freezeAndPruneMedia();
+
     notify('⏳ Menunggu profil kreator ter-load...');
 
     let waitedMs = 0;
@@ -1031,6 +1034,50 @@
   let isListLoopActive = false;
   let waitingForDetailTab = false;
   let detailWatchdogTimer = null;
+  let mediaPruneInterval = null;
+
+  /**
+   * Mencegah crash browser "Out of Memory" (OOM):
+   * Halaman Find Creators TikTok Partner Center memuat 3 video preview per kartu.
+   * Setiap baris scroll menambah puluhan elemen <video> yang me-load streaming H.264/HLS,
+   * memakan video decoders dan buffer RAM hingga menembus batas heap browser (~1.5GB - 2GB).
+   *
+   * Solusi:
+   * 1. Matikan autoplay & preload seluruh video di halaman.
+   * 2. Pause video yang sedang aktif.
+   * 3. Buang elemen <video> dan <audio> dari kartu yang sudah selesai diproses (data-tnt-processed="true")
+   *    serta putus stream-nya (src = '', load(), remove()).
+   */
+  function freezeAndPruneMedia() {
+    try {
+      // 1. Pause dan matikan buffering semua video di halaman
+      const allVideos = document.querySelectorAll('video');
+      for (const v of allVideos) {
+        try {
+          if (!v.paused) v.pause();
+          v.autoplay = false;
+          v.preload = 'none';
+          v.removeAttribute('autoplay');
+          v.removeAttribute('preload');
+        } catch (_) {}
+      }
+
+      // 2. Buang elemen <video> & <audio> dari kartu yang sudah selesai diproses / di-skip
+      const processedCards = document.querySelectorAll('[data-tnt-processed="true"]');
+      for (const card of processedCards) {
+        const mediaElements = card.querySelectorAll('video, audio');
+        for (const m of mediaElements) {
+          try {
+            m.pause();
+            m.removeAttribute('src');
+            m.src = '';
+            m.load();
+            m.remove();
+          } catch (_) {}
+        }
+      }
+    } catch (_) {}
+  }
 
   function getScrollContainer() {
     const direct = document.querySelector(FIND_CREATORS_SELECTORS.scrollContainer);
@@ -1158,6 +1205,9 @@
     const scroller = getScrollContainer();
     if (!scroller) return;
 
+    // Bersihkan buffer RAM sebelum scroll memuat baris-baris baru
+    freezeAndPruneMedia();
+
     const beforeRows = document.querySelectorAll(FIND_CREATORS_SELECTORS.rowItem).length;
     updateFloatingStatus('📜 Scroll ke bawah untuk memuat baris kreator baru...');
 
@@ -1173,6 +1223,9 @@
       scroller.scrollTo({ top: scroller.scrollHeight, behavior: 'smooth' });
       await sleep(900);
     }
+
+    // Bersihkan lagi video player yang baru masuk ke DOM agar RAM tetap dingin
+    freezeAndPruneMedia();
   }
 
   /**
@@ -1289,16 +1342,19 @@
           username: cleanUsername,
           count: 1,
         });
+        freezeAndPruneMedia();
         continue;
       }
 
       // Kreator belum ada di Buku Catatan -> Klik profilnya untuk membuka tab detail!
       if (!clickTarget) {
         cardEl.setAttribute('data-tnt-processed', 'true');
+        freezeAndPruneMedia();
         continue;
       }
 
       cardEl.setAttribute('data-tnt-processed', 'true');
+      freezeAndPruneMedia();
       waitingForDetailTab = true;
 
       badgeRowCard(cardEl, `⏳ Scraping @${cleanUsername}...`, '#4f46e5', '#6366f1');
@@ -1494,6 +1550,11 @@
         if (res && res.success) {
           isListLoopActive = true;
           waitingForDetailTab = false;
+          // Nyalakan pembersih memori periodik (setiap 2.5 detik) agar RAM browser tidak OOM
+          if (!mediaPruneInterval) {
+            mediaPruneInterval = setInterval(() => freezeAndPruneMedia(), 2500);
+          }
+          freezeAndPruneMedia();
           syncPanelWithBackground();
           scanAndProcessNextCreatorCard();
         }
@@ -1504,6 +1565,11 @@
       isListLoopActive = false;
       waitingForDetailTab = false;
       if (detailWatchdogTimer) clearTimeout(detailWatchdogTimer);
+      if (mediaPruneInterval) {
+        clearInterval(mediaPruneInterval);
+        mediaPruneInterval = null;
+      }
+      freezeAndPruneMedia();
       safeSendMessage({ action: 'STOP_AUTO_SCRAPE' }, () => {
         syncPanelWithBackground();
       });
@@ -1762,7 +1828,14 @@
       // Halaman Find Creators saat Auto-Scrape menyala
       isListLoopActive = true;
       waitingForDetailTab = false;
+      if (!mediaPruneInterval) {
+        mediaPruneInterval = setInterval(() => freezeAndPruneMedia(), 2500);
+      }
+      freezeAndPruneMedia();
       scanAndProcessNextCreatorCard();
+    } else {
+      // Pada kondisi standby pun lakukan pembersihan media agar tab tetap enteng
+      freezeAndPruneMedia();
     }
   }
 
