@@ -679,22 +679,35 @@
   }
 
   /**
-   * Normalisasi nomor telepon / WhatsApp Indonesia:
-   * Menangani format: +62 822..., 0822..., 62822..., dan 822... (tanpa prefix 0/62).
-   * Selalu mengembalikan format standar: 628xxxxxxxxxx
+   * Normalisasi nomor telepon / WhatsApp:
+   * - Format Indonesia (08, 8, 62, +62): distandarkan menjadi 628xxxxxxxxxx
+   * - Format Luar Negeri (selain 08/8/62, misal +1, +60, +65, dsb): simpan seluruh angka apa adanya
    */
   function normalizeIndonesianPhone(text) {
     if (!text) return null;
     const match =
-      text.match(/(?:whatsapp|wa|phone|kontak|telp|hp)?[:\s]*((?:\+?62|08|8)[0-9\s-]{8,18})/i) ||
-      text.match(/(?:\+?62|08|8)[0-9\s-]{8,16}/);
+      text.match(/(?:whatsapp|wa|phone|kontak|telp|hp)?[:\s]*(\+?[0-9][0-9\s-]{7,18})/i) ||
+      text.match(/(\+?[0-9][0-9\s-]{7,18})/);
     if (!match) return null;
-    const raw = (match[1] || match[0]).replace(/\D/g, '');
-    if (raw.length < 9 || raw.length > 15) return null;
 
+    const matchedStr = (match[1] || match[0]).trim();
+    const raw = matchedStr.replace(/\D/g, '');
+    if (raw.length < 7 || raw.length > 17) return null;
+
+    // Jika diawali '+' eksplisit internasional tapi bukan +62 (misal +60 Malaysia, +1 USA, +86 China, dsb)
+    if (matchedStr.startsWith('+') && !raw.startsWith('62')) {
+      return raw;
+    }
+
+    // Aturan Indonesia:
+    if (raw.startsWith('08')) return '62' + raw.slice(1);
+    if (raw.startsWith('628')) return raw;
     if (raw.startsWith('62')) return raw;
-    if (raw.startsWith('0')) return '62' + raw.slice(1);
-    if (raw.startsWith('8')) return '62' + raw;
+    // Nomor HP Indonesia diawali 8 (operator: 81, 82, 83, 85, 87, 88, 89)
+    if (/^8[1235789]\d{7,11}$/.test(raw)) return '62' + raw;
+    if (raw.startsWith('8') && raw.length >= 10 && raw.length <= 13) return '62' + raw;
+
+    // Nomor luar negeri lainnya (misal 6012..., 1415..., 6591...): simpan seluruh angka apa adanya
     return raw;
   }
 
