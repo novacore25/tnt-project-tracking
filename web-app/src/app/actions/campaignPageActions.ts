@@ -1842,7 +1842,7 @@ export async function fetchListingPagePaginatedAction(params: {
           WHERE ct.creator_id = cc.creator_id
         ) as creator_contacts,
         (
-          SELECT json_agg(sub.s) FROM (SELECT to_jsonb(cs) as s FROM creator_snapshots cs WHERE cs.creator_id = cc.creator_id ORDER BY (CASE WHEN cs.campaign_id = ${campaignId} THEN 0 ELSE 1 END), cs.tanggal_update DESC NULLS LAST, cs.id DESC LIMIT 6) sub
+          SELECT json_agg(to_jsonb(cs) ORDER BY cs.tanggal_update DESC, cs.id DESC)
           FROM creator_snapshots cs 
           WHERE cs.creator_id = cc.creator_id
         ) as creator_snapshots,
