@@ -850,14 +850,15 @@
     let modalWait = 0;
     let modalEl = null;
     while (modalWait < 5000) {
-      modalEl = document.querySelector('.arco-modal, div[role="dialog"], .arco-modal-content');
+      modalEl =
+        document.querySelector('.arco-modal') ||
+        document.querySelector('div[role="dialog"]') ||
+        document.querySelector('.arco-modal-content');
       if (
         modalEl &&
-        modalEl.innerText &&
-        (modalEl.innerText.toLowerCase().includes('contact') ||
-          modalEl.innerText.toLowerCase().includes('kontak') ||
-          modalEl.innerText.includes('@') ||
-          modalEl.innerText.match(/(?:\+?62|08)\d{8,13}/))
+        (modalEl.querySelector('div[data-e2e="0813a01f-c400-7bbc"]') ||
+          modalEl.querySelector('.arco-modal-title') ||
+          (modalEl.innerText && modalEl.innerText.toLowerCase().includes('contact')))
       ) {
         break;
       }
@@ -865,27 +866,62 @@
       modalWait += 250;
     }
 
-    const modalText = modalEl ? modalEl.innerText : document.body.innerText || '';
+    // 1. Ekstraksi spesifik dari baris data-e2e terverifikasi dari TikTok Partner Center
+    if (modalEl) {
+      const contactRows = modalEl.querySelectorAll('div[data-e2e="0813a01f-c400-7bbc"]');
+      contactRows.forEach((row) => {
+        const label = (
+          row.querySelector('span[data-e2e="874d2990-4769-42bc"]')?.textContent || ''
+        ).trim().toLowerCase();
+        const val = (
+          row.querySelector('div[data-e2e="73c486d0-8321-37aa"] .inner-content')?.textContent ||
+          row.querySelector('div[data-e2e="73c486d0-8321-37aa"]')?.textContent ||
+          ''
+        ).trim();
 
-    // Ekstrak Email
-    const emailMatch = modalText.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i);
-    if (emailMatch) {
-      pendingData.email = emailMatch[1].trim().toLowerCase();
+        if (label.includes('email') || val.includes('@')) {
+          const em = val.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i);
+          if (em) pendingData.email = em[1].trim().toLowerCase();
+        } else if (
+          label.includes('phone') ||
+          label.includes('wa') ||
+          label.includes('tel') ||
+          label.includes('kontak') ||
+          val.match(/(?:\+?62|08)\d{8,15}/)
+        ) {
+          const rawDigits = val.replace(/\D/g, '');
+          if (rawDigits.length >= 9 && rawDigits.length <= 16) {
+            pendingData.no_whatsapp = rawDigits.startsWith('0') ? '62' + rawDigits.slice(1) : rawDigits;
+          }
+        }
+      });
     }
 
-    // Ekstrak Phone / WhatsApp
-    const phoneMatch =
-      modalText.match(/(?:phone|telepon|hp|no|wa|whatsapp)?[:\s]*((?:\+?62|08)[0-9\s-]{8,18})/i) ||
-      modalText.match(/(?:\+?62|08)[0-9\s-]{8,18}/);
-    if (phoneMatch) {
-      const rawDigits = phoneMatch[1].replace(/\D/g, '');
-      if (rawDigits.length >= 9 && rawDigits.length <= 16) {
-        pendingData.no_whatsapp = rawDigits.startsWith('0') ? '62' + rawDigits.slice(1) : rawDigits;
+    // 2. Fallback regex jika data belum lengkap
+    const modalText = modalEl ? modalEl.innerText : document.body.innerText || '';
+    if (!pendingData.email) {
+      const emailMatch = modalText.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i);
+      if (emailMatch) {
+        pendingData.email = emailMatch[1].trim().toLowerCase();
       }
     }
 
-    // Tutup modal jika ada tombol close
-    const closeBtn = document.querySelector('.arco-modal-close-icon, button[aria-label="Close"]');
+    if (!pendingData.no_whatsapp) {
+      const phoneMatch =
+        modalText.match(/(?:phone|telepon|hp|no|wa|whatsapp)?[:\s]*((?:\+?62|08)[0-9\s-]{8,18})/i) ||
+        modalText.match(/(?:\+?62|08)[0-9\s-]{8,18}/);
+      if (phoneMatch) {
+        const rawDigits = phoneMatch[1].replace(/\D/g, '');
+        if (rawDigits.length >= 9 && rawDigits.length <= 16) {
+          pendingData.no_whatsapp = rawDigits.startsWith('0') ? '62' + rawDigits.slice(1) : rawDigits;
+        }
+      }
+    }
+
+    // Tutup modal menggunakan selektor resmi TikTok
+    const closeBtn = document.querySelector(
+      '.arco-modal-close-icon, span.arco-icon-hover.arco-modal-close-icon, span[aria-label="Close"]'
+    );
     if (closeBtn) simulateHumanClick(closeBtn);
 
     notify(`✅ Kontak @${pendingData.username}: WA: ${pendingData.no_whatsapp || '-'} | Email: ${pendingData.email || '-'}`);

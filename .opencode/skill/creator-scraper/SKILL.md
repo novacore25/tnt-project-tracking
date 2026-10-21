@@ -120,12 +120,18 @@ const CREATOR_DETAIL_SELECTORS = {
 
 ```javascript
 const IM_CONTACT_SELECTORS = {
-  // Tombol bulat biru Contact Info di panel profil kanan IM chat
-  contactRoundButton: 'button.arco-btn-circle, button.arco-btn-shape-circle, button[class*="circle"]',
+  // Container panel profil kanan di IM
+  workbenchContainer: '#workbench-container',
+  // Tombol Contact Info resmi (di bawah nama/avatar kreator pada workbench)
+  contactButton: 'button[data-e2e="efbe2e11-4d42-b98a"]',
   // Modal dialog Contact Info (Arco Design)
   contactModal: '.arco-modal, div[role="dialog"], .arco-modal-content',
+  // Baris item kontak (Email / Phone)
+  contactRow: 'div[data-e2e="0813a01f-c400-7bbc"]',
+  contactLabel: 'span[data-e2e="874d2990-4769-42bc"]',
+  contactValue: 'div[data-e2e="73c486d0-8321-37aa"]',
   // Tombol close modal
-  modalCloseBtn: '.arco-modal-close-icon, button[aria-label="Close"]',
+  modalCloseBtn: '.arco-modal-close-icon, span.arco-icon-hover.arco-modal-close-icon',
 };
 ```
 - **Alur Kerja Smart-Wait:**
