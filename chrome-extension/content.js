@@ -1095,6 +1095,8 @@
   function getScrollContainer() {
     const direct = document.querySelector(FIND_CREATORS_SELECTORS.scrollContainer);
     if (direct) return direct;
+    const tableScroll = document.querySelector('.arco-table-body, div[class*="table-body"], .arco-table-scroll');
+    if (tableScroll && tableScroll.scrollHeight > tableScroll.clientHeight + 50) return tableScroll;
     const wrapper = document.querySelector('div[data-e2e="9d644e6c-6279-450c"]');
     if (wrapper) {
       const divs = wrapper.querySelectorAll('div');
@@ -1221,13 +1223,17 @@
     // Bersihkan buffer RAM sebelum scroll memuat baris-baris baru
     freezeAndPruneMedia();
 
-    const beforeRows = document.querySelectorAll(FIND_CREATORS_SELECTORS.rowItem).length;
+    const beforeRows = document.querySelectorAll(
+      `${FIND_CREATORS_SELECTORS.rowItem}, tbody tr, .arco-table-body tr`
+    ).length;
     updateFloatingStatus('📜 Scroll ke bawah untuk memuat baris kreator baru...');
 
     scroller.scrollTo({ top: scroller.scrollHeight, behavior: 'smooth' });
     await sleep(1000);
 
-    const afterFirstScroll = document.querySelectorAll(FIND_CREATORS_SELECTORS.rowItem).length;
+    const afterFirstScroll = document.querySelectorAll(
+      `${FIND_CREATORS_SELECTORS.rowItem}, tbody tr, .arco-table-body tr`
+    ).length;
     if (afterFirstScroll <= beforeRows) {
       // Sensor mentok -> lakukan Scroll Jiggle (naik ~260px lalu turun lagi)
       updateFloatingStatus('🔄 Scroll mentok — melakukan Scroll Jiggle (naik sedikit & turun lagi)...');
@@ -1242,28 +1248,39 @@
   }
 
   /**
-   * Mengambil semua kartu profil kreator individual dari grid Find Creators.
-   * Satu baris grid TikTok selalu berisi 3 kartu individual (row.children): fungsi ini menjamin SEMUA 3 KARTU per baris
-   * terdeteksi dan diproses satu per satu secara berurutan, bukan hanya kartu pertama di baris tersebut.
+   * Mengambil semua kartu profil kreator individual:
+   * - Mendukung Mode Grid View (3 kartu per baris)
+   * - Mendukung Mode Table/List View (1 baris per kreator)
    */
   function getAllCreatorCardElements() {
     const cardItems = [];
-    const rows = Array.from(document.querySelectorAll(FIND_CREATORS_SELECTORS.rowItem));
 
-    for (const row of rows) {
-      // Di dalam 1 baris grid TikTok selalu ada 3 kartu profil individual (row.children)
-      const children = Array.from(row.children);
-      for (const card of children) {
-        const usernameSpan = card.querySelector(FIND_CREATORS_SELECTORS.username);
-        // Pastikan elemen anak ini adalah kartu yang valid (memiliki username)
+    // 1. Cek Mode Table View (baris tabel horizontal: tr, .arco-table-tr, [role="row"])
+    const tableRows = Array.from(
+      document.querySelectorAll('tbody tr, .arco-table-body tr, div[role="row"], div[class*="arco-table-tr"]')
+    ).filter((r) => !r.closest('thead') && !r.classList.contains('arco-table-header'));
+
+    if (tableRows.length > 0) {
+      for (const row of tableRows) {
+        // Cari username di dalam baris tabel
+        const usernameSpan =
+          row.querySelector(FIND_CREATORS_SELECTORS.username) ||
+          row.querySelector('span[class*="text-neutral-text1"]') ||
+          row.querySelector('a[href*="/detail"] span') ||
+          Array.from(row.querySelectorAll('span, a')).find((el) => {
+            const t = el.textContent?.trim() || '';
+            return t.startsWith('@') && t.length > 1;
+          });
+
         if (usernameSpan) {
           const clickTarget =
-            card.querySelector(FIND_CREATORS_SELECTORS.cardClickTarget) ||
-            card.querySelector('div[class*="cursor-pointer"]') ||
-            card;
+            row.querySelector('a[href*="/detail"]') ||
+            row.querySelector(FIND_CREATORS_SELECTORS.cardClickTarget) ||
+            usernameSpan.closest('a') ||
+            usernameSpan;
 
           cardItems.push({
-            cardEl: card,
+            cardEl: row,
             usernameSpan,
             clickTarget,
           });
@@ -1271,11 +1288,35 @@
       }
     }
 
-    // Fallback jika struktur grid berbeda: ambil dari semua username span
+    // 2. Jika bukan Table View, gunakan Mode Grid View (3 kartu individual per baris)
+    if (cardItems.length === 0) {
+      const rows = Array.from(document.querySelectorAll(FIND_CREATORS_SELECTORS.rowItem));
+      for (const row of rows) {
+        const children = Array.from(row.children);
+        for (const card of children) {
+          const usernameSpan = card.querySelector(FIND_CREATORS_SELECTORS.username);
+          if (usernameSpan) {
+            const clickTarget =
+              card.querySelector(FIND_CREATORS_SELECTORS.cardClickTarget) ||
+              card.querySelector('div[class*="cursor-pointer"]') ||
+              card;
+
+            cardItems.push({
+              cardEl: card,
+              usernameSpan,
+              clickTarget,
+            });
+          }
+        }
+      }
+    }
+
+    // 3. Fallback jika struktur DOM berbeda
     if (cardItems.length === 0) {
       const usernameSpans = Array.from(document.querySelectorAll(FIND_CREATORS_SELECTORS.username));
       for (const uSpan of usernameSpans) {
         let card =
+          uSpan.closest('tr') ||
           uSpan.closest('div[class*="cursor-pointer"]') ||
           uSpan.closest('div[class*="rounded-8"]') ||
           uSpan.parentElement?.parentElement;
