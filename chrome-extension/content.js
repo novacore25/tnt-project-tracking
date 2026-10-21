@@ -904,7 +904,7 @@
 
       notify(`💬 Roomchat & profil @${pendingData.username} siap! Membuka Contact Info...`);
       await sleep(randomBetween(400, 700));
-      simulateHumanClick(roundBtn);
+      triggerDeepClick(roundBtn);
 
       // Tunggu modal "Contact Info" muncul (hingga 5 detik)
       let modalWait = 0;
@@ -921,6 +921,10 @@
             (modalEl.innerText && modalEl.innerText.toLowerCase().includes('contact')))
         ) {
           break;
+        }
+        // Jika belum muncul setelah 1.5 detik, coba trigger ulang
+        if (modalWait === 1500) {
+          triggerDeepClick(roundBtn);
         }
         await sleep(250);
         modalWait += 250;
@@ -1025,17 +1029,83 @@
     return document.scrollingElement || document.documentElement;
   }
 
-  function simulateHumanClick(element) {
-    const rect = element.getBoundingClientRect();
-    const clientX = rect.left + Math.max(10, Math.min(rect.width - 10, rect.width * 0.35));
-    const clientY = rect.top + Math.max(8, Math.min(rect.height - 8, rect.height * 0.5));
-    const opts = { bubbles: true, cancelable: true, view: window, clientX, clientY };
+  function triggerDeepClick(element) {
+    if (!element) return;
 
-    element.dispatchEvent(new MouseEvent('mouseover', opts));
-    element.dispatchEvent(new MouseEvent('mouseenter', opts));
-    element.dispatchEvent(new MouseEvent('mousedown', opts));
-    element.dispatchEvent(new MouseEvent('mouseup', opts));
-    element.click();
+    // 1. Coba panggil langsung React handler jika ada di DOM node
+    try {
+      const reactPropsKey = Object.keys(element).find(
+        (k) => k.startsWith('__reactProps') || k.startsWith('__reactEventHandlers')
+      );
+      if (reactPropsKey && element[reactPropsKey]?.onClick) {
+        element[reactPropsKey].onClick({
+          stopPropagation: () => {},
+          preventDefault: () => {},
+        });
+      }
+    } catch (_) {}
+
+    // 2. Dispatch sequence Pointer & Mouse lengkap ke anak (SVG, span) dan tombol utama
+    const targets = [
+      element.querySelector('svg'),
+      element.querySelector('.arco-btn-icon'),
+      element.firstElementChild,
+      element,
+    ].filter(Boolean);
+
+    const rect = element.getBoundingClientRect();
+    const clientX = rect.left + (rect.width > 0 ? rect.width / 2 : 15);
+    const clientY = rect.top + (rect.height > 0 ? rect.height / 2 : 15);
+    const opts = {
+      bubbles: true,
+      cancelable: true,
+      composed: true,
+      view: window,
+      clientX,
+      clientY,
+      screenX: clientX,
+      screenY: clientY,
+      button: 0,
+      buttons: 1,
+    };
+
+    try {
+      element.focus();
+    } catch (_) {}
+
+    targets.forEach((t) => {
+      try {
+        t.dispatchEvent(new MouseEvent('mouseover', opts));
+        t.dispatchEvent(new MouseEvent('mouseenter', opts));
+        t.dispatchEvent(new PointerEvent('pointerdown', opts));
+        t.dispatchEvent(new MouseEvent('mousedown', opts));
+        t.dispatchEvent(new PointerEvent('pointerup', { ...opts, buttons: 0 }));
+        t.dispatchEvent(new MouseEvent('mouseup', { ...opts, buttons: 0 }));
+        t.dispatchEvent(new MouseEvent('click', { ...opts, buttons: 0 }));
+        if (typeof t.click === 'function') t.click();
+      } catch (_) {}
+    });
+
+    // 3. Fallback inline script execution ke konteks halaman murni
+    try {
+      const script = document.createElement('script');
+      script.textContent = `(() => {
+        const btn = document.querySelector('button[data-e2e="efbe2e11-4d42-b98a"]') ||
+                    document.querySelector('#workbench-container button');
+        if (!btn) return;
+        const k = Object.keys(btn).find(k => k.startsWith('__reactProps') || k.startsWith('__reactEventHandlers'));
+        if (k && btn[k]?.onClick) {
+          btn[k].onClick({ stopPropagation: () => {}, preventDefault: () => {} });
+        }
+      })();`;
+      (document.head || document.documentElement).appendChild(script);
+      script.remove();
+    } catch (_) {}
+  }
+
+  function simulateHumanClick(element) {
+    if (!element) return;
+    triggerDeepClick(element);
   }
 
   function badgeRowCard(rowEl, text, bgColor, borderColor) {
