@@ -913,6 +913,9 @@
 
       notify(`💬 Roomchat & profil @${pendingData.username} siap! Membuka Contact Info...`);
       await sleep(randomBetween(500, 800));
+
+      // 1. Eksekusi langsung di Main World via background (memiliki akses penuh ke React handler & kebal CSP)
+      safeSendMessage({ action: 'TRIGGER_MAIN_WORLD_CLICK' });
       triggerDeepClick(roundBtn);
 
       // Tunggu modal "Contact Info" muncul (hingga 6 detik)
@@ -931,8 +934,9 @@
         ) {
           break;
         }
-        // Jika belum muncul setelah 1.2 detik, coba trigger ulang
+        // Jika belum muncul setelah 1.2 detik atau 2.4 detik, coba trigger ulang via Main World
         if (modalWait === 1200 || modalWait === 2400) {
+          safeSendMessage({ action: 'TRIGGER_MAIN_WORLD_CLICK' });
           triggerDeepClick(roundBtn);
         }
         await sleep(250);

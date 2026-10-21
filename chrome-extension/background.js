@@ -409,6 +409,56 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       return;
     }
 
+    if (action === 'TRIGGER_MAIN_WORLD_CLICK') {
+      const tabId = sender?.tab?.id;
+      if (tabId) {
+        try {
+          await chrome.scripting.executeScript({
+            target: { tabId },
+            world: 'MAIN',
+            func: () => {
+              const btn =
+                document.querySelector('button[data-e2e="efbe2e11-4d42-b98a"]') ||
+                document.querySelector('#workbench-container button');
+              if (!btn) return false;
+
+              // 1. Panggil langsung React onClick handler di Main World
+              const reactPropsKey = Object.keys(btn).find(
+                (k) => k.startsWith('__reactProps') || k.startsWith('__reactEventHandlers')
+              );
+              if (reactPropsKey && btn[reactPropsKey]?.onClick) {
+                btn[reactPropsKey].onClick({ stopPropagation: () => {}, preventDefault: () => {} });
+              }
+
+              // 2. Dispatch sequence Pointer & Mouse lengkap di Main World
+              const rect = btn.getBoundingClientRect();
+              const opts = {
+                bubbles: true,
+                cancelable: true,
+                composed: true,
+                view: window,
+                clientX: rect.left + 15,
+                clientY: rect.top + 15,
+                button: 0,
+                buttons: 1,
+              };
+              btn.dispatchEvent(new PointerEvent('pointerdown', opts));
+              btn.dispatchEvent(new MouseEvent('mousedown', opts));
+              btn.dispatchEvent(new PointerEvent('pointerup', { ...opts, buttons: 0 }));
+              btn.dispatchEvent(new MouseEvent('mouseup', { ...opts, buttons: 0 }));
+              btn.dispatchEvent(new MouseEvent('click', { ...opts, buttons: 0 }));
+              if (typeof btn.click === 'function') btn.click();
+              return true;
+            },
+          });
+        } catch (err) {
+          console.error('Failed to trigger main world click:', err);
+        }
+      }
+      sendResponse({ success: true });
+      return;
+    }
+
     if (action === 'SCRAPE_DETAIL_SUCCESS') {
       const creator = request.payload;
       const detailTabId = sender?.tab?.id || null;
