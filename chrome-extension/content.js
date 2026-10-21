@@ -854,7 +854,7 @@
     notify(`⏳ Menunggu IM roomchat @${pendingData.username} selesai dimuat...`);
 
     let elapsed = 0;
-    const maxTimeout = 30000;
+    const maxTimeout = 10000;
     let roundBtn = null;
     let isFullyLoaded = false;
 
@@ -874,11 +874,18 @@
           break;
         }
 
+        // Cek jika IM menampilkan "No chat selected" dan sudah lewat 3.5 detik (kreator tidak punya roomchat aktif)
+        const bodyText = (document.body.innerText || '').toLowerCase();
+        if (bodyText.includes('no chat selected') && elapsed >= 3500) {
+          notify(`ℹ️ @${pendingData.username} tidak memiliki room chat aktif ("No chat selected"). Melanjutkan antrean...`);
+          break;
+        }
+
         // Cek apakah halaman workbench profil kanan sudah 100% selesai dimuat berdasarkan struktur HTML
         if (isWorkbenchFullyLoaded(pendingData.username)) {
           isFullyLoaded = true;
-          // Beri jeda 600ms agar rendering event listener React terpasang sempurna
-          await sleep(600);
+          // Beri jeda 500ms agar rendering event listener React terpasang sempurna
+          await sleep(500);
           roundBtn = findImContactRoundButton();
           // Begitu ter-load 100%: ada atau tidak tombolnya, langsung putuskan keluar loop!
           break;
@@ -1029,6 +1036,10 @@
     return document.scrollingElement || document.documentElement;
   }
 
+  /**
+   * Deep click KHUSUS untuk tombol bulat Contact Info di IM panel workbench TikTok
+   * yang memerlukan urutan event pointer/mouse atau trigger React handler.
+   */
   function triggerDeepClick(element) {
     if (!element) return;
 
@@ -1045,14 +1056,6 @@
       }
     } catch (_) {}
 
-    // 2. Dispatch sequence Pointer & Mouse lengkap ke anak (SVG, span) dan tombol utama
-    const targets = [
-      element.querySelector('svg'),
-      element.querySelector('.arco-btn-icon'),
-      element.firstElementChild,
-      element,
-    ].filter(Boolean);
-
     const rect = element.getBoundingClientRect();
     const clientX = rect.left + (rect.width > 0 ? rect.width / 2 : 15);
     const clientY = rect.top + (rect.height > 0 ? rect.height / 2 : 15);
@@ -1063,8 +1066,6 @@
       view: window,
       clientX,
       clientY,
-      screenX: clientX,
-      screenY: clientY,
       button: 0,
       buttons: 1,
     };
@@ -1073,20 +1074,17 @@
       element.focus();
     } catch (_) {}
 
-    targets.forEach((t) => {
-      try {
-        t.dispatchEvent(new MouseEvent('mouseover', opts));
-        t.dispatchEvent(new MouseEvent('mouseenter', opts));
-        t.dispatchEvent(new PointerEvent('pointerdown', opts));
-        t.dispatchEvent(new MouseEvent('mousedown', opts));
-        t.dispatchEvent(new PointerEvent('pointerup', { ...opts, buttons: 0 }));
-        t.dispatchEvent(new MouseEvent('mouseup', { ...opts, buttons: 0 }));
-        t.dispatchEvent(new MouseEvent('click', { ...opts, buttons: 0 }));
-        if (typeof t.click === 'function') t.click();
-      } catch (_) {}
-    });
+    // Dispatch satu kali urutan Pointer & Mouse Event terarah ke tombol
+    try {
+      element.dispatchEvent(new PointerEvent('pointerdown', opts));
+      element.dispatchEvent(new MouseEvent('mousedown', opts));
+      element.dispatchEvent(new PointerEvent('pointerup', { ...opts, buttons: 0 }));
+      element.dispatchEvent(new MouseEvent('mouseup', { ...opts, buttons: 0 }));
+      element.dispatchEvent(new MouseEvent('click', { ...opts, buttons: 0 }));
+      if (typeof element.click === 'function') element.click();
+    } catch (_) {}
 
-    // 3. Fallback inline script execution ke konteks halaman murni
+    // Fallback inline script execution ke konteks halaman murni jika belum terpanggil
     try {
       const script = document.createElement('script');
       script.textContent = `(() => {
@@ -1103,9 +1101,26 @@
     } catch (_) {}
   }
 
+  /**
+   * Klik standar alami manusia (satu kali klik bersih) untuk kartu, tombol biasa, dan link
+   * Mencegah pembukaan banyak tab duplikat!
+   */
   function simulateHumanClick(element) {
     if (!element) return;
-    triggerDeepClick(element);
+    const rect = element.getBoundingClientRect();
+    const clientX = rect.left + Math.max(5, Math.min(rect.width - 5, rect.width * 0.5));
+    const clientY = rect.top + Math.max(5, Math.min(rect.height - 5, rect.height * 0.5));
+    const opts = { bubbles: true, cancelable: true, view: window, clientX, clientY };
+
+    try {
+      element.dispatchEvent(new MouseEvent('mouseover', opts));
+      element.dispatchEvent(new MouseEvent('mouseenter', opts));
+      element.dispatchEvent(new MouseEvent('mousedown', opts));
+      element.dispatchEvent(new MouseEvent('mouseup', opts));
+      element.click();
+    } catch (_) {
+      if (typeof element.click === 'function') element.click();
+    }
   }
 
   function badgeRowCard(rowEl, text, bgColor, borderColor) {

@@ -466,6 +466,30 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   return true;
 });
 
+// Jika tab detail / worker ditutup (baik otomatis atau manual oleh user), langsung bebaskan Find Creators!
+chrome.tabs.onRemoved.addListener(async (tabId) => {
+  const state = await getAutoState();
+  if (state.isRunning && (state.activeDetailTabId === tabId || state.currentUsername)) {
+    await updateAutoState({
+      activeDetailTabId: null,
+      currentUsername: null,
+      isPausedCaptcha: false,
+      statusMessage: 'Melanjutkan antrean kreator berikutnya...',
+    });
+    if (state.listTabId) {
+      chrome.tabs.sendMessage(state.listTabId, { action: 'CONTINUE_NEXT_CARD' }).catch(() => {});
+    }
+  }
+});
+
+// Deteksi saat tab baru terbuka dari klik kartu Find Creators
+chrome.tabs.onCreated.addListener(async (tab) => {
+  const state = await getAutoState();
+  if (state.isRunning && !state.activeDetailTabId && tab.id !== state.listTabId) {
+    await updateAutoState({ activeDetailTabId: tab.id });
+  }
+});
+
 // Saat ekstensi di-install / di-reload di chrome://extensions, otomatis re-inject content.js
 // ke semua tab TikTok Partner Center yang sedang terbuka agar tidak terjadi "Extension context invalidated"
 chrome.runtime.onInstalled.addListener(() => {
