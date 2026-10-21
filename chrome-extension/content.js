@@ -679,23 +679,33 @@
   }
 
   /**
+   * Normalisasi nomor telepon / WhatsApp Indonesia:
+   * Menangani format: +62 822..., 0822..., 62822..., dan 822... (tanpa prefix 0/62).
+   * Selalu mengembalikan format standar: 628xxxxxxxxxx
+   */
+  function normalizeIndonesianPhone(text) {
+    if (!text) return null;
+    const match =
+      text.match(/(?:whatsapp|wa|phone|kontak|telp|hp)?[:\s]*((?:\+?62|08|8)[0-9\s-]{8,18})/i) ||
+      text.match(/(?:\+?62|08|8)[0-9\s-]{8,16}/);
+    if (!match) return null;
+    const raw = (match[1] || match[0]).replace(/\D/g, '');
+    if (raw.length < 9 || raw.length > 15) return null;
+
+    if (raw.startsWith('62')) return raw;
+    if (raw.startsWith('0')) return '62' + raw.slice(1);
+    if (raw.startsWith('8')) return '62' + raw;
+    return raw;
+  }
+
+  /**
    * Ekstraksi informasi kontak yang mungkin ada langsung di teks header halaman profil kreator.
    */
   function extractHeaderContactInfo() {
     const text = document.body ? document.body.innerText || '' : '';
     const emailMatch = text.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i);
     const email = emailMatch ? emailMatch[1].trim().toLowerCase() : null;
-
-    const phoneMatch =
-      text.match(/(?:wa|whatsapp|phone|tlp|hp|telp|contact)?[:\s]*((?:\+?62|08)[0-9\s-]{8,18})/i) ||
-      text.match(/(?:\+?62|08)[0-9\s-]{8,18}/);
-    let no_whatsapp = null;
-    if (phoneMatch) {
-      const rawDigits = phoneMatch[1].replace(/\D/g, '');
-      if (rawDigits.length >= 9 && rawDigits.length <= 16) {
-        no_whatsapp = rawDigits.startsWith('0') ? '62' + rawDigits.slice(1) : rawDigits;
-      }
-    }
+    const no_whatsapp = normalizeIndonesianPhone(text);
     return { email, no_whatsapp };
   }
 
@@ -945,37 +955,25 @@
 
       // 1. Ekstraksi spesifik dari baris data-e2e terverifikasi dari TikTok Partner Center
       if (modalEl) {
-        const contactRows = modalEl.querySelectorAll('div[data-e2e="0813a01f-c400-7bbc"]');
+        const contactRows = modalEl.querySelectorAll(
+          'div[data-e2e="0813a01f-c400-7bbc"], .arco-modal-body > div, div[class*="contact"]'
+        );
         contactRows.forEach((row) => {
-          const label = (
-            row.querySelector('span[data-e2e="874d2990-4769-42bc"]')?.textContent || ''
-          ).trim().toLowerCase();
-          const val = (
-            row.querySelector('div[data-e2e="73c486d0-8321-37aa"] .inner-content')?.textContent ||
-            row.querySelector('div[data-e2e="73c486d0-8321-37aa"]')?.textContent ||
-            ''
-          ).trim();
-
-          if (label.includes('email') || val.includes('@')) {
-            const em = val.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i);
+          const rowText = (row.textContent || '').trim();
+          if (rowText.includes('@') && !pendingData.email) {
+            const em = rowText.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i);
             if (em) pendingData.email = em[1].trim().toLowerCase();
-          } else if (
-            label.includes('phone') ||
-            label.includes('wa') ||
-            label.includes('tel') ||
-            label.includes('kontak') ||
-            val.match(/(?:\+?62|08)\d{8,15}/)
-          ) {
-            const rawDigits = val.replace(/\D/g, '');
-            if (rawDigits.length >= 9 && rawDigits.length <= 16) {
-              pendingData.no_whatsapp = rawDigits.startsWith('0') ? '62' + rawDigits.slice(1) : rawDigits;
-            }
+          }
+
+          const parsedWa = normalizeIndonesianPhone(rowText);
+          if (parsedWa && !pendingData.no_whatsapp) {
+            pendingData.no_whatsapp = parsedWa;
           }
         });
       }
 
-      // 2. Fallback regex jika data belum lengkap
-      const modalText = modalEl ? modalEl.innerText : document.body.innerText || '';
+      // 2. Fallback regex dari seluruh isi teks modal (menangani format Whatsapp: 822..., 08..., +62...)
+      const modalText = modalEl ? modalEl.innerText || modalEl.textContent || '' : '';
       if (!pendingData.email) {
         const emailMatch = modalText.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i);
         if (emailMatch) {
@@ -984,15 +982,7 @@
       }
 
       if (!pendingData.no_whatsapp) {
-        const phoneMatch =
-          modalText.match(/(?:phone|telepon|hp|no|wa|whatsapp)?[:\s]*((?:\+?62|08)[0-9\s-]{8,18})/i) ||
-          modalText.match(/(?:\+?62|08)[0-9\s-]{8,18}/);
-        if (phoneMatch) {
-          const rawDigits = phoneMatch[1].replace(/\D/g, '');
-          if (rawDigits.length >= 9 && rawDigits.length <= 16) {
-            pendingData.no_whatsapp = rawDigits.startsWith('0') ? '62' + rawDigits.slice(1) : rawDigits;
-          }
-        }
+        pendingData.no_whatsapp = normalizeIndonesianPhone(modalText);
       }
 
       // Tutup modal menggunakan selektor resmi TikTok
@@ -1173,7 +1163,48 @@
   }
 
   /**
-   * Memindai kartu dari atas ke bawah.
+   * Mengambil semua kartu profil kreator individual dari grid Find Creators.
+   * Satu baris grid berisi 3 kartu individual: fungsi ini menjamin SEMUA 3 KARTU per baris
+   * terdeteksi dan diproses satu per satu, bukan hanya kartu pertama di baris tersebut.
+   */
+  function getAllCreatorCardElements() {
+    const usernameSpans = Array.from(document.querySelectorAll(FIND_CREATORS_SELECTORS.username));
+    const cardItems = [];
+
+    for (const uSpan of usernameSpans) {
+      // Cari container kartu individual untuk kreator ini
+      let cardEl =
+        uSpan.closest('div[data-e2e="0fca897b-b18b-1087"]') ||
+        uSpan.closest('div[class*="Card"]') ||
+        uSpan.closest('div[class*="card"]');
+
+      if (!cardEl) {
+        // Cari container tingkat kartu (anak langsung dari baris/grid)
+        let curr = uSpan.parentElement;
+        while (
+          curr &&
+          curr.parentElement &&
+          !curr.parentElement.getAttribute('data-e2e')?.includes('e8faf26e')
+        ) {
+          curr = curr.parentElement;
+        }
+        cardEl = curr || uSpan.parentElement;
+      }
+
+      const clickTarget = cardEl?.querySelector(FIND_CREATORS_SELECTORS.cardClickTarget) || uSpan;
+
+      cardItems.push({
+        cardEl: cardEl || uSpan,
+        usernameSpan: uSpan,
+        clickTarget,
+      });
+    }
+
+    return cardItems;
+  }
+
+  /**
+   * Memindai kartu individual dari atas ke bawah (3 kartu per baris grid).
    * Menangani loading baris acak (Out-of-Order): jika ada baris yang belum selesai render (skeleton),
    * WAJIB ditunggu dulu, jangan di-skip!
    */
@@ -1194,37 +1225,34 @@
       (fullStatus.knownUsernames || []).map((u) => String(u).trim().toLowerCase())
     );
 
-    const allRows = Array.from(document.querySelectorAll(FIND_CREATORS_SELECTORS.rowItem));
+    const allCards = getAllCreatorCardElements();
 
-    for (let i = 0; i < allRows.length; i++) {
+    for (let i = 0; i < allCards.length; i++) {
       if (!isListLoopActive) return;
 
-      const row = allRows[i];
-      if (row.getAttribute('data-tnt-processed') === 'true') {
+      const { cardEl, usernameSpan, clickTarget } = allCards[i];
+      if (cardEl.getAttribute('data-tnt-processed') === 'true') {
         continue;
       }
 
-      // Cek apakah baris ini masih skeleton / belum selesai ter-load (karena loading TikTok kadang acak misal 24 dulu baru 22)
-      let usernameEl = row.querySelector(FIND_CREATORS_SELECTORS.username);
-      let rawUsername = usernameEl?.textContent?.trim() || '';
+      // Cek apakah kartu ini masih skeleton / belum selesai ter-load
+      let rawUsername = usernameSpan?.textContent?.trim() || '';
 
       if (!rawUsername) {
         updateFloatingStatus(
-          `⏳ Baris ke-${i + 1} belum selesai ter-load (skeleton). Menunggu sampai ter-render...`
+          `⏳ Kartu ke-${i + 1} belum selesai ter-load (skeleton). Menunggu sampai ter-render...`
         );
-        row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        cardEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
 
         let skeletonWait = 0;
         while (skeletonWait < 5000 && isListLoopActive) {
           await sleep(300);
           skeletonWait += 300;
-          usernameEl = row.querySelector(FIND_CREATORS_SELECTORS.username);
-          rawUsername = usernameEl?.textContent?.trim() || '';
+          rawUsername = usernameSpan?.textContent?.trim() || '';
           if (rawUsername) break;
         }
 
         if (!rawUsername) {
-          // Masih belum render setelah 5 detik, biarkan tanpa tanda data-tnt-processed agar siklus berikutnya dicek lagi
           continue;
         }
       }
@@ -1233,8 +1261,8 @@
 
       // Cek di Buku Catatan (knownUsernames): jika sudah ada, LANGSUNG SKIP tanpa membuka tab!
       if (knownSet.has(cleanUsername)) {
-        row.setAttribute('data-tnt-processed', 'true');
-        badgeRowCard(row, `⏭️ Sudah di Staging (@${cleanUsername})`, '#10b981', '#10b981');
+        cardEl.setAttribute('data-tnt-processed', 'true');
+        badgeRowCard(cardEl, `⏭️ Sudah di Staging (@${cleanUsername})`, '#10b981', '#10b981');
         safeSendMessage({
           action: 'RECORD_SKIPPED_DUPLICATE',
           username: cleanUsername,
@@ -1244,19 +1272,16 @@
       }
 
       // Kreator belum ada di Buku Catatan -> Klik profilnya untuk membuka tab detail!
-      const clickTarget =
-        row.querySelector(FIND_CREATORS_SELECTORS.cardClickTarget) || usernameEl;
-
       if (!clickTarget) {
-        row.setAttribute('data-tnt-processed', 'true');
+        cardEl.setAttribute('data-tnt-processed', 'true');
         continue;
       }
 
-      row.setAttribute('data-tnt-processed', 'true');
+      cardEl.setAttribute('data-tnt-processed', 'true');
       waitingForDetailTab = true;
 
-      badgeRowCard(row, `⏳ Scraping @${cleanUsername}...`, '#4f46e5', '#6366f1');
-      row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      badgeRowCard(cardEl, `⏳ Scraping @${cleanUsername}...`, '#4f46e5', '#6366f1');
+      cardEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
 
       // Micro-jitter alami manusia (0.65s - 1.25s) sebelum klik kartu
       await sleep(randomBetween(650, 1250));
