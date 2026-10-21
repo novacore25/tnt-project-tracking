@@ -8,7 +8,7 @@ import { formatAbbreviated } from "@/utils/formatters";
 
 
 
-import { ArrowLeft, UserPlus, Phone, CreditCard, Activity, ArrowUpDown, ChevronDown, ChevronRight, Edit, Save, Plus, X, Trash2, Check, Video, TrendingUp, DollarSign, Calendar, Users, Briefcase, ExternalLink, ArrowRight, TrendingDown, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, UserPlus, Phone, Mail, CreditCard, Activity, ArrowUpDown, ChevronDown, ChevronRight, Edit, Save, Plus, X, Trash2, Check, Video, TrendingUp, DollarSign, Calendar, Users, Briefcase, ExternalLink, ArrowRight, TrendingDown, AlertTriangle, CheckCircle2 } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState, ReactNode, useEffect, useRef, useCallback, useMemo } from "react";
@@ -1448,6 +1448,20 @@ export default function CreatorProfilePage() {
                   </div>
                 ) : (
                   <p className="text-sm text-slate-400">Belum ada kontak aktif</p>
+                )}
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Email Resmi</p>
+                </div>
+                {creator.email ? (
+                  <div className="flex items-center gap-2 text-sm p-2 border border-slate-200 rounded-lg">
+                    <Mail className="w-4 h-4 text-indigo-600" />
+                    <a href={`mailto:${creator.email}`} className="text-slate-800 hover:text-indigo-600 truncate">{creator.email}</a>
+                  </div>
+                ) : (
+                  <p className="text-sm text-slate-400">Belum ada email tersimpan</p>
                 )}
               </div>
 
