@@ -641,6 +641,7 @@
       avatar_url,
       mcn,
       no_whatsapp: null,
+      email: null,
       level,
       followers,
       primary_niche,
@@ -675,6 +676,225 @@
       gmv_by_category: categoryItems,
       scraped_at: new Date().toISOString(),
     };
+  }
+
+  /**
+   * Ekstraksi informasi kontak yang mungkin ada langsung di teks header halaman profil kreator.
+   */
+  function extractHeaderContactInfo() {
+    const text = document.body ? document.body.innerText || '' : '';
+    const emailMatch = text.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i);
+    const email = emailMatch ? emailMatch[1].trim().toLowerCase() : null;
+
+    const phoneMatch =
+      text.match(/(?:wa|whatsapp|phone|tlp|hp|telp|contact)?[:\s]*((?:\+?62|08)[0-9\s-]{8,18})/i) ||
+      text.match(/(?:\+?62|08)[0-9\s-]{8,18}/);
+    let no_whatsapp = null;
+    if (phoneMatch) {
+      const rawDigits = phoneMatch[1].replace(/\D/g, '');
+      if (rawDigits.length >= 9 && rawDigits.length <= 16) {
+        no_whatsapp = rawDigits.startsWith('0') ? '62' + rawDigits.slice(1) : rawDigits;
+      }
+    }
+    return { email, no_whatsapp };
+  }
+
+  /**
+   * Mencari tombol chat (ikon speech bubble) di sebelah tombol 'Invite' / 'Undang' di header detail kreator.
+   */
+  function findDetailChatButton() {
+    const byHref = document.querySelector('a[href*="/partner/im"], a[href*="creator_id="]');
+    if (byHref) return byHref;
+
+    const allButtons = Array.from(document.querySelectorAll('button, a'));
+    const inviteBtn = allButtons.find((b) => {
+      const t = (b.textContent || '').trim().toLowerCase();
+      return t === 'invite' || t === 'undang' || t.startsWith('invite') || t.startsWith('undang');
+    });
+
+    if (inviteBtn && inviteBtn.parentElement) {
+      const siblings = Array.from(inviteBtn.parentElement.children).filter((el) => el !== inviteBtn);
+      for (const el of siblings) {
+        if (
+          el.querySelector('svg') ||
+          el.classList.contains('arco-btn-icon') ||
+          el.tagName === 'BUTTON' ||
+          el.tagName === 'A'
+        ) {
+          return el;
+        }
+      }
+    }
+
+    const byAria = document.querySelector(
+      'button[aria-label*="chat" i], button[aria-label*="message" i], button[title*="chat" i], button[title*="pesan" i]'
+    );
+    if (byAria) return byAria;
+
+    return null;
+  }
+
+  /**
+   * Mencari tombol bulat biru (Contact Info) di panel profil kanan IM chat.
+   */
+  function findImContactRoundButton() {
+    const byAttr = document.querySelector(
+      'button[aria-label*="contact" i], button[title*="contact" i], button[aria-label*="kontak" i], button[title*="kontak" i]'
+    );
+    if (byAttr) return byAttr;
+
+    const circleButtons = Array.from(
+      document.querySelectorAll(
+        'button.arco-btn-circle, button.arco-btn-shape-circle, button[class*="circle"], div[role="button"][class*="circle"]'
+      )
+    );
+
+    // Filter tombol di panel kanan layar (profile sidebar)
+    for (const btn of circleButtons) {
+      const rect = btn.getBoundingClientRect();
+      if (rect.right > window.innerWidth * 0.45 && rect.top > 30 && rect.top < 450) {
+        const style = window.getComputedStyle(btn);
+        const bg = style.backgroundColor || '';
+        const isBlue =
+          bg.includes('22, 93, 255') ||
+          bg.includes('22, 119, 255') ||
+          bg.includes('79, 70, 229') ||
+          bg.includes('rgb(22,') ||
+          btn.classList.contains('arco-btn-primary');
+        if (isBlue) return btn;
+      }
+    }
+
+    // Cari tombol lingkaran dengan ikon SVG yang bukan tiga titik '...'
+    for (const btn of circleButtons) {
+      const rect = btn.getBoundingClientRect();
+      if (rect.right > window.innerWidth * 0.45 && rect.top > 30 && rect.top < 450) {
+        const svg = btn.querySelector('svg');
+        if (svg) {
+          const text = btn.innerText || '';
+          if (!text.includes('...') && rect.width < 50) {
+            return btn;
+          }
+        }
+      }
+    }
+
+    // Fallback ke tombol di area sidebar profil kanan
+    const rightSidebar = Array.from(document.querySelectorAll('div, aside, section')).find((el) => {
+      const rect = el.getBoundingClientRect();
+      return rect.right >= window.innerWidth - 30 && rect.left > window.innerWidth * 0.55 && rect.height > 250;
+    });
+    if (rightSidebar) {
+      const btn = rightSidebar.querySelector('button.arco-btn-primary, button:has(svg)');
+      if (btn) return btn;
+    }
+
+    return null;
+  }
+
+  /**
+   * Menunggu loading IM chat room selesai, lalu mengklik Contact Info dan mengekstrak nomor WA & Email.
+   * Sistem dirancang pintar: polling setiap 350ms hingga 25 detik agar menyesuaikan kecepatan loading TikTok.
+   */
+  async function waitAndScrapeImContactInfo(pendingData, notify = () => {}) {
+    notify(`⏳ Menunggu IM roomchat @${pendingData.username} selesai dimuat...`);
+
+    let elapsed = 0;
+    const maxTimeout = 25000;
+    let roundBtn = null;
+
+    while (elapsed < maxTimeout) {
+      if (isCaptchaPresent()) {
+        notify('⏸️ Captcha terdeteksi pada IM. Silakan selesaikan puzzle...');
+        safeSendMessage({ action: 'DETAIL_TAB_CAPTCHA_DETECTED' });
+        await sleep(1000);
+        continue;
+      }
+
+      roundBtn = findImContactRoundButton();
+      if (roundBtn) {
+        break;
+      }
+
+      elapsed += 350;
+      notify(`⏳ Menunggu IM roomchat @${pendingData.username} selesai dimuat (${Math.round(elapsed / 1000)}s)...`);
+      await sleep(350);
+    }
+
+    if (!roundBtn) {
+      notify(`⚠️ IM roomchat tidak memuat tombol kontak dalam 25s. Menyimpan data profil dasar...`);
+      sessionStorage.removeItem('tnt_pending_creator_scrape');
+      if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+        chrome.storage.local.remove('tnt_pending_creator_scrape');
+      }
+      safeSendMessage({
+        action: 'SCRAPE_DETAIL_SUCCESS',
+        payload: pendingData,
+        closeTab: true,
+      });
+      return;
+    }
+
+    notify(`💬 Roomchat & profil @${pendingData.username} siap! Membuka Contact Info...`);
+    await sleep(randomBetween(400, 700));
+    simulateHumanClick(roundBtn);
+
+    // Tunggu modal "Contact Info" muncul (hingga 5 detik)
+    let modalWait = 0;
+    let modalEl = null;
+    while (modalWait < 5000) {
+      modalEl = document.querySelector('.arco-modal, div[role="dialog"], .arco-modal-content');
+      if (
+        modalEl &&
+        modalEl.innerText &&
+        (modalEl.innerText.toLowerCase().includes('contact') ||
+          modalEl.innerText.toLowerCase().includes('kontak') ||
+          modalEl.innerText.includes('@') ||
+          modalEl.innerText.match(/(?:\+?62|08)\d{8,13}/))
+      ) {
+        break;
+      }
+      await sleep(250);
+      modalWait += 250;
+    }
+
+    const modalText = modalEl ? modalEl.innerText : document.body.innerText || '';
+
+    // Ekstrak Email
+    const emailMatch = modalText.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i);
+    if (emailMatch) {
+      pendingData.email = emailMatch[1].trim().toLowerCase();
+    }
+
+    // Ekstrak Phone / WhatsApp
+    const phoneMatch =
+      modalText.match(/(?:phone|telepon|hp|no|wa|whatsapp)?[:\s]*((?:\+?62|08)[0-9\s-]{8,18})/i) ||
+      modalText.match(/(?:\+?62|08)[0-9\s-]{8,18}/);
+    if (phoneMatch) {
+      const rawDigits = phoneMatch[1].replace(/\D/g, '');
+      if (rawDigits.length >= 9 && rawDigits.length <= 16) {
+        pendingData.no_whatsapp = rawDigits.startsWith('0') ? '62' + rawDigits.slice(1) : rawDigits;
+      }
+    }
+
+    // Tutup modal jika ada tombol close
+    const closeBtn = document.querySelector('.arco-modal-close-icon, button[aria-label="Close"]');
+    if (closeBtn) simulateHumanClick(closeBtn);
+
+    notify(`✅ Kontak @${pendingData.username}: WA: ${pendingData.no_whatsapp || '-'} | Email: ${pendingData.email || '-'}`);
+
+    sessionStorage.removeItem('tnt_pending_creator_scrape');
+    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+      chrome.storage.local.remove('tnt_pending_creator_scrape');
+    }
+
+    await sleep(randomBetween(500, 800));
+
+    safeSendMessage({
+      action: 'SCRAPE_DETAIL_SUCCESS',
+      payload: pendingData,
+      closeTab: true,
+    });
   }
 
   // ============================================================================
@@ -1114,6 +1334,10 @@
   async function runManualSingleDetailScrape() {
     try {
       const data = await waitAndScrapeCreatorDetailPage(updateFloatingStatus);
+      const headerContact = extractHeaderContactInfo();
+      if (headerContact.email && !data.email) data.email = headerContact.email;
+      if (headerContact.no_whatsapp && !data.no_whatsapp) data.no_whatsapp = headerContact.no_whatsapp;
+
       safeSendMessage(
         { action: 'SCRAPE_DETAIL_SUCCESS', payload: data, closeTab: false },
         () => {
@@ -1161,21 +1385,89 @@
     refreshFloatingPanelUI(fullStatus);
 
     const isDetailPage = window.location.pathname.includes('/creator/detail');
+    const isImPage = window.location.pathname.includes('/partner/im');
 
+    // Skenario A: Halaman IM Chat Room
+    if (isImPage) {
+      let pendingData = null;
+      const pendingRaw = sessionStorage.getItem('tnt_pending_creator_scrape');
+      if (pendingRaw) {
+        try {
+          pendingData = JSON.parse(pendingRaw);
+        } catch (_) {}
+      }
+
+      if (!pendingData && typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+        const localStore = await new Promise((resolve) => {
+          chrome.storage.local.get(['tnt_pending_creator_scrape'], (r) => resolve(r || {}));
+        });
+        if (localStore?.tnt_pending_creator_scrape) {
+          pendingData = localStore.tnt_pending_creator_scrape;
+        }
+      }
+
+      if (pendingData) {
+        await waitAndScrapeImContactInfo(pendingData, updateFloatingStatus);
+      }
+      return;
+    }
+
+    // Skenario B: Halaman Detail Kreator
     if (isDetailPage && fullStatus?.state?.isRunning) {
-      // Tab Detail ini dibuka otomatis oleh Auto-Scrape -> langsung jalankan ekstraksi & tutup tab setelah beres!
       try {
         const scrapedData = await waitAndScrapeCreatorDetailPage(updateFloatingStatus);
-        safeSendMessage({
-          action: 'SCRAPE_DETAIL_SUCCESS',
-          payload: scrapedData,
-          closeTab: true,
-        });
+
+        const headerContact = extractHeaderContactInfo();
+        if (headerContact.email && !scrapedData.email) scrapedData.email = headerContact.email;
+        if (headerContact.no_whatsapp && !scrapedData.no_whatsapp) scrapedData.no_whatsapp = headerContact.no_whatsapp;
+
+        sessionStorage.setItem('tnt_pending_creator_scrape', JSON.stringify(scrapedData));
+        if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+          chrome.storage.local.set({ tnt_pending_creator_scrape: scrapedData });
+        }
+
+        updateFloatingStatus(`💬 Membuka IM Chat room @${scrapedData.username} untuk mengambil Kontak...`);
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const cid = urlParams.get('cid') || scrapedData.tiktok_cid || '';
+        const pid =
+          urlParams.get('partner_id') ||
+          urlParams.get('pid') ||
+          urlParams.get('shop_id') ||
+          '7495000000000000000';
+        const fallbackImUrl = `https://partner.tiktokshop.com/partner/im?shop_id=${pid}&creator_id=${cid}&market=4&enter_from=find_creator_detail`;
+
+        const chatBtn = findDetailChatButton();
+        if (chatBtn) {
+          if (chatBtn.tagName.toLowerCase() === 'a' && chatBtn.href) {
+            window.location.href = chatBtn.href;
+          } else {
+            const origOpen = window.open;
+            window.open = function (url) {
+              if (url && (String(url).includes('/partner/im') || String(url).includes('creator_id'))) {
+                window.location.href = url;
+                return window;
+              }
+              return origOpen.apply(this, arguments);
+            };
+
+            chatBtn.removeAttribute('target');
+            simulateHumanClick(chatBtn);
+
+            setTimeout(() => {
+              if (!window.location.pathname.includes('/partner/im')) {
+                window.location.href = fallbackImUrl;
+              }
+            }, 1200);
+          }
+        } else {
+          window.location.href = fallbackImUrl;
+        }
       } catch (err) {
         updateFloatingStatus(`❌ Error ekstraksi detail: ${err?.message || err}`);
       }
     } else if (!isDetailPage && fullStatus?.state?.isRunning) {
-      // Jika halaman Find Creators di-refresh saat Auto-Scrape masih menyala
+      // Halaman Find Creators saat Auto-Scrape menyala
       isListLoopActive = true;
       waitingForDetailTab = false;
       scanAndProcessNextCreatorCard();

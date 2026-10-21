@@ -14,6 +14,7 @@ export interface StagingCreatorRecord {
   avatar_url?: string | null;
   mcn?: string | null;
   no_whatsapp?: string | null;
+  email?: string | null;
   level?: number | string | null;
   followers?: number | string | null;
   primary_niche?: string | null;
@@ -137,6 +138,8 @@ export async function ensureCreatorStagingSchema() {
 
     await db.execute(sql`ALTER TABLE creators ADD COLUMN IF NOT EXISTS display_name text;`);
     await db.execute(sql`ALTER TABLE creators ADD COLUMN IF NOT EXISTS tiktok_cid text;`);
+    await db.execute(sql`ALTER TABLE creators ADD COLUMN IF NOT EXISTS email text;`);
+    await db.execute(sql`ALTER TABLE creator_staging ADD COLUMN IF NOT EXISTS email text;`);
 
     await db.execute(sql`ALTER TABLE creator_snapshots ADD COLUMN IF NOT EXISTS gmv_status text DEFAULT 'RIIL';`);
     await db.execute(sql`ALTER TABLE creator_snapshots ADD COLUMN IF NOT EXISTS gmv_30d_showcase bigint DEFAULT 0;`);
@@ -351,6 +354,7 @@ export async function upsertStagingCreatorsBatchAction(items: StagingCreatorReco
     const avatarUrl = raw.avatar_url ? String(raw.avatar_url).trim() : null;
     const mcn = raw.mcn && String(raw.mcn).trim() !== '--' ? String(raw.mcn).trim() : null;
     const noWhatsapp = raw.no_whatsapp ? String(raw.no_whatsapp).trim() : null;
+    const email = raw.email ? String(raw.email).trim().toLowerCase() : null;
     const level = raw.level ? parseInt(String(raw.level).replace(/\D/g, ''), 10) || null : null;
     const followers = raw.followers ? Math.round(Number(raw.followers)) || 0 : 0;
     const primaryNiche = raw.primary_niche || raw.niche ? String(raw.primary_niche || raw.niche).trim() : null;
@@ -399,7 +403,7 @@ export async function upsertStagingCreatorsBatchAction(items: StagingCreatorReco
 
     await db.execute(sql`
       INSERT INTO creator_staging (
-        username, display_name, tiktok_cid, link_account, avatar_url, mcn, no_whatsapp,
+        username, display_name, tiktok_cid, link_account, avatar_url, mcn, no_whatsapp, email,
         level, followers, primary_niche,
         gmv_30d, gmv_status, gmv_30d_live, gmv_30d_video, gmv_30d_showcase,
         pct_live, pct_video, pct_showcase,
@@ -412,7 +416,7 @@ export async function upsertStagingCreatorsBatchAction(items: StagingCreatorReco
         top_locations, gmv_by_category,
         scraped_by, scraped_at, updated_at
       ) VALUES (
-        ${username}, ${displayName}, ${tiktokCid}, ${linkAccount}, ${avatarUrl}, ${mcn}, ${noWhatsapp},
+        ${username}, ${displayName}, ${tiktokCid}, ${linkAccount}, ${avatarUrl}, ${mcn}, ${noWhatsapp}, ${email},
         ${level}, ${followers}, ${primaryNiche},
         ${gmv30d}, ${gmvStatus}, ${gmv30dLive}, ${gmv30dVideo}, ${gmv30dShowcase},
         ${pctLive}, ${pctVideo}, ${pctShowcase},
@@ -432,6 +436,7 @@ export async function upsertStagingCreatorsBatchAction(items: StagingCreatorReco
         avatar_url = COALESCE(EXCLUDED.avatar_url, creator_staging.avatar_url),
         mcn = EXCLUDED.mcn,
         no_whatsapp = COALESCE(EXCLUDED.no_whatsapp, creator_staging.no_whatsapp),
+        email = COALESCE(EXCLUDED.email, creator_staging.email),
         level = COALESCE(EXCLUDED.level, creator_staging.level),
         followers = EXCLUDED.followers,
         primary_niche = COALESCE(EXCLUDED.primary_niche, creator_staging.primary_niche),
@@ -513,7 +518,7 @@ export async function promoteStagingToCreatorPoolAction(stagingIds: number[]) {
     // 1. Upsert ke tabel creators: meng-update field profil TikTok tanpa menghapus nama_asli KTP / data finansial
     const cRes = await db.execute(sql`
       INSERT INTO creators (
-        username, display_name, tiktok_cid, link_account, mcn, avatar_url, no_whatsapp, added_by, status
+        username, display_name, tiktok_cid, link_account, mcn, avatar_url, no_whatsapp, email, added_by, status
       ) VALUES (
         ${username},
         ${s.display_name || null},
@@ -522,6 +527,7 @@ export async function promoteStagingToCreatorPoolAction(stagingIds: number[]) {
         ${s.mcn || null},
         ${s.avatar_url || null},
         ${s.no_whatsapp || null},
+        ${s.email || null},
         ${profileId},
         'active'
       )
@@ -532,6 +538,7 @@ export async function promoteStagingToCreatorPoolAction(stagingIds: number[]) {
         mcn = COALESCE(EXCLUDED.mcn, creators.mcn),
         avatar_url = COALESCE(EXCLUDED.avatar_url, creators.avatar_url),
         no_whatsapp = COALESCE(EXCLUDED.no_whatsapp, creators.no_whatsapp),
+        email = COALESCE(EXCLUDED.email, creators.email),
         last_updated_by = ${profileId},
         last_updated_at = NOW()
       RETURNING id

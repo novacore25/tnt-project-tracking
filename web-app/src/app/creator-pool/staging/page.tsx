@@ -609,6 +609,30 @@ export default function StagingCreatorPage() {
                                 </span>
                               )}
                             </div>
+
+                            {(r.no_whatsapp || r.email) && (
+                              <div className="flex flex-col gap-0.5 pt-1 text-[11px]">
+                                {r.no_whatsapp && (
+                                  <a
+                                    href={`https://wa.me/${r.no_whatsapp.replace(/\D/g, '')}`}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="inline-flex items-center gap-1 font-semibold text-emerald-700 hover:text-emerald-800"
+                                  >
+                                    <span>📱</span> {r.no_whatsapp}
+                                  </a>
+                                )}
+                                {r.email && (
+                                  <a
+                                    href={`mailto:${r.email}`}
+                                    className="inline-flex items-center gap-1 text-slate-600 hover:text-indigo-600 truncate max-w-[210px]"
+                                    title={r.email}
+                                  >
+                                    <span>✉️</span> {r.email}
+                                  </a>
+                                )}
+                              </div>
+                            )}
                           </div>
                         </div>
                       </td>
