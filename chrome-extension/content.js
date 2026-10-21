@@ -735,9 +735,16 @@
   }
 
   /**
-   * Mencari tombol bulat biru (Contact Info) di panel profil kanan IM chat.
+   * Mencari tombol Contact Info di panel profil kanan IM chat (workbench-container).
    */
   function findImContactRoundButton() {
+    // 1. Selektor presisi tinggi terverifikasi dari DOM TikTok Partner Center
+    const exactBtn =
+      document.querySelector('button[data-e2e="efbe2e11-4d42-b98a"]') ||
+      document.querySelector('#workbench-container button[data-e2e="efbe2e11-4d42-b98a"]') ||
+      document.querySelector('div[data-e2e="2cc1c2ec-0582-15cc"] button');
+    if (exactBtn) return exactBtn;
+
     const byAttr = document.querySelector(
       'button[aria-label*="contact" i], button[title*="contact" i], button[aria-label*="kontak" i], button[title*="kontak" i]'
     );
