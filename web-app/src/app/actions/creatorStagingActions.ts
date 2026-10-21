@@ -177,7 +177,7 @@ export async function ensureCreatorStagingSchema() {
     await db.execute(sql`
       UPDATE creator_staging
       SET no_whatsapp = NULL
-      WHERE no_whatsapp IN ('1624253435', '621624253435');
+      WHERE no_whatsapp IN ('1824253435', '1624253435', '621824253435', '621624253435');
     `).catch(() => {});
 
     schemaEnsured = true;
@@ -361,7 +361,12 @@ export async function upsertStagingCreatorsBatchAction(items: StagingCreatorReco
     const avatarUrl = raw.avatar_url ? String(raw.avatar_url).trim() : null;
     const mcn = raw.mcn && String(raw.mcn).trim() !== '--' ? String(raw.mcn).trim() : null;
     let noWhatsapp = raw.no_whatsapp ? String(raw.no_whatsapp).trim() : null;
-    if (noWhatsapp === '1624253435' || noWhatsapp === '621624253435') {
+    if (
+      noWhatsapp === '1824253435' ||
+      noWhatsapp === '1624253435' ||
+      noWhatsapp === '621824253435' ||
+      noWhatsapp === '621624253435'
+    ) {
       noWhatsapp = null;
     }
     const email = raw.email ? String(raw.email).trim().toLowerCase() : null;

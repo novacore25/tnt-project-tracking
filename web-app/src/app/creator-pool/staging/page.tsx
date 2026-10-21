@@ -805,6 +805,17 @@ export default function StagingCreatorPage() {
                           </span>
                         )}
 
+                        <div className="text-[10px] text-slate-400 font-medium">
+                          {r.scraped_at
+                            ? new Date(r.scraped_at).toLocaleDateString('id-ID', {
+                                day: 'numeric',
+                                month: 'short',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })
+                            : '-'}
+                        </div>
+
                         <div>
                           <button
                             onClick={async () => {
