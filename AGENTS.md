@@ -20,6 +20,8 @@
 | Dokumen | Kapan dibaca |
 |---|---|
 | `.opencode/skill/tnt-project/SKILL.md` | **Selalu** — konteks domain, jebakan terverifikasi, aturan kerja |
+| `.opencode/skill/creator-scraper/SKILL.md` | **Scraping Creator & Staging** — peta DOM TikTok Partner Center, rumus GMV RIIL/ESTIMASI, infinite scroll out-of-order, captcha pause/resume |
+| `docs/KEPUTUSAN-SCRAPING-CREATOR-STAGING.md` | **Keputusan Auto-Scraping Creator & Staging** — 12 keputusan owner, skema `creator_staging`, Buku Catatan anti-duplikat, alur local queue → Staging |
 | `docs/LOG-PERTEMUAN-2026-10-01.md` | **Sesi 30 Sep–1 Okt 2026** — masalah → diagnosis → solusi, angka sebelum/sesudah, item tertunda + pemiliknya |
 | `docs/KEPUTUSAN-PEMBAYARAN.md` | **Migrasi payment** — 10 keputusan user yang sudah dikunci + realitas DB terverifikasi |
 | `docs/KEPUTUSAN-TRANSISI-BUFFER-MSGLOW.md` | **Buffer transisi MS Glow (41 & 42)** — strategi smoothing transition, baseline angka, dan SOP konvergensi ke 0 |
@@ -227,6 +229,13 @@
     dengan 419 creator approved (Mom & Baby). Menggunakan transaksi riil historis TAP.
     **DILARANG MENGHAPUS** baris ini secara membabi buta. Jika akan di-rollback/dihapus, gunakan SOP resmi di
     `docs/KEPUTUSAN-TRANSISI-BUFFER-SALSA.md`.
+
+28. **Auto-Scraping Creator TikTok Partner Center & Staging Creator (`chrome-extension/` & `/creator-pool/staging`):**
+    - Wajib baca `.opencode/skill/creator-scraper/SKILL.md` dan `docs/KEPUTUSAN-SCRAPING-CREATOR-STAGING.md` sebelum menyentuh ekstensi atau Staging Creator.
+    - `display_name` (nama profil TikTok) dipisah dari `nama_asli` (nama KTP). Bio, Email, dan `gmv_raw_text` tidak disimpan.
+    - Pisahkan parser Rupiah (`M` = Miliar / $10^9$) dan Non-Rupiah (`M` = Million / $10^6$).
+    - Gunakan "Buku Catatan" (`knownUsernames` dari Staging + Creator Pool) agar kartu yang sudah ada langsung di-skip tanpa membuka tab detail.
+    - Selama auto-scrape berjalan (loop tanpa henti sampai klik STOP, termasuk *infinite scroll jiggle* & tunggu baris *out-of-order* / *skeleton*), simpan ke local storage dulu; tombol **"Tambahkan ke Staging"** muncul setelah STOP ditekan.
 
 ## Git
 

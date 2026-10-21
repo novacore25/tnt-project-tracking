@@ -17,10 +17,10 @@ export default function ExtensionPage() {
             <span>Alat Bantu Wajib Manajer</span>
           </div>
           <h1 className="text-[36px] font-bold leading-tight mb-[16px]">
-            TNT Kreatif Extension
+            TNT Scrapping Creator (v2.0)
           </h1>
           <p className="text-blue-100 text-[18px] max-w-2xl leading-relaxed mb-[32px]">
-            Ekstensi ini diwajibkan untuk diinstal oleh seluruh Manajer. Fungsinya untuk menyedot (scraping) otomatis data kreator dari TikTok Partner Center langsung ke dalam database aplikasi kita.
+            Ekstensi resmi untuk melakukan Auto-Scrape kreator dari TikTok Partner Center (Find Creators) dilengkapi Buku Catatan Anti-Duplikat otomatis, kalkulasi GMV RIIL vs ESTIMASI, dan pengiriman batch ke menu Staging Creator.
           </p>
           
           <a 

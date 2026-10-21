@@ -1,26 +1,38 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="id">
 <head>
   <meta charset="UTF-8">
-  <title>TNT Scraper Queue</title>
+  <title>TNT Scrapping Creator</title>
   <link rel="stylesheet" href="popup.css">
 </head>
 <body>
   <div class="header">
-    <h2>TNT Scraper</h2>
+    <div>
+      <h2 style="margin:0;font-size:15px;">TNT Scrapping Creator</h2>
+      <div style="font-size:11px;color:#64748b;margin-top:2px;">
+        📖 Buku Catatan: <strong id="known-count">0</strong> username
+      </div>
+    </div>
     <span class="badge" id="queue-count">0</span>
   </div>
   
-  <div class="actions">
-    <button id="clear-all-btn" class="btn-outline-danger">Kosongkan Semua</button>
+  <div class="actions" style="display:flex;gap:6px;">
+    <button id="sync-book-btn" class="btn-outline" style="flex:1;padding:6px 8px;font-size:11px;border-radius:6px;border:1px solid #cbd5e1;background:#f8fafc;cursor:pointer;font-weight:600;">
+      🔄 Sync Buku Catatan
+    </button>
+    <button id="clear-all-btn" class="btn-outline-danger" style="padding:6px 10px;font-size:11px;">
+      Kosongkan
+    </button>
   </div>
+
+  <div id="sync-msg" style="display:none;font-size:11px;padding:6px 10px;margin:6px 12px 0;border-radius:6px;background:#eef2ff;color:#3730a3;"></div>
 
   <div class="queue-list" id="queue-list">
     <!-- Items will be injected here -->
   </div>
 
   <div class="footer">
-    <button id="send-all-btn" class="btn-primary" disabled>🚀 Kirim Semua ke TNT</button>
+    <button id="send-all-btn" class="btn-primary" disabled>🚀 Tambahkan ke Staging</button>
   </div>
 
   <script src="popup.js"></script>

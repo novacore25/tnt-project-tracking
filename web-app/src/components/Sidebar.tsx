@@ -1,7 +1,7 @@
 "use client";
 
 import Link from 'next/link';
-import { LayoutDashboard, Users, FolderKanban, Receipt, Wallet, Settings, Package, LogOut, Shield, Activity, Puzzle, ChevronLeft, ChevronRight, FileText } from 'lucide-react';
+import { LayoutDashboard, Users, FolderKanban, Receipt, Wallet, Settings, Package, LogOut, Shield, Activity, Puzzle, ChevronLeft, ChevronRight, FileText, Database } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/utils/cn';
 import { useState, useEffect } from 'react';
@@ -11,6 +11,7 @@ import { signOut } from 'next-auth/react';
 const navItems = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard, activePhase: true },
   { name: 'Creator Pool', href: '/creator-pool', icon: Users, activePhase: true },
+  { name: 'Staging Creator', href: '/creator-pool/staging', icon: Database, activePhase: true },
   { name: 'Campaign', href: '/campaigns', icon: FolderKanban, activePhase: true },
   { name: 'Dokumen', href: '/dokumen', icon: FileText, activePhase: true },
   { name: 'Master Produk', href: '/skus', icon: Package, activePhase: true },
@@ -105,7 +106,11 @@ export function Sidebar() {
 
         <nav className="flex-1 flex flex-col overflow-y-auto mt-2">
           {navItems.map((item) => {
-            const isActive = pathname ? (pathname === item.href || pathname.startsWith(item.href + '/')) : false;
+            const isActive = pathname
+              ? item.href === '/creator-pool'
+                ? pathname === '/creator-pool' || (pathname.startsWith('/creator-pool/') && !pathname.startsWith('/creator-pool/staging'))
+                : pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href + '/'))
+              : false;
             const Icon = item.icon;
             return (
               <Link
