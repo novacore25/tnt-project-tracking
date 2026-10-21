@@ -496,7 +496,7 @@ export default function StagingCreatorPage() {
                     className="rounded border-slate-300"
                   />
                 </th>
-                <th className="p-3 min-w-[230px]">Profil Kreator & MCN</th>
+                <th className="p-3 min-w-[260px]">Profil Kreator, MCN & Kontak</th>
                 <th className="p-3 min-w-[220px]">Total GMV 30D & Sales Channel</th>
                 <th className="p-3 min-w-[190px]">Metrik Sales & Kolaborasi</th>
                 <th className="p-3 min-w-[200px]">Performa Video & LIVE</th>
@@ -610,29 +610,40 @@ export default function StagingCreatorPage() {
                               )}
                             </div>
 
-                            {(r.no_whatsapp || r.email) && (
-                              <div className="flex flex-col gap-0.5 pt-1 text-[11px]">
-                                {r.no_whatsapp && (
+                            {/* Kontak Resmi (WhatsApp & Email) */}
+                            <div className="pt-2 mt-1 border-t border-slate-100 flex flex-col gap-1 text-[11px]">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                {r.no_whatsapp ? (
                                   <a
                                     href={`https://wa.me/${r.no_whatsapp.replace(/\D/g, '')}`}
                                     target="_blank"
                                     rel="noreferrer"
-                                    className="inline-flex items-center gap-1 font-semibold text-emerald-700 hover:text-emerald-800"
+                                    className="inline-flex items-center gap-1 font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 px-2 py-0.5 rounded border border-emerald-300 w-fit transition shadow-xs"
+                                    title="Klik untuk membuka chat WhatsApp"
                                   >
                                     <span>📱</span> {r.no_whatsapp}
                                   </a>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 text-slate-400 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-200">
+                                    <span>📱</span> WA: <span className="italic">Tidak ada</span>
+                                  </span>
                                 )}
-                                {r.email && (
+
+                                {r.email ? (
                                   <a
                                     href={`mailto:${r.email}`}
-                                    className="inline-flex items-center gap-1 text-slate-600 hover:text-indigo-600 truncate max-w-[210px]"
-                                    title={r.email}
+                                    className="inline-flex items-center gap-1 font-semibold text-indigo-700 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-2 py-0.5 rounded border border-indigo-200 truncate max-w-[210px] w-fit transition shadow-xs"
+                                    title={`Kirim email ke ${r.email}`}
                                   >
                                     <span>✉️</span> {r.email}
                                   </a>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 text-slate-400 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-200">
+                                    <span>✉️</span> Email: <span className="italic">Tidak ada</span>
+                                  </span>
                                 )}
                               </div>
-                            )}
+                            </div>
                           </div>
                         </div>
                       </td>
