@@ -859,7 +859,7 @@
     notify(`⏳ Menunggu IM roomchat @${pendingData.username} selesai dimuat...`);
 
     let elapsed = 0;
-    const maxTimeout = 10000;
+    const maxTimeout = 25000; // Toleransi hingga 25 detik agar jaringan lambat tidak terputus
     let roundBtn = null;
     let isFullyLoaded = false;
 
@@ -873,27 +873,24 @@
           continue;
         }
 
-        // Cek apakah tombol kontak sudah langsung terdeteksi
+        // 1. Cek apakah tombol kontak sudah langsung terdeteksi
         roundBtn = findImContactRoundButton();
         if (roundBtn) {
           break;
         }
 
-        // Cek jika IM menampilkan "No chat selected" dan sudah lewat 3.5 detik (kreator tidak punya roomchat aktif)
-        const bodyText = (document.body.innerText || '').toLowerCase();
-        if (bodyText.includes('no chat selected') && elapsed >= 3500) {
-          notify(`ℹ️ @${pendingData.username} tidak memiliki room chat aktif ("No chat selected"). Melanjutkan antrean...`);
-          break;
-        }
-
-        // Cek apakah halaman workbench profil kanan sudah 100% selesai dimuat berdasarkan struktur HTML
+        // 2. Cek apakah halaman workbench profil kanan sudah 100% selesai dimuat berdasarkan struktur HTML
         if (isWorkbenchFullyLoaded(pendingData.username)) {
           isFullyLoaded = true;
-          // Beri jeda 500ms agar rendering event listener React terpasang sempurna
-          await sleep(500);
+          await sleep(600);
           roundBtn = findImContactRoundButton();
-          // Begitu ter-load 100%: ada atau tidak tombolnya, langsung putuskan keluar loop!
-          break;
+          // Jika tombol kontak ada, langsung keluar loop dan klik!
+          if (roundBtn) break;
+
+          // Hanya jika workbench sudah 100% render sempurna DAN minimal 8 detik berlalu tanpa tombol kontak:
+          if (elapsed >= 8000) {
+            break;
+          }
         }
 
         elapsed += 400;
@@ -907,7 +904,7 @@
 
       if (!roundBtn) {
         if (isFullyLoaded) {
-          notify(`ℹ️ IM selesai dimuat 100%. @${pendingData.username} tidak memiliki tombol kontak. Melanjutkan...`);
+          notify(`ℹ️ IM selesai dimuat 100%. @${pendingData.username} tidak memiliki tombol kontak di profil.`);
         } else {
           notify(`⚠️ IM roomchat @${pendingData.username} timeout. Melanjutkan antrean...`);
         }
@@ -915,13 +912,13 @@
       }
 
       notify(`💬 Roomchat & profil @${pendingData.username} siap! Membuka Contact Info...`);
-      await sleep(randomBetween(400, 700));
+      await sleep(randomBetween(500, 800));
       triggerDeepClick(roundBtn);
 
-      // Tunggu modal "Contact Info" muncul (hingga 5 detik)
+      // Tunggu modal "Contact Info" muncul (hingga 6 detik)
       let modalWait = 0;
       let modalEl = null;
-      while (modalWait < 5000) {
+      while (modalWait < 6000) {
         modalEl =
           document.querySelector('.arco-modal') ||
           document.querySelector('div[role="dialog"]') ||
@@ -934,8 +931,8 @@
         ) {
           break;
         }
-        // Jika belum muncul setelah 1.5 detik, coba trigger ulang
-        if (modalWait === 1500) {
+        // Jika belum muncul setelah 1.2 detik, coba trigger ulang
+        if (modalWait === 1200 || modalWait === 2400) {
           triggerDeepClick(roundBtn);
         }
         await sleep(250);
@@ -1588,20 +1585,28 @@
     // Skenario A: Halaman IM Chat Room
     if (isImPage) {
       let pendingData = null;
-      const pendingRaw = sessionStorage.getItem('tnt_pending_creator_scrape');
-      if (pendingRaw) {
-        try {
-          pendingData = JSON.parse(pendingRaw);
-        } catch (_) {}
-      }
+      let readAttempts = 0;
 
-      if (!pendingData && typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
-        const localStore = await new Promise((resolve) => {
-          chrome.storage.local.get(['tnt_pending_creator_scrape'], (r) => resolve(r || {}));
-        });
-        if (localStore?.tnt_pending_creator_scrape) {
-          pendingData = localStore.tnt_pending_creator_scrape;
+      while (!pendingData && readAttempts < 15) {
+        const pendingRaw = sessionStorage.getItem('tnt_pending_creator_scrape');
+        if (pendingRaw) {
+          try {
+            pendingData = JSON.parse(pendingRaw);
+          } catch (_) {}
         }
+
+        if (!pendingData && typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+          const localStore = await new Promise((resolve) => {
+            chrome.storage.local.get(['tnt_pending_creator_scrape'], (r) => resolve(r || {}));
+          });
+          if (localStore?.tnt_pending_creator_scrape) {
+            pendingData = localStore.tnt_pending_creator_scrape;
+          }
+        }
+
+        if (pendingData) break;
+        await sleep(250);
+        readAttempts++;
       }
 
       if (pendingData) {
