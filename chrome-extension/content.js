@@ -814,18 +814,49 @@
   }
 
   /**
-   * Menunggu loading IM chat room selesai, lalu mengklik Contact Info dan mengekstrak nomor WA & Email.
-   * Sistem dirancang pintar: polling setiap 350ms, otomatis skip jika kreator tidak memiliki tombol kontak,
-   * dan dijamin selalu menutup tab serta lanjut ke antrean berikutnya.
+   * Mendeteksi apakah panel profil kanan (workbench) sudah 100% selesai dimuat berdasarkan HTML DOM murni
+   * (spinner loading hilang, username muncul, dan elemen paling bawah/metrics sudah selesai ter-render).
+   */
+  function isWorkbenchFullyLoaded(targetUsername) {
+    const workbench =
+      document.querySelector('#workbench-container') ||
+      document.querySelector('div[data-e2e="ad5a2677-54bf-3441"]');
+    if (!workbench) return false;
+
+    // 1. Pastikan spinner loading bawaan TikTok sudah hilang
+    const spinner = workbench.querySelector('.arco-spin-loading');
+    if (spinner) return false;
+
+    // 2. Pastikan elemen paling bawah profil (Followers / Metrics / Tombol Invite) sudah selesai dirender
+    const text = (workbench.innerText || '').toLowerCase();
+    const hasBottomElements = Boolean(
+      workbench.querySelector('div[data-e2e="3770aecc-519e-af66"]') ||
+      workbench.querySelector('button[data-e2e="2d88091c-bfe8-d89d"]') ||
+      workbench.querySelector('span[data-e2e="be6a5e3b-f55e-92e3"]') ||
+      text.includes('followers') ||
+      text.includes('send linking invite') ||
+      text.includes('view profile')
+    );
+
+    // 3. Pastikan username kreator target sudah muncul di workbench
+    const cleanTarget = String(targetUsername || '').trim().toLowerCase().replace(/^@/, '');
+    const hasUsername = cleanTarget ? text.includes(cleanTarget) : true;
+
+    return hasBottomElements && hasUsername;
+  }
+
+  /**
+   * Menunggu loading IM chat room selesai berdasarkan HTML DOM murni,
+   * lalu mengklik Contact Info jika ada, atau langsung lanjut jika kreator tidak memiliki kontak.
+   * Dijamin selalu menutup tab serta lanjut ke antrean berikutnya.
    */
   async function waitAndScrapeImContactInfo(pendingData, notify = () => {}) {
     notify(`⏳ Menunggu IM roomchat @${pendingData.username} selesai dimuat...`);
 
     let elapsed = 0;
-    const maxTimeout = 20000;
+    const maxTimeout = 30000;
     let roundBtn = null;
-    let workbenchLoaded = false;
-    let workbenchWaitCount = 0;
+    let isFullyLoaded = false;
 
     try {
       while (elapsed < maxTimeout) {
@@ -837,37 +868,34 @@
           continue;
         }
 
-        // Cek apakah panel profil kanan (workbench) sudah selesai ter-render
-        const workbench =
-          document.querySelector('#workbench-container') ||
-          document.querySelector('div[data-e2e="ad5a2677-54bf-3441"]') ||
-          document.querySelector('div[class*="basicInfoContainer"]');
-
-        if (workbench) {
-          workbenchLoaded = true;
-          roundBtn = findImContactRoundButton();
-          if (roundBtn) {
-            break;
-          }
-          workbenchWaitCount += 350;
-          // Jika panel workbench sudah tampil penuh selama 4 detik namun tidak ada tombol chat -> skip
-          if (workbenchWaitCount >= 4000) {
-            break;
-          }
+        // Cek apakah tombol kontak sudah langsung terdeteksi
+        roundBtn = findImContactRoundButton();
+        if (roundBtn) {
+          break;
         }
 
-        elapsed += 350;
+        // Cek apakah halaman workbench profil kanan sudah 100% selesai dimuat berdasarkan struktur HTML
+        if (isWorkbenchFullyLoaded(pendingData.username)) {
+          isFullyLoaded = true;
+          // Beri jeda 600ms agar rendering event listener React terpasang sempurna
+          await sleep(600);
+          roundBtn = findImContactRoundButton();
+          // Begitu ter-load 100%: ada atau tidak tombolnya, langsung putuskan keluar loop!
+          break;
+        }
+
+        elapsed += 400;
         notify(
           `⏳ Menunggu IM roomchat @${pendingData.username} selesai dimuat (${Math.round(
             elapsed / 1000
           )}s)...`
         );
-        await sleep(350);
+        await sleep(400);
       }
 
       if (!roundBtn) {
-        if (workbenchLoaded) {
-          notify(`ℹ️ @${pendingData.username} tidak mencantumkan tombol kontak di IM. Melanjutkan...`);
+        if (isFullyLoaded) {
+          notify(`ℹ️ IM selesai dimuat 100%. @${pendingData.username} tidak memiliki tombol kontak. Melanjutkan...`);
         } else {
           notify(`⚠️ IM roomchat @${pendingData.username} timeout. Melanjutkan antrean...`);
         }

@@ -137,9 +137,11 @@ const IM_CONTACT_SELECTORS = {
 - **Alur Kerja Smart-Wait:**
   1. Halaman detail selesai mengekstrak metrik 30D $\rightarrow$ simpan payload ke `sessionStorage` & `chrome.storage.local`.
   2. Tab yang sama dialihkan ke `/partner/im?shop_id={pid}&creator_id={cid}&market=4&enter_from=find_creator_detail`.
-  3. Tunggu hingga panel kanan IM chat termuat (polling pintar 350ms, timeout 25s; adaptif koneksi cepat vs lambat).
-  4. Begitu tombol bulat biru kontak muncul di panel kanan $\rightarrow$ klik otomatis.
-  5. Tunggu modal *Contact Info* muncul $\rightarrow$ ekstrak nomor telepon/WhatsApp (`no_whatsapp`) dan email (`email`).
+  3. Tunggu hingga panel kanan IM chat termuat 100% berdasarkan struktur DOM HTML murni (spinner `.arco-spin-loading` hilang, username muncul, dan elemen bawah seperti `Followers`/`Send linking invite` selesai ter-render; adaptif tanpa batas detik kaku).
+  4. Begitu workbench selesai ter-load 100%:
+     - Jika tombol kontak ada $\rightarrow$ klik otomatis dan buka modal *Contact Info*.
+     - Jika tombol kontak tidak ada $\rightarrow$ langsung log `tidak memiliki kontak`, simpan metrik dasar, tutup tab, dan lanjut ke kreator berikutnya.
+  5. Jika modal *Contact Info* terbuka $\rightarrow$ ekstrak nomor telepon/WhatsApp (`no_whatsapp`) dan email (`email`).
   6. Kirim `SCRAPE_DETAIL_SUCCESS` dengan `closeTab: true` $\rightarrow$ tutup tab IM otomatis $\rightarrow$ background script menginstruksikan list tab membuka kreator berikutnya!
 
 
