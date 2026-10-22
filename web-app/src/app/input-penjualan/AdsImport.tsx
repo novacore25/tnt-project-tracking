@@ -106,7 +106,7 @@ export default function AdsImport() {
     if (e.target.files && e.target.files.length > 0) {
       setLoading(true);
       
-      const newFiles = Array.from(e.target.files).map(f => {
+      const newFiles: FileConfig[] = Array.from(e.target.files).map(f => {
         const dateMatch = f.name.match(/(\d{4}-\d{2}-\d{2})/g);
         const guessedDate = dateMatch && dateMatch.length > 0 ? dateMatch[dateMatch.length - 1] : new Date().toISOString().split('T')[0];
         
@@ -118,7 +118,7 @@ export default function AdsImport() {
         };
       });
 
-      const filesWithData = [...files, ...newFiles];
+      const filesWithData: FileConfig[] = [...files, ...newFiles];
       let hasMissingAdId = false;
 
       // Get existing mappings

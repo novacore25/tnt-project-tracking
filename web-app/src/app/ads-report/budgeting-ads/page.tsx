@@ -332,9 +332,9 @@ export default function BudgetingAdsPage() {
                   </TableHeader>
                   <TableBody>
                     {isLoading ? (
-                      <TableRow><TableCell colSpan={4} className="text-center py-8">Memuat data...</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={7} className="text-center py-8">Memuat data...</TableCell></TableRow>
                     ) : campaignBalances.length === 0 ? (
-                      <TableRow><TableCell colSpan={4} className="text-center py-8 text-slate-500">Tidak ada data campaign aktif.</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={7} className="text-center py-8 text-slate-500">Tidak ada data campaign aktif.</TableCell></TableRow>
                     ) : (
                       campaignBalances.map(camp => {
                         const isOverspent = camp.remainingUsd < -1;
@@ -550,7 +550,7 @@ export default function BudgetingAdsPage() {
                   {(allocTopupId && allocIdr) && (
                     <div className="bg-blue-50 text-blue-800 text-xs p-2 rounded">
                       Karena kurs top up sumber adalah Rp {(Number(topups.find(t => t.id.toString() === allocTopupId)?.kurs_topup)).toLocaleString('id-ID')}, maka dompet campaign akan terisi: <br/>
-                      <strong className="text-sm">${(Number(allocIdr) / Number(topups.find(t => t.id.toString() === allocTopupId)?.kurs_topup)).toLocaleString('en-US', { minimumFractionDigits: 2, minimumFractionDigits: 2 })}</strong>
+                      <strong className="text-sm">${(Number(allocIdr) / Number(topups.find(t => t.id.toString() === allocTopupId)?.kurs_topup)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
                     </div>
                   )}
                   <div>

@@ -4,6 +4,7 @@ import { db, sqlInList } from '@/db';
 import { sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { normalizeKurs } from '@/utils/computed';
+import { requireUser, requireRole } from '@/lib/guards';
 
 export async function getAdsReportData(params: {
   startDate?: string;
@@ -14,6 +15,8 @@ export async function getAdsReportData(params: {
   sortKey: string;
   sortDir: 'asc' | 'desc';
 }) {
+  await requireUser();
+
   let adsQuery = sql`
     SELECT 
       ap.*,
@@ -57,12 +60,16 @@ export async function getAdsReportData(params: {
     rawFilteredData = rawFilteredData.filter(r => r.tanggal <= params.endDate!);
   }
 
-  // 2. Aggregate to find the latest record for each ad_id for summary calculations
+  // Helper key unik per iklan agar jika ad_id kosong tidak menimpa satu sama lain
+  const getAdKey = (r: any) => r.ad_id || r.ad_name || `unknown-${r.id}`;
+
+  // 2. Aggregate to find the latest record for each ad for summary calculations
   const allTimeLatestMap = new Map();
   for (const row of rawAllData) {
-    const existing = allTimeLatestMap.get(row.ad_id);
+    const key = getAdKey(row);
+    const existing = allTimeLatestMap.get(key);
     if (!existing || new Date(row.tanggal) > new Date(existing.tanggal)) {
-      allTimeLatestMap.set(row.ad_id, row);
+      allTimeLatestMap.set(key, row);
     }
   }
   let allTimeLatestData = Array.from(allTimeLatestMap.values());
@@ -72,28 +79,31 @@ export async function getAdsReportData(params: {
   if (params.startDate) {
     for (const row of rawAllData) {
       if (row.tanggal < params.startDate) {
-        const existing = latestBeforeMap.get(row.ad_id);
+        const key = getAdKey(row);
+        const existing = latestBeforeMap.get(key);
         if (!existing || new Date(row.tanggal) > new Date(existing.tanggal)) {
-          latestBeforeMap.set(row.ad_id, row);
+          latestBeforeMap.set(key, row);
         }
       }
     }
   }
 
-  // 5. Aggregate to find the latest record for each ad_id WITHIN the filtered range
+  // 5. Aggregate to find the latest record for each ad WITHIN the filtered range
   const filteredLatestMap = new Map();
   for (const row of rawFilteredData) {
-    const existing = filteredLatestMap.get(row.ad_id);
+    const key = getAdKey(row);
+    const existing = filteredLatestMap.get(key);
     if (!existing || new Date(row.tanggal) > new Date(existing.tanggal)) {
-      filteredLatestMap.set(row.ad_id, row);
+      filteredLatestMap.set(key, row);
     }
   }
   
   // Inject Delta values into the latest rows
   for (const row of rawFilteredData) {
-    const latestRow = filteredLatestMap.get(row.ad_id);
+    const key = getAdKey(row);
+    const latestRow = filteredLatestMap.get(key);
     if (latestRow && latestRow.id === row.id) {
-      const beforeRow = latestBeforeMap.get(row.ad_id);
+      const beforeRow = latestBeforeMap.get(key);
       if (beforeRow) {
         row.delta_cost_usd = Math.max(0, row.cost_usd - beforeRow.cost_usd);
         row.delta_gross_revenue_usd = Math.max(0, row.gross_revenue_usd - beforeRow.gross_revenue_usd);
@@ -121,7 +131,7 @@ export async function getAdsReportData(params: {
   // We want the date-filtered records for the table
   let tableData = rawFilteredData;
 
-  // 3. Apply Search Query Filter in memory
+  // 3. Apply Search Query Filter in memory to all collections (termasuk tableData!)
   if (params.searchQuery) {
     const q = params.searchQuery.toLowerCase();
     allTimeLatestData = allTimeLatestData.filter(r => 
@@ -131,6 +141,12 @@ export async function getAdsReportData(params: {
     filteredLatestData = filteredLatestData.filter(r => 
       (r.ad_name && r.ad_name.toLowerCase().includes(q)) || 
       (r.ad_id && r.ad_id.toLowerCase().includes(q))
+    );
+    tableData = tableData.filter(r => 
+      (r.ad_name && r.ad_name.toLowerCase().includes(q)) || 
+      (r.ad_id && r.ad_id.toLowerCase().includes(q)) ||
+      (r.creators?.username && r.creators.username.toLowerCase().includes(q)) ||
+      (r.campaign_ads_name && r.campaign_ads_name.toLowerCase().includes(q))
     );
   }
 
@@ -255,9 +271,14 @@ export async function updateAdPerformanceAction(params: {
     campaign_id?: number | null;
     creator_id?: number | null;
     campaign_ads_name?: string | null;
+    kurs?: number | null;
+    tanggal?: string | null;
+    ad_id?: string | null;
+    ad_name?: string | null;
   };
   bulkByAdId?: boolean;
 }) {
+  await requireRole('admin', 'manager', 'executive');
   const { id, adId, updates, bulkByAdId } = params;
 
   if (bulkByAdId && adId) {
@@ -266,7 +287,9 @@ export async function updateAdPerformanceAction(params: {
       SET 
         campaign_id = ${updates.campaign_id !== undefined ? updates.campaign_id : sql`campaign_id`},
         creator_id = ${updates.creator_id !== undefined ? updates.creator_id : sql`creator_id`},
-        campaign_ads_name = ${updates.campaign_ads_name !== undefined ? updates.campaign_ads_name : sql`campaign_ads_name`}
+        campaign_ads_name = ${updates.campaign_ads_name !== undefined ? updates.campaign_ads_name : sql`campaign_ads_name`},
+        ad_id = ${updates.ad_id !== undefined && updates.ad_id ? updates.ad_id : sql`ad_id`},
+        ad_name = ${updates.ad_name !== undefined && updates.ad_name ? updates.ad_name : sql`ad_name`}
       WHERE ad_id = ${adId}
     `);
   } else if (id) {
@@ -275,9 +298,39 @@ export async function updateAdPerformanceAction(params: {
       SET 
         campaign_id = ${updates.campaign_id !== undefined ? updates.campaign_id : sql`campaign_id`},
         creator_id = ${updates.creator_id !== undefined ? updates.creator_id : sql`creator_id`},
-        campaign_ads_name = ${updates.campaign_ads_name !== undefined ? updates.campaign_ads_name : sql`campaign_ads_name`}
+        campaign_ads_name = ${updates.campaign_ads_name !== undefined ? updates.campaign_ads_name : sql`campaign_ads_name`},
+        kurs = ${updates.kurs !== undefined && updates.kurs !== null ? Number(updates.kurs) : sql`kurs`},
+        tanggal = ${updates.tanggal !== undefined && updates.tanggal ? sql`${updates.tanggal}::date` : sql`tanggal`},
+        ad_id = ${updates.ad_id !== undefined && updates.ad_id ? updates.ad_id : sql`ad_id`},
+        ad_name = ${updates.ad_name !== undefined && updates.ad_name ? updates.ad_name : sql`ad_name`}
       WHERE id = ${id}
     `);
+  }
+
+  // Simpan otomatis ke master ads_name_mappings jika creator_id di-set
+  if (updates.creator_id) {
+    try {
+      let adNameToMap = updates.ad_name;
+      if (!adNameToMap) {
+        const row = (await db.execute(sql`
+          SELECT ad_name FROM ads_performance WHERE ${bulkByAdId && adId ? sql`ad_id = ${adId}` : sql`id = ${id}`} LIMIT 1
+        `)) as any[];
+        if (row && row[0]?.ad_name) {
+          adNameToMap = row[0].ad_name;
+        }
+      }
+
+      if (adNameToMap) {
+        await db.execute(sql`
+          INSERT INTO ads_name_mappings (ad_name, creator_id, created_at)
+          VALUES (${adNameToMap}, ${updates.creator_id}, now())
+          ON CONFLICT (ad_name) DO UPDATE 
+          SET creator_id = EXCLUDED.creator_id, created_at = now()
+        `);
+      }
+    } catch (e) {
+      // ignore mapping error if table not exists or constraint fails
+    }
   }
 
   revalidatePath('/ads-report');
@@ -285,6 +338,7 @@ export async function updateAdPerformanceAction(params: {
 }
 
 export async function deleteAdPerformanceAction(ids: number[]) {
+  await requireRole('admin', 'manager', 'executive');
   if (!ids || ids.length === 0) return { success: true };
   await db.execute(sql`
     DELETE FROM ads_performance WHERE id IN ${sqlInList(ids)}
@@ -294,6 +348,7 @@ export async function deleteAdPerformanceAction(ids: number[]) {
 }
 
 export async function fetchAdsBudgetingDataAction() {
+  await requireUser();
   const [topups, allocations, perf] = await Promise.all([
     db.execute(sql`SELECT * FROM ads_topups ORDER BY tanggal DESC`),
     db.execute(sql`SELECT * FROM ads_allocations ORDER BY tanggal DESC`),
@@ -314,6 +369,7 @@ export async function addAdsTopupAction(data: {
   nominal_topup_usd: number;
   keterangan?: string;
 }) {
+  await requireRole('admin', 'manager', 'finance', 'executive');
   await db.execute(sql`
     INSERT INTO ads_topups (tanggal, nominal_idr, kurs_topup, nominal_usd, catatan)
     VALUES (${data.tanggal}, ${data.nominal_topup_idr}, ${data.kurs}, ${data.nominal_topup_usd}, ${data.keterangan || null})
@@ -323,6 +379,7 @@ export async function addAdsTopupAction(data: {
 }
 
 export async function deleteAdsTopupAction(id: number) {
+  await requireRole('admin', 'manager', 'finance', 'executive');
   await db.execute(sql`DELETE FROM ads_allocations WHERE topup_id = ${id}`);
   await db.execute(sql`DELETE FROM ads_topups WHERE id = ${id}`);
   revalidatePath('/ads-report/budgeting-ads');
@@ -337,6 +394,7 @@ export async function addAdsAllocationAction(data: {
   topup_id?: number | null;
   alokasi_idr?: number | null;
 }) {
+  await requireRole('admin', 'manager', 'finance', 'executive');
   await db.execute(sql`
     INSERT INTO ads_allocations (tanggal, campaign_id, alokasi_usd, catatan, topup_id, alokasi_idr)
     VALUES (${data.tanggal}, ${data.campaign_id}, ${data.alokasi_usd}, ${data.keterangan || null}, ${data.topup_id || null}, ${data.alokasi_idr || null})
@@ -346,6 +404,7 @@ export async function addAdsAllocationAction(data: {
 }
 
 export async function deleteAdsAllocationAction(id: number) {
+  await requireRole('admin', 'manager', 'finance', 'executive');
   await db.execute(sql`DELETE FROM ads_allocations WHERE id = ${id}`);
   revalidatePath('/ads-report/budgeting-ads');
   return { success: true };

@@ -19,7 +19,7 @@ import { getAdsReportData, updateAdPerformanceAction, deleteAdPerformanceAction 
 const MemoizedTableRow = React.memo(({
   ad, isChild, isParent, parentKey, groupStats, isExpanded,
   pendingChange, isManager, selectedAds, setSelectedAds,
-  setExpandedGroups, campaigns, globalCampaignAdsOptions,
+  setExpandedGroups, campaigns, creators, globalCampaignAdsOptions,
   setCellChange, deletingId, deleteAd
 }: any) => {
   const pendingCampaignId = pendingChange?.campaign_id !== undefined ? pendingChange.campaign_id : ad.campaign_id;
@@ -32,6 +32,8 @@ const MemoizedTableRow = React.memo(({
   const hasPending = !!pendingChange;
 
   const creatorUsername = ad.creators?.username;
+  const pendingCreator = creators?.find((c: any) => c.id === pendingCreatorId);
+  const currentCreatorLabel = pendingCreator ? `@${pendingCreator.username}` : (creatorUsername ? `@${creatorUsername}` : '');
 const cost = isParent && groupStats ? groupStats.cost_usd : (ad.cost_usd || 0);
     const impr = isParent && groupStats ? groupStats.impressions : (ad.impressions || 0);
     const clicks = isParent && groupStats ? groupStats.clicks : (ad.clicks || 0);
@@ -179,7 +181,7 @@ const cost = isParent && groupStats ? groupStats.cost_usd : (ad.cost_usd || 0);
                   value={pendingCreatorId || ''} 
                   onChange={(val) => setCellChange(ad.id, 'creator_id', val === '' ? null : val, ad)} 
                   placeholder="Ketik username..." 
-                  initialLabel={creatorUsername ? `@${creatorUsername}` : ''}
+                  initialLabel={currentCreatorLabel}
                 />
               </div>
             ) : (
@@ -336,6 +338,7 @@ const cost = isParent && groupStats ? groupStats.cost_usd : (ad.cost_usd || 0);
       prevProps.isManager === nextProps.isManager &&
       prevProps.groupStats === nextProps.groupStats &&
       prevProps.campaigns === nextProps.campaigns &&
+      prevProps.creators === nextProps.creators &&
       prevProps.globalCampaignAdsOptions === nextProps.globalCampaignAdsOptions
   );
 });
@@ -454,6 +457,14 @@ export default function AdsReportPage() {
       if (change.tanggal !== undefined) updates.tanggal = change.tanggal;
       
       let newUsername = change.original.creators?.username;
+      if (updates.creator_id !== undefined) {
+        if (updates.creator_id) {
+          const matchedCreator = creators.find((c: any) => c.id === updates.creator_id);
+          newUsername = matchedCreator?.username || null;
+        } else {
+          newUsername = null;
+        }
+      }
       
       if (Object.keys(updates).length > 0) {
         const bulkUpdates: any = {};
@@ -676,11 +687,15 @@ export default function AdsReportPage() {
       "Creator": ad.creators?.username || 'Unknown',
       "Ad Name": ad.ad_name,
       "Ad ID": ad.ad_id,
-      "Cost": ad.cost,
+      "Cost": ad.cost_usd,
       "Kurs": ad.kurs,
-      "Cost (IDR)": (Number(ad.cost) || 0) * normalizeKurs(ad.kurs),
-      "Video Views": ad.video_views,
-      "GMV (VSA)": ad.vsa_gmv
+      "Cost (IDR)": (Number(ad.cost_usd) || 0) * normalizeKurs(ad.kurs),
+      "Impressions": ad.impressions,
+      "Gross Revenue (USD)": ad.gross_revenue_usd,
+      "GMV (IDR)": (Number(ad.gross_revenue_usd) || 0) * normalizeKurs(ad.kurs),
+      "ROAS": Number(ad.cost_usd) > 0 ? Number(((Number(ad.gross_revenue_usd) || 0) / Number(ad.cost_usd)).toFixed(2)) : 0,
+      "Purchases": ad.purchases,
+      "Clicks": ad.clicks
     }));
     exportToExcel(dataToExport, "Laporan_Ads_Export");
   };
@@ -1148,6 +1163,7 @@ export default function AdsReportPage() {
                     setSelectedAds={setSelectedAds}
                     setExpandedGroups={setExpandedGroups}
                     campaigns={campaigns}
+                    creators={creators}
                     globalCampaignAdsOptions={globalCampaignAdsOptions}
                     setCellChange={setCellChange}
                     deletingId={deletingId}
@@ -1174,6 +1190,7 @@ export default function AdsReportPage() {
                         setSelectedAds={setSelectedAds}
                         setExpandedGroups={setExpandedGroups}
                         campaigns={campaigns}
+                    creators={creators}
                         globalCampaignAdsOptions={globalCampaignAdsOptions}
                         setCellChange={setCellChange}
                         deletingId={deletingId}
@@ -1227,6 +1244,7 @@ export default function AdsReportPage() {
                           setSelectedAds={setSelectedAds}
                           setExpandedGroups={setExpandedGroups}
                           campaigns={campaigns}
+                    creators={creators}
                           globalCampaignAdsOptions={globalCampaignAdsOptions}
                           setCellChange={setCellChange}
                           deletingId={deletingId}
