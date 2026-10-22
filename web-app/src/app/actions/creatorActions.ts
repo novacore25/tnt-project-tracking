@@ -35,6 +35,7 @@ export async function fetchCreatorsPaginated(params: {
   pageSize?: number;
   search?: string;
   filterCampaign?: string;
+  filterApproval?: string;
   filterNiche?: string;
   filterTier?: string;
   filterLevel?: string;
@@ -46,6 +47,7 @@ export async function fetchCreatorsPaginated(params: {
     pageSize = 48,
     search = '',
     filterCampaign = '',
+    filterApproval = '',
     filterNiche = '',
     filterTier = '',
     filterLevel = '',
@@ -70,9 +72,24 @@ export async function fetchCreatorsPaginated(params: {
   }
 
   if (filterCampaign) {
+    if (filterApproval) {
+      whereConditions.push(sql`EXISTS (
+        SELECT 1 FROM campaign_creators cc 
+        WHERE cc.creator_id = cr.id 
+          AND cc.campaign_id = ${Number(filterCampaign)}
+          AND LOWER(cc.approval) = ${filterApproval.toLowerCase()}
+      )`);
+    } else {
+      whereConditions.push(sql`EXISTS (
+        SELECT 1 FROM campaign_creators cc 
+        WHERE cc.creator_id = cr.id AND cc.campaign_id = ${Number(filterCampaign)}
+      )`);
+    }
+  } else if (filterApproval) {
     whereConditions.push(sql`EXISTS (
       SELECT 1 FROM campaign_creators cc 
-      WHERE cc.creator_id = cr.id AND cc.campaign_id = ${Number(filterCampaign)}
+      WHERE cc.creator_id = cr.id 
+        AND LOWER(cc.approval) = ${filterApproval.toLowerCase()}
     )`);
   }
 
@@ -117,7 +134,12 @@ export async function fetchCreatorsPaginated(params: {
           WHERE cn.creator_id = cr.id
         ) as creator_niches,
         (
-          SELECT json_agg(json_build_object('campaign_id', cc.campaign_id))
+          SELECT json_agg(json_build_object(
+            'campaign_id', cc.campaign_id,
+            'approval', cc.approval,
+            'client_approval', cc.client_approval,
+            'tier', cc.tier
+          ))
           FROM campaign_creators cc
           WHERE cc.creator_id = cr.id
         ) as campaign_creators

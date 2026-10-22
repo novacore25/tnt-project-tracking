@@ -23,6 +23,7 @@ export default function CreatorPoolPage() {
   const [filterType, setFilterType] = useState<string>("");
   const [filterNiche, setFilterNiche] = useState<string>("");
   const [filterCampaign, setFilterCampaign] = useState<string>("");
+  const [filterApproval, setFilterApproval] = useState<string>("");
   const [filterTier, setFilterTier] = useState<string>("");
   const [filterLevel, setFilterLevel] = useState<string>("");
   const [filterAddedBy, setFilterAddedBy] = useState<string>("");
@@ -119,6 +120,7 @@ export default function CreatorPoolPage() {
         pageSize: PAGE_SIZE,
         search: debouncedSearch,
         filterCampaign,
+        filterApproval,
         filterNiche,
         filterTier,
         filterLevel,
@@ -151,13 +153,13 @@ export default function CreatorPoolPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [debouncedSearch, filterCampaign, filterNiche, filterTier, filterLevel, filterAddedBy, filterLastUpdatedBy, filterType]);
+  }, [debouncedSearch, filterCampaign, filterApproval, filterNiche, filterTier, filterLevel, filterAddedBy, filterLastUpdatedBy, filterType]);
 
   // Trigger fetch when filters change
   useEffect(() => {
     setPage(0);
     fetchCreators(0, true);
-  }, [debouncedSearch, filterType, filterNiche, filterCampaign, filterTier, filterLevel, filterAddedBy, filterLastUpdatedBy, fetchCreators]);
+  }, [debouncedSearch, filterType, filterNiche, filterCampaign, filterApproval, filterTier, filterLevel, filterAddedBy, filterLastUpdatedBy, fetchCreators]);
 
   const handleLoadMore = () => {
     const nextPage = page + 1;
@@ -241,7 +243,10 @@ export default function CreatorPoolPage() {
         </select>
         <select 
           value={filterCampaign} 
-          onChange={e => setFilterCampaign(e.target.value)}
+          onChange={e => {
+            setFilterCampaign(e.target.value);
+            if (!e.target.value) setFilterApproval("");
+          }}
           className="select w-auto !mb-0 min-w-[200px] md:w-auto"
         >
           <option value="">Semua Campaign</option>
@@ -249,6 +254,19 @@ export default function CreatorPoolPage() {
             <option key={c.id} value={c.id}>{c.nama}</option>
           ))}
         </select>
+        {filterCampaign && (
+          <select 
+            value={filterApproval} 
+            onChange={e => setFilterApproval(e.target.value)}
+            className="select w-auto !mb-0 min-w-[160px] md:w-auto border-emerald-500/50 bg-emerald-50/60 font-semibold text-emerald-900 shadow-sm"
+          >
+            <option value="">Semua Approval</option>
+            <option value="approved">Approved</option>
+            <option value="pending">Pending</option>
+            <option value="alternate">Alternate</option>
+            <option value="not_approved">Not Approved</option>
+          </select>
+        )}
       </div>
 
       <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
@@ -350,6 +368,9 @@ export default function CreatorPoolPage() {
         {data.map(creator => {
           const cleanUser = String(creator.username || '').trim().toLowerCase().replace(/^@/, '');
           const isSelected = selectedUsernames.includes(cleanUser);
+          const activeCampaignCreator = filterCampaign 
+            ? (creator.campaign_creators || []).find((cc: any) => String(cc.campaign_id) === String(filterCampaign))
+            : null;
 
           // Extract nested data safely
           const snaps = creator.creator_snapshots || [];
@@ -456,7 +477,22 @@ export default function CreatorPoolPage() {
                       )}
                     </div>
                   </div>
-                  <span className={`tier ${tierClass} shrink-0`}>{tier}</span>
+                  <div className="flex flex-col items-end gap-1 shrink-0">
+                    <span className={`tier ${tierClass}`}>{tier}</span>
+                    {activeCampaignCreator?.approval && (
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded border uppercase tracking-wider ${
+                        activeCampaignCreator.approval === 'approved'
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
+                          : activeCampaignCreator.approval === 'pending'
+                          ? 'bg-amber-50 text-amber-700 border-amber-300'
+                          : activeCampaignCreator.approval === 'alternate'
+                          ? 'bg-sky-50 text-sky-700 border-sky-300'
+                          : 'bg-rose-50 text-rose-700 border-rose-300'
+                      }`}>
+                        {activeCampaignCreator.approval.replace(/_/g, ' ')}
+                      </span>
+                    )}
+                  </div>
                 </div>
                 
                 {/* Niches & MCN */}
