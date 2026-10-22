@@ -95,14 +95,15 @@ export default function ReleaseContractModal({
   const [seqStr, setSeqStr] = useState<string>("001");
   const [isLoadingSeq, setIsLoadingSeq] = useState(false);
 
-  // Koreksi Data Kreator (Jika Belum Aman)
+  // Koreksi & Kelengkapan Data Kreator
   const [showCreatorEdit, setShowCreatorEdit] = useState(false);
+  const [namaKreator, setNamaKreator] = useState(d.namaKreator || contract?.creator_nama || "");
   const [nikKtp, setNikKtp] = useState(d.nikKtp || "");
   const [alamatKreator, setAlamatKreator] = useState(d.alamatKreator || "");
   const [teleponKreator, setTeleponKreator] = useState(d.teleponKreator || "");
   const [namaBank, setNamaBank] = useState(d.namaBank || "");
   const [nomorRekening, setNomorRekening] = useState(d.nomorRekening || "");
-  const [atasNamaRekening, setAtasNamaRekening] = useState(d.atasNamaRekening || d.namaKreator || "");
+  const [atasNamaRekening, setAtasNamaRekening] = useState(d.atasNamaRekening || d.namaKreator || contract?.creator_nama || "");
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -126,12 +127,32 @@ export default function ReleaseContractModal({
     );
     setTempatPerjanjian(data.tempatPerjanjian || "Tangerang");
 
-    setNikKtp(data.nikKtp || "");
-    setAlamatKreator(data.alamatKreator || "");
-    setTeleponKreator(data.teleponKreator || "");
-    setNamaBank(data.namaBank || "");
-    setNomorRekening(data.nomorRekening || "");
-    setAtasNamaRekening(data.atasNamaRekening || data.namaKreator || contract.creator_nama || "");
+    const cNama = data.namaKreator || contract.creator_nama || "";
+    const cNik = (data.nikKtp || "").toString().trim();
+    const cAlamat = data.alamatKreator || "";
+    const cTelp = (data.teleponKreator || "").toString().trim();
+    const cBank = data.namaBank || "";
+    const cRek = (data.nomorRekening || "").toString().trim();
+    const cAtasNama = data.atasNamaRekening || cNama;
+
+    setNamaKreator(cNama);
+    setNikKtp(cNik);
+    setAlamatKreator(cAlamat);
+    setTeleponKreator(cTelp);
+    setNamaBank(cBank);
+    setNomorRekening(cRek);
+    setAtasNamaRekening(cAtasNama);
+
+    // Hitung apakah sudah lengkap saat awal dibuka
+    const validNik = cNik.replace(/\D/g, "").length === 16;
+    const validNama = cNama.trim().length >= 2;
+    const validAlamat = cAlamat.trim().length >= 5;
+    const validTelp = cTelp.replace(/\D/g, "").length >= 8;
+    const validRek = Boolean(cBank.trim() && cRek.trim() && cAtasNama.trim());
+    const validAll = validNik && validNama && validAlamat && validTelp && validRek;
+
+    // Jika ada data yang belum lengkap, otomatis buka form koreksi kreator
+    setShowCreatorEdit(!validAll);
 
     // Ambil nomor urut resmi berikutnya dari database
     setIsLoadingSeq(true);
@@ -160,13 +181,29 @@ export default function ReleaseContractModal({
     return formatHariTanggal(tanggalKontrak);
   }, [tanggalKontrak]);
 
-  // Checklist Keamanan Data
-  const isNikValid = Boolean(nikKtp && nikKtp.trim().length === 16);
-  const isRekeningValid = Boolean(namaBank && nomorRekening && atasNamaRekening);
-  const isAlamatValid = Boolean(alamatKreator && alamatKreator.trim().length > 5);
+  // Checklist & Validasi Kelengkapan Data Kreator untuk Rilis Resmi
+  const isNamaValid = Boolean(namaKreator && namaKreator.trim().length >= 2);
+  const isNikValid = Boolean(nikKtp && nikKtp.trim().replace(/\D/g, "").length === 16);
+  const isAlamatValid = Boolean(alamatKreator && alamatKreator.trim().length >= 5);
+  const isTeleponValid = Boolean(teleponKreator && teleponKreator.trim().replace(/\D/g, "").length >= 8);
+  const isBankValid = Boolean(namaBank && namaBank.trim().length >= 2);
+  const isNomorRekValid = Boolean(nomorRekening && nomorRekening.trim().length >= 3);
+  const isAtasNamaValid = Boolean(atasNamaRekening && atasNamaRekening.trim().length >= 2);
+
+  const isRekeningValid = isBankValid && isNomorRekValid && isAtasNamaValid;
+  const isAllDataValid =
+    isNamaValid && isNikValid && isAlamatValid && isTeleponValid && isRekeningValid;
 
   const handleSubmitRelease = async () => {
     if (!contract?.id) return;
+
+    if (!isAllDataValid) {
+      setShowCreatorEdit(true);
+      setErrorMsg(
+        "Data kreator belum lengkap! Mohon lengkapi NIK 16 digit, Nama KTP, Alamat, No WhatsApp, dan Data Rekening Bank sebelum merilis resmi."
+      );
+      return;
+    }
 
     setIsSubmitting(true);
     setErrorMsg(null);
@@ -184,6 +221,7 @@ export default function ReleaseContractModal({
         tanggalPerjanjian: pembukaInfo.tanggalStr,
         tempatPerjanjian,
         customNomorKontrak: previewOfficialNumber,
+        namaKreator: namaKreator.trim(),
         nikKtp: nikKtp.trim(),
         namaBank: namaBank.trim(),
         nomorRekening: nomorRekening.trim(),
@@ -257,7 +295,7 @@ export default function ReleaseContractModal({
                 <div className="text-sm font-bold text-slate-900 flex items-center gap-1.5 mt-0.5">
                   <span className="text-blue-600">@{contract.creator_username}</span>
                   <span className="text-slate-400">&bull;</span>
-                  <span>{d.namaKreator || contract.creator_nama}</span>
+                  <span>{namaKreator || d.namaKreator || contract.creator_nama}</span>
                 </div>
               </div>
 
@@ -271,25 +309,74 @@ export default function ReleaseContractModal({
               </div>
             </div>
 
+            {/* PERINGATAN BILA DATA BELUM LENGKAP */}
+            {!isAllDataValid && (
+              <div className="p-3 bg-rose-50/90 border border-rose-200 rounded-xl flex items-start gap-2.5">
+                <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                <div className="space-y-0.5">
+                  <div className="font-bold text-rose-800 text-xs">
+                    Data Kreator Belum Lengkap (Rilis Dokumen Terkunci)
+                  </div>
+                  <p className="text-[11px] text-rose-700 leading-relaxed">
+                    Dokumen resmi membutuhkan data legalitas lengkap. Mohon lengkapi kolom yang bertanda <strong className="text-rose-900">merah (*)</strong> di bawah ini agar tombol rilis aktif.
+                  </p>
+                </div>
+              </div>
+            )}
+
             {/* CHECKLIST KEAMANAN DATA */}
-            <div className="pt-2 border-t border-slate-200/80 flex items-center gap-3 flex-wrap">
+            <div className="pt-2 border-t border-slate-200/80 flex items-center gap-2 flex-wrap">
               <span className="text-[11px] font-semibold text-slate-500">Status Data:</span>
+              
               <span
                 className={`px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 ${
                   isNikValid
                     ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
-                    : "bg-amber-100 text-amber-800 border border-amber-200"
+                    : "bg-rose-100 text-rose-800 border border-rose-200"
                 }`}
               >
                 {isNikValid ? <CheckCircle2 className="w-3 h-3" /> : <AlertTriangle className="w-3 h-3" />}
-                NIK: {isNikValid ? "Aman (16 Digit)" : "Belum 16 Digit"}
+                NIK: {isNikValid ? "Aman (16 Digit)" : "Wajib 16 Digit"}
+              </span>
+
+              <span
+                className={`px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 ${
+                  isNamaValid
+                    ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                    : "bg-rose-100 text-rose-800 border border-rose-200"
+                }`}
+              >
+                {isNamaValid ? <CheckCircle2 className="w-3 h-3" /> : <AlertTriangle className="w-3 h-3" />}
+                Nama: {isNamaValid ? "Lengkap" : "Wajib Ada"}
+              </span>
+
+              <span
+                className={`px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 ${
+                  isTeleponValid
+                    ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                    : "bg-rose-100 text-rose-800 border border-rose-200"
+                }`}
+              >
+                {isTeleponValid ? <CheckCircle2 className="w-3 h-3" /> : <AlertTriangle className="w-3 h-3" />}
+                WA: {isTeleponValid ? "Aman" : "Wajib Ada"}
+              </span>
+
+              <span
+                className={`px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 ${
+                  isAlamatValid
+                    ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                    : "bg-rose-100 text-rose-800 border border-rose-200"
+                }`}
+              >
+                {isAlamatValid ? <CheckCircle2 className="w-3 h-3" /> : <AlertTriangle className="w-3 h-3" />}
+                Alamat: {isAlamatValid ? "Lengkap" : "Wajib Ada"}
               </span>
 
               <span
                 className={`px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 ${
                   isRekeningValid
                     ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
-                    : "bg-amber-100 text-amber-800 border border-amber-200"
+                    : "bg-rose-100 text-rose-800 border border-rose-200"
                 }`}
               >
                 {isRekeningValid ? <CheckCircle2 className="w-3 h-3" /> : <AlertTriangle className="w-3 h-3" />}
@@ -301,84 +388,141 @@ export default function ReleaseContractModal({
                 onClick={() => setShowCreatorEdit(!showCreatorEdit)}
                 className="text-[11px] font-bold text-blue-600 hover:text-blue-800 ml-auto flex items-center gap-1 cursor-pointer"
               >
-                {showCreatorEdit ? "Sembunyikan Koreksi Kreator" : "Koreksi / Lengkapi Data Kreator"}
+                {showCreatorEdit ? "Tutup Form Kreator" : "Lengkapi / Koreksi Data"}
                 {showCreatorEdit ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
               </button>
             </div>
           </div>
 
-          {/* ACCORDION KOREKSI DATA KREATOR JIKA BELUM AMAN */}
+          {/* FORM KOREKSI / LENGKAPI DATA KREATOR */}
           {showCreatorEdit && (
-            <div className="p-4 rounded-xl bg-amber-50/60 border border-amber-200 space-y-3 animate-in fade-in duration-100">
-              <div className="font-bold text-amber-900 flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-amber-600" />
-                <span>Koreksi / Lengkapi Data Identitas &amp; Bank Kreator</span>
+            <div className={`p-4 rounded-xl border space-y-3 animate-in fade-in duration-100 ${
+              !isAllDataValid ? "bg-rose-50/50 border-rose-200" : "bg-blue-50/50 border-blue-200"
+            }`}>
+              <div className="font-bold flex items-center justify-between">
+                <div className={`flex items-center gap-1.5 ${!isAllDataValid ? "text-rose-900" : "text-blue-900"}`}>
+                  <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+                  <span>Data Identitas KTP &amp; Rekening Bank Kreator</span>
+                </div>
+                <span className="text-[10px] text-slate-500 font-normal">
+                  * Otomatis mengupdate master data kreator
+                </span>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="font-semibold text-slate-700 block mb-1">NIK (16 Digit)</label>
+                  <label className={`font-semibold block mb-1 ${!isNamaValid ? "text-rose-700" : "text-slate-700"}`}>
+                    Nama Lengkap (Sesuai KTP) *
+                    {!isNamaValid && <span className="text-[10px] font-normal text-rose-600 ml-1">(Wajib diisi)</span>}
+                  </label>
+                  <input
+                    type="text"
+                    value={namaKreator}
+                    onChange={(e) => setNamaKreator(e.target.value)}
+                    placeholder="Nama lengkap sesuai KTP"
+                    className={`w-full px-2.5 py-1.5 bg-white border rounded-lg text-xs outline-none transition-colors ${
+                      !isNamaValid ? "border-rose-400 focus:border-rose-500 bg-rose-50/20" : "border-slate-300 focus:border-blue-500"
+                    }`}
+                  />
+                </div>
+
+                <div>
+                  <label className={`font-semibold block mb-1 ${!isNikValid ? "text-rose-700" : "text-slate-700"}`}>
+                    NIK KTP (16 Digit) *
+                    {!isNikValid && (
+                      <span className="text-[10px] font-normal text-rose-600 ml-1">
+                        (Wajib 16 digit &bull; saat ini: {nikKtp.length})
+                      </span>
+                    )}
+                  </label>
                   <input
                     type="text"
                     value={nikKtp}
                     onChange={(e) => setNikKtp(e.target.value.replace(/\D/g, "").slice(0, 16))}
-                    placeholder="3201xxxxxxxxxxxx"
-                    className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs outline-none focus:border-blue-500"
+                    placeholder="Contoh: 3201xxxxxxxxxxxx"
+                    className={`w-full px-2.5 py-1.5 bg-white border rounded-lg text-xs outline-none transition-colors ${
+                      !isNikValid ? "border-rose-400 focus:border-rose-500 bg-rose-50/20" : "border-slate-300 focus:border-blue-500"
+                    }`}
                   />
                 </div>
 
                 <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Nomor WhatsApp</label>
+                  <label className={`font-semibold block mb-1 ${!isTeleponValid ? "text-rose-700" : "text-slate-700"}`}>
+                    Nomor WhatsApp *
+                    {!isTeleponValid && <span className="text-[10px] font-normal text-rose-600 ml-1">(Wajib diisi)</span>}
+                  </label>
                   <input
                     type="text"
                     value={teleponKreator}
                     onChange={(e) => setTeleponKreator(e.target.value)}
-                    placeholder="08xxxxxxxxxx"
-                    className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs outline-none focus:border-blue-500"
-                  />
-                </div>
-
-                <div className="sm:col-span-2">
-                  <label className="font-semibold text-slate-700 block mb-1">Alamat Sesuai KTP / Domisili</label>
-                  <input
-                    type="text"
-                    value={alamatKreator}
-                    onChange={(e) => setAlamatKreator(e.target.value)}
-                    placeholder="Jl. Merpati No. 12, RT 01/RW 02..."
-                    className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs outline-none focus:border-blue-500"
+                    placeholder="Contoh: 0812xxxxxxxx"
+                    className={`w-full px-2.5 py-1.5 bg-white border rounded-lg text-xs outline-none transition-colors ${
+                      !isTeleponValid ? "border-rose-400 focus:border-rose-500 bg-rose-50/20" : "border-slate-300 focus:border-blue-500"
+                    }`}
                   />
                 </div>
 
                 <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Bank / E-Wallet</label>
+                  <label className={`font-semibold block mb-1 ${!isBankValid ? "text-rose-700" : "text-slate-700"}`}>
+                    Bank / E-Wallet *
+                    {!isBankValid && <span className="text-[10px] font-normal text-rose-600 ml-1">(Wajib diisi)</span>}
+                  </label>
                   <input
                     type="text"
                     value={namaBank}
                     onChange={(e) => setNamaBank(e.target.value)}
-                    placeholder="BCA / Mandiri / BRI"
-                    className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs outline-none focus:border-blue-500"
+                    placeholder="BCA / Mandiri / BRI / BNI"
+                    className={`w-full px-2.5 py-1.5 bg-white border rounded-lg text-xs outline-none transition-colors ${
+                      !isBankValid ? "border-rose-400 focus:border-rose-500 bg-rose-50/20" : "border-slate-300 focus:border-blue-500"
+                    }`}
                   />
                 </div>
 
                 <div>
-                  <label className="font-semibold text-slate-700 block mb-1">Nomor Rekening</label>
+                  <label className={`font-semibold block mb-1 ${!isNomorRekValid ? "text-rose-700" : "text-slate-700"}`}>
+                    Nomor Rekening *
+                    {!isNomorRekValid && <span className="text-[10px] font-normal text-rose-600 ml-1">(Wajib diisi)</span>}
+                  </label>
                   <input
                     type="text"
                     value={nomorRekening}
                     onChange={(e) => setNomorRekening(e.target.value)}
-                    placeholder="Nomor Rekening"
-                    className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs outline-none focus:border-blue-500"
+                    placeholder="Nomor rekening tanpa spasi"
+                    className={`w-full px-2.5 py-1.5 bg-white border rounded-lg text-xs outline-none transition-colors ${
+                      !isNomorRekValid ? "border-rose-400 focus:border-rose-500 bg-rose-50/20" : "border-slate-300 focus:border-blue-500"
+                    }`}
                   />
                 </div>
 
-                <div className="sm:col-span-2">
-                  <label className="font-semibold text-slate-700 block mb-1">Atas Nama Rekening</label>
+                <div>
+                  <label className={`font-semibold block mb-1 ${!isAtasNamaValid ? "text-rose-700" : "text-slate-700"}`}>
+                    Atas Nama Rekening *
+                    {!isAtasNamaValid && <span className="text-[10px] font-normal text-rose-600 ml-1">(Wajib diisi)</span>}
+                  </label>
                   <input
                     type="text"
                     value={atasNamaRekening}
                     onChange={(e) => setAtasNamaRekening(e.target.value)}
                     placeholder="Nama di buku tabungan"
-                    className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs outline-none focus:border-blue-500"
+                    className={`w-full px-2.5 py-1.5 bg-white border rounded-lg text-xs outline-none transition-colors ${
+                      !isAtasNamaValid ? "border-rose-400 focus:border-rose-500 bg-rose-50/20" : "border-slate-300 focus:border-blue-500"
+                    }`}
+                  />
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className={`font-semibold block mb-1 ${!isAlamatValid ? "text-rose-700" : "text-slate-700"}`}>
+                    Alamat Lengkap Sesuai KTP / Domisili *
+                    {!isAlamatValid && <span className="text-[10px] font-normal text-rose-600 ml-1">(Wajib diisi)</span>}
+                  </label>
+                  <input
+                    type="text"
+                    value={alamatKreator}
+                    onChange={(e) => setAlamatKreator(e.target.value)}
+                    placeholder="Jl. Merpati No. 12, RT 01/RW 02, Kelurahan, Kecamatan, Kota..."
+                    className={`w-full px-2.5 py-1.5 bg-white border rounded-lg text-xs outline-none transition-colors ${
+                      !isAlamatValid ? "border-rose-400 focus:border-rose-500 bg-rose-50/20" : "border-slate-300 focus:border-blue-500"
+                    }`}
                   />
                 </div>
               </div>
@@ -550,17 +694,31 @@ export default function ReleaseContractModal({
           <button
             type="button"
             onClick={handleSubmitRelease}
-            disabled={isSubmitting}
-            className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center gap-2 cursor-pointer disabled:opacity-50"
+            disabled={isSubmitting || !isAllDataValid}
+            className={`px-5 py-2.5 rounded-xl text-xs font-bold transition-all shadow-md flex items-center gap-2 ${
+              isAllDataValid
+                ? "bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer shadow-emerald-900/10"
+                : "bg-slate-200 text-slate-400 cursor-not-allowed border border-slate-300 shadow-none"
+            }`}
+            title={
+              !isAllDataValid
+                ? "Lengkapi seluruh data kreator (NIK 16 digit, Nama KTP, Alamat, No WA, Rekening) sebelum merilis resmi"
+                : "Kunci & Rilis Dokumen Resmi"
+            }
           >
             {isSubmitting ? (
               <>
                 <RefreshCw className="w-4 h-4 animate-spin" />
                 <span>Mengunci &amp; Merilis Dokumen...</span>
               </>
+            ) : !isAllDataValid ? (
+              <>
+                <Lock className="w-4 h-4 text-slate-400" />
+                <span>Data Belum Lengkap (Rilis Terkunci)</span>
+              </>
             ) : (
               <>
-                <Lock className="w-4 h-4" />
+                <CheckCircle2 className="w-4 h-4" />
                 <span>Kunci &amp; Rilis Dokumen Resmi ({previewOfficialNumber})</span>
               </>
             )}

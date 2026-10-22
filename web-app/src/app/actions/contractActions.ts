@@ -531,6 +531,7 @@ export async function releaseContractAction(contractId: number, options?: {
   tanggalPerjanjian?: string;
   tempatPerjanjian?: string;
   customNomorKontrak?: string;
+  namaKreator?: string;
   nikKtp?: string;
   namaBank?: string;
   nomorRekening?: string;
@@ -604,6 +605,7 @@ export async function releaseContractAction(contractId: number, options?: {
       namaPerusahaan: options?.namaPerusahaan?.trim() || prevData.namaPerusahaan || 'PT TNT KREATIF DIGITAL',
       alamatPerusahaan: options?.alamatPerusahaan?.trim() || prevData.alamatPerusahaan || 'Jalan Kavling Perkebunan Raya, RT 006 / RW 013, Panunggangan Barat, Kecamatan Cibodas, Kota Tangerang, Banten 15139',
       // Jika user mengisi / mengoreksi data kreator di modal rilis:
+      namaKreator: options?.namaKreator?.trim() || prevData.namaKreator,
       nikKtp: options?.nikKtp?.trim() || prevData.nikKtp,
       namaBank: options?.namaBank?.trim() || prevData.namaBank,
       nomorRekening: options?.nomorRekening?.trim() || prevData.nomorRekening,
@@ -614,11 +616,13 @@ export async function releaseContractAction(contractId: number, options?: {
       qtyVt: options?.qtyVt !== undefined ? Number(options.qtyVt) : prevData.qtyVt,
     };
 
-    // Update juga tabel creators jika NIK / Rekening / Alamat dilengkapi
-    if (doc.creator_id && (options?.nikKtp || options?.alamatKreator || options?.teleponKreator)) {
+    // Update juga tabel creators jika NIK / Rekening / Alamat / Nama dilengkapi
+    if (doc.creator_id && (options?.nikKtp || options?.alamatKreator || options?.teleponKreator || options?.namaKreator)) {
       await db.execute(sql`
         UPDATE creators
         SET 
+          nama_lengkap = COALESCE(NULLIF(${options?.namaKreator || ''}, ''), nama_lengkap),
+          nama_asli = COALESCE(NULLIF(${options?.namaKreator || ''}, ''), nama_asli),
           nik = COALESCE(NULLIF(${options?.nikKtp || ''}, ''), nik),
           alamat_ktp = COALESCE(NULLIF(${options?.alamatKreator || ''}, ''), alamat_ktp),
           no_whatsapp = COALESCE(NULLIF(${options?.teleponKreator || ''}, ''), no_whatsapp),
