@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useRef } from "react";
+import React, { useState, useMemo } from "react";
 import {
   Search,
   CheckCircle2,
@@ -9,20 +9,26 @@ import {
   Printer,
   Edit,
   Trash2,
-  Save,
   RefreshCw,
-  Table as TableIcon,
   AlertCircle,
-  Wand2,
   FileSpreadsheet,
-  Download
+  Download,
+  Layers,
+  FileText,
+  User,
+  CreditCard,
+  Building,
+  Calendar,
+  Sparkles,
+  ExternalLink,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import {
   releaseContractAction,
   deleteContractAction,
-  batchUpdateContractsAction,
 } from "@/app/actions/contractActions";
+import DocumentSpreadsheetModal from "./DocumentSpreadsheetModal";
+import ContractPreviewModal from "./ContractPreviewModal";
 
 interface ContractTableViewProps {
   contracts: any[];
@@ -30,19 +36,16 @@ interface ContractTableViewProps {
   onEditContract: (contract: any) => void;
   onPreviewContract: (contract: any) => void;
   campaignId?: number;
+  campaignName?: string;
 }
 
-type EditableContractColumn =
-  | "namaKreator"
-  | "nikKtp"
-  | "alamatKreator"
-  | "teleponKreator"
-  | "statusBinding"
-  | "namaBank"
-  | "nomorRekening"
-  | "atasNamaRekening"
-  | "qtyVt"
-  | "biayaHonor";
+const TIPE_DOKUMEN_OPTIONS = [
+  { value: "all", label: "Semua Tipe Dokumen" },
+  { value: "perjanjian_kerjasama", label: "Surat Perjanjian Kerja Sama (Join Campaign)" },
+  { value: "spk_talent", label: "Surat Perintah Kerja (SPK Talent)" },
+  { value: "mou_brand", label: "MoU Brand Partner" },
+  { value: "adendum", label: "Adendum Kontrak" },
+];
 
 export default function ContractTableView({
   contracts,
@@ -50,181 +53,112 @@ export default function ContractTableView({
   onEditContract,
   onPreviewContract,
   campaignId,
+  campaignName,
 }: ContractTableViewProps) {
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
-
-  // State untuk perbaris yang diedit / di-paste
-  const [editedRows, setEditedRows] = useState<{ [id: number]: any }>({});
-  const [isSavingBatch, setIsSavingBatch] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<string>("all"); // 'all' | 'draft' | 'released'
+  const [tipeDokumenFilter, setTipeDokumenFilter] = useState<string>("all");
   const [actionLoadingId, setActionLoadingId] = useState<number | null>(null);
   const [toastMsg, setToastMsg] = useState<{ success: boolean; text: string } | null>(null);
 
+  // Modal State
+  const [isSpreadsheetOpen, setIsSpreadsheetOpen] = useState(false);
+  const [previewingContract, setPreviewingContract] = useState<any | null>(null);
+
   const showToast = (success: boolean, text: string) => {
     setToastMsg({ success, text });
-    setTimeout(() => setToastMsg(null), 4000);
+    setTimeout(() => setToastMsg(null), 5000);
   };
 
   const filteredList = useMemo(() => {
     return contracts.filter((c: any) => {
+      // Filter Status (Draft vs Dirilis)
       if (statusFilter !== "all" && c.status !== statusFilter) return false;
+
+      // Filter Tipe Dokumen
+      if (tipeDokumenFilter !== "all") {
+        const curType = c.tipe_dokumen || "perjanjian_kerjasama";
+        if (curType !== tipeDokumenFilter) return false;
+      }
+
+      // Filter Search
       if (!search.trim()) return true;
       const s = search.toLowerCase();
       const num = (c.nomor_kontrak || "").toLowerCase();
       const u = (c.creator_username || "").toLowerCase();
       const n = (c.creator_nama || "").toLowerCase();
       const cmp = (c.campaign_nama || "").toLowerCase();
-      return num.includes(s) || u.includes(s) || n.includes(s) || cmp.includes(s);
+      const d = c.contract_data || {};
+      const nik = (d.nikKtp || "").toLowerCase();
+      const bank = (d.namaBank || "").toLowerCase();
+
+      return (
+        num.includes(s) ||
+        u.includes(s) ||
+        n.includes(s) ||
+        cmp.includes(s) ||
+        nik.includes(s) ||
+        bank.includes(s)
+      );
     });
-  }, [contracts, statusFilter, search]);
+  }, [contracts, statusFilter, tipeDokumenFilter, search]);
 
-  const handleCellChange = (id: number, field: EditableContractColumn, value: any) => {
-    setEditedRows((prev) => ({
-      ...prev,
-      [id]: {
-        ...(prev[id] || {}),
-        [field]: value,
-      },
-    }));
-  };
-
-  // MULTI-CELL & MULTI-ROW EXCEL PASTE HANDLER (Persis seperti Spreadsheet Import Kreator)
-  const handlePaste = (
-    e: React.ClipboardEvent<HTMLInputElement>,
-    startRowIdx: number,
-    startColName: EditableContractColumn
-  ) => {
-    const text = e.clipboardData.getData("text/plain");
-    if (!text || (!text.includes("\t") && !text.includes("\n"))) {
-      return; // Single value standard paste
+  // Hitung jumlah draft & released untuk badge filter
+  const counts = useMemo(() => {
+    let draft = 0;
+    let released = 0;
+    for (const c of contracts) {
+      if (c.status === "released") released++;
+      else draft++;
     }
-    e.preventDefault();
+    return { all: contracts.length, draft, released };
+  }, [contracts]);
 
-    // Parse Excel TSV format
-    const lines = text.split(/\r?\n/).filter((l) => l.trim() !== "");
-    const parsedGrid = lines.map((l) => l.split("\t"));
-
-    const columnOrder: EditableContractColumn[] = [
-      "namaKreator",
-      "statusBinding",
-      "nikKtp",
-      "alamatKreator",
-      "teleponKreator",
-      "namaBank",
-      "nomorRekening",
-      "atasNamaRekening",
-      "qtyVt",
-      "biayaHonor",
-    ];
-
-    const startColIdx = columnOrder.indexOf(startColName);
-    if (startColIdx === -1) return;
-
-    setEditedRows((prev) => {
-      const nextEdited = { ...prev };
-
-      for (let r = 0; r < parsedGrid.length; r++) {
-        const targetRowIdx = startRowIdx + r;
-        if (targetRowIdx >= filteredList.length) break;
-
-        const rowItem = filteredList[targetRowIdx];
-        if (rowItem.status === "released") continue; // Lewati jika sudah dirilis resmi / terkunci
-
-        const currentEdit = { ...(nextEdited[rowItem.id] || {}) };
-        const pasteCells = parsedGrid[r];
-
-        for (let c = 0; c < pasteCells.length; c++) {
-          const targetColIdx = startColIdx + c;
-          if (targetColIdx >= columnOrder.length) break;
-
-          const colKey = columnOrder[targetColIdx];
-          let cellVal = pasteCells[c].trim();
-
-          if (colKey === "nikKtp") {
-            cellVal = cellVal.replace(/\D/g, "").slice(0, 16);
-          } else if (colKey === "biayaHonor" || colKey === "qtyVt") {
-            cellVal = cellVal.replace(/[^\d]/g, "");
-          } else if (colKey === "statusBinding") {
-            cellVal =
-              cellVal.toLowerCase().includes("binding") &&
-              !cellVal.toLowerCase().includes("non")
-                ? "KREATOR Binding"
-                : "KREATOR Non-Binding";
-          }
-
-          currentEdit[colKey] = cellVal;
-        }
-
-        nextEdited[rowItem.id] = currentEdit;
-      }
-
-      return nextEdited;
-    });
-
-    showToast(true, `Berhasil paste ${parsedGrid.length} baris dari Excel.`);
-  };
-
-  const handleSaveExcelBatch = async () => {
-    const ids = Object.keys(editedRows).map(Number);
-    if (ids.length === 0) {
-      showToast(true, "Tidak ada perubahan yang perlu disimpan.");
+  // Handler Rilis Dokumen Resmi
+  const handleReleaseContract = async (contract: any) => {
+    if (contract.status === "released") {
+      alert(`Dokumen ini sudah dirilis sebelumnya dengan nomor ${contract.nomor_kontrak}`);
       return;
     }
 
-    setIsSavingBatch(true);
-    try {
-      const payload = ids.map((id) => ({
-        id,
-        ...editedRows[id],
-      }));
-      const res = await batchUpdateContractsAction(payload);
-      if (res.success) {
-        showToast(true, res.message || "Seluruh data kontrak berhasil disimpan!");
-        setEditedRows({});
-        onRefresh();
-      } else {
-        showToast(false, res.error || "Gagal menyimpan perubahan.");
-      }
-    } catch (err: any) {
-      showToast(false, err.message || "Terjadi kesalahan.");
-    } finally {
-      setIsSavingBatch(false);
-    }
-  };
+    const conf = window.confirm(
+      `Apakah Anda yakin ingin MERILIS RESMI kontrak untuk @${contract.creator_username}?\n\nNomor urut resmi berikutnya akan otomatis ditetapkan dan dikunci secara global.`
+    );
+    if (!conf) return;
 
-  const handleRelease = async (c: any) => {
-    if (
-      !confirm(
-        `Rilis resmi kontrak untuk @${c.creator_username}?\nNomor urut resmi global berikutnya akan otomatis terkunci.`
-      )
-    ) {
-      return;
-    }
-    setActionLoadingId(c.id);
+    setActionLoadingId(contract.id);
     try {
-      const res = await releaseContractAction(c.id);
+      const res = await releaseContractAction(contract.id);
       if (res.success) {
-        showToast(true, res.message || "Dokumen berhasil dirilis.");
+        showToast(true, res.message || "Dokumen berhasil dirilis resmi.");
         onRefresh();
       } else {
         showToast(false, res.error || "Gagal merilis dokumen.");
       }
     } catch (err: any) {
-      showToast(false, err.message);
+      showToast(false, err.message || "Terjadi kesalahan.");
     } finally {
       setActionLoadingId(null);
     }
   };
 
-  const handleDelete = async (c: any) => {
-    if (!confirm(`Hapus draft kontrak untuk @${c.creator_username}?`)) {
+  // Handler Hapus Draft
+  const handleDeleteContract = async (contract: any) => {
+    if (contract.status === "released") {
+      alert("Dokumen yang telah dirilis resmi tidak dapat dihapus!");
       return;
     }
-    setActionLoadingId(c.id);
+
+    const conf = window.confirm(
+      `Hapus draft dokumen kontrak untuk @${contract.creator_username}?`
+    );
+    if (!conf) return;
+
+    setActionLoadingId(contract.id);
     try {
-      const res = await deleteContractAction(c.id);
+      const res = await deleteContractAction(contract.id);
       if (res.success) {
-        showToast(true, "Draft dokumen berhasil dihapus.");
+        showToast(true, res.message || "Draft berhasil dihapus.");
         onRefresh();
       } else {
         showToast(false, res.error || "Gagal menghapus.");
@@ -236,7 +170,7 @@ export default function ContractTableView({
     }
   };
 
-  // EXPORT KE EXCEL
+  // Export ke Excel
   const handleExportExcel = () => {
     if (filteredList.length === 0) {
       alert("Tidak ada data untuk diekspor.");
@@ -245,33 +179,33 @@ export default function ContractTableView({
 
     const exportData = filteredList.map((c: any, idx: number) => {
       const d = c.contract_data || {};
-      const edit = editedRows[c.id] || {};
       return {
         No: idx + 1,
         "Nomor Kontrak": c.nomor_kontrak || "[DRAFT]",
         Status: c.status === "released" ? "Dirilis Resmi" : "Draft",
+        "Tipe Dokumen": c.tipe_dokumen || "perjanjian_kerjasama",
         Username: `@${c.creator_username}`,
-        "Nama Lengkap (KTP)": edit.namaKreator ?? (d.namaKreator || c.creator_nama || ""),
-        "Status Binding": (edit.statusBinding ?? (c.status_binding || d.statusBinding || "Non-Binding")).replace("KREATOR ", ""),
-        "NIK KTP": edit.nikKtp ?? (d.nikKtp || ""),
-        Alamat: edit.alamatKreator ?? (d.alamatKreator || ""),
-        "No WhatsApp": edit.teleponKreator ?? (d.teleponKreator || ""),
-        Bank: edit.namaBank ?? (d.namaBank || ""),
-        "Nomor Rekening": edit.nomorRekening ?? (d.nomorRekening || ""),
-        "Atas Nama": edit.atasNamaRekening ?? (d.atasNamaRekening || ""),
-        "Qty VT": edit.qtyVt ?? (d.qtyVt || 1),
-        "Fee Kontrak (Rp)": edit.biayaHonor ?? (d.biayaHonor || 0),
-        "Dibuat Oleh": c.created_by_name || "-",
+        "Nama Lengkap (KTP)": d.namaKreator || c.creator_nama || "",
+        "Status Binding": (c.status_binding || d.statusBinding || "Non-Binding").replace("KREATOR ", ""),
+        "NIK KTP": d.nikKtp || "",
+        Alamat: d.alamatKreator || "",
+        "No WhatsApp": d.teleponKreator || "",
+        Bank: d.namaBank || "",
+        "Nomor Rekening": d.nomorRekening || "",
+        "Atas Nama Rekening": d.atasNamaRekening || "",
+        "Qty VT": d.qtyVt || 1,
+        "Fee Kontrak (Rp)": d.biayaHonor || 0,
+        "PIC Pembuat": c.created_by_name || "-",
+        "PIC Rilis": c.released_by_name || "-",
+        "Tanggal Rilis": c.released_at ? new Date(c.released_at).toLocaleDateString("id-ID") : "-",
       };
     });
 
     const worksheet = XLSX.utils.json_to_sheet(exportData);
     const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Dokumen Kontrak");
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Daftar Dokumen");
     XLSX.writeFile(workbook, `Rekap_Dokumen_Kontrak_${new Date().toISOString().split("T")[0]}.xlsx`);
   };
-
-  const changedCount = Object.keys(editedRows).length;
 
   return (
     <div className="space-y-4">
@@ -292,410 +226,332 @@ export default function ContractTableView({
             )}
             <span>{toastMsg.text}</span>
           </div>
-          <button onClick={() => setToastMsg(null)} className="text-slate-400 hover:text-slate-600">
+          <button onClick={() => setToastMsg(null)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
             &times;
           </button>
         </div>
       )}
 
       {/* TOOLBAR UTAMA */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
-        <div className="flex items-center gap-2 flex-1 max-w-md">
-          <div className="relative flex-1">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+        {/* PENCARIAN & FILTER STATUS SWITCH */}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 flex-1 flex-wrap">
+          {/* SEARCH INPUT */}
+          <div className="relative min-w-[240px] flex-1 max-w-sm">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Cari nomor dokumen, username, atau nama..."
-              className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+              placeholder="Cari nomor kontrak, username, NIK..."
+              className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
             />
           </div>
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 outline-none"
-          >
-            <option value="all">Semua Status</option>
-            <option value="draft">Draft (Bisa Edit / Paste)</option>
-            <option value="released">Dirilis Resmi (Terkunci)</option>
-          </select>
+
+          {/* TIPE DOKUMEN SELECTOR */}
+          <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl">
+            <Layers className="w-3.5 h-3.5 text-slate-500" />
+            <select
+              value={tipeDokumenFilter}
+              onChange={(e) => setTipeDokumenFilter(e.target.value)}
+              className="bg-transparent text-xs font-semibold text-slate-700 outline-none cursor-pointer"
+            >
+              {TIPE_DOKUMEN_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* STATUS SWITCH FILTER (TABS) */}
+          <div className="flex items-center p-1 bg-slate-100 rounded-xl border border-slate-200 text-xs font-semibold">
+            <button
+              onClick={() => setStatusFilter("all")}
+              className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                statusFilter === "all"
+                  ? "bg-white text-blue-700 shadow-2xs font-bold"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              Semua ({counts.all})
+            </button>
+            <button
+              onClick={() => setStatusFilter("draft")}
+              className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
+                statusFilter === "draft"
+                  ? "bg-amber-500 text-white shadow-2xs font-bold"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <Clock className="w-3 h-3" />
+              Draft ({counts.draft})
+            </button>
+            <button
+              onClick={() => setStatusFilter("released")}
+              className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
+                statusFilter === "released"
+                  ? "bg-emerald-600 text-white shadow-2xs font-bold"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <CheckCircle2 className="w-3 h-3" />
+              Dirilis ({counts.released})
+            </button>
+          </div>
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
-          {changedCount > 0 && (
+        {/* TOMBOL AKSI UTAMA */}
+        <div className="flex items-center gap-2.5 flex-wrap">
+          {/* TOMBOL MINI-EXCEL IMPORT & UPDATE DATA */}
+          {campaignId && (
             <button
               type="button"
-              onClick={handleSaveExcelBatch}
-              disabled={isSavingBatch}
-              className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 animate-pulse cursor-pointer disabled:opacity-50"
+              onClick={() => setIsSpreadsheetOpen(true)}
+              className="px-3.5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-emerald-600/20 flex items-center gap-2 cursor-pointer"
             >
-              {isSavingBatch ? (
-                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <Save className="w-3.5 h-3.5" />
-              )}
-              <span>Simpan {changedCount} Perubahan Tabel</span>
+              <FileSpreadsheet className="w-4 h-4" />
+              <span>Import &amp; Update Data (Excel)</span>
             </button>
           )}
 
           <button
             type="button"
             onClick={handleExportExcel}
-            className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+            className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
           >
-            <Download className="w-3.5 h-3.5 text-emerald-600" />
+            <Download className="w-3.5 h-3.5 text-slate-600" />
             <span>Export Excel</span>
           </button>
 
           <button
             type="button"
             onClick={onRefresh}
-            className="p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg border border-slate-200 cursor-pointer"
-            title="Refresh Data & Auto-Sync Approved"
+            className="p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl border border-slate-200 transition-colors cursor-pointer"
+            title="Refresh Data"
           >
             <RefreshCw className="w-4 h-4" />
           </button>
         </div>
       </div>
 
-      {/* SPREADSHEET MINI-EXCEL GRID */}
-      <div className="bg-white rounded-xl border border-slate-300 shadow-sm overflow-hidden flex flex-col">
-        <div className="px-4 py-2.5 bg-slate-100/90 border-b border-slate-200 flex items-center justify-between text-xs text-slate-600">
-          <div className="flex items-center gap-2">
-            <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
-            <span className="font-bold text-slate-800">
-              Tabel Spreadsheet Kontrak Kreator (Auto-Fill &amp; Support Multi-Cell Paste)
-            </span>
-          </div>
-          <span className="text-[11px] text-slate-500 font-normal">
-            💡 Tips: Anda bisa meng-copy baris dari Excel lalu langsung <b>Ctrl+V</b> di sel mana saja.
-          </span>
-        </div>
-
-        <div className="overflow-x-auto max-h-[660px]">
-          <table className="w-full border-collapse text-xs" style={{ tableLayout: "fixed" }}>
-            <thead className="bg-slate-100 text-slate-700 font-bold uppercase tracking-wider text-[11px] border-b border-slate-300 sticky top-0 z-10 shadow-xs">
+      {/* DAFTAR DOKUMEN TABLE */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs text-left border-collapse">
+            <thead className="bg-slate-50/80 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider text-[11px]">
               <tr>
-                <th className="w-12 px-2 py-2 text-center border-b border-r border-slate-300 bg-slate-100">No</th>
-                <th className="w-44 px-3 py-2 text-left border-b border-r border-slate-300 bg-slate-100">Nomor Kontrak</th>
-                <th className="w-28 px-3 py-2 text-left border-b border-r border-slate-300 bg-slate-100">Status</th>
-                <th className="w-36 px-3 py-2 text-left border-b border-r border-slate-300 bg-slate-100">Username</th>
-                <th className="w-48 px-3 py-2 text-left border-b border-r border-slate-300 bg-slate-100">Nama Lengkap (KTP)</th>
-                <th className="w-32 px-3 py-2 text-left border-b border-r border-slate-300 bg-slate-100">Status Binding</th>
-                <th className="w-36 px-3 py-2 text-left border-b border-r border-slate-300 bg-slate-100">NIK (16 Digit)</th>
-                <th className="w-56 px-3 py-2 text-left border-b border-r border-slate-300 bg-slate-100">Alamat KTP / Domisili</th>
-                <th className="w-32 px-3 py-2 text-left border-b border-r border-slate-300 bg-slate-100">WhatsApp</th>
-                <th className="w-28 px-3 py-2 text-left border-b border-r border-slate-300 bg-slate-100">Bank</th>
-                <th className="w-36 px-3 py-2 text-left border-b border-r border-slate-300 bg-slate-100">No. Rekening</th>
-                <th className="w-44 px-3 py-2 text-left border-b border-r border-slate-300 bg-slate-100">Atas Nama Rekening</th>
-                <th className="w-20 px-3 py-2 text-center border-b border-r border-slate-300 bg-slate-100">Qty VT</th>
-                <th className="w-32 px-3 py-2 text-left border-b border-r border-slate-300 bg-slate-100">Fee Honor (Rp)</th>
-                <th className="w-32 px-3 py-2 text-left border-b border-r border-slate-300 bg-slate-100">PIC Pembuat</th>
-                <th className="w-32 px-3 py-2 text-right border-b border-slate-300 bg-slate-100 sticky right-0 z-20">Aksi</th>
+                <th className="w-12 px-4 py-3.5 text-center">#</th>
+                <th className="px-4 py-3.5">Nomor Dokumen</th>
+                <th className="px-4 py-3.5">Kreator &amp; Akun</th>
+                <th className="px-4 py-3.5">Binding</th>
+                <th className="px-4 py-3.5">Deliverables</th>
+                <th className="px-4 py-3.5">Fee Honor</th>
+                <th className="px-4 py-3.5">Data Rekening</th>
+                <th className="px-4 py-3.5">Status &amp; PIC</th>
+                <th className="px-4 py-3.5 text-right">Aksi</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-200">
+            <tbody className="divide-y divide-slate-100">
               {filteredList.length === 0 ? (
                 <tr>
-                  <td colSpan={16} className="p-8 text-center text-slate-400 font-medium bg-white">
-                    Belum ada kreator berstatus Approved di campaign ini. Saat kreator di-approve di listing, draft otomatis muncul di sini.
+                  <td colSpan={9} className="py-14 text-center">
+                    <div className="max-w-md mx-auto space-y-2">
+                      <div className="w-12 h-12 rounded-full bg-slate-100 text-slate-400 mx-auto flex items-center justify-center">
+                        <FileText className="w-6 h-6" />
+                      </div>
+                      <p className="font-semibold text-slate-700">
+                        Tidak ada dokumen kontrak yang cocok
+                      </p>
+                      <p className="text-xs text-slate-400">
+                        {statusFilter === "released"
+                          ? "Belum ada dokumen yang dirilis resmi. Rilis draft untuk mendapatkan nomor urut resmi."
+                          : "Saat kreator di-approve di listing, draft dokumen otomatis muncul di sini. Anda juga bisa mengimpor data via tombol Import Data (Excel)."}
+                      </p>
+                    </div>
                   </td>
                 </tr>
               ) : (
                 filteredList.map((c: any, idx: number) => {
                   const d = c.contract_data || {};
-                  const isDraft = c.status === "draft";
-                  const editData = editedRows[c.id] || {};
-
-                  const curNama = editData.namaKreator !== undefined ? editData.namaKreator : (d.namaKreator || c.creator_nama || "");
-                  const curBinding = editData.statusBinding !== undefined ? editData.statusBinding : (c.status_binding || d.statusBinding || "KREATOR Non-Binding");
-                  const curNik = editData.nikKtp !== undefined ? editData.nikKtp : (d.nikKtp || "");
-                  const curAlamat = editData.alamatKreator !== undefined ? editData.alamatKreator : (d.alamatKreator || "");
-                  const curWa = editData.teleponKreator !== undefined ? editData.teleponKreator : (d.teleponKreator || "");
-                  const curBank = editData.namaBank !== undefined ? editData.namaBank : (d.namaBank || "");
-                  const curRek = editData.nomorRekening !== undefined ? editData.nomorRekening : (d.nomorRekening || "");
-                  const curHolder = editData.atasNamaRekening !== undefined ? editData.atasNamaRekening : (d.atasNamaRekening || curNama);
-                  const curVt = editData.qtyVt !== undefined ? editData.qtyVt : (d.qtyVt || 1);
-                  const curHonor = editData.biayaHonor !== undefined ? editData.biayaHonor : (d.biayaHonor || 0);
-
-                  const isRowChanged = Boolean(editedRows[c.id]);
+                  const isReleased = c.status === "released";
+                  const namaKreator = d.namaKreator || c.creator_nama || c.creator_username;
+                  const binding = (c.status_binding || d.statusBinding || "Non-Binding").replace("KREATOR ", "");
+                  const isBinding = binding.toLowerCase().includes("binding") && !binding.toLowerCase().includes("non");
+                  const honor = Number(d.biayaHonor || 0);
+                  const bank = d.namaBank || "";
+                  const rek = d.nomorRekening || "";
+                  const holder = d.atasNamaRekening || "";
+                  const hasRekening = Boolean(bank && rek);
 
                   return (
                     <tr
                       key={c.id}
-                      className={`hover:bg-blue-50/40 transition-colors ${
-                        isRowChanged
-                          ? "bg-amber-50/70"
-                          : !isDraft
-                          ? "bg-emerald-50/25"
-                          : "bg-white"
-                      }`}
+                      className="hover:bg-slate-50/80 transition-colors group"
                     >
-                      {/* NO */}
-                      <td className="px-2 py-1 text-center font-mono text-slate-400 border-b border-r border-slate-300 bg-slate-50">
+                      {/* # */}
+                      <td className="px-4 py-3.5 text-center text-slate-400 font-mono text-[11px]">
                         {idx + 1}
                       </td>
 
-                      {/* NOMOR KONTRAK */}
-                      <td className="px-3 py-1 font-mono font-bold border-b border-r border-slate-300">
-                        {isDraft ? (
-                          <span className="text-amber-700 bg-amber-100/70 border border-amber-300 px-1.5 py-0.5 rounded text-[10px] truncate block">
-                            {c.nomor_kontrak || "[DRAFT AUTO]"}
-                          </span>
-                        ) : (
-                          <span className="text-emerald-800 bg-emerald-100/80 border border-emerald-300 px-2 py-0.5 rounded text-[11px] truncate block">
-                            {c.nomor_kontrak}
-                          </span>
-                        )}
-                      </td>
-
-                      {/* STATUS */}
-                      <td className="px-3 py-1 border-b border-r border-slate-300">
-                        {isDraft ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800">
-                            <Clock className="w-3 h-3" /> Draft
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
-                            <CheckCircle2 className="w-3 h-3" /> Dirilis Resmi
-                          </span>
-                        )}
-                      </td>
-
-                      {/* USERNAME */}
-                      <td className="px-3 py-1 font-bold text-slate-800 border-b border-r border-slate-300 bg-slate-50/60 truncate">
-                        @{c.creator_username}
-                      </td>
-
-                      {/* NAMA KREATOR (KTP) */}
-                      <td className="p-0 border-b border-r border-slate-300">
-                        {isDraft ? (
-                          <input
-                            type="text"
-                            value={curNama}
-                            onChange={(e) => handleCellChange(c.id, "namaKreator", e.target.value)}
-                            onPaste={(e) => handlePaste(e, idx, "namaKreator")}
-                            placeholder="Nama Sesuai KTP"
-                            className="w-full h-full min-h-[36px] px-2.5 py-1 outline-none text-xs text-slate-800 focus:bg-blue-50 font-medium placeholder-slate-300"
-                          />
-                        ) : (
-                          <div className="px-3 py-1 text-xs text-slate-700 truncate">{curNama}</div>
-                        )}
-                      </td>
-
-                      {/* STATUS BINDING */}
-                      <td className="p-0 border-b border-r border-slate-300">
-                        {isDraft ? (
-                          <select
-                            value={curBinding}
-                            onChange={(e) => handleCellChange(c.id, "statusBinding", e.target.value)}
-                            className="w-full h-full min-h-[36px] px-2 py-1 outline-none text-xs text-slate-800 bg-transparent cursor-pointer font-semibold"
-                          >
-                            <option value="KREATOR Non-Binding">Non-Binding</option>
-                            <option value="KREATOR Binding">Binding</option>
-                          </select>
-                        ) : (
-                          <div className="px-3 py-1 text-[11px] font-semibold text-slate-700">
-                            {curBinding.replace("KREATOR ", "")}
+                      {/* NOMOR DOKUMEN & TIPE */}
+                      <td className="px-4 py-3.5">
+                        <div className="space-y-1">
+                          {isReleased ? (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                              <Lock className="w-3 h-3 text-blue-600 shrink-0" />
+                              <span>{c.nomor_kontrak}</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+                              <Clock className="w-3 h-3 text-amber-600 shrink-0" />
+                              <span>{c.nomor_kontrak || "[DRAFT KONTRAK]"}</span>
+                            </span>
+                          )}
+                          <div className="flex items-center gap-1 text-[10px] text-slate-400">
+                            <span>Perjanjian Kerja Sama (Join Campaign)</span>
                           </div>
-                        )}
-                      </td>
-
-                      {/* NIK KTP */}
-                      <td className="p-0 border-b border-r border-slate-300 font-mono">
-                        {isDraft ? (
-                          <input
-                            type="text"
-                            maxLength={16}
-                            value={curNik}
-                            onChange={(e) => handleCellChange(c.id, "nikKtp", e.target.value)}
-                            onPaste={(e) => handlePaste(e, idx, "nikKtp")}
-                            placeholder="16 digit"
-                            className="w-full h-full min-h-[36px] px-2.5 py-1 outline-none text-xs text-slate-800 focus:bg-blue-50 font-mono placeholder-slate-300"
-                          />
-                        ) : (
-                          <div className="px-3 py-1 text-xs text-slate-700 font-mono">{curNik || "-"}</div>
-                        )}
-                      </td>
-
-                      {/* ALAMAT KTP */}
-                      <td className="p-0 border-b border-r border-slate-300">
-                        {isDraft ? (
-                          <input
-                            type="text"
-                            value={curAlamat}
-                            onChange={(e) => handleCellChange(c.id, "alamatKreator", e.target.value)}
-                            onPaste={(e) => handlePaste(e, idx, "alamatKreator")}
-                            placeholder="Domisili / KTP"
-                            className="w-full h-full min-h-[36px] px-2.5 py-1 outline-none text-xs text-slate-800 focus:bg-blue-50 placeholder-slate-300"
-                          />
-                        ) : (
-                          <div className="px-3 py-1 text-xs text-slate-700 truncate" title={curAlamat}>
-                            {curAlamat || "-"}
-                          </div>
-                        )}
-                      </td>
-
-                      {/* WHATSAPP */}
-                      <td className="p-0 border-b border-r border-slate-300 font-mono">
-                        {isDraft ? (
-                          <input
-                            type="text"
-                            value={curWa}
-                            onChange={(e) => handleCellChange(c.id, "teleponKreator", e.target.value)}
-                            onPaste={(e) => handlePaste(e, idx, "teleponKreator")}
-                            placeholder="0812xxx"
-                            className="w-full h-full min-h-[36px] px-2.5 py-1 outline-none text-xs text-slate-800 focus:bg-blue-50 font-mono placeholder-slate-300"
-                          />
-                        ) : (
-                          <div className="px-3 py-1 text-xs text-slate-700 font-mono">{curWa || "-"}</div>
-                        )}
-                      </td>
-
-                      {/* BANK */}
-                      <td className="p-0 border-b border-r border-slate-300">
-                        {isDraft ? (
-                          <input
-                            type="text"
-                            value={curBank}
-                            onChange={(e) => handleCellChange(c.id, "namaBank", e.target.value)}
-                            onPaste={(e) => handlePaste(e, idx, "namaBank")}
-                            placeholder="BCA/Mandiri"
-                            className="w-full h-full min-h-[36px] px-2.5 py-1 outline-none text-xs text-slate-800 focus:bg-blue-50 uppercase placeholder-slate-300"
-                          />
-                        ) : (
-                          <div className="px-3 py-1 text-xs text-slate-700 uppercase font-semibold">
-                            {curBank || "-"}
-                          </div>
-                        )}
-                      </td>
-
-                      {/* NO REKENING */}
-                      <td className="p-0 border-b border-r border-slate-300 font-mono">
-                        {isDraft ? (
-                          <input
-                            type="text"
-                            value={curRek}
-                            onChange={(e) => handleCellChange(c.id, "nomorRekening", e.target.value)}
-                            onPaste={(e) => handlePaste(e, idx, "nomorRekening")}
-                            placeholder="Nomor rek"
-                            className="w-full h-full min-h-[36px] px-2.5 py-1 outline-none text-xs text-slate-800 focus:bg-blue-50 font-mono placeholder-slate-300"
-                          />
-                        ) : (
-                          <div className="px-3 py-1 text-xs text-slate-700 font-mono">{curRek || "-"}</div>
-                        )}
-                      </td>
-
-                      {/* ATAS NAMA */}
-                      <td className="p-0 border-b border-r border-slate-300">
-                        {isDraft ? (
-                          <input
-                            type="text"
-                            value={curHolder}
-                            onChange={(e) => handleCellChange(c.id, "atasNamaRekening", e.target.value)}
-                            onPaste={(e) => handlePaste(e, idx, "atasNamaRekening")}
-                            placeholder="Nama pemilik rek"
-                            className="w-full h-full min-h-[36px] px-2.5 py-1 outline-none text-xs text-slate-800 focus:bg-blue-50 placeholder-slate-300"
-                          />
-                        ) : (
-                          <div className="px-3 py-1 text-xs text-slate-700 truncate">{curHolder || "-"}</div>
-                        )}
-                      </td>
-
-                      {/* QTY VT */}
-                      <td className="p-0 border-b border-r border-slate-300 text-center">
-                        {isDraft ? (
-                          <input
-                            type="number"
-                            min={1}
-                            value={curVt}
-                            onChange={(e) => handleCellChange(c.id, "qtyVt", e.target.value)}
-                            onPaste={(e) => handlePaste(e, idx, "qtyVt")}
-                            className="w-full h-full min-h-[36px] px-2 py-1 outline-none text-xs text-slate-800 focus:bg-blue-50 text-center font-bold"
-                          />
-                        ) : (
-                          <div className="px-2 py-1 text-xs font-bold text-slate-700">{curVt}</div>
-                        )}
-                      </td>
-
-                      {/* FEE HONOR */}
-                      <td className="p-0 border-b border-r border-slate-300 font-mono">
-                        {isDraft ? (
-                          <input
-                            type="text"
-                            value={curHonor}
-                            onChange={(e) => handleCellChange(c.id, "biayaHonor", e.target.value)}
-                            onPaste={(e) => handlePaste(e, idx, "biayaHonor")}
-                            placeholder="0"
-                            className="w-full h-full min-h-[36px] px-2.5 py-1 outline-none text-xs text-slate-800 focus:bg-blue-50 font-mono font-bold"
-                          />
-                        ) : (
-                          <div className="px-3 py-1 text-xs font-mono font-bold text-slate-800">
-                            Rp {Number(curHonor).toLocaleString("id-ID")}
-                          </div>
-                        )}
-                      </td>
-
-                      {/* PIC PEMBUAT */}
-                      <td className="px-3 py-1 text-xs border-b border-r border-slate-300 whitespace-nowrap bg-slate-50/50">
-                        <div className="font-semibold text-slate-800">{c.created_by_name || "PIC TNT"}</div>
-                        <div className="text-[10px] text-slate-400">
-                          {c.created_at ? new Date(c.created_at).toLocaleDateString("id-ID") : "-"}
                         </div>
                       </td>
 
-                      {/* AKSI (STICKY RIGHT) */}
-                      <td className="px-3 py-1 text-right border-b border-slate-300 sticky right-0 bg-white/95 backdrop-blur-xs shadow-xs z-10 whitespace-nowrap">
-                        <div className="flex items-center justify-end gap-1">
-                          {/* PREVIEW & PRINT */}
+                      {/* KREATOR & AKUN */}
+                      <td className="px-4 py-3.5">
+                        <div>
+                          <div className="font-bold text-slate-900 flex items-center gap-1">
+                            <span className="text-blue-600">@{c.creator_username}</span>
+                          </div>
+                          <div className="text-slate-600 font-medium text-[11px] mt-0.5">
+                            {namaKreator}
+                          </div>
+                          {d.nikKtp && (
+                            <div className="text-[10px] text-slate-400 font-mono">
+                              NIK: {d.nikKtp}
+                            </div>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* STATUS BINDING */}
+                      <td className="px-4 py-3.5">
+                        <span
+                          className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            isBinding
+                              ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                              : "bg-slate-100 text-slate-600 border border-slate-200"
+                          }`}
+                        >
+                          {isBinding ? "Binding" : "Non-Binding"}
+                        </span>
+                      </td>
+
+                      {/* DELIVERABLES */}
+                      <td className="px-4 py-3.5">
+                        <div className="space-y-0.5">
+                          <div className="font-semibold text-slate-700">
+                            {d.qtyVt || 1} Video TikTok
+                          </div>
+                          {Number(d.qtyLive || 0) > 0 && (
+                            <div className="text-[11px] text-slate-500">
+                              {d.qtyLive} Livestream
+                            </div>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* FEE HONOR */}
+                      <td className="px-4 py-3.5">
+                        <div className="font-bold text-slate-900">
+                          {honor > 0 ? `Rp ${honor.toLocaleString("id-ID")}` : "Rp 0 (Barter/Free)"}
+                        </div>
+                        <div className="text-[10px] text-slate-400">Fee Honor</div>
+                      </td>
+
+                      {/* DATA REKENING */}
+                      <td className="px-4 py-3.5">
+                        {hasRekening ? (
+                          <div className="space-y-0.5">
+                            <div className="font-semibold text-slate-800">
+                              {bank} - {rek}
+                            </div>
+                            <div className="text-[10px] text-slate-500 truncate max-w-[150px]">
+                              a.n {holder}
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-medium text-amber-600 bg-amber-50 px-2 py-0.5 rounded">
+                            <AlertCircle className="w-3 h-3" />
+                            Belum Ada Rekening
+                          </span>
+                        )}
+                      </td>
+
+                      {/* STATUS & PIC */}
+                      <td className="px-4 py-3.5">
+                        <div className="space-y-0.5">
+                          <div>
+                            {isReleased ? (
+                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                                Dirilis Resmi
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800">
+                                Draft
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[10px] text-slate-400">
+                            Oleh: {c.created_by_name || "PIC TNT"}
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* AKSI */}
+                      <td className="px-4 py-3.5 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          {/* TOMBOL CETAK / PDF */}
                           <button
                             type="button"
-                            onClick={() => onPreviewContract(c)}
-                            className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
+                            onClick={() => setPreviewingContract(c)}
+                            className="p-1.5 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
                             title="Pratinjau & Cetak PDF"
                           >
                             <Printer className="w-4 h-4" />
                           </button>
 
-                          {/* EDIT GENERATOR FORM */}
-                          {isDraft && (
+                          {/* TOMBOL RILIS (HANYA BILA DRAFT) */}
+                          {!isReleased && (
+                            <button
+                              type="button"
+                              onClick={() => handleReleaseContract(c)}
+                              disabled={actionLoadingId === c.id}
+                              className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] font-bold transition-all shadow-2xs flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                              title="Rilis Resmi & Kunci Nomor Dokumen"
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              <span>Rilis</span>
+                            </button>
+                          )}
+
+                          {/* TOMBOL EDIT DOKUMEN / FORM */}
+                          {!isReleased && (
                             <button
                               type="button"
                               onClick={() => onEditContract(c)}
-                              className="p-1.5 text-amber-600 hover:bg-amber-50 rounded-lg transition-colors cursor-pointer"
-                              title="Buka Formulir Lengkap"
+                              className="p-1.5 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+                              title="Edit Form Dokumen"
                             >
                               <Edit className="w-4 h-4" />
                             </button>
                           )}
 
-                          {/* RILIS RESMI DOKUMEN */}
-                          {isDraft && (
+                          {/* TOMBOL HAPUS DRAFT */}
+                          {!isReleased && (
                             <button
                               type="button"
-                              onClick={() => handleRelease(c)}
+                              onClick={() => handleDeleteContract(c)}
                               disabled={actionLoadingId === c.id}
-                              className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[11px] font-bold flex items-center gap-1 shadow-xs transition-all cursor-pointer disabled:opacity-50"
-                              title="Rilis Resmi & Kunci Nomor Urut Terakhir + 1"
-                            >
-                              {actionLoadingId === c.id ? (
-                                <RefreshCw className="w-3 h-3 animate-spin" />
-                              ) : (
-                                <Lock className="w-3 h-3" />
-                              )}
-                              <span>Rilis</span>
-                            </button>
-                          )}
-
-                          {/* HAPUS DRAFT */}
-                          {isDraft && (
-                            <button
-                              type="button"
-                              onClick={() => handleDelete(c)}
-                              disabled={actionLoadingId === c.id}
-                              className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
-                              title="Hapus Draft"
+                              className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+                              title="Hapus Draft Dokumen"
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
@@ -710,6 +566,26 @@ export default function ContractTableView({
           </table>
         </div>
       </div>
+
+      {/* SPREADSHEET MINI EXCEL MODAL */}
+      {campaignId && (
+        <DocumentSpreadsheetModal
+          isOpen={isSpreadsheetOpen}
+          onClose={() => setIsSpreadsheetOpen(false)}
+          campaignId={campaignId}
+          campaignName={campaignName}
+          onSuccess={() => {
+            onRefresh();
+          }}
+        />
+      )}
+
+      {/* MODAL CETAK & PREVIEW PDF */}
+      <ContractPreviewModal
+        isOpen={Boolean(previewingContract)}
+        onClose={() => setPreviewingContract(null)}
+        contract={previewingContract}
+      />
     </div>
   );
 }

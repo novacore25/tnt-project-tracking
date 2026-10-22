@@ -19,6 +19,20 @@ function getInitials(name: string): string {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
+let hasEnsuredTipeDokumenCol = false;
+async function ensureTipeDokumenCol() {
+  if (hasEnsuredTipeDokumenCol) return;
+  try {
+    await db.execute(sql`
+      ALTER TABLE creator_contracts ADD COLUMN IF NOT EXISTS tipe_dokumen TEXT DEFAULT 'perjanjian_kerjasama';
+      CREATE INDEX IF NOT EXISTS idx_creator_contracts_tipe_dokumen ON creator_contracts(tipe_dokumen);
+    `);
+    hasEnsuredTipeDokumenCol = true;
+  } catch (e) {
+    // ignore
+  }
+}
+
 /**
  * 1. Ambil list kontrak (Bisa global atau difilter per campaignId)
  */
@@ -26,9 +40,11 @@ export async function fetchContractsAction(params?: {
   campaignId?: number;
   status?: string;
   search?: string;
+  tipeDokumen?: string;
 }) {
   try {
     const { sessionUser, profile } = await requireUser();
+    await ensureTipeDokumenCol();
     if (params?.campaignId) {
       await syncApprovedCreatorDraftsInternal(
         params.campaignId,
@@ -43,6 +59,9 @@ export async function fetchContractsAction(params?: {
     }
     if (params?.status && params.status !== 'all') {
       conditions.push(sql`ct.status = ${params.status}`);
+    }
+    if (params?.tipeDokumen && params.tipeDokumen !== 'all') {
+      conditions.push(sql`(ct.tipe_dokumen = ${params.tipeDokumen} OR (${params.tipeDokumen} = 'perjanjian_kerjasama' AND ct.tipe_dokumen IS NULL))`);
     }
     if (params?.search && params.search.trim() !== '') {
       const q = `%${params.search.trim()}%`;
@@ -654,6 +673,401 @@ export async function batchUpdateContractsAction(rows: Array<{
     return { success: true, message: 'Data dokumen berhasil diperbarui dari tabel excel.' };
   } catch (err: any) {
     console.error('batchUpdateContractsAction error:', err);
+    return { success: false, error: err.message };
+  }
+}
+
+/**
+ * 7. Lookup data kreator di campaign untuk instant autofill di Mini Excel
+ */
+export async function fetchCampaignCreatorsLookupForDokumenAction(campaignId: number) {
+  try {
+    await requireUser();
+
+    const rows = await db.execute(sql`
+      SELECT 
+        cc.id as campaign_creator_id,
+        cc.creator_id,
+        c.username,
+        COALESCE(
+          NULLIF(c.nama_lengkap, ''),
+          NULLIF(c.nama_asli, ''),
+          (
+            SELECT ci.nama_ktp FROM creator_identities ci 
+            WHERE ci.creator_id = c.id AND ci.nama_ktp IS NOT NULL AND ci.nama_ktp != ''
+            ORDER BY ci.is_primary DESC, ci.id DESC LIMIT 1
+          ),
+          (
+            SELECT pi.nama_penerima FROM payment_items pi
+            JOIN campaign_creators cc2 ON pi.campaign_creator_id = cc2.id
+            WHERE cc2.creator_id = c.id AND pi.nama_penerima IS NOT NULL AND pi.nama_penerima != ''
+            ORDER BY pi.id DESC LIMIT 1
+          )
+        ) as nama_lengkap,
+        COALESCE(
+          (
+            SELECT ci.nik FROM creator_identities ci 
+            WHERE ci.creator_id = c.id AND ci.nik IS NOT NULL AND ci.nik != ''
+            ORDER BY ci.is_primary DESC, ci.id DESC LIMIT 1
+          ),
+          (
+            SELECT pi.nik FROM payment_items pi
+            JOIN campaign_creators cc2 ON pi.campaign_creator_id = cc2.id
+            WHERE cc2.creator_id = c.id AND pi.nik IS NOT NULL AND pi.nik != ''
+            ORDER BY pi.id DESC LIMIT 1
+          ),
+          NULLIF(c.nik, '')
+        ) as nik_ktp,
+        COALESCE(
+          (
+            SELECT ci.alamat_ktp FROM creator_identities ci 
+            WHERE ci.creator_id = c.id AND ci.alamat_ktp IS NOT NULL AND ci.alamat_ktp != ''
+            ORDER BY ci.is_primary DESC, ci.id DESC LIMIT 1
+          ),
+          (
+            SELECT pi.alamat_ktp FROM payment_items pi
+            JOIN campaign_creators cc2 ON pi.campaign_creator_id = cc2.id
+            WHERE cc2.creator_id = c.id AND pi.alamat_ktp IS NOT NULL AND pi.alamat_ktp != ''
+            ORDER BY pi.id DESC LIMIT 1
+          ),
+          NULLIF(c.alamat_ktp, '')
+        ) as alamat_ktp,
+        COALESCE(
+          (
+            SELECT ct.nomor FROM creator_contacts ct 
+            WHERE ct.creator_id = c.id AND ct.status = 'aktif' AND ct.nomor IS NOT NULL AND ct.nomor != ''
+            ORDER BY ct.id DESC LIMIT 1
+          ),
+          (
+            SELECT cpc.nomor_wa FROM creator_pic_contacts cpc
+            WHERE cpc.creator_id = c.id AND cpc.nomor_wa IS NOT NULL AND cpc.nomor_wa != ''
+            ORDER BY cpc.is_primary DESC, cpc.id DESC LIMIT 1
+          ),
+          (
+            SELECT pi.nomor_wa_dealing FROM payment_items pi
+            JOIN campaign_creators cc2 ON pi.campaign_creator_id = cc2.id
+            WHERE cc2.creator_id = c.id AND pi.nomor_wa_dealing IS NOT NULL AND pi.nomor_wa_dealing != ''
+            ORDER BY pi.id DESC LIMIT 1
+          ),
+          NULLIF(c.nomor_wa_dealing, ''),
+          NULLIF(c.no_whatsapp, '')
+        ) as contact_nomor,
+        COALESCE(
+          (
+            SELECT cb.bank_name FROM creator_bank_accounts cb 
+            WHERE cb.creator_id = c.id AND cb.bank_name IS NOT NULL AND cb.bank_name != ''
+            ORDER BY cb.is_primary DESC, cb.id ASC LIMIT 1
+          ),
+          (
+            SELECT pi.metode_pembayaran FROM payment_items pi
+            JOIN campaign_creators cc2 ON pi.campaign_creator_id = cc2.id
+            WHERE cc2.creator_id = c.id AND pi.metode_pembayaran IS NOT NULL AND pi.metode_pembayaran != ''
+            ORDER BY pi.id DESC LIMIT 1
+          )
+        ) as bank_name,
+        COALESCE(
+          (
+            SELECT cb.account_number FROM creator_bank_accounts cb 
+            WHERE cb.creator_id = c.id AND cb.account_number IS NOT NULL AND cb.account_number != ''
+            ORDER BY cb.is_primary DESC, cb.id ASC LIMIT 1
+          ),
+          (
+            SELECT pi.nomor_rekening FROM payment_items pi
+            JOIN campaign_creators cc2 ON pi.campaign_creator_id = cc2.id
+            WHERE cc2.creator_id = c.id AND pi.nomor_rekening IS NOT NULL AND pi.nomor_rekening != ''
+            ORDER BY pi.id DESC LIMIT 1
+          )
+        ) as account_number,
+        COALESCE(
+          (
+            SELECT cb.account_holder FROM creator_bank_accounts cb 
+            WHERE cb.creator_id = c.id AND cb.account_holder IS NOT NULL AND cb.account_holder != ''
+            ORDER BY cb.is_primary DESC, cb.id ASC LIMIT 1
+          ),
+          (
+            SELECT pi.nama_penerima FROM payment_items pi
+            JOIN campaign_creators cc2 ON pi.campaign_creator_id = cc2.id
+            WHERE cc2.creator_id = c.id AND pi.nama_penerima IS NOT NULL AND pi.nama_penerima != ''
+            ORDER BY pi.id DESC LIMIT 1
+          )
+        ) as account_holder,
+        COALESCE(c.status_binding, 'Non-Binding') as status_binding,
+        cc.qty_vt,
+        cc.price,
+        cc.approval,
+        ct.id as contract_id,
+        ct.status as contract_status,
+        ct.nomor_kontrak,
+        ct.contract_data
+      FROM campaign_creators cc
+      JOIN creators c ON cc.creator_id = c.id
+      LEFT JOIN creator_contracts ct ON (ct.campaign_creator_id = cc.id OR (ct.campaign_id = cc.campaign_id AND ct.creator_id = c.id))
+      WHERE cc.campaign_id = ${campaignId}
+      ORDER BY cc.id ASC
+    `) as any[];
+
+    return { success: true, data: rows };
+  } catch (err: any) {
+    console.error('fetchCampaignCreatorsLookupForDokumenAction error:', err);
+    return { success: false, error: err.message, data: [] };
+  }
+}
+
+/**
+ * 8. Upsert Batch Kontrak dari Mini Excel Spreadsheet
+ */
+export async function upsertContractsBatchFromSpreadsheetAction(params: {
+  campaignId: number;
+  tipeDokumen?: string;
+  rows: Array<{
+    username: string;
+    namaKreator?: string;
+    statusBinding?: string;
+    nikKtp?: string;
+    alamatKreator?: string;
+    teleponKreator?: string;
+    namaBank?: string;
+    nomorRekening?: string;
+    atasNamaRekening?: string;
+    qtyVt?: number;
+    biayaHonor?: number;
+  }>;
+}) {
+  try {
+    const { sessionUser, profile } = await requireUser();
+    const picName = profile.fullName || sessionUser.email?.split('@')[0] || 'PIC TNT';
+    const picId = profile.id;
+    const { campaignId, rows } = params;
+    const tipeDokumen = params.tipeDokumen || 'perjanjian_kerjasama';
+
+    await ensureTipeDokumenCol();
+
+    if (!campaignId || !rows || rows.length === 0) {
+      return { success: false, error: 'Data baris tidak boleh kosong' };
+    }
+
+    const campRows = await db.execute(sql`
+      SELECT c.*, b.nama as brand_nama
+      FROM campaigns c
+      LEFT JOIN brands b ON c.brand_id = b.id
+      WHERE c.id = ${campaignId}
+      LIMIT 1
+    `) as any[];
+
+    if (!campRows || campRows.length === 0) {
+      return { success: false, error: 'Campaign tidak ditemukan' };
+    }
+    const camp = campRows[0];
+    const brandName = camp.brand_nama || 'Brand Partner';
+
+    const today = new Date();
+    const curYear = today.getFullYear();
+    const curRomanMonth = getRomanMonth(today.getMonth());
+
+    let updatedCount = 0;
+    let createdCount = 0;
+    let skippedCount = 0;
+
+    // Filter baris yang memiliki username
+    const validRows = rows.filter(r => r.username && r.username.trim() !== '');
+
+    const chunkSize = 20;
+    for (let i = 0; i < validRows.length; i += chunkSize) {
+      const chunk = validRows.slice(i, i + chunkSize);
+      await Promise.all(
+        chunk.map(async (row) => {
+          const cleanUsername = row.username.trim().replace(/^@+/, '').trim().toLowerCase();
+          if (!cleanUsername) return;
+
+          // 1. Cari atau buat kreator di creators
+          let creatorId: number;
+          const cExist = await db.execute(sql`
+            SELECT id, username, nama_lengkap, status_binding FROM creators WHERE LOWER(username) = ${cleanUsername} LIMIT 1
+          `) as any[];
+
+          if (cExist.length > 0) {
+            creatorId = cExist[0].id;
+          } else {
+            const [newC] = await db.execute(sql`
+              INSERT INTO creators (username, nama_lengkap, created_at, updated_at)
+              VALUES (${cleanUsername}, ${row.namaKreator || cleanUsername}, now(), now())
+              RETURNING id
+            `) as any[];
+            creatorId = newC.id;
+          }
+
+          // 2. Pastikan campaign_creators ada
+          let ccId: number;
+          const ccExist = await db.execute(sql`
+            SELECT id FROM campaign_creators WHERE campaign_id = ${campaignId} AND creator_id = ${creatorId} LIMIT 1
+          `) as any[];
+
+          if (ccExist.length > 0) {
+            ccId = ccExist[0].id;
+            if (row.biayaHonor !== undefined || row.qtyVt !== undefined) {
+              await db.execute(sql`
+                UPDATE campaign_creators
+                SET 
+                  price = COALESCE(${row.biayaHonor}, price),
+                  qty_vt = COALESCE(${row.qtyVt}, qty_vt),
+                  updated_at = now()
+                WHERE id = ${ccId}
+              `);
+            }
+          } else {
+            const [newCc] = await db.execute(sql`
+              INSERT INTO campaign_creators (
+                campaign_id, creator_id, approval, price, qty_vt, qty_live, created_at, updated_at
+              ) VALUES (
+                ${campaignId}, ${creatorId}, 'approved', ${row.biayaHonor || 0}, ${row.qtyVt || 1}, 0, now(), now()
+              ) RETURNING id
+            `) as any[];
+            ccId = newCc.id;
+          }
+
+          // 3. Cek apakah ada kontrak di creator_contracts
+          const ctExist = await db.execute(sql`
+            SELECT id, status, contract_data, tipe_dokumen
+            FROM creator_contracts
+            WHERE (campaign_creator_id = ${ccId} OR (campaign_id = ${campaignId} AND creator_id = ${creatorId}))
+            LIMIT 1
+          `) as any[];
+
+          const creatorRealName = row.namaKreator || cleanUsername;
+          const bindingStatus = (row.statusBinding || '').toLowerCase().includes('binding') && !(row.statusBinding || '').toLowerCase().includes('non')
+            ? 'KREATOR Binding'
+            : 'KREATOR Non-Binding';
+
+          if (ctExist.length > 0) {
+            const existingContract = ctExist[0];
+            if (existingContract.status === 'released') {
+              // Terkunci, jangan ubah
+              skippedCount++;
+              return;
+            }
+
+            const prevData = existingContract.contract_data || {};
+            const mergedContractData = {
+              ...prevData,
+              namaKreator: row.namaKreator || prevData.namaKreator || creatorRealName,
+              usernameTikTok: cleanUsername,
+              nikKtp: row.nikKtp !== undefined && row.nikKtp !== '' ? row.nikKtp : prevData.nikKtp,
+              alamatKreator: row.alamatKreator !== undefined && row.alamatKreator !== '' ? row.alamatKreator : prevData.alamatKreator,
+              teleponKreator: row.teleponKreator !== undefined && row.teleponKreator !== '' ? row.teleponKreator : prevData.teleponKreator,
+              statusBinding: bindingStatus,
+              namaBank: row.namaBank !== undefined && row.namaBank !== '' ? row.namaBank : prevData.namaBank,
+              nomorRekening: row.nomorRekening !== undefined && row.nomorRekening !== '' ? row.nomorRekening : prevData.nomorRekening,
+              atasNamaRekening: row.atasNamaRekening !== undefined && row.atasNamaRekening !== '' ? row.atasNamaRekening : (prevData.atasNamaRekening || creatorRealName),
+              qtyVt: row.qtyVt !== undefined ? Number(row.qtyVt) : (prevData.qtyVt || 1),
+              biayaHonor: row.biayaHonor !== undefined ? Number(row.biayaHonor) : (prevData.biayaHonor || 0),
+            };
+
+            await db.execute(sql`
+              UPDATE creator_contracts
+              SET 
+                status_binding = ${bindingStatus},
+                contract_data = ${JSON.stringify(mergedContractData)}::jsonb,
+                tipe_dokumen = ${tipeDokumen},
+                updated_at = now()
+              WHERE id = ${existingContract.id}
+            `);
+            updatedCount++;
+          } else {
+            // Buat draft baru
+            const creatorInitials = getInitials(creatorRealName);
+            const draftNumber = `[DRAFT]/JC-TNT/${creatorInitials}/${curRomanMonth}/${curYear}`;
+            const contractTitle = `Kontrak Join Campaign - @${cleanUsername} (${brandName})`;
+
+            const newContractData = {
+              nomorKontrak: draftNumber,
+              statusBinding: bindingStatus,
+              namaPerusahaan: 'PT TNT KREATIF DIGITAL',
+              alamatPerusahaan: 'Jalan Kavling Perkebunan Raya, RT 006 / RW 013, Panunggangan Barat, Kecamatan Cibodas, Kota Tangerang, Banten 15139',
+              namaDirekturTNT: 'Stevani',
+              jabatanDirekturTNT: 'Direktur',
+              namaSignerTNT: 'Ruben Arianto',
+              jabatanSignerTNT: 'Manajer Umum',
+              namaPicTNT: picName || 'Safira',
+              jabatanPicTNT: 'Project Manager',
+              namaKreator: creatorRealName,
+              usernameTikTok: cleanUsername,
+              tiktokUid: '',
+              nikKtp: row.nikKtp || '',
+              alamatKreator: row.alamatKreator || '',
+              teleponKreator: row.teleponKreator || '',
+              emailKreator: '',
+              namaBank: row.namaBank || '',
+              nomorRekening: row.nomorRekening || '',
+              atasNamaRekening: row.atasNamaRekening || creatorRealName,
+              namaCampaign: camp.nama,
+              namaBrand: brandName,
+              jenisCampaign: 'Fee',
+              qtyVt: Number(row.qtyVt) || 1,
+              qtyPhotoSlide: 0,
+              qtyLive: 0,
+              biayaHonor: Number(row.biayaHonor) || 0,
+              durasiKonten: '30 - 60',
+              durasiKontenTerbilang: 'tiga puluh sampai enam puluh',
+              skemaPembayaran: 'H+14 dari selesai Campaign sampai dengan H+21 dari selesai Campaign',
+              catatanTambahan: '',
+              tempatPerjanjian: 'Tangerang'
+            };
+
+            await db.execute(sql`
+              INSERT INTO creator_contracts (
+                creator_id,
+                campaign_id,
+                campaign_creator_id,
+                judul_kontrak,
+                link_kontrak,
+                nomor_kontrak,
+                status_binding,
+                signer_name,
+                signer_role,
+                status,
+                tipe_dokumen,
+                created_by_id,
+                created_by_name,
+                contract_data,
+                created_at,
+                updated_at
+              ) VALUES (
+                ${creatorId},
+                ${campaignId},
+                ${ccId},
+                ${contractTitle},
+                ${'#draft-' + ccId},
+                ${draftNumber},
+                ${bindingStatus},
+                ${'Ruben Arianto'},
+                ${'Manajer Umum'},
+                'draft',
+                ${tipeDokumen},
+                ${picId || null},
+                ${picName || 'System'},
+                ${JSON.stringify(newContractData)}::jsonb,
+                now(),
+                now()
+              )
+            `);
+            createdCount++;
+          }
+        })
+      );
+    }
+
+    revalidatePath(`/campaigns/${campaignId}/dokumen`);
+    revalidatePath('/dokumen');
+
+    return {
+      success: true,
+      updatedCount,
+      createdCount,
+      skippedCount,
+      message: `Berhasil memproses data: ${createdCount} draft baru dibuat, ${updatedCount} draft diperbarui${skippedCount > 0 ? `, ${skippedCount} dokumen yang sudah dirilis dilewati (terkunci)` : ''}.`
+    };
+  } catch (err: any) {
+    console.error('upsertContractsBatchFromSpreadsheetAction error:', err);
     return { success: false, error: err.message };
   }
 }

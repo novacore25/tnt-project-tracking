@@ -81,7 +81,7 @@ export default function DokumenClient({
     setIsLoadingContracts(true);
     try {
       const res = await fetchContractsAction({
-        campaignId: isCampaignScoped ? selectedCampaignId || undefined : undefined,
+        campaignId: isCampaignScoped ? selectedCampaignId || undefined : (selectedCampaignId || undefined),
       });
       if (res.success && res.data) {
         setContracts(res.data);
@@ -233,6 +233,27 @@ export default function DokumenClient({
 
 
 
+          {!isCampaignScoped && (
+            <div className="flex items-center gap-1.5 bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200">
+              <Building className="w-3.5 h-3.5 text-slate-500" />
+              <select
+                value={selectedCampaignId || "all"}
+                onChange={(e) => {
+                  const val = e.target.value === "all" ? null : Number(e.target.value);
+                  setSelectedCampaignId(val);
+                }}
+                className="bg-transparent text-xs font-semibold text-slate-700 outline-none cursor-pointer"
+              >
+                <option value="all">Semua Campaign</option>
+                {campaigns?.map((camp: any) => (
+                  <option key={camp.id} value={camp.id}>
+                    {camp.nama}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <button
             onClick={() => {
               fetchData();
@@ -261,6 +282,7 @@ export default function DokumenClient({
             setActiveTab("buat_dokumen");
           }}
           campaignId={selectedCampaignId || undefined}
+          campaignName={selectedCampaign?.nama || "Campaign"}
         />
       ) : activeTab === "buat_dokumen" ? (
         <ContractGeneratorWorkspace
