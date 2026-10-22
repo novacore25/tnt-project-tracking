@@ -198,6 +198,12 @@ export default function ContractGeneratorWorkspace({
   const [namaPicTNT, setNamaPicTNT] = useState(defaultUserName || "Safira");
   const [jabatanPicTNT, setJabatanPicTNT] = useState("Project Manager");
 
+  // Penandatangan Pihak TNT (Pihak Pertama)
+  const [namaSignerTNT, setNamaSignerTNT] = useState('Ruben Arianto');
+  const [jabatanSignerTNT, setJabatanSignerTNT] = useState('Manajer Umum');
+
+  // Pihak Kedua (Kreator)
+  const [statusBinding, setStatusBinding] = useState('KREATOR Non-Binding');
   // Pihak Kedua (Kreator)
   const [namaKreator, setNamaKreator] = useState("");
   const [usernameTikTok, setUsernameTikTok] = useState("");
@@ -339,6 +345,9 @@ export default function ContractGeneratorWorkspace({
     const tLahir = c.tempat_lahir || "";
     const tgLahir = c.tanggal_lahir ? String(c.tanggal_lahir).split("T")[0] : "";
 
+    const bindingVal = (c.status_binding || '').toLowerCase().includes('binding') && !(c.status_binding || '').toLowerCase().includes('non') ? 'KREATOR Binding' : 'KREATOR Non-Binding';
+    setStatusBinding(bindingVal);
+    const creatorInitials = getInitials(realName || uName);
     setNamaKreator(realName);
     setUsernameTikTok(uName);
     setTeleponKreator(phone);
@@ -357,7 +366,7 @@ export default function ContractGeneratorWorkspace({
 
     const seqStr = String(c.cc_id || 1).padStart(3, "0");
     const romanMonth = getRomanMonth(today.getMonth());
-    setNomorKontrak(`${seqStr}/JC-TNT/${inisialDrafter || "TNT"}/${romanMonth}/${curYear}`);
+    setNomorKontrak(`${seqStr}/JC-TNT/${creatorInitials || inisialDrafter || "TNT"}/${romanMonth}/${curYear}`);
     if (selectedCampaign?.nama) {
       setHashtag(`#${selectedCampaign.nama.replace(/\s+/g, "")}`);
     }
@@ -398,6 +407,7 @@ export default function ContractGeneratorWorkspace({
       const res = await syncContractCreatorProfileDataAction({
         creatorId: currentCreator.creator_id,
         namaLengkap: namaKreator,
+        statusBinding: statusBinding.replace('KREATOR ', ''),
         tiktokUid,
         nikKtp,
         alamatKtp: alamatKreator,
@@ -431,6 +441,7 @@ export default function ContractGeneratorWorkspace({
       await syncContractCreatorProfileDataAction({
         creatorId: currentCreator.creator_id,
         namaLengkap: namaKreator,
+        statusBinding: statusBinding.replace('KREATOR ', ''),
         tiktokUid,
         nikKtp,
         alamatKtp: alamatKreator,
@@ -520,12 +531,15 @@ export default function ContractGeneratorWorkspace({
       alamatPerusahaan,
       namaDirekturTNT: namaDirekturTNT || "Stevani",
       jabatanDirekturTNT: jabatanDirekturTNT || "Direktur",
+      namaSignerTNT: namaSignerTNT || "Ruben Arianto",
+      jabatanSignerTNT: jabatanSignerTNT || "Manajer Umum",
       namaPicTNT,
       jabatanPicTNT,
       teleponPerusahaan,
       emailPerusahaan,
 
       // Pihak Kedua (Kreator)
+      statusBinding,
       namaKreator: namaKreator || "Nama Content Creator",
       usernameTikTok: usernameTikTok || "username",
       tiktokUid,
@@ -855,6 +869,38 @@ export default function ContractGeneratorWorkspace({
             </div>
 
             <div className="space-y-3 text-xs">
+              {/* Status Kreator (Binding / Non-Binding) */}
+              <div>
+                <label className="font-semibold text-slate-700 flex items-center justify-between">
+                  <span>Status Kreator di Kontrak *</span>
+                  <span className="text-[10px] text-emerald-600 font-medium">KREATOR Binding / Non-Binding</span>
+                </label>
+                <div className="grid grid-cols-2 gap-2 mt-1">
+                  <button
+                    type="button"
+                    onClick={() => setStatusBinding("KREATOR Non-Binding")}
+                    className={`py-1.5 px-3 rounded-lg border text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
+                      statusBinding === "KREATOR Non-Binding"
+                        ? "bg-slate-900 text-white border-slate-900 shadow-sm"
+                        : "bg-white text-slate-700 border-slate-300 hover:bg-slate-50"
+                    }`}
+                  >
+                    <span>KREATOR Non-Binding</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setStatusBinding("KREATOR Binding")}
+                    className={`py-1.5 px-3 rounded-lg border text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
+                      statusBinding === "KREATOR Binding"
+                        ? "bg-emerald-700 text-white border-emerald-700 shadow-sm"
+                        : "bg-white text-slate-700 border-slate-300 hover:bg-slate-50"
+                    }`}
+                  >
+                    <span>KREATOR Binding</span>
+                  </button>
+                </div>
+              </div>
+
               {/* Nama Lengkap & Username TikTok */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -1123,6 +1169,27 @@ export default function ContractGeneratorWorkspace({
                   }}
                   placeholder="SF"
                   className="w-full mt-1 px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 font-mono font-bold uppercase focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="font-semibold text-slate-700">Penandatangan Akhir TNT *</label>
+                <input
+                  type="text"
+                  value={namaSignerTNT}
+                  onChange={(e) => setNamaSignerTNT(e.target.value)}
+                  placeholder="Ruben Arianto"
+                  className="w-full mt-1 px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 font-semibold focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 outline-none"
+                />
+              </div>
+              <div>
+                <label className="font-semibold text-slate-700">Jabatan Penandatangan</label>
+                <input
+                  type="text"
+                  value={jabatanSignerTNT}
+                  onChange={(e) => setJabatanSignerTNT(e.target.value)}
+                  placeholder="Manajer Umum"
+                  className="w-full mt-1 px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-900 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 outline-none"
                 />
               </div>
 

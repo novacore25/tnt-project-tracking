@@ -1009,6 +1009,7 @@ export async function syncContractCreatorProfileDataAction(data: {
   creatorId: number;
   namaLengkap?: string;
   tiktokUid?: string;
+  statusBinding?: string;
   nikKtp?: string;
   alamatKtp?: string;
   tempatLahir?: string;
@@ -1029,6 +1030,9 @@ export async function syncContractCreatorProfileDataAction(data: {
   try {
     // 1. Update master tabel creators
     const creatorSets: any[] = [];
+    if (data.statusBinding?.trim()) {
+      creatorSets.push(sql`status_binding = ${data.statusBinding.trim()}`);
+    }
     if (data.namaLengkap?.trim()) {
       creatorSets.push(sql`nama_asli = ${data.namaLengkap.trim()}`);
       creatorSets.push(sql`nama_lengkap = ${data.namaLengkap.trim()}`);

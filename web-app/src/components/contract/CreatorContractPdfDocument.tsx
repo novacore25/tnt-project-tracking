@@ -322,6 +322,8 @@ export interface CreatorContractData {
   alamatPerusahaan?: string; // default "Jalan Kavling Perkebunan Raya, RT 006 / RW 013, Panunggangan Barat, Kecamatan Cibodas, Kota Tangerang, Banten 15139"
   namaDirekturTNT?: string; // default "Stevani"
   jabatanDirekturTNT?: string; // default "Direktur"
+  namaSignerTNT?: string; // Penandatangan di akhir (Ruben Arianto / Stevani)
+  jabatanSignerTNT?: string; // Manajer Umum / Direktur
   namaPicTNT?: string; // Drafter / PIC name
   jabatanPicTNT?: string;
   teleponPerusahaan?: string;
@@ -329,6 +331,7 @@ export interface CreatorContractData {
 
   // Pihak Kedua (Kreator)
   namaKreator: string;
+  statusBinding?: string; // "KREATOR Binding" | "KREATOR Non-Binding"
   usernameTikTok: string;
   tiktokUid?: string;
   nikKtp?: string;
@@ -382,6 +385,9 @@ export function CreatorContractPdfDocument({ data }: { data: CreatorContractData
   const feePerVtFormatted = feePerVtNum.toLocaleString("id-ID");
 
   const namaDirektur = data.namaDirekturTNT || "Stevani";
+  const namaSigner = data.namaSignerTNT || "Ruben Arianto";
+  const jabatanSigner = data.jabatanSignerTNT || "Manajer Umum";
+  const statusBindingStr = data.statusBinding || "KREATOR Non-Binding";
   const namaPerusahaan = data.namaPerusahaan || "PT TNT KREATIF DIGITAL";
   const alamatPerusahaan =
     data.alamatPerusahaan ||
@@ -478,7 +484,8 @@ export function CreatorContractPdfDocument({ data }: { data: CreatorContractData
             di {data.alamatKreator || "______________"}, pemilik akun TikTok{" "}
             <Text style={styles.bold}>@{cleanUname || "_______"}</Text>, nomor telepon (WhatsApp){" "}
             <Text style={styles.bold}>{data.teleponKreator || "_____"}</Text> dan email{" "}
-            <Text style={styles.bold}>{data.emailKreator || "______"}</Text>, untuk selanjutnya disebut &ldquo;
+            <Text style={styles.bold}>{data.emailKreator || "______"}</Text>, dengan status{" "}
+            <Text style={styles.bold}>{statusBindingStr}</Text>, untuk selanjutnya disebut &ldquo;
             <Text style={styles.bold}>KREATOR</Text>&rdquo;.
           </Text>
         </View>
@@ -862,8 +869,9 @@ export function CreatorContractPdfDocument({ data }: { data: CreatorContractData
         <View style={[styles.listItem, { marginTop: 4 }]}>
           <Text style={styles.listNumber}>2.</Text>
           <Text style={styles.listText}>
-            Apabila jaminan tersebut tidak benar, TNT berhak menghentikan keikutsertaan KREATOR dalam Campaign dan
-            menerapkan Pasal 8 serta Pasal 13.
+            Apabila jaminan tersebut tidak benar, TNT berhak menghentikan keikutsertaan KREATOR dalam Campaign,
+            dan apabila KREATOR terlambat melebihi 14 (empat belas) Hari Kerja, maka Fee KREATOR dipotong sebesar
+            50% (lima puluh persen) serta berlaku Pasal 8 dan Pasal 13.
           </Text>
         </View>
 
@@ -1197,8 +1205,8 @@ export function CreatorContractPdfDocument({ data }: { data: CreatorContractData
           <View style={styles.signRow}>
             <View style={styles.signColumn}>
               <Text style={styles.signPartyLabel}>{namaPerusahaan}</Text>
-              <Text style={styles.signName}>{namaDirektur}</Text>
-              <Text style={styles.signRole}>{data.jabatanDirekturTNT || "Direktur"}</Text>
+              <Text style={styles.signName}>{namaSigner}</Text>
+              <Text style={styles.signRole}>{jabatanSigner}</Text>
             </View>
 
             <View style={styles.signColumn}>

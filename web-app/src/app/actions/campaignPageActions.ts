@@ -2496,6 +2496,7 @@ export async function fetchCampaignCreatorsForDocumentsAction(params: {
         c.npwp,
         c.tempat_lahir,
         c.tanggal_lahir,
+        COALESCE(c.status_binding, 'Non-Binding') as status_binding,
         COALESCE(
           (
             SELECT ct.nomor 
