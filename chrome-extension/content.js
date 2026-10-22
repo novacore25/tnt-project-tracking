@@ -1554,10 +1554,17 @@
       return;
     }
 
-    // 2. Masukkan username ke search input & submit pencarian
+    // 2. Masukkan username (wajib huruf kecil semua & tanpa spasi) ke search input & submit pencarian
     searchInput.focus();
-    setNativeInputValue(searchInput, cleanUser);
-    await sleep(300);
+    // Klik tombol clear jika ada di wrapper input
+    const clearBtn = searchInput.parentElement?.querySelector('.arco-input-clear-btn, [class*="clear"]');
+    if (clearBtn && typeof clearBtn.click === 'function') {
+      try { clearBtn.click(); } catch (_) {}
+    }
+    setNativeInputValue(searchInput, '');
+    await sleep(120);
+    setNativeInputValue(searchInput, cleanUser.toLowerCase());
+    await sleep(250);
     triggerSearchSubmit(searchInput);
 
     // Tunggu render hasil pencarian
@@ -1994,7 +2001,11 @@
       updateFloatingStatus('🔄 Menarik antrean target dari Creator Pool...');
       safeSendMessage({ action: 'FETCH_SCRAPE_TARGETS' }, (res) => {
         if (res && res.success && Array.isArray(res.targets) && res.targets.length > 0) {
-          targetQueueList = res.targets;
+          // Pastikan semua username target huruf kecil murni tanpa @ dan tanpa spasi
+          targetQueueList = res.targets.map((t) => ({
+            ...t,
+            username: String(t.username || '').trim().toLowerCase().replace(/^@/, ''),
+          }));
           currentTargetIndex = 0;
           if (targetBadge) {
             targetBadge.textContent = `${res.targets.length} target`;
