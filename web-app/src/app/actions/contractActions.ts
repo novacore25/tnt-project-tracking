@@ -19,15 +19,26 @@ function getInitials(name: string): string {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
-let hasEnsuredTipeDokumenCol = false;
+let hasEnsuredContractColumns = false;
 async function ensureTipeDokumenCol() {
-  if (hasEnsuredTipeDokumenCol) return;
+  if (hasEnsuredContractColumns) return;
   try {
     await db.execute(sql`
+      ALTER TABLE creator_contracts ADD COLUMN IF NOT EXISTS campaign_creator_id INT REFERENCES campaign_creators(id) ON DELETE SET NULL;
+      ALTER TABLE creator_contracts ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'draft';
+      ALTER TABLE creator_contracts ADD COLUMN IF NOT EXISTS seq_number INT;
+      ALTER TABLE creator_contracts ADD COLUMN IF NOT EXISTS created_by_id TEXT;
+      ALTER TABLE creator_contracts ADD COLUMN IF NOT EXISTS created_by_name TEXT;
+      ALTER TABLE creator_contracts ADD COLUMN IF NOT EXISTS released_by_id TEXT;
+      ALTER TABLE creator_contracts ADD COLUMN IF NOT EXISTS released_by_name TEXT;
+      ALTER TABLE creator_contracts ADD COLUMN IF NOT EXISTS released_at TIMESTAMPTZ;
+      ALTER TABLE creator_contracts ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now();
       ALTER TABLE creator_contracts ADD COLUMN IF NOT EXISTS tipe_dokumen TEXT DEFAULT 'perjanjian_kerjasama';
       CREATE INDEX IF NOT EXISTS idx_creator_contracts_tipe_dokumen ON creator_contracts(tipe_dokumen);
+      CREATE INDEX IF NOT EXISTS idx_creator_contracts_status ON creator_contracts(status);
+      CREATE INDEX IF NOT EXISTS idx_creator_contracts_seq ON creator_contracts(seq_number);
     `);
-    hasEnsuredTipeDokumenCol = true;
+    hasEnsuredContractColumns = true;
   } catch (e) {
     // ignore
   }
@@ -507,6 +518,7 @@ export async function saveContractDraftAction(params: {
 export async function getNextContractSequenceAction() {
   try {
     await requireUser();
+    await ensureTipeDokumenCol();
     const maxSeqResult = await db.execute(sql`
       SELECT COALESCE(MAX(seq_number), 0) as max_seq
       FROM creator_contracts
@@ -543,6 +555,7 @@ export async function releaseContractAction(contractId: number, options?: {
 }) {
   try {
     const { sessionUser, profile } = await requireUser();
+    await ensureTipeDokumenCol();
     const defaultPicName = (sessionUser as any).name || (profile as any).fullName || sessionUser.email?.split('@')[0] || 'PIC TNT';
     const picId = profile.id;
 
@@ -950,6 +963,7 @@ export async function upsertContractsBatchFromSpreadsheetAction(params: {
 }) {
   try {
     const { sessionUser, profile } = await requireUser();
+    await ensureTipeDokumenCol();
     const defaultPicName = (sessionUser as any).name || (profile as any).fullName || sessionUser.email?.split('@')[0] || 'PIC TNT';
     const picId = profile.id;
     const { campaignId, rows } = params;
