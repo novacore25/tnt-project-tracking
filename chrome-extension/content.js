@@ -2235,7 +2235,8 @@
             });
           }
           currentTargetIndex++;
-          await sleep(600);
+          // Beri jeda 1.4 detik agar Garbage Collector Chrome & OS membebaskan RAM tab yang baru ditutup
+          await sleep(1400);
           processNextTargetStep();
           return;
         }

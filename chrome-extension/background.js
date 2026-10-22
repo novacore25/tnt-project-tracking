@@ -448,6 +448,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
 
     if (action === 'STOP_AUTO_SCRAPE') {
+      clearDetailWatchdog();
       const storage = await getStorage([STORAGE_KEYS.QUEUE]);
       const queueLen = (storage[STORAGE_KEYS.QUEUE] || []).length;
       const newState = await updateAutoState({
@@ -510,6 +511,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
 
     if (action === 'DETAIL_TAB_OPENED_IM') {
+      clearDetailWatchdog();
       const detailTabId = sender?.tab?.id || null;
       await updateAutoState({
         activeDetailTabId: null,
@@ -584,6 +586,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
 
     if (action === 'SCRAPE_DETAIL_SUCCESS') {
+      clearDetailWatchdog();
       const creator = request.payload;
       const detailTabId = sender?.tab?.id || null;
 
@@ -677,8 +680,42 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   return true;
 });
 
+// Watchdog Anti-Crash OOM (Out of Memory) untuk tab detail
+let detailTabCrashWatchdog = null;
+
+function resetDetailWatchdog(tabId) {
+  if (detailTabCrashWatchdog) clearTimeout(detailTabCrashWatchdog);
+  detailTabCrashWatchdog = setTimeout(async () => {
+    const state = await getAutoState();
+    if (state.isRunning && (state.activeDetailTabId || tabId)) {
+      const deadTabId = state.activeDetailTabId || tabId;
+      console.warn(`[TNT Scraper] Tab detail ${deadTabId} tidak merespons (kemungkinan OOM Crash). Menutup otomatis...`);
+      if (deadTabId) {
+        chrome.tabs.remove(deadTabId).catch(() => {});
+      }
+      await updateAutoState({
+        activeDetailTabId: null,
+        activeImTabId: null,
+        currentUsername: null,
+        statusMessage: `⚠️ Tab detail kreator crash/timeout (OOM). Menutup tab otomatis & lanjut antrean...`,
+      });
+      if (state.listTabId) {
+        chrome.tabs.sendMessage(state.listTabId, { action: 'CONTINUE_NEXT_CARD' }).catch(() => {});
+      }
+    }
+  }, 22000);
+}
+
+function clearDetailWatchdog() {
+  if (detailTabCrashWatchdog) {
+    clearTimeout(detailTabCrashWatchdog);
+    detailTabCrashWatchdog = null;
+  }
+}
+
 // Jika tab IM ditutup, atau jika tab detail ditutup tanpa membuka IM, langsung bebaskan Find Creators!
 chrome.tabs.onRemoved.addListener(async (tabId) => {
+  clearDetailWatchdog();
   const state = await getAutoState();
   if (state.isRunning) {
     const isImTabClosed = Boolean(state.activeImTabId && state.activeImTabId === tabId);
@@ -704,6 +741,7 @@ chrome.tabs.onCreated.addListener(async (tab) => {
   const state = await getAutoState();
   if (state.isRunning && !state.activeDetailTabId && tab.id !== state.listTabId) {
     await updateAutoState({ activeDetailTabId: tab.id });
+    resetDetailWatchdog(tab.id);
   }
 });
 
