@@ -415,6 +415,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         STORAGE_KEYS.KNOWN_USERNAMES,
         STORAGE_KEYS.KNOWN_UPDATED_AT,
         'tnt_scrape_targets',
+        'tnt_active_target',
       ]);
       sendResponse({
         state: { ...DEFAULT_AUTO_STATE, ...(storage[STORAGE_KEYS.AUTO_STATE] || {}) },
@@ -423,6 +424,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         knownUsernames: storage[STORAGE_KEYS.KNOWN_USERNAMES] || [],
         knownUpdatedAt: storage[STORAGE_KEYS.KNOWN_UPDATED_AT] || null,
         scrapeTargets: storage.tnt_scrape_targets || [],
+        activeTarget: storage.tnt_active_target || null,
       });
       return;
     }

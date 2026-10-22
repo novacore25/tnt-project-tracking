@@ -2028,19 +2028,21 @@
         return;
       }
 
-      isTargetModeRunning = true;
-      isListLoopActive = false;
-      waitingForDetailTab = false;
-      currentTargetIndex = 0;
+      safeSendMessage({ action: 'START_AUTO_SCRAPE' }, (res) => {
+        isTargetModeRunning = true;
+        isListLoopActive = false;
+        waitingForDetailTab = false;
+        currentTargetIndex = 0;
 
-      const startBtn = document.getElementById('tnt-btn-start');
-      const stopBtn = document.getElementById('tnt-btn-stop');
-      if (startBtn) startBtn.style.display = 'none';
-      if (stopBtn) stopBtn.style.display = 'block';
-      if (runTargetsBtn) runTargetsBtn.style.display = 'none';
+        const startBtn = document.getElementById('tnt-btn-start');
+        const stopBtn = document.getElementById('tnt-btn-stop');
+        if (startBtn) startBtn.style.display = 'none';
+        if (stopBtn) stopBtn.style.display = 'block';
+        if (runTargetsBtn) runTargetsBtn.style.display = 'none';
 
-      // Mulai targeted loop
-      processNextTargetStep();
+        // Mulai targeted loop
+        processNextTargetStep();
+      });
     });
 
     document.getElementById('tnt-btn-push-staging').addEventListener('click', () => {
@@ -2282,7 +2284,13 @@
     }
 
     // Skenario B: Halaman Detail Kreator
-    if (isDetailPage && fullStatus?.state?.isRunning) {
+    const shouldAutoScrapeDetail =
+      isDetailPage &&
+      (fullStatus?.state?.isRunning ||
+        Boolean(fullStatus?.state?.currentUsername) ||
+        Boolean(fullStatus?.activeTarget));
+
+    if (shouldAutoScrapeDetail) {
       try {
         const scrapedData = await waitAndScrapeCreatorDetailPage(updateFloatingStatus);
 
