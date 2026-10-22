@@ -1492,6 +1492,7 @@
           </button>
           <span id="tnt-mode-pill" style="font-size:10px;background:rgba(255,255,255,0.1);padding:2px 8px;border-radius:999px;color:#cbd5e1;">Siap</span>
           <button id="tnt-btn-minimize-panel" title="Perkecil Panel" style="background:none;border:none;color:#94a3b8;cursor:pointer;font-size:13px;padding:0 4px;line-height:1;">—</button>
+          <button id="tnt-btn-close-panel" title="Sembunyikan Panel dari Layar" style="background:none;border:none;color:#94a3b8;cursor:pointer;font-size:13px;padding:0 4px;line-height:1;font-weight:700;">✕</button>
         </div>
       </div>
 
@@ -1615,6 +1616,73 @@
     if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
       chrome.storage.local.get(['tnt_ui_panel_minimized'], (res) => {
         if (res.tnt_ui_panel_minimized) setPanelMinimized(true);
+      });
+    }
+
+    // Tombol Close Panel (✕) & Launcher Bubble Mini
+    let launcherBubble = document.getElementById('tnt-launcher-bubble');
+    if (!launcherBubble) {
+      launcherBubble = document.createElement('div');
+      launcherBubble.id = 'tnt-launcher-bubble';
+      launcherBubble.style.cssText = `
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #4f46e5, #6366f1);
+        color: #fff;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        font-weight: 800;
+        font-size: 11px;
+        cursor: pointer;
+        box-shadow: 0 4px 14px rgba(79, 70, 229, 0.45);
+        z-index: 999999;
+        border: 2px solid rgba(255, 255, 255, 0.3);
+        user-select: none;
+        transition: transform 0.2s;
+      `;
+      launcherBubble.title = 'Buka TNT Scrapping Creator';
+      launcherBubble.textContent = 'TNT';
+      launcherBubble.addEventListener('mouseenter', () => {
+        launcherBubble.style.transform = 'scale(1.1)';
+      });
+      launcherBubble.addEventListener('mouseleave', () => {
+        launcherBubble.style.transform = 'scale(1)';
+      });
+      document.body.appendChild(launcherBubble);
+    }
+
+    function setPanelHidden(isHidden) {
+      if (!panelRoot) return;
+      if (isHidden) {
+        panelRoot.style.display = 'none';
+        if (launcherBubble) launcherBubble.style.display = 'flex';
+      } else {
+        panelRoot.style.display = 'block';
+        if (launcherBubble) launcherBubble.style.display = 'none';
+      }
+      if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+        chrome.storage.local.set({ tnt_ui_panel_hidden: isHidden });
+      }
+    }
+
+    window.__tntSetPanelHidden = setPanelHidden;
+
+    document.getElementById('tnt-btn-close-panel')?.addEventListener('click', () => {
+      setPanelHidden(true);
+    });
+
+    launcherBubble?.addEventListener('click', () => {
+      setPanelHidden(false);
+    });
+
+    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+      chrome.storage.local.get(['tnt_ui_panel_hidden'], (res) => {
+        if (res.tnt_ui_panel_hidden) setPanelHidden(true);
       });
     }
 
@@ -1832,6 +1900,16 @@
   // 7. LISTENER PESAN DARI BACKGROUND & AUTO-TRIGGER DETAIL TAB
   // ============================================================================
   chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    if (request.action === 'TOGGLE_PANEL_VISIBILITY') {
+      const panel = document.getElementById('tnt-scraping-creator-panel');
+      const isHidden = panel && panel.style.display === 'none';
+      if (typeof window.__tntSetPanelHidden === 'function') {
+        window.__tntSetPanelHidden(!isHidden);
+      }
+      sendResponse({ ok: true, isHidden: !isHidden });
+      return;
+    }
+
     if (request.action === 'STATE_UPDATED') {
       syncPanelWithBackground();
       sendResponse({ ok: true });

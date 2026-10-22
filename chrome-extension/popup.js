@@ -10,6 +10,24 @@ document.addEventListener('DOMContentLoaded', () => {
   const syncMsg = document.getElementById('sync-msg');
   const clearBtn = document.getElementById('clear-all-btn');
   const sendBtn = document.getElementById('send-all-btn');
+  const togglePanelBtn = document.getElementById('toggle-panel-btn');
+
+  if (togglePanelBtn) {
+    togglePanelBtn.onclick = () => {
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        const activeTab = tabs?.[0];
+        if (activeTab?.id) {
+          chrome.tabs.sendMessage(activeTab.id, { action: 'TOGGLE_PANEL_VISIBILITY' }, (res) => {
+            if (chrome.runtime.lastError) {
+              showMessage('Buka tab TikTok Partner Center terlebih dahulu.');
+            } else {
+              window.close();
+            }
+          });
+        }
+      });
+    };
+  }
 
   function formatIdr(val) {
     const num = Math.round(Number(val) || 0);
