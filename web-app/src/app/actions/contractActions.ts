@@ -823,19 +823,52 @@ export async function upsertContractsBatchFromSpreadsheetAction(params: {
     username: string;
     namaKreator?: string;
     statusBinding?: string;
+    tiktokUid?: string;
     nikKtp?: string;
     alamatKreator?: string;
+    tanggalLahir?: string;
+    tempatLahir?: string;
     teleponKreator?: string;
+    emailKreator?: string;
+    npwpKreator?: string;
     namaBank?: string;
     nomorRekening?: string;
     atasNamaRekening?: string;
+    namaBrand?: string;
+    jenisCampaign?: string;
     qtyVt?: number;
+    qtyPhotoSlide?: number;
+    qtyLive?: number;
+    durasiKonten?: string;
+    durasiKontenTerbilang?: string;
+    hashtagCampaign?: string;
+    tanggalKirimDraft?: string;
+    tanggalMulaiPosting?: string;
+    tanggalBatasPosting?: string;
     biayaHonor?: number;
+    feePerDeliverable?: number;
+    skemaPembayaran?: string;
+    batasWaktuRevisi?: string;
+    jangkaWaktuTayang?: string;
+    rawKontrakMulai?: string;
+    rawKontrakBerakhir?: string;
+    catatanTambahan?: string;
+    namaDirekturTNT?: string;
+    jabatanDirekturTNT?: string;
+    namaPicTNT?: string;
+    inisialPicTNT?: string;
+    namaSignerTNT?: string;
+    jabatanSignerTNT?: string;
+    namaPerusahaan?: string;
+    alamatPerusahaan?: string;
+    nomorKontrak?: string;
+    tanggalPerjanjian?: string;
+    tempatPerjanjian?: string;
   }>;
 }) {
   try {
     const { sessionUser, profile } = await requireUser();
-    const picName = profile.fullName || sessionUser.email?.split('@')[0] || 'PIC TNT';
+    const defaultPicName = profile.fullName || sessionUser.email?.split('@')[0] || 'PIC TNT';
     const picId = profile.id;
     const { campaignId, rows } = params;
     const tipeDokumen = params.tipeDokumen || 'perjanjian_kerjasama';
@@ -858,7 +891,7 @@ export async function upsertContractsBatchFromSpreadsheetAction(params: {
       return { success: false, error: 'Campaign tidak ditemukan' };
     }
     const camp = campRows[0];
-    const brandName = camp.brand_nama || 'Brand Partner';
+    const defaultBrandName = camp.brand_nama || 'Brand Partner';
 
     const today = new Date();
     const curYear = today.getFullYear();
@@ -885,13 +918,33 @@ export async function upsertContractsBatchFromSpreadsheetAction(params: {
             SELECT id, username, nama_lengkap, status_binding FROM creators WHERE LOWER(username) = ${cleanUsername} LIMIT 1
           `) as any[];
 
+          const creatorRealName = row.namaKreator || cleanUsername;
+          const bindingStatus = (row.statusBinding || '').toLowerCase().includes('binding') && !(row.statusBinding || '').toLowerCase().includes('non')
+            ? 'KREATOR Binding'
+            : 'KREATOR Non-Binding';
+
           if (cExist.length > 0) {
             creatorId = cExist[0].id;
+            await db.execute(sql`
+              UPDATE creators
+              SET 
+                nama_lengkap = COALESCE(NULLIF(${row.namaKreator || ''}, ''), nama_lengkap),
+                status_binding = ${bindingStatus},
+                nik = COALESCE(NULLIF(${row.nikKtp || ''}, ''), nik),
+                alamat_ktp = COALESCE(NULLIF(${row.alamatKreator || ''}, ''), alamat_ktp),
+                no_whatsapp = COALESCE(NULLIF(${row.teleponKreator || ''}, ''), no_whatsapp),
+                email = COALESCE(NULLIF(${row.emailKreator || ''}, ''), email),
+                npwp = COALESCE(NULLIF(${row.npwpKreator || ''}, ''), npwp),
+                updated_at = now()
+              WHERE id = ${creatorId}
+            `);
           } else {
             const [newC] = await db.execute(sql`
-              INSERT INTO creators (username, nama_lengkap, created_at, updated_at)
-              VALUES (${cleanUsername}, ${row.namaKreator || cleanUsername}, now(), now())
-              RETURNING id
+              INSERT INTO creators (
+                username, nama_lengkap, status_binding, nik, alamat_ktp, no_whatsapp, email, npwp, created_at, updated_at
+              ) VALUES (
+                ${cleanUsername}, ${creatorRealName}, ${bindingStatus}, ${row.nikKtp || null}, ${row.alamatKreator || null}, ${row.teleponKreator || null}, ${row.emailKreator || null}, ${row.npwpKreator || null}, now(), now()
+              ) RETURNING id
             `) as any[];
             creatorId = newC.id;
           }
@@ -902,24 +955,27 @@ export async function upsertContractsBatchFromSpreadsheetAction(params: {
             SELECT id FROM campaign_creators WHERE campaign_id = ${campaignId} AND creator_id = ${creatorId} LIMIT 1
           `) as any[];
 
+          const honorVal = row.biayaHonor !== undefined ? Number(row.biayaHonor) : 0;
+          const vtVal = row.qtyVt !== undefined ? Number(row.qtyVt) : 1;
+          const liveVal = row.qtyLive !== undefined ? Number(row.qtyLive) : 0;
+
           if (ccExist.length > 0) {
             ccId = ccExist[0].id;
-            if (row.biayaHonor !== undefined || row.qtyVt !== undefined) {
-              await db.execute(sql`
-                UPDATE campaign_creators
-                SET 
-                  price = COALESCE(${row.biayaHonor}, price),
-                  qty_vt = COALESCE(${row.qtyVt}, qty_vt),
-                  updated_at = now()
-                WHERE id = ${ccId}
-              `);
-            }
+            await db.execute(sql`
+              UPDATE campaign_creators
+              SET 
+                price = COALESCE(${row.biayaHonor}, price),
+                qty_vt = COALESCE(${row.qtyVt}, qty_vt),
+                qty_live = COALESCE(${row.qtyLive}, qty_live),
+                updated_at = now()
+              WHERE id = ${ccId}
+            `);
           } else {
             const [newCc] = await db.execute(sql`
               INSERT INTO campaign_creators (
                 campaign_id, creator_id, approval, price, qty_vt, qty_live, created_at, updated_at
               ) VALUES (
-                ${campaignId}, ${creatorId}, 'approved', ${row.biayaHonor || 0}, ${row.qtyVt || 1}, 0, now(), now()
+                ${campaignId}, ${creatorId}, 'approved', ${honorVal}, ${vtVal}, ${liveVal}, now(), now()
               ) RETURNING id
             `) as any[];
             ccId = newCc.id;
@@ -927,16 +983,16 @@ export async function upsertContractsBatchFromSpreadsheetAction(params: {
 
           // 3. Cek apakah ada kontrak di creator_contracts
           const ctExist = await db.execute(sql`
-            SELECT id, status, contract_data, tipe_dokumen
+            SELECT id, status, contract_data, tipe_dokumen, nomor_kontrak
             FROM creator_contracts
             WHERE (campaign_creator_id = ${ccId} OR (campaign_id = ${campaignId} AND creator_id = ${creatorId}))
             LIMIT 1
           `) as any[];
 
-          const creatorRealName = row.namaKreator || cleanUsername;
-          const bindingStatus = (row.statusBinding || '').toLowerCase().includes('binding') && !(row.statusBinding || '').toLowerCase().includes('non')
-            ? 'KREATOR Binding'
-            : 'KREATOR Non-Binding';
+          const currentBrandName = row.namaBrand || defaultBrandName;
+          const currentPicName = row.namaPicTNT || defaultPicName;
+          const creatorInitials = getInitials(creatorRealName);
+          const defaultDraftNumber = `[DRAFT]/JC-TNT/${creatorInitials}/${curRomanMonth}/${curYear}`;
 
           if (ctExist.length > 0) {
             const existingContract = ctExist[0];
@@ -949,17 +1005,51 @@ export async function upsertContractsBatchFromSpreadsheetAction(params: {
             const prevData = existingContract.contract_data || {};
             const mergedContractData = {
               ...prevData,
+              nomorKontrak: row.nomorKontrak || existingContract.nomor_kontrak || prevData.nomorKontrak || defaultDraftNumber,
+              statusBinding: bindingStatus,
               namaKreator: row.namaKreator || prevData.namaKreator || creatorRealName,
               usernameTikTok: cleanUsername,
+              tiktokUid: row.tiktokUid !== undefined ? row.tiktokUid : (prevData.tiktokUid || ''),
               nikKtp: row.nikKtp !== undefined && row.nikKtp !== '' ? row.nikKtp : prevData.nikKtp,
               alamatKreator: row.alamatKreator !== undefined && row.alamatKreator !== '' ? row.alamatKreator : prevData.alamatKreator,
+              tanggalLahir: row.tanggalLahir !== undefined ? row.tanggalLahir : (prevData.tanggalLahir || ''),
+              tempatLahir: row.tempatLahir !== undefined ? row.tempatLahir : (prevData.tempatLahir || ''),
               teleponKreator: row.teleponKreator !== undefined && row.teleponKreator !== '' ? row.teleponKreator : prevData.teleponKreator,
-              statusBinding: bindingStatus,
+              emailKreator: row.emailKreator !== undefined ? row.emailKreator : (prevData.emailKreator || ''),
+              npwpKreator: row.npwpKreator !== undefined ? row.npwpKreator : (prevData.npwpKreator || ''),
               namaBank: row.namaBank !== undefined && row.namaBank !== '' ? row.namaBank : prevData.namaBank,
               nomorRekening: row.nomorRekening !== undefined && row.nomorRekening !== '' ? row.nomorRekening : prevData.nomorRekening,
               atasNamaRekening: row.atasNamaRekening !== undefined && row.atasNamaRekening !== '' ? row.atasNamaRekening : (prevData.atasNamaRekening || creatorRealName),
+              namaCampaign: camp.nama,
+              namaBrand: currentBrandName,
+              jenisCampaign: row.jenisCampaign || prevData.jenisCampaign || 'Fee',
               qtyVt: row.qtyVt !== undefined ? Number(row.qtyVt) : (prevData.qtyVt || 1),
+              qtyPhotoSlide: row.qtyPhotoSlide !== undefined ? Number(row.qtyPhotoSlide) : (prevData.qtyPhotoSlide || 0),
+              qtyLive: row.qtyLive !== undefined ? Number(row.qtyLive) : (prevData.qtyLive || 0),
+              durasiKonten: row.durasiKonten || prevData.durasiKonten || '30 - 60',
+              durasiKontenTerbilang: row.durasiKontenTerbilang || prevData.durasiKontenTerbilang || 'tiga puluh sampai enam puluh',
+              hashtagCampaign: row.hashtagCampaign || prevData.hashtagCampaign || '',
+              tanggalKirimDraft: row.tanggalKirimDraft || prevData.tanggalKirimDraft || '',
+              tanggalMulaiPosting: row.tanggalMulaiPosting || prevData.tanggalMulaiPosting || '',
+              tanggalBatasPosting: row.tanggalBatasPosting || prevData.tanggalBatasPosting || '',
               biayaHonor: row.biayaHonor !== undefined ? Number(row.biayaHonor) : (prevData.biayaHonor || 0),
+              feePerDeliverable: row.feePerDeliverable !== undefined ? Number(row.feePerDeliverable) : (prevData.feePerDeliverable || 0),
+              skemaPembayaran: row.skemaPembayaran || prevData.skemaPembayaran || 'H+14 dari selesai Campaign sampai dengan H+21 dari selesai Campaign',
+              batasWaktuRevisi: row.batasWaktuRevisi || prevData.batasWaktuRevisi || '2 (dua)',
+              jangkaWaktuTayang: row.jangkaWaktuTayang || prevData.jangkaWaktuTayang || '60 (enam puluh)',
+              rawKontrakMulai: row.rawKontrakMulai || prevData.rawKontrakMulai || '',
+              rawKontrakBerakhir: row.rawKontrakBerakhir || prevData.rawKontrakBerakhir || '',
+              catatanTambahan: row.catatanTambahan !== undefined ? row.catatanTambahan : (prevData.catatanTambahan || ''),
+              namaDirekturTNT: row.namaDirekturTNT || prevData.namaDirekturTNT || 'Stevani',
+              jabatanDirekturTNT: row.jabatanDirekturTNT || prevData.jabatanDirekturTNT || 'Direktur',
+              namaPicTNT: currentPicName,
+              inisialPicTNT: row.inisialPicTNT || prevData.inisialPicTNT || getInitials(currentPicName),
+              namaSignerTNT: row.namaSignerTNT || prevData.namaSignerTNT || 'Ruben Arianto',
+              jabatanSignerTNT: row.jabatanSignerTNT || prevData.jabatanSignerTNT || 'Manajer Umum',
+              namaPerusahaan: row.namaPerusahaan || prevData.namaPerusahaan || 'PT TNT KREATIF DIGITAL',
+              alamatPerusahaan: row.alamatPerusahaan || prevData.alamatPerusahaan || 'Jalan Kavling Perkebunan Raya, RT 006 / RW 013, Panunggangan Barat, Kecamatan Cibodas, Kota Tangerang, Banten 15139',
+              tanggalPerjanjian: row.tanggalPerjanjian || prevData.tanggalPerjanjian || '',
+              tempatPerjanjian: row.tempatPerjanjian || prevData.tempatPerjanjian || 'Tangerang'
             };
 
             await db.execute(sql`
@@ -974,43 +1064,56 @@ export async function upsertContractsBatchFromSpreadsheetAction(params: {
             updatedCount++;
           } else {
             // Buat draft baru
-            const creatorInitials = getInitials(creatorRealName);
-            const draftNumber = `[DRAFT]/JC-TNT/${creatorInitials}/${curRomanMonth}/${curYear}`;
-            const contractTitle = `Kontrak Join Campaign - @${cleanUsername} (${brandName})`;
+            const draftNumber = row.nomorKontrak || defaultDraftNumber;
+            const contractTitle = `Kontrak Join Campaign - @${cleanUsername} (${currentBrandName})`;
 
             const newContractData = {
               nomorKontrak: draftNumber,
               statusBinding: bindingStatus,
-              namaPerusahaan: 'PT TNT KREATIF DIGITAL',
-              alamatPerusahaan: 'Jalan Kavling Perkebunan Raya, RT 006 / RW 013, Panunggangan Barat, Kecamatan Cibodas, Kota Tangerang, Banten 15139',
-              namaDirekturTNT: 'Stevani',
-              jabatanDirekturTNT: 'Direktur',
-              namaSignerTNT: 'Ruben Arianto',
-              jabatanSignerTNT: 'Manajer Umum',
-              namaPicTNT: picName || 'Safira',
+              namaPerusahaan: row.namaPerusahaan || 'PT TNT KREATIF DIGITAL',
+              alamatPerusahaan: row.alamatPerusahaan || 'Jalan Kavling Perkebunan Raya, RT 006 / RW 013, Panunggangan Barat, Kecamatan Cibodas, Kota Tangerang, Banten 15139',
+              namaDirekturTNT: row.namaDirekturTNT || 'Stevani',
+              jabatanDirekturTNT: row.jabatanDirekturTNT || 'Direktur',
+              namaSignerTNT: row.namaSignerTNT || 'Ruben Arianto',
+              jabatanSignerTNT: row.jabatanSignerTNT || 'Manajer Umum',
+              namaPicTNT: currentPicName,
+              inisialPicTNT: row.inisialPicTNT || getInitials(currentPicName),
               jabatanPicTNT: 'Project Manager',
               namaKreator: creatorRealName,
               usernameTikTok: cleanUsername,
-              tiktokUid: '',
+              tiktokUid: row.tiktokUid || '',
               nikKtp: row.nikKtp || '',
               alamatKreator: row.alamatKreator || '',
+              tanggalLahir: row.tanggalLahir || '',
+              tempatLahir: row.tempatLahir || '',
               teleponKreator: row.teleponKreator || '',
-              emailKreator: '',
+              emailKreator: row.emailKreator || '',
+              npwpKreator: row.npwpKreator || '',
               namaBank: row.namaBank || '',
               nomorRekening: row.nomorRekening || '',
               atasNamaRekening: row.atasNamaRekening || creatorRealName,
               namaCampaign: camp.nama,
-              namaBrand: brandName,
-              jenisCampaign: 'Fee',
-              qtyVt: Number(row.qtyVt) || 1,
-              qtyPhotoSlide: 0,
-              qtyLive: 0,
-              biayaHonor: Number(row.biayaHonor) || 0,
-              durasiKonten: '30 - 60',
-              durasiKontenTerbilang: 'tiga puluh sampai enam puluh',
-              skemaPembayaran: 'H+14 dari selesai Campaign sampai dengan H+21 dari selesai Campaign',
-              catatanTambahan: '',
-              tempatPerjanjian: 'Tangerang'
+              namaBrand: currentBrandName,
+              jenisCampaign: row.jenisCampaign || 'Fee',
+              qtyVt: vtVal,
+              qtyPhotoSlide: row.qtyPhotoSlide !== undefined ? Number(row.qtyPhotoSlide) : 0,
+              qtyLive: liveVal,
+              biayaHonor: honorVal,
+              feePerDeliverable: row.feePerDeliverable !== undefined ? Number(row.feePerDeliverable) : 0,
+              durasiKonten: row.durasiKonten || '30 - 60',
+              durasiKontenTerbilang: row.durasiKontenTerbilang || 'tiga puluh sampai enam puluh',
+              hashtagCampaign: row.hashtagCampaign || '',
+              tanggalKirimDraft: row.tanggalKirimDraft || '',
+              tanggalMulaiPosting: row.tanggalMulaiPosting || '',
+              tanggalBatasPosting: row.tanggalBatasPosting || '',
+              skemaPembayaran: row.skemaPembayaran || 'H+14 dari selesai Campaign sampai dengan H+21 dari selesai Campaign',
+              batasWaktuRevisi: row.batasWaktuRevisi || '2 (dua)',
+              jangkaWaktuTayang: row.jangkaWaktuTayang || '60 (enam puluh)',
+              rawKontrakMulai: row.rawKontrakMulai || '',
+              rawKontrakBerakhir: row.rawKontrakBerakhir || '',
+              catatanTambahan: row.catatanTambahan || '',
+              tanggalPerjanjian: row.tanggalPerjanjian || '',
+              tempatPerjanjian: row.tempatPerjanjian || 'Tangerang'
             };
 
             await db.execute(sql`
@@ -1039,12 +1142,12 @@ export async function upsertContractsBatchFromSpreadsheetAction(params: {
                 ${'#draft-' + ccId},
                 ${draftNumber},
                 ${bindingStatus},
-                ${'Ruben Arianto'},
-                ${'Manajer Umum'},
+                ${row.namaSignerTNT || 'Ruben Arianto'},
+                ${row.jabatanSignerTNT || 'Manajer Umum'},
                 'draft',
                 ${tipeDokumen},
                 ${picId || null},
-                ${picName || 'System'},
+                ${currentPicName},
                 ${JSON.stringify(newContractData)}::jsonb,
                 now(),
                 now()
