@@ -29,6 +29,7 @@ import {
 } from "@/app/actions/contractActions";
 import DocumentSpreadsheetModal from "./DocumentSpreadsheetModal";
 import ContractPreviewModal from "./ContractPreviewModal";
+import ReleaseContractModal from "./ReleaseContractModal";
 
 interface ContractTableViewProps {
   contracts: any[];
@@ -64,6 +65,7 @@ export default function ContractTableView({
   // Modal State
   const [isSpreadsheetOpen, setIsSpreadsheetOpen] = useState(false);
   const [previewingContract, setPreviewingContract] = useState<any | null>(null);
+  const [releasingContract, setReleasingContract] = useState<any | null>(null);
 
   const showToast = (success: boolean, text: string) => {
     setToastMsg({ success, text });
@@ -522,7 +524,7 @@ export default function ContractTableView({
                           {!isReleased && (
                             <button
                               type="button"
-                              onClick={() => handleReleaseContract(c)}
+                              onClick={() => setReleasingContract(c)}
                               disabled={actionLoadingId === c.id}
                               className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] font-bold transition-all shadow-2xs flex items-center gap-1 cursor-pointer disabled:opacity-50"
                               title="Rilis Resmi & Kunci Nomor Dokumen"
@@ -585,6 +587,17 @@ export default function ContractTableView({
         isOpen={Boolean(previewingContract)}
         onClose={() => setPreviewingContract(null)}
         contract={previewingContract}
+      />
+
+      {/* MODAL VERIFIKASI DATA & RILIS DOKUMEN RESMI */}
+      <ReleaseContractModal
+        isOpen={Boolean(releasingContract)}
+        onClose={() => setReleasingContract(null)}
+        contract={releasingContract}
+        onSuccess={() => {
+          showToast(true, "Dokumen resmi berhasil dirilis!");
+          onRefresh();
+        }}
       />
     </div>
   );

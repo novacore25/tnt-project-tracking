@@ -148,19 +148,6 @@ const ALL_COLUMNS: ColumnDef[] = [
   { key: "rawKontrakMulai", label: "Periode Kontrak Mulai", category: "deliverables", width: "w-36", placeholder: "dd/mm/yyyy" },
   { key: "rawKontrakBerakhir", label: "Periode Kontrak Selesai", category: "deliverables", width: "w-36", placeholder: "dd/mm/yyyy" },
   { key: "catatanTambahan", label: "Catatan Tambahan (Lampiran I)", category: "deliverables", width: "w-64", placeholder: "Catatan teknis..." },
-
-  // --- PIHAK PERTAMA (TNT) & LEGALITAS ---
-  { key: "namaDirekturTNT", label: "Nama Direktur TNT", category: "legalitas", width: "w-36", placeholder: "Stevani" },
-  { key: "jabatanDirekturTNT", label: "Jabatan Perwakilan", category: "legalitas", width: "w-36", placeholder: "Direktur" },
-  { key: "namaPicTNT", label: "Nama Drafter / PIC TNT", category: "legalitas", width: "w-44", placeholder: "Nama PIC" },
-  { key: "inisialPicTNT", label: "Inisial Nama Drafter", category: "legalitas", width: "w-32", placeholder: "HN" },
-  { key: "namaSignerTNT", label: "Penandatangan Akhir TNT", category: "legalitas", width: "w-44", placeholder: "Ruben Arianto" },
-  { key: "jabatanSignerTNT", label: "Jabatan Penandatangan", category: "legalitas", width: "w-40", placeholder: "Manajer Umum" },
-  { key: "namaPerusahaan", label: "Nama Entitas Perusahaan", category: "legalitas", width: "w-48", placeholder: "PT TNT KREATIF DIGITAL" },
-  { key: "alamatPerusahaan", label: "Alamat Kantor Resmi", category: "legalitas", width: "w-64", placeholder: "Jl. Kavling Perkebunan..." },
-  { key: "nomorKontrak", label: "Nomor Surat Kontrak", category: "legalitas", width: "w-48", placeholder: "001/JC-TNT/..." },
-  { key: "tanggalPerjanjian", label: "Pilih Tanggal Kontrak", category: "legalitas", width: "w-36", placeholder: "dd/mm/yyyy" },
-  { key: "tempatPerjanjian", label: "Kota Penandatanganan", category: "legalitas", width: "w-36", placeholder: "Tangerang" },
 ];
 
 const createEmptyRow = (defaultBrand: string = ""): DocumentSpreadsheetRow => {
@@ -567,17 +554,6 @@ export default function DocumentSpreadsheetModal({
         rawKontrakMulai: r.rawKontrakMulai.trim() || undefined,
         rawKontrakBerakhir: r.rawKontrakBerakhir.trim() || undefined,
         catatanTambahan: r.catatanTambahan.trim() || undefined,
-        namaDirekturTNT: r.namaDirekturTNT.trim() || undefined,
-        jabatanDirekturTNT: r.jabatanDirekturTNT.trim() || undefined,
-        namaPicTNT: r.namaPicTNT.trim() || undefined,
-        inisialPicTNT: r.inisialPicTNT.trim() || undefined,
-        namaSignerTNT: r.namaSignerTNT.trim() || undefined,
-        jabatanSignerTNT: r.jabatanSignerTNT.trim() || undefined,
-        namaPerusahaan: r.namaPerusahaan.trim() || undefined,
-        alamatPerusahaan: r.alamatPerusahaan.trim() || undefined,
-        nomorKontrak: r.nomorKontrak.trim() || undefined,
-        tanggalPerjanjian: r.tanggalPerjanjian.trim() || undefined,
-        tempatPerjanjian: r.tempatPerjanjian.trim() || undefined,
       }));
 
       const res = await upsertContractsBatchFromSpreadsheetAction({
@@ -744,17 +720,6 @@ export default function DocumentSpreadsheetModal({
             >
               <Calendar className="w-3.5 h-3.5" />
               <span>3. Deliverables &amp; Lampiran</span>
-            </button>
-            <button
-              onClick={() => setActiveCategoryFilter("legalitas")}
-              className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
-                activeCategoryFilter === "legalitas"
-                  ? "bg-indigo-600 text-white shadow-2xs font-bold"
-                  : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
-              }`}
-            >
-              <Building className="w-3.5 h-3.5" />
-              <span>4. Pihak Pertama (TNT)</span>
             </button>
           </div>
 

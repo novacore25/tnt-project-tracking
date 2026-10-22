@@ -49,7 +49,7 @@ export async function fetchContractsAction(params?: {
       await syncApprovedCreatorDraftsInternal(
         params.campaignId,
         profile.id,
-        profile.fullName || sessionUser.email?.split('@')[0]
+        (sessionUser as any).name || (profile as any).fullName || sessionUser.email?.split('@')[0] || 'PIC TNT'
       );
     }
 
@@ -107,7 +107,11 @@ export async function fetchContractsAction(params?: {
 /**
  * Internal Sync: Pastikan seluruh kreator approved otomatis memiliki draft kontrak
  */
-async function syncApprovedCreatorDraftsInternal(campaignId: number, picId?: string, picName?: string) {
+async function syncApprovedCreatorDraftsInternal(
+  campaignId: number,
+  picId?: string,
+  picName?: string
+): Promise<{ createdCount: number; existingCount: number }> {
   try {
     const campRows = await db.execute(sql`
       SELECT c.*, b.nama as brand_nama
@@ -116,7 +120,7 @@ async function syncApprovedCreatorDraftsInternal(campaignId: number, picId?: str
       WHERE c.id = ${campaignId}
       LIMIT 1
     `) as any[];
-    if (!campRows || campRows.length === 0) return;
+    if (!campRows || campRows.length === 0) return { createdCount: 0, existingCount: 0 };
     const camp = campRows[0];
     const brandName = camp.brand_nama || 'Brand Partner';
 
@@ -379,7 +383,7 @@ async function syncApprovedCreatorDraftsInternal(campaignId: number, picId?: str
 export async function autoGenerateApprovedCreatorDraftsAction(campaignId: number) {
   try {
     const { sessionUser, profile } = await requireUser();
-    const picName = profile.fullName || sessionUser.email?.split('@')[0] || 'PIC TNT';
+    const picName = (sessionUser as any).name || (profile as any).fullName || sessionUser.email?.split('@')[0] || 'PIC TNT';
     const picId = profile.id;
 
     const res = await syncApprovedCreatorDraftsInternal(campaignId, picId, picName);
@@ -413,7 +417,7 @@ export async function saveContractDraftAction(params: {
 }) {
   try {
     const { sessionUser, profile } = await requireUser();
-    const picName = profile.fullName || sessionUser.email?.split('@')[0] || 'PIC TNT';
+    const picName = (sessionUser as any).name || (profile as any).fullName || sessionUser.email?.split('@')[0] || 'PIC TNT';
     const picId = profile.id;
 
     const { contractId, campaignId, creatorId, campaignCreatorId, contractData } = params;
@@ -500,10 +504,45 @@ export async function saveContractDraftAction(params: {
 /**
  * 4. RILIS DOKUMEN (Nomor Terkunci Global Terakhir + 1)
  */
-export async function releaseContractAction(contractId: number) {
+export async function getNextContractSequenceAction() {
+  try {
+    await requireUser();
+    const maxSeqResult = await db.execute(sql`
+      SELECT COALESCE(MAX(seq_number), 0) as max_seq
+      FROM creator_contracts
+      WHERE status = 'released'
+    `) as any[];
+    const nextSeq = Number(maxSeqResult[0]?.max_seq || 0) + 1;
+    return { success: true, nextSeq, seqStr: String(nextSeq).padStart(3, '0') };
+  } catch (err: any) {
+    return { success: false, nextSeq: 1, seqStr: '001', error: err.message };
+  }
+}
+
+export async function releaseContractAction(contractId: number, options?: {
+  namaDirekturTNT?: string;
+  jabatanDirekturTNT?: string;
+  namaPicTNT?: string;
+  inisialPicTNT?: string;
+  namaSignerTNT?: string;
+  jabatanSignerTNT?: string;
+  namaPerusahaan?: string;
+  alamatPerusahaan?: string;
+  tanggalPerjanjian?: string;
+  tempatPerjanjian?: string;
+  customNomorKontrak?: string;
+  nikKtp?: string;
+  namaBank?: string;
+  nomorRekening?: string;
+  atasNamaRekening?: string;
+  alamatKreator?: string;
+  teleponKreator?: string;
+  biayaHonor?: number;
+  qtyVt?: number;
+}) {
   try {
     const { sessionUser, profile } = await requireUser();
-    const picName = profile.fullName || sessionUser.email?.split('@')[0] || 'PIC TNT';
+    const defaultPicName = (sessionUser as any).name || (profile as any).fullName || sessionUser.email?.split('@')[0] || 'PIC TNT';
     const picId = profile.id;
 
     // Ambil detail kontrak
@@ -537,17 +576,56 @@ export async function releaseContractAction(contractId: number) {
     const today = new Date();
     const curYear = today.getFullYear();
     const curRomanMonth = getRomanMonth(today.getMonth());
-    const creatorInit = getInitials(doc.nama_kreator || doc.username || 'TNT');
+    
+    // Inisial Drafter / PIC sesuai format baku: [No]/JC-TNT/[Inisial Drafter]/[Bulan Romawi]/[Tahun]
+    const drafterName = options?.namaPicTNT || doc.created_by_name || defaultPicName;
+    const drafterInitials = options?.inisialPicTNT?.trim().toUpperCase() || getInitials(drafterName);
 
-    // Format Resmi: 001/JC-TNT/{Inisial Kreator}/{Bulan Romawi}/{Tahun}
-    const officialContractNumber = `${seqStr}/JC-TNT/${creatorInit}/${curRomanMonth}/${curYear}`;
+    const generatedOfficialNumber = `${seqStr}/JC-TNT/${drafterInitials}/${curRomanMonth}/${curYear}`;
+    const officialContractNumber = options?.customNomorKontrak?.trim() || generatedOfficialNumber;
 
-    // Update contract_data snapshot dengan nomor resmi dan tanggal rilis
+    // Format Tanggal Perjanjian
+    const tanggalPerjanjianStr = options?.tanggalPerjanjian?.trim() || 
+      `${today.getDate()} ${['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'][today.getMonth()]} ${curYear}`;
+
+    // Update contract_data snapshot dengan nomor resmi dan data legalitas
+    const prevData = doc.contract_data || {};
     const updatedContractData = {
-      ...(doc.contract_data || {}),
+      ...prevData,
       nomorKontrak: officialContractNumber,
-      tanggalPerjanjian: `${today.getDate()} ${['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'][today.getMonth()]} ${curYear}`
+      tanggalPerjanjian: tanggalPerjanjianStr,
+      tempatPerjanjian: options?.tempatPerjanjian?.trim() || prevData.tempatPerjanjian || 'Tangerang',
+      namaDirekturTNT: options?.namaDirekturTNT?.trim() || prevData.namaDirekturTNT || 'Stevani',
+      jabatanDirekturTNT: options?.jabatanDirekturTNT?.trim() || prevData.jabatanDirekturTNT || 'Direktur',
+      namaPicTNT: drafterName,
+      inisialPicTNT: drafterInitials,
+      namaSignerTNT: options?.namaSignerTNT?.trim() || prevData.namaSignerTNT || 'Ruben Arianto',
+      jabatanSignerTNT: options?.jabatanSignerTNT?.trim() || prevData.jabatanSignerTNT || 'Manajer Umum',
+      namaPerusahaan: options?.namaPerusahaan?.trim() || prevData.namaPerusahaan || 'PT TNT KREATIF DIGITAL',
+      alamatPerusahaan: options?.alamatPerusahaan?.trim() || prevData.alamatPerusahaan || 'Jalan Kavling Perkebunan Raya, RT 006 / RW 013, Panunggangan Barat, Kecamatan Cibodas, Kota Tangerang, Banten 15139',
+      // Jika user mengisi / mengoreksi data kreator di modal rilis:
+      nikKtp: options?.nikKtp?.trim() || prevData.nikKtp,
+      namaBank: options?.namaBank?.trim() || prevData.namaBank,
+      nomorRekening: options?.nomorRekening?.trim() || prevData.nomorRekening,
+      atasNamaRekening: options?.atasNamaRekening?.trim() || prevData.atasNamaRekening,
+      alamatKreator: options?.alamatKreator?.trim() || prevData.alamatKreator,
+      teleponKreator: options?.teleponKreator?.trim() || prevData.teleponKreator,
+      biayaHonor: options?.biayaHonor !== undefined ? Number(options.biayaHonor) : prevData.biayaHonor,
+      qtyVt: options?.qtyVt !== undefined ? Number(options.qtyVt) : prevData.qtyVt,
     };
+
+    // Update juga tabel creators jika NIK / Rekening / Alamat dilengkapi
+    if (doc.creator_id && (options?.nikKtp || options?.alamatKreator || options?.teleponKreator)) {
+      await db.execute(sql`
+        UPDATE creators
+        SET 
+          nik = COALESCE(NULLIF(${options?.nikKtp || ''}, ''), nik),
+          alamat_ktp = COALESCE(NULLIF(${options?.alamatKreator || ''}, ''), alamat_ktp),
+          no_whatsapp = COALESCE(NULLIF(${options?.teleponKreator || ''}, ''), no_whatsapp),
+          updated_at = now()
+        WHERE id = ${doc.creator_id}
+      `);
+    }
 
     await db.execute(sql`
       UPDATE creator_contracts
@@ -556,7 +634,7 @@ export async function releaseContractAction(contractId: number) {
         seq_number = ${nextSeq},
         nomor_kontrak = ${officialContractNumber},
         released_by_id = ${picId},
-        released_by_name = ${picName},
+        released_by_name = ${drafterName},
         released_at = now(),
         contract_data = ${JSON.stringify(updatedContractData)}::jsonb,
         updated_at = now()
@@ -868,7 +946,7 @@ export async function upsertContractsBatchFromSpreadsheetAction(params: {
 }) {
   try {
     const { sessionUser, profile } = await requireUser();
-    const defaultPicName = profile.fullName || sessionUser.email?.split('@')[0] || 'PIC TNT';
+    const defaultPicName = (sessionUser as any).name || (profile as any).fullName || sessionUser.email?.split('@')[0] || 'PIC TNT';
     const picId = profile.id;
     const { campaignId, rows } = params;
     const tipeDokumen = params.tipeDokumen || 'perjanjian_kerjasama';
