@@ -248,6 +248,105 @@ async function pushQueueToStaging(customQueue) {
   return { success: true, count: queue.length };
 }
 
+/**
+ * Mengambil daftar target scraping yang disiapkan dari TNT App (/api/creator-staging/targets)
+ */
+async function fetchScrapeTargetsFromTntTab(openTabIfNeeded = true) {
+  let tab = await findTntAppTab();
+
+  if (!tab && openTabIfNeeded) {
+    tab = await new Promise((resolve) => {
+      chrome.tabs.create(
+        { url: 'https://campaign.tntkreatif.com/creator-pool', active: false },
+        (newTab) => {
+          const listener = (tabId, info) => {
+            if (tabId === newTab.id && info.status === 'complete') {
+              chrome.tabs.onUpdated.removeListener(listener);
+              setTimeout(() => resolve(newTab), 1200);
+            }
+          };
+          chrome.tabs.onUpdated.addListener(listener);
+        }
+      );
+    });
+  }
+
+  if (!tab || !tab.id) {
+    return {
+      success: false,
+      error: 'Tab aplikasi TNT belum terbuka. Buka halaman Creator Pool terlebih dahulu.',
+    };
+  }
+
+  try {
+    const injectionResults = await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: async () => {
+        try {
+          const res = await fetch('/api/creator-staging/targets', { credentials: 'include' });
+          if (res.ok) {
+            const data = await res.json();
+            return {
+              success: true,
+              targets: data?.targets || [],
+              count: data?.count || 0,
+            };
+          }
+          return { success: false, error: `HTTP ${res.status} saat menarik target.` };
+        } catch (e) {
+          return { success: false, error: e?.message || 'Gagal fetch target.' };
+        }
+      },
+    });
+
+    const result = injectionResults?.[0]?.result;
+    if (result && result.success) {
+      await setStorage({ tnt_scrape_targets: result.targets });
+      return result;
+    }
+    return {
+      success: false,
+      error: result?.error || 'Gagal membaca target dari aplikasi TNT.',
+    };
+  } catch (err) {
+    return {
+      success: false,
+      error: err?.message || 'Gagal menghubungi tab TNT.',
+    };
+  }
+}
+
+/**
+ * Mengirim status penyelesaian target ke TNT App
+ */
+async function updateTargetStatusInTntTab(username, status = 'completed') {
+  let tab = await findTntAppTab();
+  if (!tab || !tab.id) return { success: false };
+
+  try {
+    const injectionResults = await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: async (uname, stat) => {
+        try {
+          const res = await fetch('/api/creator-staging/targets', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ action: 'complete', username: uname, status: stat }),
+          });
+          return { success: res.ok };
+        } catch (e) {
+          return { success: false, error: e?.message };
+        }
+      },
+      args: [username, status],
+    });
+    return injectionResults?.[0]?.result || { success: false };
+  } catch {
+    return { success: false };
+  }
+}
+
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   (async () => {
     const action = request?.action;
@@ -291,12 +390,31 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       return;
     }
 
+    if (action === 'FETCH_SCRAPE_TARGETS') {
+      const res = await fetchScrapeTargetsFromTntTab(false);
+      sendResponse(res);
+      return;
+    }
+
+    if (action === 'UPDATE_TARGET_STATUS') {
+      const res = await updateTargetStatusInTntTab(request.username, request.status || 'completed');
+      sendResponse(res);
+      return;
+    }
+
+    if (action === 'SET_ACTIVE_TARGET') {
+      await setStorage({ tnt_active_target: request.target || null });
+      sendResponse({ success: true });
+      return;
+    }
+
     if (action === 'GET_FULL_STATUS') {
       const storage = await getStorage([
         STORAGE_KEYS.AUTO_STATE,
         STORAGE_KEYS.QUEUE,
         STORAGE_KEYS.KNOWN_USERNAMES,
         STORAGE_KEYS.KNOWN_UPDATED_AT,
+        'tnt_scrape_targets',
       ]);
       sendResponse({
         state: { ...DEFAULT_AUTO_STATE, ...(storage[STORAGE_KEYS.AUTO_STATE] || {}) },
@@ -304,6 +422,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         knownCount: (storage[STORAGE_KEYS.KNOWN_USERNAMES] || []).length,
         knownUsernames: storage[STORAGE_KEYS.KNOWN_USERNAMES] || [],
         knownUpdatedAt: storage[STORAGE_KEYS.KNOWN_UPDATED_AT] || null,
+        scrapeTargets: storage.tnt_scrape_targets || [],
       });
       return;
     }
@@ -478,7 +597,18 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         STORAGE_KEYS.QUEUE,
         STORAGE_KEYS.KNOWN_USERNAMES,
         STORAGE_KEYS.AUTO_STATE,
+        'tnt_active_target',
       ]);
+
+      const activeTarget = storage.tnt_active_target;
+      if (activeTarget && typeof activeTarget === 'object') {
+        if (activeTarget.campaign_name) creator.campaign_name = activeTarget.campaign_name;
+        if (activeTarget.campaign_id) creator.campaign_id = activeTarget.campaign_id;
+        if (!Array.isArray(creator.campaign_tags)) creator.campaign_tags = [];
+        if (activeTarget.campaign_name && !creator.campaign_tags.includes(activeTarget.campaign_name)) {
+          creator.campaign_tags.push(activeTarget.campaign_name);
+        }
+      }
 
       const queue = storage[STORAGE_KEYS.QUEUE] || [];
       const filteredQueue = queue.filter(

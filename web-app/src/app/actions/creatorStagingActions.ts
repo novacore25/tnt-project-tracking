@@ -54,6 +54,8 @@ export interface StagingCreatorRecord {
   age_55_plus_pct?: number | string | null;
   top_locations?: Array<{ loc: string; pct: number }> | string | null;
   gmv_by_category?: Array<{ category: string; pct: number }> | string | null;
+  campaign_tags?: string[] | null;
+  campaign_name?: string | null;
   status_staging?: string | null;
   promoted_creator_id?: number | null;
   scraped_by?: string | null;
@@ -216,6 +218,7 @@ export async function fetchStagingCreatorsAction(params: {
   pageNum?: number;
   pageSize?: number;
   search?: string;
+  filterCampaign?: string;
   filterNiche?: string;
   filterGmvStatus?: string;
   filterStatusStaging?: string;
@@ -229,6 +232,7 @@ export async function fetchStagingCreatorsAction(params: {
     pageNum = 0,
     pageSize = 50,
     search = '',
+    filterCampaign = '',
     filterNiche = '',
     filterGmvStatus = '',
     filterStatusStaging = 'all',
@@ -244,6 +248,10 @@ export async function fetchStagingCreatorsAction(params: {
     whereConditions.push(
       sql`(cs.username ILIKE ${s} OR cs.display_name ILIKE ${s} OR cs.mcn ILIKE ${s})`
     );
+  }
+
+  if (filterCampaign && filterCampaign.trim()) {
+    whereConditions.push(sql`${filterCampaign.trim()} = ANY(cs.campaign_tags)`);
   }
 
   if (filterNiche) {
@@ -273,7 +281,7 @@ export async function fetchStagingCreatorsAction(params: {
   else if (sortBy === 'video_views_desc') orderClause = sql`ORDER BY cs.avg_video_views DESC NULLS LAST, cs.id DESC`;
   else if (sortBy === 'live_views_desc') orderClause = sql`ORDER BY cs.avg_live_views DESC NULLS LAST, cs.id DESC`;
 
-  const [rows, countRes, summaryRes, nichesRes] = await Promise.all([
+  const [rows, countRes, summaryRes, nichesRes, campaignTagsRes] = await Promise.all([
     db.execute(sql`
       SELECT
         cs.*,
@@ -307,6 +315,12 @@ export async function fetchStagingCreatorsAction(params: {
       WHERE primary_niche IS NOT NULL AND primary_niche != ''
       ORDER BY primary_niche ASC
     `),
+    db.execute(sql`
+      SELECT DISTINCT unnest(campaign_tags) as tag
+      FROM creator_staging
+      WHERE campaign_tags IS NOT NULL AND cardinality(campaign_tags) > 0
+      ORDER BY tag ASC
+    `).catch(() => []),
   ]);
 
   const countRows = countRes as unknown as Array<{ count?: number }>;
@@ -318,6 +332,7 @@ export async function fetchStagingCreatorsAction(params: {
     total_estimasi: number;
   }>;
   const nicheRows = nichesRes as unknown as Array<{ primary_niche?: string }>;
+  const tagRows = (campaignTagsRes as unknown as Array<{ tag?: string }>) || [];
 
   const total = countRows[0]?.count || 0;
   const stats = summaryRows[0] || {
@@ -328,6 +343,7 @@ export async function fetchStagingCreatorsAction(params: {
     total_estimasi: 0,
   };
   const distinctNiches = nicheRows.map((r) => r.primary_niche || '').filter(Boolean);
+  const distinctCampaignTags = tagRows.map((r) => r.tag || '').filter(Boolean);
 
   return {
     data: (rows as unknown as StagingCreatorRecord[]) || [],
@@ -335,6 +351,7 @@ export async function fetchStagingCreatorsAction(params: {
     hasMore: offset + pageSize < total,
     stats,
     distinctNiches,
+    distinctCampaignTags,
   };
 }
 
@@ -416,6 +433,20 @@ export async function upsertStagingCreatorsBatchAction(items: StagingCreatorReco
     const topLocationsJson = JSON.stringify(Array.isArray(raw.top_locations) ? raw.top_locations.slice(0, 5) : []);
     const gmvByCategoryJson = JSON.stringify(Array.isArray(raw.gmv_by_category) ? raw.gmv_by_category : []);
 
+    // Gabungkan campaign_tags & campaign_name jika disediakan
+    const incomingTags: string[] = [];
+    if (Array.isArray(raw.campaign_tags)) {
+      raw.campaign_tags.forEach((t) => {
+        const cleanT = String(t || '').trim();
+        if (cleanT && !incomingTags.includes(cleanT)) incomingTags.push(cleanT);
+      });
+    }
+    if (raw.campaign_name && typeof raw.campaign_name === 'string') {
+      const cleanCn = raw.campaign_name.trim();
+      if (cleanCn && !incomingTags.includes(cleanCn)) incomingTags.push(cleanCn);
+    }
+    const tagsLiteral = incomingTags.length > 0 ? sql`ARRAY[${sql.join(incomingTags.map(t => sql`${t}`), sql`, `)}]::text[]` : sql`'{}'::text[]`;
+
     await db.execute(sql`
       INSERT INTO creator_staging (
         username, display_name, tiktok_cid, link_account, avatar_url, mcn, no_whatsapp, email,
@@ -428,7 +459,7 @@ export async function upsertStagingCreatorsBatchAction(items: StagingCreatorReco
         live_gpm, live_streams_count_30d, avg_live_views, avg_live_engagement_rate,
         audience_male_pct, audience_female_pct, audience_age,
         age_18_24_pct, age_25_34_pct, age_35_44_pct, age_45_54_pct, age_55_plus_pct,
-        top_locations, gmv_by_category,
+        top_locations, gmv_by_category, campaign_tags,
         scraped_by, scraped_at, updated_at
       ) VALUES (
         ${username}, ${displayName}, ${tiktokCid}, ${linkAccount}, ${avatarUrl}, ${mcn}, ${noWhatsapp}, ${email},
@@ -441,7 +472,7 @@ export async function upsertStagingCreatorsBatchAction(items: StagingCreatorReco
         ${liveGpm}, ${liveStreamsCount30d}, ${avgLiveViews}, ${avgLiveEngagementRate},
         ${audienceMalePct}, ${audienceFemalePct}, ${audienceAge},
         ${age18_24}, ${age25_34}, ${age35_44}, ${age45_54}, ${age55Plus},
-        ${topLocationsJson}::jsonb, ${gmvByCategoryJson}::jsonb,
+        ${topLocationsJson}::jsonb, ${gmvByCategoryJson}::jsonb, ${tagsLiteral},
         ${profileId}, NOW(), NOW()
       )
       ON CONFLICT (username) DO UPDATE SET
@@ -490,6 +521,9 @@ export async function upsertStagingCreatorsBatchAction(items: StagingCreatorReco
         age_55_plus_pct = EXCLUDED.age_55_plus_pct,
         top_locations = EXCLUDED.top_locations,
         gmv_by_category = EXCLUDED.gmv_by_category,
+        campaign_tags = ARRAY(
+          SELECT DISTINCT unnest(COALESCE(creator_staging.campaign_tags, '{}'::text[]) || EXCLUDED.campaign_tags)
+        ),
         scraped_by = COALESCE(EXCLUDED.scraped_by, creator_staging.scraped_by),
         updated_at = NOW()
     `);
@@ -646,6 +680,99 @@ export async function promoteStagingToCreatorPoolAction(stagingIds: number[]) {
   revalidatePath('/creator-pool/staging');
   revalidatePath('/creator-pool');
   return { success: true, promotedCount };
+}
+
+/**
+ * Mempromosikan kreator dari Staging langsung ke listingan Campaign tertentu (campaign_creators).
+ * Sekaligus meng-update data profil utama kreator & menyisipkan snapshot performa terbaru.
+ * Jika relasi di campaign_creators belum ada, baris baru ditambahkan dengan status approved.
+ * Jika sudah ada, tier dan status disinkronisasi.
+ */
+export async function promoteStagingToCampaignListingAction(params: {
+  stagingIds: number[];
+  campaignId: number;
+  campaignName?: string;
+}) {
+  const user = await requireAuthenticatedUser();
+  await ensureCreatorStagingSchema();
+
+  const { stagingIds, campaignId, campaignName } = params;
+  if (!Array.isArray(stagingIds) || stagingIds.length === 0) {
+    return { success: false, error: 'Pilih minimal 1 kreator untuk di-update ke campaign.' };
+  }
+  if (!campaignId) {
+    return { success: false, error: 'Pilih campaign tujuan.' };
+  }
+
+  // 1. Promosikan ke Creator Pool & Snapshots terlebih dahulu
+  const promoteRes = await promoteStagingToCreatorPoolAction(stagingIds);
+  if (!promoteRes.success) {
+    return promoteRes;
+  }
+
+  // 2. Ambil data kreator staging yang dipilih
+  const stagingRows = (await db.execute(sql`
+    SELECT id, username, followers
+    FROM creator_staging
+    WHERE id IN ${sqlInList(stagingIds)}
+  `)) as unknown as Array<{ id: number; username: string; followers?: number | string | null }>;
+
+  const usernames = stagingRows
+    .map((s) => String(s.username || '').trim().toLowerCase().replace(/^@/, ''))
+    .filter(Boolean);
+
+  if (usernames.length === 0) {
+    return { success: true, promotedCount: 0, campaignName: campaignName || '' };
+  }
+
+  const creatorRows = (await db.execute(sql`
+    SELECT id, LOWER(username) as username FROM creators WHERE LOWER(username) IN ${sqlInList(usernames)}
+  `)) as unknown as Array<{ id: number; username: string }>;
+
+  const creatorMap = new Map(creatorRows.map((c) => [c.username, c.id]));
+
+  let insertedCount = 0;
+  let updatedCount = 0;
+
+  for (const s of stagingRows) {
+    const cleanUser = String(s.username || '').trim().toLowerCase().replace(/^@/, '');
+    const creatorId = creatorMap.get(cleanUser);
+    if (!creatorId) continue;
+
+    const followersNum = Number(s.followers) || 0;
+    let tier = 'Nano';
+    if (followersNum >= 1_000_000) tier = 'Mega';
+    else if (followersNum >= 500_000) tier = 'Macro';
+    else if (followersNum >= 100_000) tier = 'Mid-Tier';
+    else if (followersNum >= 10_000) tier = 'Micro';
+
+    const ccRes = await db.execute(sql`
+      INSERT INTO campaign_creators (
+        campaign_id, creator_id, tier, approval, client_approval, status_bayar, qty_vt, price, created_at
+      ) VALUES (
+        ${campaignId}, ${creatorId}, ${tier}, 'approved', 'approved', 'belum', 1, 0, NOW()
+      )
+      ON CONFLICT (campaign_id, creator_id) DO UPDATE SET
+        tier = EXCLUDED.tier
+      RETURNING id, (xmax = 0) AS is_insert
+    `);
+
+    const isInsert = (ccRes as any)?.[0]?.is_insert;
+    if (isInsert) insertedCount++;
+    else updatedCount++;
+  }
+
+  revalidatePath('/creator-pool/staging');
+  revalidatePath(`/campaigns/${campaignId}`);
+  revalidatePath('/creator-pool');
+
+  return {
+    success: true,
+    totalProcessed: stagingRows.length,
+    insertedCount,
+    updatedCount,
+    campaignName: campaignName || `Campaign #${campaignId}`,
+  };
 }
 
 export async function deleteStagingCreatorsAction(stagingIds: number[]) {

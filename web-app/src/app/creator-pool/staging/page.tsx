@@ -26,9 +26,11 @@ import {
   fetchKnownCreatorUsernamesAction,
   upsertStagingCreatorsBatchAction,
   promoteStagingToCreatorPoolAction,
+  promoteStagingToCampaignListingAction,
   deleteStagingCreatorsAction,
   type StagingCreatorRecord,
 } from '@/app/actions/creatorStagingActions';
+import { useDatabaseStore } from '@/store/useDatabaseStore';
 import { toNum } from '@/utils/computed';
 
 function formatIdr(val: number | string | null | undefined): string {
@@ -47,11 +49,13 @@ function formatCompact(val: number | string | null | undefined): string {
 }
 
 export default function StagingCreatorPage() {
+  const { campaigns } = useDatabaseStore();
   const [rows, setRows] = useState<StagingCreatorRecord[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [importingBatch, setImportingBatch] = useState(false);
   const [promoting, setPromoting] = useState(false);
+  const [promotingToCampaign, setPromotingToCampaign] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [bannerMessage, setBannerMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
@@ -63,6 +67,7 @@ export default function StagingCreatorPage() {
     total_estimasi: 0,
   });
   const [distinctNiches, setDistinctNiches] = useState<string[]>([]);
+  const [distinctCampaignTags, setDistinctCampaignTags] = useState<string[]>([]);
   const [knownBook, setKnownBook] = useState<{
     stagingCount: number;
     totalKnown: number;
@@ -77,6 +82,7 @@ export default function StagingCreatorPage() {
   const [pageNum, setPageNum] = useState(0);
   const pageSize = 50;
   const [search, setSearch] = useState('');
+  const [filterCampaign, setFilterCampaign] = useState('');
   const [filterNiche, setFilterNiche] = useState('');
   const [filterGmvStatus, setFilterGmvStatus] = useState('');
   const [filterStatusStaging, setFilterStatusStaging] = useState('all');
@@ -106,6 +112,7 @@ export default function StagingCreatorPage() {
         pageNum,
         pageSize,
         search,
+        filterCampaign,
         filterNiche,
         filterGmvStatus,
         filterStatusStaging,
@@ -115,6 +122,7 @@ export default function StagingCreatorPage() {
       setTotal(res.total || 0);
       if (res.stats) setStats(res.stats);
       if (res.distinctNiches) setDistinctNiches(res.distinctNiches);
+      if (res.distinctCampaignTags) setDistinctCampaignTags(res.distinctCampaignTags);
     } catch (err: unknown) {
       console.error('Gagal memuat data Staging Creator:', err);
       setBannerMessage({
@@ -124,7 +132,7 @@ export default function StagingCreatorPage() {
     } finally {
       setLoading(false);
     }
-  }, [pageNum, pageSize, search, filterNiche, filterGmvStatus, filterStatusStaging, sortBy]);
+  }, [pageNum, pageSize, search, filterCampaign, filterNiche, filterGmvStatus, filterStatusStaging, sortBy]);
 
   const checkAndConsumeIncomingExtensionBatch = useCallback(async () => {
     try {
@@ -229,6 +237,53 @@ export default function StagingCreatorPage() {
       });
     } finally {
       setPromoting(false);
+    }
+  };
+
+  const handlePromoteToCampaign = async (campaignIdToUse?: number, campaignNameToUse?: string) => {
+    if (selectedIds.length === 0) return;
+    
+    // Cari campaign dari filter jika tidak dilempar langsung
+    let cId = campaignIdToUse;
+    let cName = campaignNameToUse;
+    if (!cId && filterCampaign) {
+      const matchCamp = campaigns.find(c => c.nama.toLowerCase() === filterCampaign.toLowerCase() || String(c.id) === String(filterCampaign));
+      if (matchCamp) {
+        cId = matchCamp.id;
+        cName = matchCamp.nama;
+      }
+    }
+
+    if (!cId) {
+      alert("Pilih campaign tujuan terlebih dahulu melalui filter campaign atau pilih opsi campaign.");
+      return;
+    }
+
+    setPromotingToCampaign(true);
+    setBannerMessage(null);
+    try {
+      const res = await promoteStagingToCampaignListingAction({
+        stagingIds: selectedIds,
+        campaignId: cId,
+        campaignName: cName,
+      });
+      if (res.success) {
+        setBannerMessage({
+          type: 'success',
+          text: `🚀 Berhasil meng-update ${res.totalProcessed} kreator ke listingan Campaign "${res.campaignName}"! Status, tier, dan metrik analitik otomatis tersinkronisasi.`,
+        });
+        setSelectedIds([]);
+        await Promise.all([loadStagingData(), syncKnownBook()]);
+      } else {
+        setBannerMessage({ type: 'error', text: res.error || 'Gagal meng-update ke campaign.' });
+      }
+    } catch (err: unknown) {
+      setBannerMessage({
+        type: 'error',
+        text: err instanceof Error ? err.message : 'Terjadi kesalahan saat update ke campaign.',
+      });
+    } finally {
+      setPromotingToCampaign(false);
     }
   };
 
@@ -392,7 +447,7 @@ export default function StagingCreatorPage() {
 
       {/* Filter & Bulk Action Bar */}
       <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-xs space-y-3">
-        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-3">
           <div className="relative lg:col-span-2">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
@@ -406,6 +461,29 @@ export default function StagingCreatorPage() {
               className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
           </div>
+
+          <select
+            value={filterCampaign}
+            onChange={(e) => {
+              setFilterCampaign(e.target.value);
+              setPageNum(0);
+            }}
+            className="px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white font-medium text-slate-800"
+          >
+            <option value="">🎯 Semua Tag Campaign</option>
+            {distinctCampaignTags.map((t) => (
+              <option key={t} value={t}>
+                🏷️ {t}
+              </option>
+            ))}
+            {campaigns
+              .filter((c) => !distinctCampaignTags.includes(c.nama))
+              .map((c) => (
+                <option key={c.id} value={c.nama}>
+                  📁 {c.nama}
+                </option>
+              ))}
+          </select>
 
           <select
             value={filterStatusStaging}
@@ -437,19 +515,6 @@ export default function StagingCreatorPage() {
           </select>
 
           <select
-            value={filterGmvStatus}
-            onChange={(e) => {
-              setFilterGmvStatus(e.target.value);
-              setPageNum(0);
-            }}
-            className="px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white"
-          >
-            <option value="">Semua Tipe GMV</option>
-            <option value="RIIL">GMV RIIL</option>
-            <option value="ESTIMASI">GMV ESTIMASI</option>
-          </select>
-
-          <select
             value={sortBy}
             onChange={(e) => {
               setSortBy(e.target.value);
@@ -468,18 +533,65 @@ export default function StagingCreatorPage() {
         {/* Bulk Action Toolbar */}
         {selectedIds.length > 0 && (
           <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3 bg-indigo-50/70 px-4 py-2.5 rounded-lg">
-            <div className="text-sm font-semibold text-indigo-950">
-              {selectedIds.length} kreator dipilih
+            <div className="text-sm font-semibold text-indigo-950 flex items-center gap-2">
+              <span>{selectedIds.length} kreator dipilih</span>
+              {filterCampaign && (
+                <span className="text-xs bg-indigo-200 text-indigo-900 font-bold px-2 py-0.5 rounded-full">
+                  Target: {filterCampaign}
+                </span>
+              )}
             </div>
-            <div className="flex items-center gap-2.5">
+            <div className="flex flex-wrap items-center gap-2.5">
+              {/* Tombol Update ke Listingan Campaign */}
+              {filterCampaign ? (
+                <button
+                  onClick={() => handlePromoteToCampaign()}
+                  disabled={promotingToCampaign || promoting}
+                  className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-1.5 rounded-lg text-xs font-bold shadow-xs transition cursor-pointer disabled:opacity-50"
+                  title={`Update performa ${selectedIds.length} kreator ke listingan ${filterCampaign}`}
+                >
+                  <Sparkles className="w-4 h-4" />
+                  <span>
+                    {promotingToCampaign
+                      ? 'Mengupdate...'
+                      : `🚀 Update ke Listingan "${filterCampaign}" (${selectedIds.length})`}
+                  </span>
+                </button>
+              ) : (
+                <div className="flex items-center gap-1.5">
+                  <select
+                    id="tnt-bulk-campaign-select"
+                    defaultValue=""
+                    className="text-xs border border-emerald-300 bg-white text-emerald-950 font-semibold rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        const targetC = campaigns.find(c => String(c.id) === e.target.value);
+                        if (targetC) {
+                          handlePromoteToCampaign(targetC.id, targetC.nama);
+                          e.target.value = '';
+                        }
+                      }
+                    }}
+                  >
+                    <option value="" disabled>🚀 Update ke Listing Campaign...</option>
+                    {campaigns.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.nama}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               <button
                 onClick={handlePromoteSelected}
-                disabled={promoting}
-                className="inline-flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-1.5 rounded-lg text-xs font-bold shadow-xs transition cursor-pointer disabled:opacity-50"
+                disabled={promoting || promotingToCampaign}
+                className="inline-flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white px-3.5 py-1.5 rounded-lg text-xs font-bold shadow-xs transition cursor-pointer disabled:opacity-50"
               >
                 <ArrowUpRight className="w-4 h-4" />
                 <span>{promoting ? 'Memindahkan...' : `Pindahkan ke Creator Pool (${selectedIds.length})`}</span>
               </button>
+
               <button
                 onClick={handleDeleteSelected}
                 disabled={deleting}
@@ -620,6 +732,20 @@ export default function StagingCreatorPage() {
                                 </span>
                               )}
                             </div>
+
+                            {/* Tag Campaign Terkait */}
+                            {Array.isArray(r.campaign_tags) && r.campaign_tags.length > 0 && (
+                              <div className="flex flex-wrap gap-1 pt-1">
+                                {r.campaign_tags.map((tag) => (
+                                  <span
+                                    key={tag}
+                                    className="px-1.5 py-0.5 bg-purple-100 text-purple-900 border border-purple-300 rounded text-[9.5px] font-bold shadow-2xs"
+                                  >
+                                    🏷️ {tag}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
 
                             {/* Kontak Resmi (WhatsApp & Email) */}
                             <div className="pt-2 mt-1 border-t border-slate-100 flex flex-col gap-1 text-[11px]">

@@ -1454,6 +1454,194 @@
   }
 
   // ============================================================================
+  // 5B. TARGETED SCRAPER MODE (Pencarian Username Spesifik & Scroll 25 Baris)
+  // ============================================================================
+  let isTargetModeRunning = false;
+  let targetQueueList = [];
+  let currentTargetIndex = 0;
+  let currentActiveTarget = null;
+
+  function findPartnerCenterSearchInput() {
+    const candidates = [
+      'input[placeholder*="Creator" i]',
+      'input[placeholder*="search" i]',
+      'input[placeholder*="cari" i]',
+      'input[placeholder*="kreator" i]',
+      'input[placeholder*="username" i]',
+      '.arco-input-inner',
+      'input.arco-input',
+      'input[type="search"]',
+    ];
+    for (const selector of candidates) {
+      const els = Array.from(document.querySelectorAll(selector));
+      for (const el of els) {
+        if (el.offsetParent !== null && !el.closest('#tnt-scraping-creator-panel')) {
+          return el;
+        }
+      }
+    }
+    return null;
+  }
+
+  function setNativeInputValue(inputEl, value) {
+    const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+    if (nativeSetter) {
+      nativeSetter.call(inputEl, value);
+    } else {
+      inputEl.value = value;
+    }
+    inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+    inputEl.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+
+  function triggerSearchSubmit(inputEl) {
+    inputEl.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, code: 'Enter', which: 13, bubbles: true }));
+    inputEl.dispatchEvent(new KeyboardEvent('keypress', { key: 'Enter', keyCode: 13, code: 'Enter', which: 13, bubbles: true }));
+    inputEl.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', keyCode: 13, code: 'Enter', which: 13, bubbles: true }));
+
+    const btn =
+      inputEl.closest('.arco-input-group, .arco-input-wrapper')?.querySelector('.arco-icon-search, button, svg') ||
+      inputEl.parentElement?.querySelector('button, svg');
+    if (btn && typeof btn.click === 'function') {
+      try {
+        btn.click();
+      } catch (_) {}
+    }
+  }
+
+  async function processNextTargetStep() {
+    if (!isTargetModeRunning) return;
+
+    if (currentTargetIndex >= targetQueueList.length) {
+      isTargetModeRunning = false;
+      currentActiveTarget = null;
+      safeSendMessage({ action: 'SET_ACTIVE_TARGET', target: null });
+      updateFloatingStatus(
+        `🎉 Selesai! Seluruh antrean target (${targetQueueList.length} kreator) telah selesai diproses. Klik tombol "Tambahkan ke Staging" di bawah!`
+      );
+      const startBtn = document.getElementById('tnt-btn-start');
+      const stopBtn = document.getElementById('tnt-btn-stop');
+      const runTargetBtn = document.getElementById('tnt-btn-run-targets');
+      if (startBtn) startBtn.style.display = 'block';
+      if (stopBtn) stopBtn.style.display = 'none';
+      if (runTargetBtn) runTargetBtn.style.display = 'none';
+      syncPanelWithBackground();
+      return;
+    }
+
+    const target = targetQueueList[currentTargetIndex];
+    currentActiveTarget = target;
+    const cleanUser = String(target.username || '').trim().toLowerCase().replace(/^@/, '');
+
+    // Simpan target aktif ke background agar saat detail tab selesai discrape, campaign_name & campaign_tags tersemat
+    safeSendMessage({ action: 'SET_ACTIVE_TARGET', target });
+
+    updateFloatingStatus(
+      `🔍 [${currentTargetIndex + 1}/${targetQueueList.length}] Mencari target: @${cleanUser} (${target.campaign_name || 'Campaign'})...`
+    );
+
+    // 1. Temukan search input di TikTok Partner Center
+    let searchInput = findPartnerCenterSearchInput();
+    if (!searchInput) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      await sleep(600);
+      searchInput = findPartnerCenterSearchInput();
+    }
+
+    if (!searchInput) {
+      updateFloatingStatus(`⚠️ Search bar TikTok Partner Center tidak ditemukan di layar ini.`);
+      isTargetModeRunning = false;
+      return;
+    }
+
+    // 2. Masukkan username ke search input & submit pencarian
+    searchInput.focus();
+    setNativeInputValue(searchInput, cleanUser);
+    await sleep(300);
+    triggerSearchSubmit(searchInput);
+
+    // Tunggu render hasil pencarian
+    await sleep(1800);
+
+    // 3. Evaluasi baris: Cek baris 1, jika belum ketemu scroll hingga 25 baris
+    const scroller = getScrollContainer() || window;
+    let foundCard = null;
+    let checkedCount = 0;
+    const maxInspectRows = 25;
+
+    for (let scrollAttempt = 0; scrollAttempt < 8; scrollAttempt++) {
+      if (!isTargetModeRunning) return;
+
+      const currentCards = getAllCreatorCardElements();
+      for (let i = checkedCount; i < currentCards.length && i < maxInspectRows; i++) {
+        const c = currentCards[i];
+        const cardUsername = (c.usernameSpan?.textContent || '').trim().toLowerCase().replace(/^@/, '');
+        if (cardUsername === cleanUser) {
+          foundCard = c;
+          break;
+        }
+      }
+
+      if (foundCard) break;
+      checkedCount = Math.min(currentCards.length, maxInspectRows);
+      if (checkedCount >= maxInspectRows) break;
+
+      // Belum ketemu di baris yang tampak -> scroll ke bawah perlahan untuk memuat baris berikutnya
+      updateFloatingStatus(
+        `📜 @${cleanUser} belum ada di baris awal. Scroll mencari... (sudah cek ${checkedCount}/${maxInspectRows} baris)`
+      );
+      if (scroller.scrollBy) {
+        scroller.scrollBy({ top: 320, behavior: 'smooth' });
+      } else {
+        window.scrollBy({ top: 320, behavior: 'smooth' });
+      }
+      await sleep(800);
+    }
+
+    // 4. Jika kartu target ditemukan:
+    if (foundCard) {
+      updateFloatingStatus(`🎯 Ditemukan @${cleanUser}! Membuka detail profil...`);
+      foundCard.cardEl?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      await sleep(400);
+
+      waitingForDetailTab = true;
+      safeSendMessage({
+        action: 'CARD_CLICKED_WAITING_DETAIL',
+        username: cleanUser,
+      });
+
+      // Buka detail tab
+      if (foundCard.clickTarget && typeof foundCard.clickTarget.click === 'function') {
+        foundCard.clickTarget.click();
+      } else {
+        const link = foundCard.cardEl?.querySelector('a[href*="/detail"]');
+        if (link) link.click();
+      }
+
+      // Pasang timeout watchdog jika detail tab tidak merespons dalam 45 detik
+      if (detailWatchdogTimer) clearTimeout(detailWatchdogTimer);
+      detailWatchdogTimer = setTimeout(async () => {
+        if (waitingForDetailTab && isTargetModeRunning) {
+          updateFloatingStatus(`⏱️ Timeout membuka @${cleanUser}. Melanjutkan ke target berikutnya...`);
+          waitingForDetailTab = false;
+          safeSendMessage({ action: 'UPDATE_TARGET_STATUS', username: cleanUser, status: 'failed' });
+          currentTargetIndex++;
+          processNextTargetStep();
+        }
+      }, 45000);
+
+      return;
+    }
+
+    // 5. Jika tidak ditemukan setelah 25 baris:
+    updateFloatingStatus(`⚠️ @${cleanUser} tidak ditemukan setelah 25 baris pencarian. Lewati...`);
+    safeSendMessage({ action: 'UPDATE_TARGET_STATUS', username: cleanUser, status: 'failed' });
+    currentTargetIndex++;
+    await sleep(1000);
+    processNextTargetStep();
+  }
+
+  // ============================================================================
   // 6. FLOATING PANEL UI ("TNT Scrapping Creator")
   // ============================================================================
   let panelRoot = null;
@@ -1542,6 +1730,25 @@
 
         <div id="tnt-status-box" style="background:rgba(79,70,229,0.15);border:1px solid rgba(99,102,241,0.3);color:#e2e8f0;padding:8px 10px;border-radius:8px;margin-bottom:12px;font-size:11px;line-height:1.4;min-height:34px;">
           Siap melakukan scraping kreator TikTok Partner Center.
+        </div>
+
+        <!-- Section Mode Antrean Target Update -->
+        <div id="tnt-target-section" style="background:rgba(99,102,241,0.08);border:1px dashed rgba(99,102,241,0.35);border-radius:10px;padding:8px 10px;margin-bottom:12px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+            <div style="display:flex;align-items:center;gap:5px;">
+              <span>🎯</span>
+              <strong style="color:#c7d2fe;font-size:11px;">Update Antrean Target</strong>
+            </div>
+            <span id="tnt-target-badge" style="font-size:10px;background:#4f46e5;color:#fff;font-weight:700;padding:1px 6px;border-radius:999px;">0 target</span>
+          </div>
+          <div style="display:flex;gap:6px;">
+            <button id="tnt-btn-fetch-targets" title="Ambil antrean kreator yang disiapkan dari Creator Pool" style="flex:1;padding:6px 8px;border-radius:7px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.08);color:#fff;font-size:10.5px;font-weight:600;cursor:pointer;">
+              📥 Tarik Target
+            </button>
+            <button id="tnt-btn-run-targets" style="display:none;flex:1.2;padding:6px 8px;border-radius:7px;border:none;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;font-size:10.5px;font-weight:700;cursor:pointer;box-shadow:0 2px 8px rgba(99,102,241,0.4);">
+              ▶️ Mulai Target
+            </button>
+          </div>
         </div>
 
         <div style="display:flex;flex-direction:column;gap:8px;">
@@ -1761,6 +1968,7 @@
 
     document.getElementById('tnt-btn-stop').addEventListener('click', () => {
       isListLoopActive = false;
+      isTargetModeRunning = false;
       waitingForDetailTab = false;
       if (detailWatchdogTimer) clearTimeout(detailWatchdogTimer);
       if (mediaPruneInterval) {
@@ -1771,6 +1979,68 @@
       safeSendMessage({ action: 'STOP_AUTO_SCRAPE' }, () => {
         syncPanelWithBackground();
       });
+      const runTargetBtn = document.getElementById('tnt-btn-run-targets');
+      if (runTargetBtn && targetQueueList.length > 0) {
+        runTargetBtn.style.display = 'block';
+      }
+    });
+
+    // Listener Mode Antrean Target
+    const fetchTargetsBtn = document.getElementById('tnt-btn-fetch-targets');
+    const runTargetsBtn = document.getElementById('tnt-btn-run-targets');
+    const targetBadge = document.getElementById('tnt-target-badge');
+
+    fetchTargetsBtn?.addEventListener('click', () => {
+      updateFloatingStatus('🔄 Menarik antrean target dari Creator Pool...');
+      safeSendMessage({ action: 'FETCH_SCRAPE_TARGETS' }, (res) => {
+        if (res && res.success && Array.isArray(res.targets) && res.targets.length > 0) {
+          targetQueueList = res.targets;
+          currentTargetIndex = 0;
+          if (targetBadge) {
+            targetBadge.textContent = `${res.targets.length} target`;
+            targetBadge.style.background = '#10b981';
+          }
+          if (runTargetsBtn) {
+            runTargetsBtn.style.display = 'block';
+            runTargetsBtn.textContent = `▶️ Mulai (${res.targets.length})`;
+          }
+          const cName = res.targets[0]?.campaign_name || 'Campaign';
+          updateFloatingStatus(
+            `🎯 Menemukan ${res.targets.length} kreator target untuk [${cName}]. Klik "Mulai" untuk auto-search & scrape!`
+          );
+        } else {
+          targetQueueList = [];
+          if (targetBadge) {
+            targetBadge.textContent = '0 target';
+            targetBadge.style.background = '#4f46e5';
+          }
+          if (runTargetsBtn) runTargetsBtn.style.display = 'none';
+          updateFloatingStatus(
+            'ℹ️ Belum ada antrean target. Buka Creator Pool di TNT App, pilih/filter kreator lalu klik "Siapkan Antrean Update".'
+          );
+        }
+      });
+    });
+
+    runTargetsBtn?.addEventListener('click', () => {
+      if (targetQueueList.length === 0) {
+        updateFloatingStatus('⚠️ Antrean target kosong. Tarik target terlebih dahulu.');
+        return;
+      }
+
+      isTargetModeRunning = true;
+      isListLoopActive = false;
+      waitingForDetailTab = false;
+      currentTargetIndex = 0;
+
+      const startBtn = document.getElementById('tnt-btn-start');
+      const stopBtn = document.getElementById('tnt-btn-stop');
+      if (startBtn) startBtn.style.display = 'none';
+      if (stopBtn) stopBtn.style.display = 'block';
+      if (runTargetsBtn) runTargetsBtn.style.display = 'none';
+
+      // Mulai targeted loop
+      processNextTargetStep();
     });
 
     document.getElementById('tnt-btn-push-staging').addEventListener('click', () => {
@@ -1940,6 +2210,20 @@
           );
           await sleep(1000);
           window.location.reload();
+          return;
+        }
+
+        if (isTargetModeRunning) {
+          if (currentActiveTarget && currentActiveTarget.username) {
+            safeSendMessage({
+              action: 'UPDATE_TARGET_STATUS',
+              username: currentActiveTarget.username,
+              status: 'completed',
+            });
+          }
+          currentTargetIndex++;
+          await sleep(600);
+          processNextTargetStep();
           return;
         }
 
