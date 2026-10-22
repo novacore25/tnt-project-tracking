@@ -1752,6 +1752,9 @@
             <button id="tnt-btn-fetch-targets" title="Ambil antrean kreator yang disiapkan dari Creator Pool" style="flex:1;padding:6px 8px;border-radius:7px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.08);color:#fff;font-size:10.5px;font-weight:600;cursor:pointer;">
               📥 Tarik Target
             </button>
+            <button id="tnt-btn-clear-targets" title="Kosongkan Antrean Target di Ekstensi & Database" style="padding:6px 8px;border-radius:7px;border:1px solid rgba(244,63,94,0.35);background:rgba(244,63,94,0.12);color:#fda4af;font-size:10.5px;font-weight:600;cursor:pointer;">
+              🗑️
+            </button>
             <button id="tnt-btn-run-targets" style="display:none;flex:1.2;padding:6px 8px;border-radius:7px;border:none;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;font-size:10.5px;font-weight:700;cursor:pointer;box-shadow:0 2px 8px rgba(99,102,241,0.4);">
               ▶️ Mulai Target
             </button>
@@ -2030,6 +2033,21 @@
             'ℹ️ Belum ada antrean target. Buka Creator Pool di TNT App, pilih/filter kreator lalu klik "Siapkan Antrean Update".'
           );
         }
+      });
+    });
+
+    document.getElementById('tnt-btn-clear-targets')?.addEventListener('click', () => {
+      updateFloatingStatus('⏳ Mengosongkan antrean target...');
+      safeSendMessage({ action: 'CLEAR_SCRAPE_TARGETS' }, () => {
+        targetQueueList = [];
+        currentTargetIndex = 0;
+        isTargetModeRunning = false;
+        if (targetBadge) {
+          targetBadge.textContent = '0 target';
+          targetBadge.style.background = '#4f46e5';
+        }
+        if (runTargetsBtn) runTargetsBtn.style.display = 'none';
+        updateFloatingStatus('🗑️ Antrean target telah dikosongkan. Silakan siapkan target campaign baru dari Creator Pool.');
       });
     });
 

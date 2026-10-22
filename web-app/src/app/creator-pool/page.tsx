@@ -8,10 +8,10 @@ import { Search, Loader2, Download, Users } from "lucide-react";
 import Link from "next/link";
 import { useState, useEffect, useCallback } from "react";
 import { fetchCreatorsPaginated, fetchStaffProfiles } from "@/app/actions/creatorActions";
-import { addScrapeTargetsAction } from "@/app/actions/creatorTargetActions";
+import { addScrapeTargetsAction, clearScrapeTargetsAction } from "@/app/actions/creatorTargetActions";
 import { exportToCSV } from "@/utils/exportCsv";
 import { CreatorSyncModal } from "@/components/CreatorSyncModal";
-import { Check, CheckSquare, Square, Target, Video, Radio, MapPin, Sparkles } from "lucide-react";
+import { Check, CheckSquare, Square, Target, Video, Radio, MapPin, Sparkles, Trash2 } from "lucide-react";
 
 const PAGE_SIZE = 48;
 
@@ -54,6 +54,7 @@ export default function CreatorPoolPage() {
   // State Seleksi Checkbox & Antrean Update
   const [selectedUsernames, setSelectedUsernames] = useState<string[]>([]);
   const [isPreparingQueue, setIsPreparingQueue] = useState(false);
+  const [isClearingQueue, setIsClearingQueue] = useState(false);
   const [queueSuccessMsg, setQueueSuccessMsg] = useState("");
 
   const toggleSelectOne = (username: string) => {
@@ -93,6 +94,20 @@ export default function CreatorPoolPage() {
       alert("Gagal menyiapkan antrean: " + (err?.message || err));
     } finally {
       setIsPreparingQueue(false);
+    }
+  };
+
+  const handleClearTargetQueue = async () => {
+    if (!window.confirm("Kosongkan semua antrean target yang tersimpan di sistem? Tindakan ini akan mereset antrean agar Anda bisa beralih ke campaign lain.")) return;
+    setIsClearingQueue(true);
+    try {
+      await clearScrapeTargetsAction();
+      setQueueSuccessMsg("🗑️ Seluruh antrean target berhasil dikosongkan.");
+      setTimeout(() => setQueueSuccessMsg(""), 6000);
+    } catch (err: any) {
+      alert("Gagal mengosongkan antrean: " + (err?.message || err));
+    } finally {
+      setIsClearingQueue(false);
     }
   };
 
@@ -309,6 +324,17 @@ export default function CreatorPoolPage() {
           >
             {isPreparingQueue ? <Loader2 className="w-4 h-4 animate-spin" /> : <Target className="w-4 h-4" />}
             <span>🎯 Siapkan Antrean Update ({selectedUsernames.length})</span>
+          </button>
+
+          <button
+            type="button"
+            disabled={isClearingQueue}
+            onClick={handleClearTargetQueue}
+            title="Kosongkan seluruh antrean target di sistem agar bisa beralih ke campaign lain"
+            className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg bg-rose-950/60 hover:bg-rose-900 border border-rose-800/60 text-rose-300 transition cursor-pointer disabled:opacity-50"
+          >
+            {isClearingQueue ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5 text-rose-400" />}
+            <span>Kosongkan Antrean</span>
           </button>
         </div>
       </div>

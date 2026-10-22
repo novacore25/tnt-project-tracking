@@ -262,20 +262,20 @@ export default function StagingCreatorPage() {
     setPromotingToCampaign(true);
     setBannerMessage(null);
     try {
-      const res = await promoteStagingToCampaignListingAction({
+      const res = (await promoteStagingToCampaignListingAction({
         stagingIds: selectedIds,
         campaignId: cId,
         campaignName: cName,
-      });
-      if (res.success) {
+      })) as any;
+      if (res?.success) {
         setBannerMessage({
           type: 'success',
-          text: `🚀 Berhasil meng-update ${res.totalProcessed} kreator ke listingan Campaign "${res.campaignName}"! Status, tier, dan metrik analitik otomatis tersinkronisasi.`,
+          text: `🚀 Berhasil meng-update ${res.totalProcessed || res.promotedCount || selectedIds.length} kreator ke listingan Campaign "${res.campaignName || cName}"! Status, tier, dan metrik analitik otomatis tersinkronisasi.`,
         });
         setSelectedIds([]);
         await Promise.all([loadStagingData(), syncKnownBook()]);
       } else {
-        setBannerMessage({ type: 'error', text: res.error || 'Gagal meng-update ke campaign.' });
+        setBannerMessage({ type: 'error', text: res?.error || 'Gagal meng-update ke campaign.' });
       }
     } catch (err: unknown) {
       setBannerMessage({

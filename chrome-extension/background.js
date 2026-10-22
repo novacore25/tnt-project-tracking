@@ -347,6 +347,40 @@ async function updateTargetStatusInTntTab(username, status = 'completed') {
   }
 }
 
+/**
+ * Mengosongkan seluruh antrean target scraping di storage ekstensi dan database TNT App
+ */
+async function clearScrapeTargetsInTntTab() {
+  await setStorage({
+    tnt_scrape_targets: [],
+    tnt_active_target: null,
+  });
+
+  let tab = await findTntAppTab();
+  if (!tab || !tab.id) return { success: true };
+
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: async () => {
+        try {
+          await fetch('/api/creator-staging/targets', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ action: 'clear' }),
+          });
+          return { success: true };
+        } catch {
+          return { success: false };
+        }
+      },
+    });
+  } catch (_) {}
+
+  return { success: true };
+}
+
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   (async () => {
     const action = request?.action;
@@ -392,6 +426,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
     if (action === 'FETCH_SCRAPE_TARGETS') {
       const res = await fetchScrapeTargetsFromTntTab(false);
+      sendResponse(res);
+      return;
+    }
+
+    if (action === 'CLEAR_SCRAPE_TARGETS') {
+      const res = await clearScrapeTargetsInTntTab();
       sendResponse(res);
       return;
     }

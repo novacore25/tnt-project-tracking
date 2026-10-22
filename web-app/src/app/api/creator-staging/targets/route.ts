@@ -4,6 +4,7 @@ import {
   fetchPendingScrapeTargetsAction,
   addScrapeTargetsAction,
   markScrapeTargetCompletedAction,
+  clearScrapeTargetsAction,
 } from '@/app/actions/creatorTargetActions';
 
 export async function GET() {
@@ -29,6 +30,11 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
+    if (body.action === 'clear') {
+      await clearScrapeTargetsAction();
+      return NextResponse.json({ success: true, message: 'Antrean target berhasil dikosongkan.' });
+    }
+
     if (body.action === 'complete' && body.username) {
       await markScrapeTargetCompletedAction(body.username);
       return NextResponse.json({ success: true });
