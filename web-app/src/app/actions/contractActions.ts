@@ -28,7 +28,14 @@ export async function fetchContractsAction(params?: {
   search?: string;
 }) {
   try {
-    await requireUser();
+    const { sessionUser, profile } = await requireUser();
+    if (params?.campaignId) {
+      await syncApprovedCreatorDraftsInternal(
+        params.campaignId,
+        profile.id,
+        profile.fullName || sessionUser.email?.split('@')[0]
+      );
+    }
 
     const conditions: any[] = [];
     if (params?.campaignId) {
@@ -73,6 +80,245 @@ export async function fetchContractsAction(params?: {
   } catch (err: any) {
     console.error('fetchContractsAction error:', err);
     return { success: false, error: err.message, data: [] };
+  }
+}
+
+/**
+ * Internal Sync: Pastikan seluruh kreator approved otomatis memiliki draft kontrak
+ */
+async function syncApprovedCreatorDraftsInternal(campaignId: number, picId?: string, picName?: string) {
+  try {
+    const campRows = await db.execute(sql`
+      SELECT c.*, b.nama as brand_nama
+      FROM campaigns c
+      LEFT JOIN brands b ON c.brand_id = b.id
+      WHERE c.id = ${campaignId}
+      LIMIT 1
+    `) as any[];
+    if (!campRows || campRows.length === 0) return;
+    const camp = campRows[0];
+    const brandName = camp.brand_nama || 'Brand Partner';
+
+    const ccRows = await db.execute(sql`
+      SELECT 
+        cc.id as cc_id,
+        cc.campaign_id,
+        cc.creator_id,
+        cc.price,
+        cc.qty_vt,
+        cc.qty_live,
+        cc.approval,
+        c.username,
+        COALESCE(
+          NULLIF(c.nama_lengkap, ''),
+          NULLIF(c.nama_asli, ''),
+          (
+            SELECT ci.nama_ktp FROM creator_identities ci 
+            WHERE ci.creator_id = c.id AND ci.nama_ktp IS NOT NULL AND ci.nama_ktp != ''
+            ORDER BY ci.is_primary DESC, ci.id DESC LIMIT 1
+          ),
+          (
+            SELECT pi.nama_penerima FROM payment_items pi
+            JOIN campaign_creators cc2 ON pi.campaign_creator_id = cc2.id
+            WHERE cc2.creator_id = c.id AND pi.nama_penerima IS NOT NULL AND pi.nama_penerima != ''
+            ORDER BY pi.id DESC LIMIT 1
+          )
+        ) as nama_lengkap,
+        COALESCE(
+          (
+            SELECT ci.nik FROM creator_identities ci 
+            WHERE ci.creator_id = c.id AND ci.nik IS NOT NULL AND ci.nik != ''
+            ORDER BY ci.is_primary DESC, ci.id DESC LIMIT 1
+          ),
+          (
+            SELECT pi.nik FROM payment_items pi
+            JOIN campaign_creators cc2 ON pi.campaign_creator_id = cc2.id
+            WHERE cc2.creator_id = c.id AND pi.nik IS NOT NULL AND pi.nik != ''
+            ORDER BY pi.id DESC LIMIT 1
+          ),
+          NULLIF(c.nik, '')
+        ) as nik_ktp,
+        COALESCE(
+          (
+            SELECT ci.alamat_ktp FROM creator_identities ci 
+            WHERE ci.creator_id = c.id AND ci.alamat_ktp IS NOT NULL AND ci.alamat_ktp != ''
+            ORDER BY ci.is_primary DESC, ci.id DESC LIMIT 1
+          ),
+          (
+            SELECT pi.alamat_ktp FROM payment_items pi
+            JOIN campaign_creators cc2 ON pi.campaign_creator_id = cc2.id
+            WHERE cc2.creator_id = c.id AND pi.alamat_ktp IS NOT NULL AND pi.alamat_ktp != ''
+            ORDER BY pi.id DESC LIMIT 1
+          ),
+          NULLIF(c.alamat_ktp, '')
+        ) as alamat_ktp,
+        COALESCE(
+          (
+            SELECT ct.nomor FROM creator_contacts ct 
+            WHERE ct.creator_id = c.id AND ct.status = 'aktif' AND ct.nomor IS NOT NULL AND ct.nomor != ''
+            ORDER BY ct.id DESC LIMIT 1
+          ),
+          (
+            SELECT cpc.nomor_wa FROM creator_pic_contacts cpc
+            WHERE cpc.creator_id = c.id AND cpc.nomor_wa IS NOT NULL AND cpc.nomor_wa != ''
+            ORDER BY cpc.is_primary DESC, cpc.id DESC LIMIT 1
+          ),
+          (
+            SELECT pi.nomor_wa_dealing FROM payment_items pi
+            JOIN campaign_creators cc2 ON pi.campaign_creator_id = cc2.id
+            WHERE cc2.creator_id = c.id AND pi.nomor_wa_dealing IS NOT NULL AND pi.nomor_wa_dealing != ''
+            ORDER BY pi.id DESC LIMIT 1
+          ),
+          NULLIF(c.nomor_wa_dealing, ''),
+          NULLIF(c.no_whatsapp, '')
+        ) as contact_nomor,
+        COALESCE(
+          (
+            SELECT cb.bank_name FROM creator_bank_accounts cb 
+            WHERE cb.creator_id = c.id AND cb.bank_name IS NOT NULL AND cb.bank_name != ''
+            ORDER BY cb.is_primary DESC, cb.id ASC LIMIT 1
+          ),
+          (
+            SELECT pi.metode_pembayaran FROM payment_items pi
+            JOIN campaign_creators cc2 ON pi.campaign_creator_id = cc2.id
+            WHERE cc2.creator_id = c.id AND pi.metode_pembayaran IS NOT NULL AND pi.metode_pembayaran != ''
+            ORDER BY pi.id DESC LIMIT 1
+          )
+        ) as bank_name,
+        COALESCE(
+          (
+            SELECT cb.account_number FROM creator_bank_accounts cb 
+            WHERE cb.creator_id = c.id AND cb.account_number IS NOT NULL AND cb.account_number != ''
+            ORDER BY cb.is_primary DESC, cb.id ASC LIMIT 1
+          ),
+          (
+            SELECT pi.nomor_rekening FROM payment_items pi
+            JOIN campaign_creators cc2 ON pi.campaign_creator_id = cc2.id
+            WHERE cc2.creator_id = c.id AND pi.nomor_rekening IS NOT NULL AND pi.nomor_rekening != ''
+            ORDER BY pi.id DESC LIMIT 1
+          )
+        ) as account_number,
+        COALESCE(
+          (
+            SELECT cb.account_holder FROM creator_bank_accounts cb 
+            WHERE cb.creator_id = c.id AND cb.account_holder IS NOT NULL AND cb.account_holder != ''
+            ORDER BY cb.is_primary DESC, cb.id ASC LIMIT 1
+          ),
+          (
+            SELECT pi.nama_penerima FROM payment_items pi
+            JOIN campaign_creators cc2 ON pi.campaign_creator_id = cc2.id
+            WHERE cc2.creator_id = c.id AND pi.nama_penerima IS NOT NULL AND pi.nama_penerima != ''
+            ORDER BY pi.id DESC LIMIT 1
+          )
+        ) as account_holder,
+        c.email,
+        c.npwp,
+        c.tempat_lahir,
+        c.tanggal_lahir,
+        c.tiktok_uid,
+        COALESCE(c.status_binding, 'Non-Binding') as status_binding
+      FROM campaign_creators cc
+      JOIN creators c ON cc.creator_id = c.id
+      WHERE cc.campaign_id = ${campaignId}
+        AND LOWER(cc.approval) = 'approved'
+      ORDER BY cc.id ASC
+    `) as any[];
+
+    if (!ccRows || ccRows.length === 0) return;
+
+    const today = new Date();
+    const curYear = today.getFullYear();
+    const curRomanMonth = getRomanMonth(today.getMonth());
+
+    for (const cc of ccRows) {
+      const exist = await db.execute(sql`
+        SELECT id, status FROM creator_contracts 
+        WHERE campaign_creator_id = ${cc.cc_id} OR (campaign_id = ${campaignId} AND creator_id = ${cc.creator_id})
+        LIMIT 1
+      `) as any[];
+
+      if (exist.length > 0) continue;
+
+      const creatorRealName = cc.nama_lengkap || cc.username;
+      const creatorInitials = getInitials(creatorRealName);
+      const draftNumber = `[DRAFT]/JC-TNT/${creatorInitials}/${curRomanMonth}/${curYear}`;
+      const contractTitle = `Kontrak Join Campaign - @${cc.username} (${brandName})`;
+
+      const initialContractData = {
+        nomorKontrak: draftNumber,
+        statusBinding: cc.status_binding?.toLowerCase().includes('binding') && !cc.status_binding?.toLowerCase().includes('non')
+          ? 'KREATOR Binding'
+          : 'KREATOR Non-Binding',
+        namaPerusahaan: 'PT TNT KREATIF DIGITAL',
+        alamatPerusahaan: 'Jalan Kavling Perkebunan Raya, RT 006 / RW 013, Panunggangan Barat, Kecamatan Cibodas, Kota Tangerang, Banten 15139',
+        namaDirekturTNT: 'Stevani',
+        jabatanDirekturTNT: 'Direktur',
+        namaSignerTNT: 'Ruben Arianto',
+        jabatanSignerTNT: 'Manajer Umum',
+        namaPicTNT: picName || 'Safira',
+        jabatanPicTNT: 'Project Manager',
+        namaKreator: creatorRealName,
+        usernameTikTok: cc.username,
+        tiktokUid: cc.tiktok_uid || '',
+        nikKtp: cc.nik_ktp || '',
+        alamatKreator: cc.alamat_ktp || '',
+        teleponKreator: cc.contact_nomor || '',
+        emailKreator: cc.email || '',
+        namaBank: cc.bank_name || '',
+        nomorRekening: cc.account_number || '',
+        atasNamaRekening: cc.account_holder || creatorRealName,
+        namaCampaign: camp.nama,
+        namaBrand: brandName,
+        jenisCampaign: 'Fee',
+        qtyVt: Number(cc.qty_vt) || 1,
+        qtyPhotoSlide: 0,
+        qtyLive: Number(cc.qty_live) || 0,
+        biayaHonor: Number(cc.price) || 0,
+        durasiKonten: '30 - 60',
+        durasiKontenTerbilang: 'tiga puluh sampai enam puluh',
+        skemaPembayaran: 'H+14 dari selesai Campaign sampai dengan H+21 dari selesai Campaign',
+        catatanTambahan: '',
+        tempatPerjanjian: 'Tangerang'
+      };
+
+      await db.execute(sql`
+        INSERT INTO creator_contracts (
+          creator_id,
+          campaign_id,
+          campaign_creator_id,
+          judul_kontrak,
+          link_kontrak,
+          nomor_kontrak,
+          status_binding,
+          signer_name,
+          signer_role,
+          status,
+          created_by_id,
+          created_by_name,
+          contract_data,
+          created_at,
+          updated_at
+        ) VALUES (
+          ${cc.creator_id},
+          ${campaignId},
+          ${cc.cc_id},
+          ${contractTitle},
+          ${'#draft-' + cc.cc_id},
+          ${draftNumber},
+          ${initialContractData.statusBinding},
+          ${'Ruben Arianto'},
+          ${'Manajer Umum'},
+          'draft',
+          ${picId || null},
+          ${picName || 'System'},
+          ${JSON.stringify(initialContractData)}::jsonb,
+          now(),
+          now()
+        )
+      `);
+    }
+  } catch (err) {
+    console.error('syncApprovedCreatorDraftsInternal error:', err);
   }
 }
 

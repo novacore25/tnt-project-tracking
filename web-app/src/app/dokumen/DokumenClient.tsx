@@ -231,23 +231,7 @@ export default function DokumenClient({
             </button>
           </div>
 
-          {/* AUTO GENERATE APPROVED DRAFTS BUTTON */}
-          {selectedCampaignId && (
-            <button
-              type="button"
-              onClick={handleAutoGenerateApproved}
-              disabled={isAutoGenerating}
-              className="flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer disabled:opacity-50"
-              title="Buat draft otomatis untuk seluruh kreator yang berstatus approved"
-            >
-              {isAutoGenerating ? (
-                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <Zap className="w-3.5 h-3.5" />
-              )}
-              <span>Auto-Generate Approved</span>
-            </button>
-          )}
+
 
           <button
             onClick={() => {
