@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import dynamic from "next/dynamic";
@@ -32,6 +32,7 @@ import {
 import Link from "next/link";
 import { CreatorContractPdfDocument, CreatorContractData } from "@/components/contract/CreatorContractPdfDocument";
 import { syncContractCreatorProfileDataAction } from "@/app/actions/creatorActions";
+import { saveContractDraftAction, releaseContractAction } from "@/app/actions/contractActions";
 import { fetchCampaignCreatorsForDocumentsAction } from "@/app/actions/campaignPageActions";
 
 const PDFViewer = dynamic(
@@ -119,6 +120,8 @@ interface ContractGeneratorWorkspaceProps {
   campaignBrandName: string;
   defaultUserName: string;
   onCreatorUpdated?: () => void;
+  initialContract?: any;
+  isCampaignScoped?: boolean;
 }
 
 export default function ContractGeneratorWorkspace({
@@ -129,6 +132,8 @@ export default function ContractGeneratorWorkspace({
   campaignBrandName,
   defaultUserName,
   onCreatorUpdated,
+  initialContract,
+  isCampaignScoped = false,
 }: ContractGeneratorWorkspaceProps) {
   // PILIHAN KONTRAK / TEMPLATE DOKUMEN
   const [selectedDocType, setSelectedDocType] = useState<string>("kontrak_creator");
@@ -150,6 +155,42 @@ export default function ContractGeneratorWorkspace({
     if (!selectedCcId) return null;
     return creators.find((c) => c.cc_id === selectedCcId) || null;
   }, [selectedCreator, selectedCcId, creators]);
+
+  // Load data dari initialContract jika ada (Mode Edit)
+  const [currentContractId, setCurrentContractId] = useState<number | null>(null);
+  const [contractStatus, setContractStatus] = useState<string>('draft');
+  const [isSavingDraft, setIsSavingDraft] = useState(false);
+  const [isReleasing, setIsReleasing] = useState(false);
+  const [contractFeedback, setContractFeedback] = useState<{ success: boolean; msg: string } | null>(null);
+
+  useEffect(() => {
+    if (initialContract) {
+      setCurrentContractId(initialContract.id);
+      setContractStatus(initialContract.status || 'draft');
+      const d = initialContract.contract_data || {};
+      if (d.nomorKontrak) setNomorKontrak(d.nomorKontrak);
+      if (d.namaKreator) setNamaKreator(d.namaKreator);
+      if (d.usernameTikTok) {
+        setUsernameTikTok(d.usernameTikTok);
+        setSearchQuery(`@${d.usernameTikTok.replace(/^@+/, '')}`);
+      }
+      if (d.statusBinding) setStatusBinding(d.statusBinding);
+      if (d.nikKtp) setNikKtp(d.nikKtp);
+      if (d.alamatKreator) setAlamatKreator(d.alamatKreator);
+      if (d.teleponKreator) setTeleponKreator(d.teleponKreator);
+      if (d.emailKreator) setEmailKreator(d.emailKreator);
+      if (d.namaBank) setNamaBank(d.namaBank);
+      if (d.nomorRekening) setNomorRekening(d.nomorRekening);
+      if (d.atasNamaRekening) setAtasNamaRekening(d.atasNamaRekening);
+      if (d.biayaHonor) setBiayaHonor(Number(d.biayaHonor));
+      if (d.qtyVt) setQtyVt(Number(d.qtyVt));
+      if (d.namaBrand) setManualBrandName(d.namaBrand);
+      if (d.namaSignerTNT) setNamaSignerTNT(d.namaSignerTNT);
+      if (d.jabatanSignerTNT) setJabatanSignerTNT(d.jabatanSignerTNT);
+      if (d.skemaPembayaran) setSkemaPembayaran(d.skemaPembayaran);
+      if (d.catatanTambahan) setCatatanTambahan(d.catatanTambahan);
+    }
+  }, [initialContract]);
 
   // Reset pencarian & seleksi kreator ketika campaign berganti
   useEffect(() => {
