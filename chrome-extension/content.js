@@ -1485,62 +1485,138 @@
           <span style="background:#4f46e5;color:#fff;font-weight:800;padding:3px 8px;border-radius:6px;font-size:11px;">TNT</span>
           <strong style="font-size:14px;letter-spacing:-0.2px;">TNT Scrapping Creator</strong>
         </div>
-        <span id="tnt-mode-pill" style="font-size:10px;background:rgba(255,255,255,0.1);padding:2px 8px;border-radius:999px;color:#cbd5e1;">Siap</span>
-      </div>
-
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
-        <div style="background:rgba(255,255,255,0.05);padding:8px 10px;border-radius:10px;border:1px solid rgba(255,255,255,0.08);">
-          <div style="color:#94a3b8;font-size:10px;font-weight:600;">📖 BUKU CATATAN</div>
-          <div style="font-size:15px;font-weight:800;color:#a5b4fc;margin-top:2px;"><span id="tnt-known-count">0</span> <small style="font-size:10px;font-weight:500;color:#64748b;">username</small></div>
-        </div>
-        <div style="background:rgba(255,255,255,0.05);padding:8px 10px;border-radius:10px;border:1px solid rgba(255,255,255,0.08);">
-          <div style="color:#94a3b8;font-size:10px;font-weight:600;">📦 ANTREAN LOCAL</div>
-          <div style="font-size:15px;font-weight:800;color:#34d399;margin-top:2px;"><span id="tnt-queue-count">0</span> <small style="font-size:10px;font-weight:500;color:#64748b;">kreator</small></div>
-        </div>
-      </div>
-
-      <div style="display:flex;justify-content:space-between;background:rgba(255,255,255,0.04);padding:6px 10px;border-radius:8px;margin-bottom:10px;font-size:11px;color:#cbd5e1;">
-        <span>✅ Sesi Ini: <strong id="tnt-session-scraped" style="color:#fff;">0</strong></span>
-        <span>⏭️ Skip Duplikat: <strong id="tnt-session-skipped" style="color:#38bdf8;">0</strong></span>
-      </div>
-
-      <div style="background:rgba(255,255,255,0.05);padding:8px 10px;border-radius:10px;border:1px solid rgba(255,255,255,0.08);margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;">
-        <label for="tnt-toggle-contacts" style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:11px;color:#f1f5f9;font-weight:600;user-select:none;">
-          <input type="checkbox" id="tnt-toggle-contacts" checked style="width:16px;height:16px;accent-color:#4f46e5;cursor:pointer;">
-          <span>💬 Buka Kontak (IM Chat)</span>
-        </label>
-        <span id="tnt-toggle-hint" style="font-size:10px;color:#34d399;font-weight:700;">Lengkap (WA/Email)</span>
-      </div>
-
-      <div id="tnt-status-box" style="background:rgba(79,70,229,0.15);border:1px solid rgba(99,102,241,0.3);color:#e2e8f0;padding:8px 10px;border-radius:8px;margin-bottom:12px;font-size:11px;line-height:1.4;min-height:34px;">
-        Siap melakukan scraping kreator TikTok Partner Center.
-      </div>
-
-      <div style="display:flex;flex-direction:column;gap:8px;">
-        <div style="display:flex;gap:6px;">
-          <button id="tnt-btn-sync-book" style="flex:1;padding:8px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.18);background:rgba(255,255,255,0.07);color:#f8fafc;font-weight:600;font-size:11px;cursor:pointer;">
-            🔄 Ambil Buku Catatan
+        <div style="display:flex;align-items:center;gap:6px;">
+          <button id="tnt-btn-toggle-settings" title="Buka / Sembunyikan Pengaturan" style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:3px 8px;color:#cbd5e1;cursor:pointer;font-size:11px;font-weight:600;display:flex;align-items:center;gap:4px;transition:all 0.2s;">
+            <span>⚙️</span>
+            <span id="tnt-settings-btn-label">Pengaturan</span>
           </button>
-          <button id="tnt-btn-clear-book" title="Kosongkan Buku Catatan di Ekstensi" style="padding:8px 10px;border-radius:8px;border:1px solid rgba(244,63,94,0.35);background:rgba(244,63,94,0.14);color:#fda4af;font-weight:600;font-size:11px;cursor:pointer;">
-            🗑️ Hapus Catatan
-          </button>
+          <span id="tnt-mode-pill" style="font-size:10px;background:rgba(255,255,255,0.1);padding:2px 8px;border-radius:999px;color:#cbd5e1;">Siap</span>
+          <button id="tnt-btn-minimize-panel" title="Perkecil Panel" style="background:none;border:none;color:#94a3b8;cursor:pointer;font-size:13px;padding:0 4px;line-height:1;">—</button>
+        </div>
+      </div>
+
+      <div id="tnt-panel-body">
+        <!-- SECTION PENGATURAN (Bisa dimunculkan / disembunyikan via tombol ⚙️ Pengaturan) -->
+        <div id="tnt-settings-section" style="display:none;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:10px;margin-bottom:10px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+            <span style="font-size:10px;font-weight:700;color:#94a3b8;letter-spacing:0.5px;">⚙️ PENGATURAN SCRAPING</span>
+            <span style="font-size:10px;color:#64748b;cursor:pointer;" id="tnt-btn-close-settings">✕ Tutup</span>
+          </div>
+
+          <!-- Setting 1: Toggle Kontak IM -->
+          <div style="background:rgba(255,255,255,0.04);padding:8px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;">
+            <label for="tnt-toggle-contacts" style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:11px;color:#f1f5f9;font-weight:600;user-select:none;">
+              <input type="checkbox" id="tnt-toggle-contacts" checked style="width:16px;height:16px;accent-color:#4f46e5;cursor:pointer;">
+              <span>💬 Buka Kontak (IM Chat)</span>
+            </label>
+            <span id="tnt-toggle-hint" style="font-size:10px;color:#34d399;font-weight:700;">Lengkap (WA/Email)</span>
+          </div>
+
+          <!-- Setting 2: Manajemen Buku Catatan -->
+          <div style="display:flex;gap:6px;">
+            <button id="tnt-btn-sync-book" style="flex:1;padding:7px 8px;border-radius:7px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.06);color:#f8fafc;font-weight:600;font-size:10.5px;cursor:pointer;">
+              🔄 Ambil Buku Catatan
+            </button>
+            <button id="tnt-btn-clear-book" title="Kosongkan Buku Catatan di Ekstensi" style="padding:7px 8px;border-radius:7px;border:1px solid rgba(244,63,94,0.35);background:rgba(244,63,94,0.12);color:#fda4af;font-weight:600;font-size:10.5px;cursor:pointer;">
+              🗑️ Hapus Catatan
+            </button>
+          </div>
         </div>
 
-        <button id="tnt-btn-start" style="width:100%;padding:10px 12px;border-radius:10px;border:none;background:linear-gradient(135deg,#4f46e5,#6366f1);color:#fff;font-weight:700;font-size:13px;cursor:pointer;box-shadow:0 4px 12px rgba(79,70,229,0.4);">
-          ▶️ Mulai Auto-Scrape (Tanpa Henti)
-        </button>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
+          <div style="background:rgba(255,255,255,0.05);padding:8px 10px;border-radius:10px;border:1px solid rgba(255,255,255,0.08);">
+            <div style="color:#94a3b8;font-size:10px;font-weight:600;">📖 BUKU CATATAN</div>
+            <div style="font-size:15px;font-weight:800;color:#a5b4fc;margin-top:2px;"><span id="tnt-known-count">0</span> <small style="font-size:10px;font-weight:500;color:#64748b;">username</small></div>
+          </div>
+          <div style="background:rgba(255,255,255,0.05);padding:8px 10px;border-radius:10px;border:1px solid rgba(255,255,255,0.08);">
+            <div style="color:#94a3b8;font-size:10px;font-weight:600;">📦 ANTREAN LOCAL</div>
+            <div style="font-size:15px;font-weight:800;color:#34d399;margin-top:2px;"><span id="tnt-queue-count">0</span> <small style="font-size:10px;font-weight:500;color:#64748b;">kreator</small></div>
+          </div>
+        </div>
 
-        <button id="tnt-btn-stop" style="display:none;width:100%;padding:10px 12px;border-radius:10px;border:none;background:linear-gradient(135deg,#e11d48,#f43f5e);color:#fff;font-weight:700;font-size:13px;cursor:pointer;box-shadow:0 4px 12px rgba(225,29,72,0.4);">
-          ⏹️ STOP Scraping
-        </button>
+        <div style="display:flex;justify-content:space-between;background:rgba(255,255,255,0.04);padding:6px 10px;border-radius:8px;margin-bottom:10px;font-size:11px;color:#cbd5e1;">
+          <span>✅ Sesi Ini: <strong id="tnt-session-scraped" style="color:#fff;">0</strong></span>
+          <span>⏭️ Skip Duplikat: <strong id="tnt-session-skipped" style="color:#38bdf8;">0</strong></span>
+        </div>
 
-        <button id="tnt-btn-push-staging" style="display:none;width:100%;padding:11px 12px;border-radius:10px;border:none;background:linear-gradient(135deg,#059669,#10b981);color:#fff;font-weight:800;font-size:13px;cursor:pointer;box-shadow:0 4px 14px rgba(16,185,129,0.4);">
-          🚀 Tambahkan ke Staging (0 Kreator)
-        </button>
+        <div id="tnt-status-box" style="background:rgba(79,70,229,0.15);border:1px solid rgba(99,102,241,0.3);color:#e2e8f0;padding:8px 10px;border-radius:8px;margin-bottom:12px;font-size:11px;line-height:1.4;min-height:34px;">
+          Siap melakukan scraping kreator TikTok Partner Center.
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          <button id="tnt-btn-start" style="width:100%;padding:10px 12px;border-radius:10px;border:none;background:linear-gradient(135deg,#4f46e5,#6366f1);color:#fff;font-weight:700;font-size:13px;cursor:pointer;box-shadow:0 4px 12px rgba(79,70,229,0.4);">
+            ▶️ Mulai Auto-Scrape (Tanpa Henti)
+          </button>
+
+          <button id="tnt-btn-stop" style="display:none;width:100%;padding:10px 12px;border-radius:10px;border:none;background:linear-gradient(135deg,#e11d48,#f43f5e);color:#fff;font-weight:700;font-size:13px;cursor:pointer;box-shadow:0 4px 12px rgba(225,29,72,0.4);">
+            ⏹️ STOP Scraping
+          </button>
+
+          <button id="tnt-btn-push-staging" style="display:none;width:100%;padding:11px 12px;border-radius:10px;border:none;background:linear-gradient(135deg,#059669,#10b981);color:#fff;font-weight:800;font-size:13px;cursor:pointer;box-shadow:0 4px 14px rgba(16,185,129,0.4);">
+            🚀 Tambahkan ke Staging (0 Kreator)
+          </button>
+        </div>
       </div>
     `;
 
     document.body.appendChild(panelRoot);
+
+    // Toggle Pengaturan Scraping (Buka / Sembunyikan)
+    const settingsSec = document.getElementById('tnt-settings-section');
+    const settingsBtn = document.getElementById('tnt-btn-toggle-settings');
+
+    function setSettingsVisibility(show) {
+      if (!settingsSec || !settingsBtn) return;
+      settingsSec.style.display = show ? 'block' : 'none';
+      settingsBtn.style.background = show ? 'rgba(99, 102, 241, 0.35)' : 'rgba(255, 255, 255, 0.08)';
+      settingsBtn.style.borderColor = show ? '#6366f1' : 'rgba(255, 255, 255, 0.15)';
+      settingsBtn.style.color = show ? '#a5b4fc' : '#cbd5e1';
+      if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+        chrome.storage.local.set({ tnt_ui_settings_open: show });
+      }
+    }
+
+    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+      chrome.storage.local.get(['tnt_ui_settings_open'], (res) => {
+        setSettingsVisibility(Boolean(res.tnt_ui_settings_open));
+      });
+    }
+
+    settingsBtn?.addEventListener('click', () => {
+      const isVisible = settingsSec.style.display !== 'none';
+      setSettingsVisibility(!isVisible);
+    });
+
+    document.getElementById('tnt-btn-close-settings')?.addEventListener('click', () => {
+      setSettingsVisibility(false);
+    });
+
+    // Toggle Minimize Panel
+    const minBtn = document.getElementById('tnt-btn-minimize-panel');
+    const panelBody = document.getElementById('tnt-panel-body');
+
+    function setPanelMinimized(isMin) {
+      if (!panelRoot || !panelBody || !minBtn) return;
+      panelBody.style.display = isMin ? 'none' : 'block';
+      panelRoot.style.width = isMin ? 'auto' : '340px';
+      panelRoot.style.padding = isMin ? '8px 12px' : '16px';
+      minBtn.textContent = isMin ? '◻' : '—';
+      minBtn.title = isMin ? 'Perbesar Panel' : 'Perkecil Panel';
+      if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+        chrome.storage.local.set({ tnt_ui_panel_minimized: isMin });
+      }
+    }
+
+    minBtn?.addEventListener('click', () => {
+      const isCurrentlyMin = panelBody.style.display === 'none';
+      setPanelMinimized(!isCurrentlyMin);
+    });
+
+    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+      chrome.storage.local.get(['tnt_ui_panel_minimized'], (res) => {
+        if (res.tnt_ui_panel_minimized) setPanelMinimized(true);
+      });
+    }
 
     // Load & listen toggle opsi Buka Kontak (IM Chat)
     if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
