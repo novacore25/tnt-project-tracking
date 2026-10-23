@@ -16,8 +16,34 @@ export default function CampaignsPage() {
   const [newBrandName, setNewBrandName] = useState('');
   const [statusFilter, setStatusFilter] = useState<'aktif' | 'selesai' | 'arsip'>('aktif');
   const [groupFilter, setGroupFilter] = useState<string>('all');
+  const [typeFilter, setTypeFilter] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const searchInputRef = useRef<HTMLInputElement>(null);
+
+  const toggleTypeFilter = (type: 'sales' | 'awareness') => {
+    setTypeFilter(prev => {
+      if (prev.includes(type)) {
+        return prev.filter(t => t !== type);
+      } else {
+        return [...prev, type];
+      }
+    });
+  };
+
+  const matchesTypeFilter = (c: any, types: string[]) => {
+    if (types.length === 0 || types.length === 2) {
+      // Jika tidak ada filter tipe atau dua-duanya dipilih ("AWARENESS + SALES")
+      return true;
+    }
+    const t = (c.tipe_campaign || '').toLowerCase();
+    if (types.includes('sales')) {
+      return t === 'sales' || t === 'gmv_awareness';
+    }
+    if (types.includes('awareness')) {
+      return t === 'awareness' || t === 'gmv_awareness';
+    }
+    return true;
+  };
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -345,30 +371,104 @@ export default function CampaignsPage() {
         </div>
       </div>
 
-      {/* Group Filter Pills */}
-      <div className="flex items-center gap-[8px]">
-        {[
-          { key: 'all', label: 'Semua Tim' },
-          { key: 'Tim Campaign', label: 'Tim Campaign' },
-          { key: 'Tim MCN', label: 'Tim MCN' },
-        ].map(g => (
-          <button
-            key={g.key}
-            onClick={() => setGroupFilter(g.key)}
-            className={`px-[14px] py-[6px] rounded-full text-[13px] font-semibold transition-all ${
-              groupFilter === g.key
-                ? 'bg-p300 text-white shadow-sm'
-                : 'bg-line text-text-soft hover:bg-p50 hover:text-p300'
-            }`}
-          >
-            {g.label}
-            <span className={`ml-[6px] text-[11px] px-[5px] py-[1px] rounded-full ${
-              groupFilter === g.key ? 'bg-white/20 text-white' : 'bg-white text-text-soft'
-            }`}>
-              {campaigns.filter(c => c.status === statusFilter && (g.key === 'all' || (c.campaign_group || 'Tim Campaign') === g.key) && c.nama.toLowerCase().includes(searchQuery.toLowerCase())).length}
-            </span>
-          </button>
-        ))}
+      {/* Group & Type Filter Bar */}
+      <div className="flex flex-wrap items-center justify-between gap-[12px]">
+        <div className="flex flex-wrap items-center gap-[8px]">
+          {/* Group Filter Pills */}
+          {[
+            { key: 'all', label: 'Semua Tim' },
+            { key: 'Tim Campaign', label: 'Tim Campaign' },
+            { key: 'Tim MCN', label: 'Tim MCN' },
+          ].map(g => (
+            <button
+              key={g.key}
+              onClick={() => setGroupFilter(g.key)}
+              className={`px-[14px] py-[6px] rounded-full text-[13px] font-semibold transition-all ${
+                groupFilter === g.key
+                  ? 'bg-p300 text-white shadow-sm'
+                  : 'bg-line text-text-soft hover:bg-p50 hover:text-p300'
+              }`}
+            >
+              {g.label}
+              <span className={`ml-[6px] text-[11px] px-[5px] py-[1px] rounded-full ${
+                groupFilter === g.key ? 'bg-white/20 text-white' : 'bg-white text-text-soft'
+              }`}>
+                {campaigns.filter(c => 
+                  c.status === statusFilter && 
+                  (g.key === 'all' || (c.campaign_group || 'Tim Campaign') === g.key) && 
+                  c.nama.toLowerCase().includes(searchQuery.toLowerCase()) &&
+                  matchesTypeFilter(c, typeFilter)
+                ).length}
+              </span>
+            </button>
+          ))}
+
+          <div className="hidden sm:block h-[18px] w-[1px] bg-line mx-[4px]" />
+
+          {/* Type Filter Buttons (SALES, AWARENESS, multi-select) */}
+          <div className="flex items-center gap-[8px] flex-wrap">
+            <button
+              type="button"
+              onClick={() => toggleTypeFilter('sales')}
+              className={`px-[14px] py-[6px] rounded-full text-[13px] font-bold transition-all flex items-center gap-[6px] ${
+                typeFilter.includes('sales')
+                  ? 'bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-600/30'
+                  : 'bg-line text-text-soft hover:bg-emerald-50 hover:text-emerald-700'
+              }`}
+            >
+              <span>SALES</span>
+              <span className={`text-[11px] px-[5px] py-[1px] rounded-full ${
+                typeFilter.includes('sales') ? 'bg-white/20 text-white' : 'bg-white text-text-soft'
+              }`}>
+                {campaigns.filter(c => 
+                  c.status === statusFilter && 
+                  (groupFilter === 'all' || (c.campaign_group || 'Tim Campaign') === groupFilter) && 
+                  c.nama.toLowerCase().includes(searchQuery.toLowerCase()) && 
+                  (c.tipe_campaign === 'sales' || c.tipe_campaign === 'gmv_awareness')
+                ).length}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => toggleTypeFilter('awareness')}
+              className={`px-[14px] py-[6px] rounded-full text-[13px] font-bold transition-all flex items-center gap-[6px] ${
+                typeFilter.includes('awareness')
+                  ? 'bg-slate-800 text-white shadow-sm ring-2 ring-slate-800/30'
+                  : 'bg-line text-text-soft hover:bg-slate-100 hover:text-slate-900'
+              }`}
+            >
+              <span>AWARENESS</span>
+              <span className={`text-[11px] px-[5px] py-[1px] rounded-full ${
+                typeFilter.includes('awareness') ? 'bg-white/20 text-white' : 'bg-white text-text-soft'
+              }`}>
+                {campaigns.filter(c => 
+                  c.status === statusFilter && 
+                  (groupFilter === 'all' || (c.campaign_group || 'Tim Campaign') === groupFilter) && 
+                  c.nama.toLowerCase().includes(searchQuery.toLowerCase()) && 
+                  (c.tipe_campaign === 'awareness' || c.tipe_campaign === 'gmv_awareness')
+                ).length}
+              </span>
+            </button>
+
+            {typeFilter.length === 2 && (
+              <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-[8px] py-[3px] rounded-full">
+                AWARENESS + SALES
+              </span>
+            )}
+
+            {typeFilter.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setTypeFilter([])}
+                className="text-[12px] text-text-soft hover:text-p300 underline font-medium ml-1 transition-colors"
+                title="Reset filter tipe campaign"
+              >
+                Reset
+              </button>
+            )}
+          </div>
+        </div>
       </div>
 
       <div className="flex items-center gap-[8px] border-b border-line pb-0">
@@ -390,17 +490,38 @@ export default function CampaignsPage() {
             <span className={`ml-[4px] text-[11px] px-[6px] py-[2px] rounded-full ${
               statusFilter === tab.key ? 'bg-p50 text-p300' : 'bg-line text-text-soft'
             }`}>
-              {campaigns.filter(c => c.status === tab.key && (groupFilter === 'all' || (c.campaign_group || 'Tim Campaign') === groupFilter) && c.nama.toLowerCase().includes(searchQuery.toLowerCase())).length}
+              {campaigns.filter(c => 
+                c.status === tab.key && 
+                (groupFilter === 'all' || (c.campaign_group || 'Tim Campaign') === groupFilter) && 
+                c.nama.toLowerCase().includes(searchQuery.toLowerCase()) &&
+                matchesTypeFilter(c, typeFilter)
+              ).length}
             </span>
           </button>
         ))}
       </div>
 
       <div className="grid gap-[16px] md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {campaigns.filter(c => c.status === statusFilter && (groupFilter === 'all' || (c.campaign_group || 'Tim Campaign') === groupFilter) && c.nama.toLowerCase().includes(searchQuery.toLowerCase())).map(campaign => {
-          const brand = brands.find(b => b.id === campaign.brand_id);
-          return <CampaignCardItem key={campaign.id} campaign={campaign} brand={brand} isManager={isManager} />;
-        })}
+        {(() => {
+          const filtered = campaigns.filter(c => 
+            c.status === statusFilter && 
+            (groupFilter === 'all' || (c.campaign_group || 'Tim Campaign') === groupFilter) && 
+            c.nama.toLowerCase().includes(searchQuery.toLowerCase()) &&
+            matchesTypeFilter(c, typeFilter)
+          );
+          if (filtered.length === 0) {
+            return (
+              <div className="col-span-full py-16 text-center text-text-soft">
+                <p className="text-base font-semibold text-text">Tidak ada campaign yang ditemukan</p>
+                <p className="text-xs text-text-soft mt-1">Coba sesuaikan filter tim, tipe, status, atau kata kunci pencarian.</p>
+              </div>
+            );
+          }
+          return filtered.map(campaign => {
+            const brand = brands.find(b => b.id === campaign.brand_id);
+            return <CampaignCardItem key={campaign.id} campaign={campaign} brand={brand} isManager={isManager} />;
+          });
+        })()}
       </div>
     </div>
   );
@@ -419,6 +540,10 @@ function CampaignCardItem({ campaign, brand, isManager }: { campaign: any, brand
     start_date: campaign.start_date, end_date: campaign.end_date,
     target_gmv: campaign.target_gmv || '', target_video: campaign.target_video || '',
     target_creator: campaign.target_creator || '', target_views: campaign.target_views || '',
+    target_creator_nano: campaign.target_creator_nano || '',
+    target_creator_micro: campaign.target_creator_micro || '',
+    target_creator_macro: campaign.target_creator_macro || '',
+    target_creator_mega: campaign.target_creator_mega || '',
     budget_creator_plafon: campaign.budget_creator_plafon || '', budget_ads_plafon: campaign.budget_ads_plafon || '',
     require_client_approval: campaign.require_client_approval || false
   });
