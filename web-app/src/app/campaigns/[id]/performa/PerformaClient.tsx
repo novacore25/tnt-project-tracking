@@ -961,22 +961,20 @@ export default function CampaignPerformaClient({ campaignId }: { campaignId: num
     if (c.approval === 'pending') fbPendingCreators++;
   });
 
-  const unprocessedSamplesCount = React.useMemo(() => {
-    const targetList = (appliedFilterType === 'none' || appliedFilterUsernames.length === 0)
-      ? localCreators
-      : localCreators.filter(c => {
-          const u = c.creators?.username?.toLowerCase();
-          if (!u) return false;
-          const match = appliedFilterUsernames.includes(u);
-          return appliedFilterType === 'include' ? match : !match;
-        });
+  const targetListForSamples = (appliedFilterType === 'none' || appliedFilterUsernames.length === 0)
+    ? localCreators
+    : localCreators.filter(c => {
+        const u = c.creators?.username?.toLowerCase();
+        if (!u) return false;
+        const match = appliedFilterUsernames.includes(u);
+        return appliedFilterType === 'include' ? match : !match;
+      });
 
-    return targetList.filter(c => {
-      if (c.approval !== 'approved') return false;
-      const proses = creatorAddressMap.get(c.id) || 'Belum diproses';
-      return proses.toLowerCase() === 'belum diproses';
-    }).length;
-  }, [localCreators, creatorAddressMap, appliedFilterType, appliedFilterUsernames]);
+  const unprocessedSamplesCount = targetListForSamples.filter(c => {
+    if (c.approval !== 'approved') return false;
+    const proses = creatorAddressMap.get(c.id) || 'Belum diproses';
+    return proses.toLowerCase() === 'belum diproses';
+  }).length;
 
   const totalApprovedCreators = isFiltered 
     ? fbApprovedCreators 
