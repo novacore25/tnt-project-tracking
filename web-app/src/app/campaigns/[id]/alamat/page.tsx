@@ -4,7 +4,7 @@ import { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import { useParams } from "next/navigation";
 import { useDatabaseStore } from "@/store/useDatabaseStore";
 import { CreatorAddress } from "@/types/database";
-import { Download, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
+import { Download, ArrowUp, ArrowDown, ArrowUpDown, Clock, Package, Truck, CheckCircle2, XCircle, RotateCcw } from "lucide-react";
 import { exportToCSV } from "@/utils/exportCsv";
 import { useAuth } from "@/providers/AuthProvider";
 import { MultiSelect } from "@/components/MultiSelect";
@@ -48,6 +48,7 @@ export default function AlamatPage() {
   const [sortConfig, setSortConfig] = useState<{ key: string; dir: 'asc' | 'desc' }>({ key: 'id', dir: 'desc' });
   const [currentPage, setCurrentPage] = useState(0);
   const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [processFilter, setProcessFilter] = useState<string | null>(null);
   const hasSyncedRef = useRef(new Set<number>());
 
   // Debounce search input
@@ -117,11 +118,92 @@ export default function AlamatPage() {
     return map;
   }, [creator_addresses]);
 
+  const processCounts = useMemo(() => {
+    const counts: Record<string, number> = {
+      'Belum diproses': 0,
+      'Diproses': 0,
+      'Dikirim': 0,
+      'Diterima': 0,
+      'Batal': 0
+    };
+
+    localCreators.forEach(cc => {
+      if (!isCreatorVisible(cc.creators?.username)) return;
+      const addr = addressMap.get(cc.id);
+      const p = addr?.proses || 'Belum diproses';
+      if (counts[p] !== undefined) {
+        counts[p]++;
+      } else {
+        counts['Belum diproses']++;
+      }
+    });
+
+    return counts;
+  }, [localCreators, addressMap, isCreatorVisible]);
+
+  const PROCESS_CARDS = [
+    {
+      key: 'Belum diproses',
+      label: 'Belum Diproses',
+      icon: Clock,
+      color: 'text-amber-600',
+      bgColor: 'bg-amber-50',
+      borderColor: 'border-amber-200',
+      activeClass: 'border-amber-500 bg-amber-50/60 ring-2 ring-amber-500/30 shadow-md',
+      desc: 'Menunggu diproses'
+    },
+    {
+      key: 'Diproses',
+      label: 'Diproses',
+      icon: Package,
+      color: 'text-blue-600',
+      bgColor: 'bg-blue-50',
+      borderColor: 'border-blue-200',
+      activeClass: 'border-blue-500 bg-blue-50/60 ring-2 ring-blue-500/30 shadow-md',
+      desc: 'Sedang disiapkan'
+    },
+    {
+      key: 'Dikirim',
+      label: 'Dikirim',
+      icon: Truck,
+      color: 'text-indigo-600',
+      bgColor: 'bg-indigo-50',
+      borderColor: 'border-indigo-200',
+      activeClass: 'border-indigo-500 bg-indigo-50/60 ring-2 ring-indigo-500/30 shadow-md',
+      desc: 'Dalam pengiriman'
+    },
+    {
+      key: 'Diterima',
+      label: 'Diterima',
+      icon: CheckCircle2,
+      color: 'text-emerald-600',
+      bgColor: 'bg-emerald-50',
+      borderColor: 'border-emerald-200',
+      activeClass: 'border-emerald-500 bg-emerald-50/60 ring-2 ring-emerald-500/30 shadow-md',
+      desc: 'Sampel sampai'
+    },
+    {
+      key: 'Batal',
+      label: 'Batal',
+      icon: XCircle,
+      color: 'text-rose-600',
+      bgColor: 'bg-rose-50',
+      borderColor: 'border-rose-200',
+      activeClass: 'border-rose-500 bg-rose-50/60 ring-2 ring-rose-500/30 shadow-md',
+      desc: 'Pengiriman batal'
+    },
+  ];
+
   const approvedCCs = useMemo(() => {
     const filtered = localCreators.filter(cc => {
       if (!isCreatorVisible(cc.creators?.username)) return false;
       if (debouncedSearch) {
         if (!cc.creators?.username.toLowerCase().includes(debouncedSearch.toLowerCase())) return false;
+      }
+      if (processFilter) {
+        const addr = addressMap.get(cc.id);
+        const p = addr?.proses || 'Belum diproses';
+        if (p.toLowerCase() !== processFilter.toLowerCase()) return false;
       }
       return true;
     });
@@ -145,7 +227,7 @@ export default function AlamatPage() {
     });
 
     return filtered;
-  }, [localCreators, debouncedSearch, sortConfig, addressMap, isCreatorVisible]);
+  }, [localCreators, debouncedSearch, processFilter, sortConfig, addressMap, isCreatorVisible]);
 
   const totalPages = Math.ceil(approvedCCs.length / PAGE_SIZE);
   const paginatedCCs = useMemo(() => {
@@ -326,6 +408,82 @@ export default function AlamatPage() {
 
   return (
     <div className="space-y-[24px] pb-[80px]">
+      {/* Cards Performa Sampel */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        {PROCESS_CARDS.map(card => {
+          const Icon = card.icon;
+          const isSelected = processFilter === card.key;
+          const count = processCounts[card.key] || 0;
+          return (
+            <button
+              key={card.key}
+              type="button"
+              onClick={() => {
+                setProcessFilter(prev => prev === card.key ? null : card.key);
+                setCurrentPage(0);
+              }}
+              className={`p-4 rounded-xl border text-left transition-all relative group bg-white shadow-sm flex flex-col justify-between cursor-pointer ${
+                isSelected 
+                  ? card.activeClass 
+                  : 'border-slate-200 hover:border-slate-300 hover:shadow'
+              }`}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[12px] font-semibold text-slate-600 group-hover:text-slate-900 transition-colors">
+                  {card.label}
+                </span>
+                <div className={`p-1.5 rounded-lg ${card.bgColor} ${card.color}`}>
+                  <Icon className="w-4 h-4" />
+                </div>
+              </div>
+              <div>
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-2xl font-extrabold text-slate-800 tracking-tight">
+                    {count.toLocaleString('id-ID')}
+                  </span>
+                  <span className="text-[11px] text-slate-400 font-medium">kreator</span>
+                </div>
+                <p className="text-[11px] text-slate-400 mt-1 truncate">
+                  {card.desc}
+                </p>
+              </div>
+              {isSelected && (
+                <div className="absolute top-2 right-2">
+                  <span className="flex h-2 w-2 relative">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-600"></span>
+                  </span>
+                </div>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Filter Aktif Banner */}
+      {processFilter && (
+        <div className="flex items-center justify-between bg-blue-50 border border-blue-200 rounded-lg px-4 py-2.5 text-xs text-blue-900 shadow-sm">
+          <div className="flex items-center gap-2">
+            <span className="font-semibold">Filter Aktif:</span>
+            <span className="bg-white px-2 py-0.5 rounded border border-blue-200 font-bold text-blue-700">
+              Status Sampel: {processFilter}
+            </span>
+            <span className="text-blue-700">({approvedCCs.length} kreator ditemukan)</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setProcessFilter(null);
+              setCurrentPage(0);
+            }}
+            className="flex items-center gap-1 text-blue-700 hover:text-blue-900 font-bold underline cursor-pointer"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            Tampilkan Semua
+          </button>
+        </div>
+      )}
+
       <div className="ccard !p-0 overflow-hidden">
         <div className="p-[16px] border-b border-line flex flex-col md:flex-row items-start md:items-center justify-between gap-[16px] bg-slate-50">
           <h3 className="font-semibold text-text text-[16px]">Data Alamat Pengiriman Sampel</h3>

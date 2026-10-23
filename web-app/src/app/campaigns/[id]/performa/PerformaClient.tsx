@@ -34,6 +34,7 @@ export default function CampaignPerformaClient({ campaignId }: { campaignId: num
   const [initialTotalLivestreams, setInitialTotalLivestreams] = useState(0);
   const [hasSkus, setHasSkus] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
+  const [creatorAddressMap, setCreatorAddressMap] = useState<Map<number, string>>(new Map());
 
   const [searchQuery, setSearchQuery] = useState('');
   const [showAdsDetail, setShowAdsDetail] = useState(false);
@@ -185,6 +186,14 @@ export default function CampaignPerformaClient({ campaignId }: { campaignId: num
       const orgVidsData = res.organicVideos || [];
 
       setLocalCreators(ccData);
+
+      const addrMap = new Map<number, string>();
+      for (const a of (res.creatorAddresses || [])) {
+        if (a.campaign_creator_id) {
+          addrMap.set(a.campaign_creator_id, a.proses || 'Belum diproses');
+        }
+      }
+      setCreatorAddressMap(addrMap);
 
       // 3. Fast In-Memory Aggregation of Sales and Organic Videos
       const approvedUsernames = new Set<string>();
@@ -952,6 +961,23 @@ export default function CampaignPerformaClient({ campaignId }: { campaignId: num
     if (c.approval === 'pending') fbPendingCreators++;
   });
 
+  const unprocessedSamplesCount = React.useMemo(() => {
+    const targetList = (appliedFilterType === 'none' || appliedFilterUsernames.length === 0)
+      ? localCreators
+      : localCreators.filter(c => {
+          const u = c.creators?.username?.toLowerCase();
+          if (!u) return false;
+          const match = appliedFilterUsernames.includes(u);
+          return appliedFilterType === 'include' ? match : !match;
+        });
+
+    return targetList.filter(c => {
+      if (c.approval !== 'approved') return false;
+      const proses = creatorAddressMap.get(c.id) || 'Belum diproses';
+      return proses.toLowerCase() === 'belum diproses';
+    }).length;
+  }, [localCreators, creatorAddressMap, appliedFilterType, appliedFilterUsernames]);
+
   const totalApprovedCreators = isFiltered 
     ? fbApprovedCreators 
     : (fastCountsData ? fastCountsData.approved : (rpc.total_approved_creators !== undefined ? Number(rpc.total_approved_creators) : localCreators.filter(c => c.approval === 'approved').length));
@@ -1221,6 +1247,24 @@ export default function CampaignPerformaClient({ campaignId }: { campaignId: num
                     <span className="text-text-soft text-[11px]">
                       {totalPendingCreators} pending
                     </span>
+                  </div>
+
+                  <div className="mt-[12px] pt-[10px] border-t border-line flex items-center justify-between text-[12px]">
+                    <Link
+                      href={`/campaigns/${campaignId}/alamat`}
+                      className="group flex items-center gap-1.5 text-text-soft hover:text-p300 transition-colors"
+                      title="Lihat data sampel & alamat pengiriman"
+                    >
+                      <Package className="w-3.5 h-3.5 text-amber-500" />
+                      <span className="font-medium group-hover:underline">Sampel Belum Diproses:</span>
+                    </Link>
+                    <Link
+                      href={`/campaigns/${campaignId}/alamat`}
+                      className="font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2 py-0.5 rounded-md transition-colors text-[11px]"
+                      title="Buka menu Sampel & Alamat"
+                    >
+                      {unprocessedSamplesCount.toLocaleString('id-ID')} kreator
+                    </Link>
                   </div>
                 </div>
                 <div className="p-[8px] bg-orange-50 rounded-[8px] text-orange-600"><Users className="w-5 h-5" /></div>

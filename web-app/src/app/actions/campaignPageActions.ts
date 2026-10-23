@@ -352,7 +352,7 @@ export async function fetchDailyPerformancePageDataAction(campaignId: number) {
 // ============================================================
 export async function fetchPerformaPageFullDataAction(campaignId: number) {
   try {
-    const [campaignRes, conceptsRes, skusRes, ccRes, vidRes, salesRes, adsRes, orgRes, aliasesRes] = await Promise.all([
+    const [campaignRes, conceptsRes, skusRes, ccRes, vidRes, salesRes, adsRes, orgRes, aliasesRes, addressesRes] = await Promise.all([
       db.execute(sql`SELECT * FROM campaigns WHERE id = ${campaignId} LIMIT 1`) as Promise<any[]>,
       db.execute(sql`
         SELECT cc.*, sk.nama_produk
@@ -402,6 +402,12 @@ export async function fetchPerformaPageFullDataAction(campaignId: number) {
         FROM creator_aliases ca
         JOIN creators c ON ca.creator_id = c.id
         WHERE ca.creator_id IN (SELECT creator_id FROM campaign_creators WHERE campaign_id = ${campaignId})
+      `).catch(() => []) as Promise<any[]>,
+      db.execute(sql`
+        SELECT ca.id, ca.campaign_creator_id, ca.proses
+        FROM creator_addresses ca
+        JOIN campaign_creators cc ON ca.campaign_creator_id = cc.id
+        WHERE cc.campaign_id = ${campaignId}
       `).catch(() => []) as Promise<any[]>
     ]);
 
@@ -414,6 +420,7 @@ export async function fetchPerformaPageFullDataAction(campaignId: number) {
     const ads = adsRes || [];
     const organicVideos = orgRes || [];
     const creatorAliases = aliasesRes || [];
+    const creatorAddresses = (addressesRes as any[]) || [];
 
     // Map videos
     const videosByCcId = new Map<number, any[]>();
@@ -445,7 +452,8 @@ export async function fetchPerformaPageFullDataAction(campaignId: number) {
       sales,
       ads,
       organicVideos,
-      creatorAliases
+      creatorAliases,
+      creatorAddresses
     };
   } catch (err: any) {
     console.error('fetchPerformaPageFullDataAction error:', err);
