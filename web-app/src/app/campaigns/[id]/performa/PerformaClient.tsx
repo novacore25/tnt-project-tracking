@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { TrendingUp, BarChart3, Activity, ArrowUpDown, ChevronDown, ChevronRight, ChevronUp, Edit2, Check, X, Loader2, Eye, EyeOff, SlidersHorizontal, RotateCcw, Users, PlaySquare, Download, ShoppingCart, ExternalLink, Package, Trophy, PlayCircle } from "lucide-react";
+import { TrendingUp, BarChart3, Activity, ArrowUpDown, ChevronDown, ChevronRight, ChevronUp, Edit2, Check, X, Loader2, Eye, EyeOff, SlidersHorizontal, RotateCcw, Users, PlaySquare, Download, ShoppingCart, ExternalLink, Package, Trophy, PlayCircle, Clock, Truck } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { exportToCSV } from "@/utils/exportCsv";
@@ -976,6 +976,27 @@ export default function CampaignPerformaClient({ campaignId }: { campaignId: num
     return proses.toLowerCase() === 'belum diproses';
   }).length;
 
+  let diprosesInactiveCount = 0;
+  let dikirimInactiveCount = 0;
+  let diterimaInactiveCount = 0;
+
+  creatorStats.forEach(c => {
+    if (c.approval !== 'approved' || c.id === -1) return;
+    const isInactive = (Number(c.totalVt) || 0) === 0 && (Number(c.totalLive) || 0) === 0;
+    if (!isInactive) return;
+
+    const p = (creatorAddressMap.get(c.id) || 'Belum diproses').trim().toLowerCase();
+    if (p === 'dikirim') {
+      dikirimInactiveCount++;
+    } else if (p === 'diterima') {
+      diterimaInactiveCount++;
+    } else if (p === 'diproses') {
+      diprosesInactiveCount++;
+    }
+  });
+
+  const inProgressInactiveCount = dikirimInactiveCount + diterimaInactiveCount + diprosesInactiveCount;
+
   const totalApprovedCreators = isFiltered 
     ? fbApprovedCreators 
     : (fastCountsData ? fastCountsData.approved : (rpc.total_approved_creators !== undefined ? Number(rpc.total_approved_creators) : localCreators.filter(c => c.approval === 'approved').length));
@@ -1247,22 +1268,51 @@ export default function CampaignPerformaClient({ campaignId }: { campaignId: num
                     </span>
                   </div>
 
-                  <div className="mt-[12px] pt-[10px] border-t border-line flex items-center justify-between text-[12px]">
-                    <Link
-                      href={`/campaigns/${campaignId}/alamat`}
-                      className="group flex items-center gap-1.5 text-text-soft hover:text-p300 transition-colors"
-                      title="Lihat data sampel & alamat pengiriman"
-                    >
-                      <Package className="w-3.5 h-3.5 text-amber-500" />
-                      <span className="font-medium group-hover:underline">Sampel Belum Diproses:</span>
-                    </Link>
-                    <Link
-                      href={`/campaigns/${campaignId}/alamat`}
-                      className="font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2 py-0.5 rounded-md transition-colors text-[11px]"
-                      title="Buka menu Sampel & Alamat"
-                    >
-                      {unprocessedSamplesCount.toLocaleString('id-ID')} kreator
-                    </Link>
+                  <div className="mt-[12px] pt-[10px] border-t border-line flex flex-col gap-2 text-[12px]">
+                    <div className="flex items-center justify-between">
+                      <Link
+                        href={`/campaigns/${campaignId}/alamat`}
+                        className="group flex items-center gap-1.5 text-text-soft hover:text-p300 transition-colors"
+                        title="Lihat kreator yang sampelnya belum diproses"
+                      >
+                        <Clock className="w-3.5 h-3.5 text-amber-500" />
+                        <span className="font-medium group-hover:underline">Sampel Belum Diproses:</span>
+                      </Link>
+                      <Link
+                        href={`/campaigns/${campaignId}/alamat`}
+                        className="font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2 py-0.5 rounded-md transition-colors text-[11px]"
+                        title="Buka menu Sampel & Alamat"
+                      >
+                        {unprocessedSamplesCount.toLocaleString('id-ID')} kreator
+                      </Link>
+                    </div>
+
+                    <div className="pt-2 border-t border-dashed border-slate-200/80">
+                      <div className="flex items-center justify-between">
+                        <Link
+                          href={`/campaigns/${campaignId}/alamat`}
+                          className="group flex items-center gap-1.5 text-text-soft hover:text-p300 transition-colors"
+                          title="Kreator yang sampelnya sedang berjalan (diproses/dikirim/diterima) tapi belum ada VT/Live"
+                        >
+                          <Truck className="w-3.5 h-3.5 text-indigo-500" />
+                          <span className="font-medium group-hover:underline">Sampel Berjalan Belum Aktif:</span>
+                        </Link>
+                        <Link
+                          href={`/campaigns/${campaignId}/alamat`}
+                          className="font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-2 py-0.5 rounded-md transition-colors text-[11px]"
+                          title="Buka menu Sampel & Alamat"
+                        >
+                          {inProgressInactiveCount.toLocaleString('id-ID')} kreator
+                        </Link>
+                      </div>
+                      <div className="flex items-center justify-between text-[10.5px] text-slate-500 mt-1.5 px-1 bg-slate-50/70 py-1 rounded border border-slate-100">
+                        <span>Dikirim: <strong className="text-indigo-700 font-semibold">{dikirimInactiveCount}</strong></span>
+                        <span className="text-slate-300">•</span>
+                        <span>Diterima: <strong className="text-emerald-700 font-semibold">{diterimaInactiveCount}</strong></span>
+                        <span className="text-slate-300">•</span>
+                        <span>Diproses: <strong className="text-blue-700 font-semibold">{diprosesInactiveCount}</strong></span>
+                      </div>
+                    </div>
                   </div>
                 </div>
                 <div className="p-[8px] bg-orange-50 rounded-[8px] text-orange-600"><Users className="w-5 h-5" /></div>

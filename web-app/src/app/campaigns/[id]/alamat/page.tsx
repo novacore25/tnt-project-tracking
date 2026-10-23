@@ -49,6 +49,7 @@ export default function AlamatPage() {
   const [currentPage, setCurrentPage] = useState(0);
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [processFilter, setProcessFilter] = useState<string | null>(null);
+  const [filterActiveStatus, setFilterActiveStatus] = useState<'all' | 'inactive' | 'active'>('all');
   const hasSyncedRef = useRef(new Set<number>());
 
   // Debounce search input
@@ -119,22 +120,24 @@ export default function AlamatPage() {
   }, [creator_addresses]);
 
   const processCounts = useMemo(() => {
-    const counts: Record<string, number> = {
-      'Belum diproses': 0,
-      'Diproses': 0,
-      'Dikirim': 0,
-      'Diterima': 0,
-      'Batal': 0
+    const counts: Record<string, { total: number; inactive: number; active: number }> = {
+      'Belum diproses': { total: 0, inactive: 0, active: 0 },
+      'Diproses': { total: 0, inactive: 0, active: 0 },
+      'Dikirim': { total: 0, inactive: 0, active: 0 },
+      'Diterima': { total: 0, inactive: 0, active: 0 },
+      'Batal': { total: 0, inactive: 0, active: 0 }
     };
 
     localCreators.forEach(cc => {
       if (!isCreatorVisible(cc.creators?.username)) return;
       const addr = addressMap.get(cc.id);
       const p = addr?.proses || 'Belum diproses';
-      if (counts[p] !== undefined) {
-        counts[p]++;
+      const target = counts[p] || counts['Belum diproses'];
+      target.total++;
+      if (cc.is_active) {
+        target.active++;
       } else {
-        counts['Belum diproses']++;
+        target.inactive++;
       }
     });
 
@@ -205,6 +208,8 @@ export default function AlamatPage() {
         const p = addr?.proses || 'Belum diproses';
         if (p.toLowerCase() !== processFilter.toLowerCase()) return false;
       }
+      if (filterActiveStatus === 'inactive' && cc.is_active) return false;
+      if (filterActiveStatus === 'active' && !cc.is_active) return false;
       return true;
     });
 
@@ -227,7 +232,7 @@ export default function AlamatPage() {
     });
 
     return filtered;
-  }, [localCreators, debouncedSearch, processFilter, sortConfig, addressMap, isCreatorVisible]);
+  }, [localCreators, debouncedSearch, processFilter, filterActiveStatus, sortConfig, addressMap, isCreatorVisible]);
 
   const totalPages = Math.ceil(approvedCCs.length / PAGE_SIZE);
   const paginatedCCs = useMemo(() => {
@@ -413,11 +418,10 @@ export default function AlamatPage() {
         {PROCESS_CARDS.map(card => {
           const Icon = card.icon;
           const isSelected = processFilter === card.key;
-          const count = processCounts[card.key] || 0;
+          const count = processCounts[card.key] || { total: 0, inactive: 0, active: 0 };
           return (
-            <button
+            <div
               key={card.key}
-              type="button"
               onClick={() => {
                 setProcessFilter(prev => prev === card.key ? null : card.key);
                 setCurrentPage(0);
@@ -439,11 +443,52 @@ export default function AlamatPage() {
               <div>
                 <div className="flex items-baseline gap-1.5">
                   <span className="text-2xl font-extrabold text-slate-800 tracking-tight">
-                    {count.toLocaleString('id-ID')}
+                    {count.total.toLocaleString('id-ID')}
                   </span>
                   <span className="text-[11px] text-slate-400 font-medium">kreator</span>
                 </div>
-                <p className="text-[11px] text-slate-400 mt-1 truncate">
+
+                {/* Sub-breakdown Belum Aktif / Aktif */}
+                <div className="flex flex-wrap items-center gap-1.5 mt-2 pt-2 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setProcessFilter(card.key);
+                      setFilterActiveStatus(prev => (processFilter === card.key && prev === 'inactive') ? 'all' : 'inactive');
+                      setCurrentPage(0);
+                    }}
+                    className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-semibold transition-all border ${
+                      processFilter === card.key && filterActiveStatus === 'inactive'
+                        ? 'bg-amber-600 text-white border-amber-600 shadow-sm'
+                        : 'bg-amber-50 text-amber-800 border-amber-200/70 hover:bg-amber-100'
+                    }`}
+                    title="Filter kreator belum aktif di status ini"
+                  >
+                    <span>{count.inactive} Belum Aktif</span>
+                  </button>
+                  {count.active > 0 && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setProcessFilter(card.key);
+                        setFilterActiveStatus(prev => (processFilter === card.key && prev === 'active') ? 'all' : 'active');
+                        setCurrentPage(0);
+                      }}
+                      className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium transition-all border ${
+                        processFilter === card.key && filterActiveStatus === 'active'
+                          ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+                          : 'bg-emerald-50 text-emerald-800 border-emerald-200/70 hover:bg-emerald-100'
+                      }`}
+                      title="Filter kreator aktif di status ini"
+                    >
+                      <span>{count.active} Aktif</span>
+                    </button>
+                  )}
+                </div>
+
+                <p className="text-[10px] text-slate-400 mt-2 truncate">
                   {card.desc}
                 </p>
               </div>
@@ -455,25 +500,37 @@ export default function AlamatPage() {
                   </span>
                 </div>
               )}
-            </button>
+            </div>
           );
         })}
       </div>
 
       {/* Filter Aktif Banner */}
-      {processFilter && (
+      {(processFilter || filterActiveStatus !== 'all') && (
         <div className="flex items-center justify-between bg-blue-50 border border-blue-200 rounded-lg px-4 py-2.5 text-xs text-blue-900 shadow-sm">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <span className="font-semibold">Filter Aktif:</span>
-            <span className="bg-white px-2 py-0.5 rounded border border-blue-200 font-bold text-blue-700">
-              Status Sampel: {processFilter}
-            </span>
-            <span className="text-blue-700">({approvedCCs.length} kreator ditemukan)</span>
+            {processFilter && (
+              <span className="bg-white px-2 py-0.5 rounded border border-blue-200 font-bold text-blue-700">
+                Status Sampel: {processFilter}
+              </span>
+            )}
+            {filterActiveStatus !== 'all' && (
+              <span className={`px-2 py-0.5 rounded border font-bold ${
+                filterActiveStatus === 'inactive' 
+                  ? 'bg-amber-100 text-amber-800 border-amber-300' 
+                  : 'bg-emerald-100 text-emerald-800 border-emerald-300'
+              }`}>
+                Konten: {filterActiveStatus === 'inactive' ? 'Belum Aktif (0 Konten)' : 'Aktif (Ada VT/Live)'}
+              </span>
+            )}
+            <span className="text-blue-700 font-medium">({approvedCCs.length} kreator ditemukan)</span>
           </div>
           <button
             type="button"
             onClick={() => {
               setProcessFilter(null);
+              setFilterActiveStatus('all');
               setCurrentPage(0);
             }}
             className="flex items-center gap-1 text-blue-700 hover:text-blue-900 font-bold underline cursor-pointer"
@@ -502,6 +559,18 @@ export default function AlamatPage() {
             >
               <Download className="w-4 h-4" /> Export CSV
             </button>
+            <select
+              value={filterActiveStatus}
+              onChange={e => {
+                setFilterActiveStatus(e.target.value as 'all' | 'inactive' | 'active');
+                setCurrentPage(0);
+              }}
+              className="input !py-[6px] !text-[12px] bg-white font-medium border-slate-200 text-slate-700"
+            >
+              <option value="all">Semua Konten</option>
+              <option value="inactive">Hanya Belum Aktif (0 Konten)</option>
+              <option value="active">Hanya Aktif (Ada VT/Live)</option>
+            </select>
             <input 
               type="text" 
               placeholder="Cari username..." 
@@ -517,7 +586,7 @@ export default function AlamatPage() {
               <tr>
                 <th className="py-[16px] px-3 sticky left-0 z-20 bg-slate-50 min-w-[50px] max-w-[50px]">No</th>
                 <th className="py-[16px] px-3 sticky left-[50px] z-20 bg-slate-50 min-w-[150px] max-w-[150px]">Product</th>
-                <th className="py-[16px] px-3 sticky left-[200px] z-20 bg-slate-50 min-w-[150px] max-w-[150px] shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
+                <th className="py-[16px] px-3 sticky left-[200px] z-20 bg-slate-50 min-w-[170px] max-w-[170px] shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
                   <button onClick={() => toggleSort('username')} className="flex items-center font-semibold hover:text-blue-600 transition-colors">
                     Username <SortIcon col="username" />
                   </button>
@@ -596,7 +665,22 @@ export default function AlamatPage() {
                           </div>
                         )}
                       </td>
-                      <td className="px-3 py-3 font-medium sticky left-[200px] z-10 bg-white group-hover:bg-slate-50 transition-colors min-w-[150px] max-w-[150px] shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">@{creator?.username}</td>
+                      <td className="px-3 py-3 font-medium sticky left-[200px] z-10 bg-white group-hover:bg-slate-50 transition-colors min-w-[170px] max-w-[170px] shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
+                        <div className="flex flex-col gap-1 items-start">
+                          <span className="font-semibold text-slate-800">@{creator?.username}</span>
+                          {cc.is_active ? (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200" title="Kreator sudah memiliki video VT atau Live">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                              Aktif (Ada VT)
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200" title="Kreator belum mengunggah video VT maupun Live">
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+                              Belum Aktif
+                            </span>
+                          )}
+                        </div>
+                      </td>
                       <td className="px-3 py-3">
                         {isEditing ? (
                           <input type="text" className="input w-full w-28 text-xs" value={editWhatsapp} onChange={e => setEditWhatsapp(e.target.value)} placeholder="08..." />

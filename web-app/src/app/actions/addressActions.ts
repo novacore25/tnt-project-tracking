@@ -24,6 +24,50 @@ export async function fetchCampaignAddressesAction(campaignId: number) {
 
 export async function fetchCampaignCreatorsForAddressAction(campaignId: number, requireClientApproval?: boolean) {
   let query = sql`
+    WITH active_usernames AS (
+      SELECT DISTINCT LOWER(creator_username) as uname
+      FROM organic_videos
+      WHERE campaign_id = ${campaignId}
+         OR (product_id IS NOT NULL AND product_id IN (
+           SELECT product_id FROM skus WHERE campaign_id = ${campaignId} AND product_id IS NOT NULL
+         ))
+      UNION
+      SELECT DISTINCT LOWER(creator_username) as uname
+      FROM sales
+      WHERE content_uid IS NOT NULL AND content_uid != ''
+        AND (
+          campaign_id = ${campaignId}
+          OR (product_id IS NOT NULL AND product_id IN (
+            SELECT product_id FROM skus WHERE campaign_id = ${campaignId} AND product_id IS NOT NULL
+          ))
+        )
+    ),
+    active_video_ccs AS (
+      SELECT DISTINCT v.campaign_creator_id as id
+      FROM videos v
+      JOIN campaign_creators cc ON v.campaign_creator_id = cc.id
+      WHERE cc.campaign_id = ${campaignId}
+        AND (
+          (v.link_video IS NOT NULL AND v.link_video != '')
+          OR (v.content_uid IS NOT NULL AND v.content_uid != '')
+        )
+    ),
+    active_cc_ids AS (
+      SELECT id FROM active_video_ccs
+      UNION
+      SELECT cc.id
+      FROM campaign_creators cc
+      JOIN creators c ON cc.creator_id = c.id
+      WHERE cc.campaign_id = ${campaignId}
+        AND (
+          LOWER(c.username) IN (SELECT uname FROM active_usernames)
+          OR EXISTS (
+            SELECT 1 FROM creator_aliases ca 
+            WHERE ca.creator_id = c.id 
+              AND LOWER(ca.alias_username) IN (SELECT uname FROM active_usernames)
+          )
+        )
+    )
     SELECT 
       cc.id,
       cc.campaign_id,
@@ -31,6 +75,7 @@ export async function fetchCampaignCreatorsForAddressAction(campaignId: number, 
       cc.approval,
       cc.client_approval,
       cc.assigned_sku_ids,
+      (acc.id IS NOT NULL) as is_active,
       json_build_object(
         'id', cr.id,
         'username', cr.username,
@@ -52,6 +97,7 @@ export async function fetchCampaignCreatorsForAddressAction(campaignId: number, 
       ) as creators
     FROM campaign_creators cc
     JOIN creators cr ON cc.creator_id = cr.id
+    LEFT JOIN active_cc_ids acc ON cc.id = acc.id
     WHERE cc.campaign_id = ${campaignId}
       AND LOWER(cc.approval) IN ('approved', 'approve')
   `;
