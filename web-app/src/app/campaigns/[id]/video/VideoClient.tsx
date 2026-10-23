@@ -2368,6 +2368,11 @@ export default function CampaignVideoPage({
                         <div className="text-center px-2 lg:px-4 border-l border-slate-200">
                           <p className="text-[10px] text-slate-500 font-medium">TOTAL LIKES</p>
                           <p className="font-bold text-slate-700">{m?.totalLikes?.toLocaleString('id-ID') || 0}</p>
+                          {m?.totalViews > 0 && (
+                            <p className="text-[10px] text-rose-600 font-semibold mt-0.5" title="Like Engagement Rate: (Total Likes / Total Views) * 100">
+                              ER: {((m.totalLikes / m.totalViews) * 100).toFixed(2)}%
+                            </p>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -2436,6 +2441,7 @@ export default function CampaignVideoPage({
                             }
 
                             const rpm = vidViews > 0 ? (vidGmv / vidViews) * 1000 : 0;
+                            const erLikes = vidViews > 0 ? Number(((vidLikes / vidViews) * 100).toFixed(2)) : 0;
                             let cleanConcept = v.concept;
                             if (typeof cleanConcept === 'string' && cleanConcept.includes('Auto-detected')) {
                               cleanConcept = null;
@@ -2619,7 +2625,7 @@ export default function CampaignVideoPage({
                                       </div>
                                     )}
                                     {hasContentUid && (
-                                      <div className="mt-2 grid grid-cols-4 gap-1 bg-slate-50 border border-slate-200 p-2 rounded-md text-xs">
+                                      <div className="mt-2 grid grid-cols-5 gap-1 bg-slate-50 border border-slate-200 p-2 rounded-md text-xs">
                                          <div className="text-center">
                                             <div className="text-slate-400 text-[10px]">Views</div>
                                             <div className="font-semibold text-slate-700">{vidViews.toLocaleString('id-ID')}</div>
@@ -2630,11 +2636,15 @@ export default function CampaignVideoPage({
                                          </div>
                                          <div className="text-center border-l border-slate-200">
                                             <div className="text-slate-400 text-[10px]">GMV</div>
-                                            <div className="font-semibold text-emerald-600">Rp {vidGmv.toLocaleString('id-ID')}</div>
+                                            <div className="font-semibold text-emerald-600 truncate" title={`Rp ${vidGmv.toLocaleString('id-ID')}`}>Rp {vidGmv.toLocaleString('id-ID')}</div>
                                          </div>
                                          <div className="text-center border-l border-slate-200" title="GMV Per Mille (Per 1000 Views)">
                                             <div className="text-slate-400 text-[10px]">GPM</div>
-                                            <div className="font-semibold text-indigo-600">Rp {Math.round(rpm).toLocaleString('id-ID')}</div>
+                                            <div className="font-semibold text-indigo-600 truncate" title={`Rp ${Math.round(rpm).toLocaleString('id-ID')}`}>Rp {Math.round(rpm).toLocaleString('id-ID')}</div>
+                                         </div>
+                                         <div className="text-center border-l border-slate-200" title="Engagement Rate Likes: (Total Likes / Views) * 100">
+                                            <div className="text-slate-400 text-[10px]">ER Likes</div>
+                                            <div className="font-semibold text-rose-600">{erLikes}%</div>
                                          </div>
                                       </div>
                                     )}
@@ -2924,6 +2934,11 @@ export default function CampaignVideoPage({
                       <td className="p-4 align-top">
                         <div className="font-semibold text-slate-700 text-sm">{v.vidViews.toLocaleString('id-ID')} <span className="text-[11px] font-normal text-slate-500">views</span></div>
                         <div className="text-[12px] text-slate-500 mt-0.5">{v.vidLikes.toLocaleString('id-ID')} <span className="text-[10px]">likes</span></div>
+                        {v.vidViews > 0 && (
+                          <div className="text-[11px] font-semibold text-rose-600 mt-1 bg-rose-50 px-2 py-0.5 rounded w-fit border border-rose-100" title="Engagement Rate Likes: (Total Likes / Total Views) * 100">
+                            ER: {((v.vidLikes / v.vidViews) * 100).toFixed(2)}%
+                          </div>
+                        )}
                       </td>
                       <td className="p-4 align-top">
                          {hasAccess && (
