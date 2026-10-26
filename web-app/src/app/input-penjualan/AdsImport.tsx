@@ -252,9 +252,9 @@ export default function AdsImport() {
           const purchases = safeParseNum(row['Purchases (Shop)'] || row['Purchases'] || row['Conversions']);
           const impressions = safeParseNum(row['Impressions']);
           const clicks = safeParseNum(row['Clicks (destination)'] || row['Clicks']);
-          const ppv = safeParseNum(row['Product page views'] || row['Product Page Views']);
-          const checkouts = safeParseNum(row['Checkouts initiated'] || row['Checkouts Initiated']);
-          const itemsPurchased = safeParseNum(row['Items purchased'] || row['Items Purchased']);
+          const ppv = safeParseNum(row['Product page views'] || row['Product Page Views'] || row['Product page views (Shop)']);
+          const checkouts = safeParseNum(row['Checkouts initiated'] || row['Checkouts Initiated'] || row['Checkouts initiated (Shop)']);
+          const itemsPurchased = safeParseNum(row['Items purchased'] || row['Items Purchased'] || row['Items purchased (Shop)']);
           
           return {
             campaign_id: globalCampaignId ? Number(globalCampaignId) : null,
@@ -288,7 +288,7 @@ export default function AdsImport() {
         if (res.success) {
           successCount += res.count;
         } else {
-          errors.push(`File ${fConfig.file.name}: Gagal import`);
+          errors.push(`File ${fConfig.file.name}: ${res.error || 'Gagal import'}`);
         }
       }
 
