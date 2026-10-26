@@ -366,6 +366,7 @@ export default function AdsReportPage() {
   const [appliedEndDate, setAppliedEndDate] = useState<string>('');
   const [campaignAdsName, setCampaignAdsName] = useState<string>('');
   const [appliedCampaignAdsName, setAppliedCampaignAdsName] = useState<string>('');
+  const [selectedObjectives, setSelectedObjectives] = useState<string[]>([]);
   
   const { profile } = useAuth();
   const isManager = profile?.role === 'manager' || profile?.role === 'executive';
@@ -380,6 +381,12 @@ export default function AdsReportPage() {
   // New States for Accordion View
   const [viewMode, setViewMode] = useState<'flat' | 'grouped'>('grouped');
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+
+  const toggleObjective = (obj: 'SALES' | 'AWARENESS') => {
+    setSelectedObjectives(prev => 
+      prev.includes(obj) ? prev.filter(x => x !== obj) : [...prev, obj]
+    );
+  };
 
   const handleSort = (key: SortColumn) => {
     let direction: 'asc' | 'desc' = 'asc';
@@ -399,6 +406,7 @@ export default function AdsReportPage() {
           campaignId: selectedCampaignId,
           campaignAdsName: appliedCampaignAdsName || undefined,
           searchQuery: deferredSearchQuery || undefined,
+          objectives: selectedObjectives.length > 0 ? selectedObjectives : undefined,
           sortKey: sortConfig?.key || 'tanggal',
           sortDir: sortConfig?.direction || 'desc'
         });
@@ -414,7 +422,7 @@ export default function AdsReportPage() {
       setIsLoading(false);
     };
     fetchAds();
-  }, [appliedStartDate, appliedEndDate, selectedCampaignId, appliedCampaignAdsName, deferredSearchQuery, sortConfig]);
+  }, [appliedStartDate, appliedEndDate, selectedCampaignId, appliedCampaignAdsName, deferredSearchQuery, sortConfig, selectedObjectives]);
   
   // Inline Auto-Save States
   type PendingAdChange = { campaign_id?: number | null; campaign_ads_name?: string | null; creator_id?: number | null; kurs?: number; ad_id?: string; ad_name?: string; tanggal?: string; original: any };
@@ -1001,6 +1009,44 @@ export default function AdsReportPage() {
             </div>
           </div>
           <div className="flex flex-col md:flex-row items-start md:items-center gap-3">
+            {/* Objective Filters: SALES vs AWARENESS */}
+            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg">
+              <button
+                type="button"
+                onClick={() => toggleObjective('SALES')}
+                className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all flex items-center gap-1.5 cursor-pointer ${
+                  selectedObjectives.includes('SALES')
+                    ? 'bg-emerald-600 text-white shadow-sm ring-1 ring-emerald-400'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                }`}
+                title="Filter iklan penjualan (SALES / Konversi)"
+              >
+                <span>🛒</span> SALES
+              </button>
+              <button
+                type="button"
+                onClick={() => toggleObjective('AWARENESS')}
+                className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all flex items-center gap-1.5 cursor-pointer ${
+                  selectedObjectives.includes('AWARENESS')
+                    ? 'bg-purple-600 text-white shadow-sm ring-1 ring-purple-400'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                }`}
+                title="Filter iklan jangkauan (AWARENESS / Brand)"
+              >
+                <span>📢</span> AWARENESS
+              </button>
+              {selectedObjectives.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedObjectives([])}
+                  className="px-2 py-1 text-[11px] text-slate-500 hover:text-slate-800 rounded transition-colors"
+                  title="Tampilkan Semua Iklan"
+                >
+                  Semua
+                </button>
+              )}
+            </div>
+
             <div className="flex items-center gap-2">
               <input 
                 type="date" 
@@ -1045,6 +1091,7 @@ export default function AdsReportPage() {
                   onClick={() => { 
                     setStartDate(''); setEndDate(''); setCampaignAdsName('');
                     setAppliedStartDate(''); setAppliedEndDate(''); setAppliedCampaignAdsName('');
+                    setSelectedObjectives([]);
                   }}
                   className="p-2 text-red-500 hover:bg-red-50 rounded border border-red-200"
                   title="Reset Filter"

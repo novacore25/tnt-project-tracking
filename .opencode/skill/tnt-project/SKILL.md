@@ -98,10 +98,10 @@ whitelisted_emails ──> allowlist login (saat ini DILEWATI, lihat §4)
 |---|---|---|
 | **VT** | Video TikTok (UGC creator) | `videos` |
 | **VT / Live** | Dua konten berbeda,Diifferentiate via `content_type` / `is_livestream` | `organic_videos` |
-| **Organic** | GMV dari link organic/affiliate tanpa Ads. **Ini satu-satunya sumber total GMV** | `sales` |
-| **Ads / VSA** | GMV dari iklan TikTok Ads. **KUMULATIF per ad — jangan `SUM`.** Ditampilkan terpisah, tidak dijumlahkan ke total | `ads_performance` |
+| **Organic** | GMV organik dari TikTok Partner Center (affiliate/creator link non-ads) | `sales` |
+| **Ads / VSA** | GMV Video Shopping Ads dari TikTok Ads Manager. Baris tanggal terakhir per `ad_id` (kumulatif). **Dijumlahkan ke Total GMV** karena order dari video yang di-ads tidak masuk ke Partner Center (migrasi 2 Okt 2026) | `ads_performance` |
 | **Custom report** | Awareness + hitung video saja. **Bukan untuk sales** | `organic_videos`, `live_session_products` |
-| **GMV** | Gross Merchandise Value, dalam IDR. **Hanya dari `order_id` di `sales`.** Lihat §3.34 | `sales.gmv` (bigint) |
+| **Total GMV** | GMV Akumulatif: `SUM(sales.gmv)` (non-refund) + `ads_performance` (baris tanggal terakhir per ad_id). Lihat Rule 8 & §3A.7 | `sales` + `ads_performance` |
 | **Komisi** | Fee creator, `%` | `skus.komisi` |
 | **Rate card** | Harga tetap per posting | `campaign_creators.price` |
 | **PIC** | Person in charge (internal) | `campaign_creators.notes_pic` |
@@ -2904,3 +2904,58 @@ memberi informasi yang saling menguatkan, bukan noise.
    - **TIDAK ADA mutasi atau penulisan data ke PostgreSQL** saat tombol tersebut diklik.
    - Penyimpanan data ke database (`payment_batches` dan `payment_items`) hanya dieksekusi ketika user menekan tombol *"Simpan Draft"* (`saveBatchDraft`) atau *"Kirim ke Manager / Finance"* (`submitBatchToManager`) di dalam komponen `BatchForm`.
    - Oleh karena itu, crash UI sebelum form terbuka **TIDAK menyimpan, memodifikasi, atau merusak data apa pun di database**. Database tetap 100% utuh dan bersih.
+
+---
+
+### 10i. Sistem Report Ads, Budgeting, & Mapping End-to-End (26 Okt 2026)
+
+#### 1. Arsitektur & Jalur Data End-to-End (System Flow)
+1. **Sumber Data & Format File:**
+   - Berasal dari export **TikTok Ads Manager** (bukan Partner Center).
+   - Format: Spreadsheet CSV atau XLSX dengan kolom standar TikTok:
+     `Ad ID`, `Ad name`, `Campaign name`, `Cost` / `Spend`, `Gross revenue (Shop)`, `Purchases (Shop)`, `Impressions`, `Clicks`, `Product page views`, `Checkouts initiated`, `Items purchased`.
+2. **Ingestion Pipeline (`/ads-report/import-ads` & `AdsImport.tsx`):**
+   - **Multi-File Upload:** Mendukung upload banyak file sekaligus dengan auto-deteksi tanggal dari nama file (`YYYY-MM-DD`).
+   - **Default Kurs Normalizer:** Default kurs 16.000. Melewati `normalizeKurs` (`kurs < 16000 ? kurs * 1000 : kurs`) untuk mencegah bug input desimal `16.993` vs `16993`.
+   - **Deteksi Pemetaan Otomatis:** Sistem membaca tabel master `ads_name_mappings` (`ad_name -> creator_id, campaign_id, product_id`). Jika suatu `ad_name` pernah dipetakan sebelumnya, kreator otomatis terhubung tanpa input ulang manual.
+   - **Fallback Campaign Ads Name:** Jika input global kosong, sistem otomatis mengambil `row['Campaign name']` dari baris spreadsheet.
+   - **Idempotent Delete & Bulk Insert:** Menghapus data pada rentang tanggal file yang di-upload (terisolasi per campaign jika dipilih), lalu melakukan *chunked multi-row insert* (100 baris/query) ke tabel `ads_performance`.
+3. **Penyimpanan Database (`ads_performance`):**
+   - Kolom kunci: `ad_id`, `ad_name`, `campaign_ads_name`, `campaign_id`, `creator_id`, `product_id`, `tanggal`, `cost_usd`, `gross_revenue_usd`, `kurs`, `impressions`, `clicks`, `purchases`, `raw_data` (JSONB).
+
+#### 2. Aturan Agregasi & Prinsip Perhitungan (Non-Negotiable Domain Truth)
+1. **DILARANG `SUM` ANTAR TANGGAL (Data Kumulatif All-Time):**
+   - Laporan export TikTok Ads Manager all-time adalah kumulatif hingga tanggal tersebut.
+   - Untuk menghitung performa All-Time: **Wajib mengambil baris tanggal TERAKHIR per `ad_id`** (atau `ad_id || ad_name || 'unknown-' + id` jika `ad_id` kosong).
+2. **Kurs Baris Terakhir (Bukan MAX):**
+   - Nilai IDR dihitung dari: `cost_usd * kurs` dan `gross_revenue_usd * kurs` pada baris tanggal terakhir tersebut.
+   - **DILARANG `MAX(gross_revenue_usd * kurs)`** karena diam-diam akan memilih baris dengan kurs tertinggi bukan tanggal terakhir.
+3. **Delta Rentang Tanggal (Date Range Growth):**
+   - Jika user memilih filter `startDate` s/d `endDate`:
+     $$\Delta = \max(0, \text{Latest Within Range} - \text{Latest Before Start Date})$$
+   - Memastikan metrik spend, gmv, klik, dan order mencerminkan pertumbuhan nyata dalam periode yang dipilih.
+4. **Hubungan Organik vs Ads dalam Total GMV (Rule 8):**
+   - `sales` = data organik Partner Center (order link creator).
+   - `ads_performance` = data berbayar Video Shopping Ads (order dari video yang di-ads TIDAK masuk Partner Center).
+   - Maka: $$\text{Total GMV} = \sum(\text{sales.gmv non-refund}) + \text{ads\_gmv (baris terakhir)}$$
+
+#### 3. Manajemen Laporan & Pemetaan Manual (`/ads-report`)
+1. **Inline Editing & 2-Second Debounced Autosave:**
+   - Manager dapat langsung mengubah `Campaign`, `Creator`, `Kurs`, `Tanggal`, `Ad ID`, dan `Ad Name` langsung pada sel tabel.
+   - Perubahan ditampung dalam state `pendingChanges` dan di-commit otomatis ke server setelah jeda 2 detik (`updateAdPerformanceAction`).
+   - Setiap kali kreator dipetakan, sistem otomatis melakukan **UPSERT ke master `ads_name_mappings`**, sehingga saat file di-import ulang di masa depan, pemetaan tidak terhapus.
+2. **Filter Fleksibel (SALES vs AWARENESS):**
+   - Tombol toggle instan: **🛒 SALES** dan **📢 AWARENESS**.
+   - Jika keduanya dipilih: menampilkan gabungan SALES + AWARENESS.
+   - Memudahkan media buyer dan finance memisahkan iklan konversi GMV dari iklan awareness/traffic.
+3. **Dua Mode Tampilan Tabel:**
+   - **Database Ads (Flat Mode):** Menampilkan setiap baris log harian untuk audit detail.
+   - **Performa Ads Per ID (Grouped Mode):** Mengelompokkan riwayat iklan per Ad ID dengan accordion delta & lifetime.
+
+#### 4. Ads Budgeting & Saldo Kas (`/ads-report/budgeting-ads`)
+1. **Alur Kas Top Up Global $\rightarrow$ Alokasi $\rightarrow$ Spend Real:**
+   - **Top Up Global (`ads_topups`):** Pencatatan setoran modal iklan (IDR & USD) dari finance.
+   - **Saldo USD Idle:** Selisih total top up USD dikurangi total alokasi yang sudah dibagikan ke campaign.
+   - **Alokasi Campaign (`ads_allocations`):** Dompet saldo yang dijatahkan untuk campaign tertentu.
+   - **Realisasi Spend:** Dihitung dari baris tanggal terakhir per ad_id pada campaign tersebut.
+   - **Sisa Saldo & Alert:** $\text{Alokasi USD} - \text{Real Spend USD}$. Jika sisa saldo $< 0$, sistem memberikan indikator peringatan overspend.

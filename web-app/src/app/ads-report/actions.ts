@@ -12,6 +12,7 @@ export async function getAdsReportData(params: {
   campaignId?: number | null;
   campaignAdsName?: string | null;
   searchQuery?: string;
+  objectives?: string[];
   sortKey: string;
   sortDir: 'asc' | 'desc';
 }) {
@@ -49,6 +50,31 @@ export async function getAdsReportData(params: {
       campaignBreakdown: { list: [], globalUnmappedCampaigns: 0 }, 
       budgetBalances: {} 
     };
+  }
+
+  // Filter by Objective (SALES vs AWARENESS)
+  if (params.objectives && params.objectives.length > 0) {
+    const isSalesSelected = params.objectives.some(o => o.toUpperCase() === 'SALES');
+    const isAwarenessSelected = params.objectives.some(o => o.toUpperCase() === 'AWARENESS');
+
+    const matchObjective = (r: any) => {
+      const text = `${r.campaign_ads_name || ''} ${r.ad_name || ''}`.toLowerCase();
+      const hasSalesKeyword = /sales|conv|purchase|belanja|vsa/i.test(text) || (Number(r.gross_revenue_usd) || 0) > 0 || (Number(r.purchases) || 0) > 0;
+      const hasAwarenessKeyword = /awareness|traffic|reach|view|brand/i.test(text) || ((Number(r.gross_revenue_usd) || 0) === 0 && (Number(r.purchases) || 0) === 0 && (Number(r.impressions) || 0) > 0);
+
+      if (isSalesSelected && isAwarenessSelected) {
+        return hasSalesKeyword || hasAwarenessKeyword;
+      }
+      if (isSalesSelected) {
+        return hasSalesKeyword;
+      }
+      if (isAwarenessSelected) {
+        return hasAwarenessKeyword;
+      }
+      return true;
+    };
+
+    rawAllData = rawAllData.filter(matchObjective);
   }
 
   // Filter raw data by date in memory

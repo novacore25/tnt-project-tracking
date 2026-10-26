@@ -258,7 +258,7 @@ export default function AdsImport() {
           
           return {
             campaign_id: globalCampaignId ? Number(globalCampaignId) : null,
-            campaign_ads_name: globalCampaignAdsName,
+            campaign_ads_name: globalCampaignAdsName || row['Campaign name'] || row['Campaign Name'] || '',
             tanggal: fConfig.tanggal,
             kurs: Number(fConfig.kurs) || 16000,
             ad_name: adName,
