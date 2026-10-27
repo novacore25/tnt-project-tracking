@@ -158,3 +158,20 @@ Data TNT pada tabel utama terisolasi secara fisik dan tidak akan tersentuh sama 
   - Total Achievement Baru: **Rp 1.823.050.270 (~Rp 1,82 Miliar)**
   - Terekam konsisten di tabel fisik `archive_*`, view `vw_archive_campaign_summary`, halaman internal performa, dan portal publik brand `/portal/260/dashboard`.
 
+#### D. Kasus Update Data Riil OMG 3 (Campaign ID 261)
+- **Status Awal (Baseline Dummy):**
+  - Sales Organik: 32 baris = Rp 10.690.668 (quantity = 1 pcs)
+  - Ads Performance: 1 baris dummy global = $19.043,73 USD = Rp 304.699.680 (tanpa username kreator)
+  - Total Achievement: **Rp 315.390.348 (~Rp 315 Juta)**
+- **Data Riil Diperbarui (User Update):**
+  - Sales Organik: 32 baris dengan quantity riil (total 2.063 pcs) = **Rp 10.690.668**
+  - Ads Performance: 32 baris per-kreator ($133.633,35 USD @ Rp 16.000) = **Rp 2.138.133.600**
+- **Hasil Setelah Update:**
+  - Total Sales Organik: 32 baris = **Rp 10.690.668**
+  - Total Ads Performance: 32 baris = **Rp 2.138.133.600**
+  - Total Achievement Baru: **Rp 2.148.824.268 (~Rp 2,15 Miliar)**
+  - Total Kreator: 245 kreator terdaftar
+  - Total Video: 558 video TikTok disetujui (approved)
+  - Sinkron di tabel `archive_*`, view `vw_archive_campaign_summary`, dan portal publik brand `/portal/261/dashboard`.
+
+
