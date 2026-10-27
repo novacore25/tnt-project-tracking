@@ -254,6 +254,23 @@ Data TNT pada tabel utama terisolasi secara fisik dan tidak akan tersentuh sama 
   - Total Video: 274 video TikTok disetujui (approved)
   - Sinkron di tabel `archive_*`, view `vw_archive_campaign_summary`, dan portal publik brand `/portal/269/dashboard`.
 
+#### J. Kasus Update Data Riil Light+ (Campaign ID 279)
+- **Status Awal (Baseline):**
+  - Sales Organik: 11 baris = Rp 7.364.685
+  - Ads Performance: 1 baris dummy global (`OTHER_AD_Light+_16`) = Rp 16.649.920 (tanpa username kreator)
+  - Total Achievement: **Rp 24.014.605 (~Rp 24 Juta)**
+- **Data Riil Diperbarui (User Update):**
+  - Sales Organik: 83 baris dengan nominal & quantity riil (total 3.065 pcs) = **Rp 116.748.451**
+  - Ads Performance: 69 baris per-kreator ($117.164,87 USD @ Rp 16.000) = **Rp 1.874.637.872** (100% terpetakan ke username kreator, top kreator: `putri.antris` & `sis.915` masing-masing Rp 140,5 Juta ads)
+- **Hasil Setelah Update:**
+  - Total Sales Organik: 83 baris = **Rp 116.748.451**
+  - Total Ads Performance: 69 baris = **Rp 1.874.637.872**
+  - Total Achievement Baru: **Rp 1.991.386.323 (~Rp 1,99 Miliar)**
+  - Total Kreator: 155 kreator terdaftar & approved (seluruh 77 kreator aktif sales/ads 100% cocok dengan kreator campaign)
+  - Total Video: 422 video TikTok disetujui (approved)
+  - Sinkron di tabel `archive_*`, view `vw_archive_campaign_summary`, dan portal publik brand `/portal/279/dashboard`.
+
+
 
 
 
