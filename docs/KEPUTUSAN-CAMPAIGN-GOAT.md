@@ -222,6 +222,23 @@ Data TNT pada tabel utama terisolasi secara fisik dan tidak akan tersentuh sama 
   - Total Video: 544 video TikTok disetujui (approved)
   - Sinkron di tabel `archive_*`, view `vw_archive_campaign_summary`, dan portal publik brand `/portal/264/dashboard`.
 
+#### H. Kasus Update Data Riil Wardah 4 (Glasting Lip Matte) (Campaign ID 265)
+- **Status Awal (Baseline):**
+  - Sales Organik: 4 baris = Rp 517.377 (quantity = 1 pcs)
+  - Ads Performance: 1 baris dummy global = $39.034,42 USD = Rp 624.550.720 (tanpa username kreator)
+  - Total Achievement: **Rp 625.068.097 (~Rp 625 Juta)**
+- **Data Riil Diperbarui (User Update):**
+  - Sales Organik: 42 baris dengan nominal & quantity riil (total 1.772 pcs) = **Rp 165.307.227**
+  - Ads Performance: 42 baris per-kreator ($289.287,65 USD @ Rp 16.000) = **Rp 4.628.602.363**
+- **Hasil Setelah Update:**
+  - Total Sales Organik: 42 baris = **Rp 165.307.227**
+  - Total Ads Performance: 42 baris = **Rp 4.628.602.363**
+  - Total Achievement Baru: **Rp 4.793.909.590 (~Rp 4,79 Miliar)**
+  - Total Kreator: 90 kreator terdaftar & approved (termasuk penambahan otomatis 4 kreator cross-campaign yang aktif menghasilkan sales & ads: `katanyakezia`, `pilaaa.66`, `naatt167`, `alansecond7`)
+  - Total Video: 127 video TikTok disetujui (approved)
+  - Sinkron di tabel `archive_*`, view `vw_archive_campaign_summary`, dan portal publik brand `/portal/265/dashboard`.
+
+
 
 
 
