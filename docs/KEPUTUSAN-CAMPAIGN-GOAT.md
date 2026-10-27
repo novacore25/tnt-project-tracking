@@ -143,19 +143,21 @@ Data TNT pada tabel utama terisolasi secara fisik dan tidak akan tersentuh sama 
 - PIN default tetap `1234`, membuka portal brand publik `/portal/[id]/dashboard`.
 - `portalActions.ts` menyajikan data ringkasan, kreator, video, dan performa dari tabel `archive_*`.
 
-#### C. Kasus Penambahan Data OMG 2 (Campaign ID 260)
-- **Status Awal (Baseline):**
+#### C. Kasus Penyesuaian Data Riil OMG 2 (Campaign ID 260)
+- **Status Awal (Baseline Dummy):**
   - Sales Organik: 66 baris = Rp 79.724.057
-  - Ads Performance: 1 baris global = $76.114,97 USD = Rp 1.217.839.520
+  - Ads Performance: 1 baris dummy global (`OTHER_AD_OMG_2_ORIGINAL`) = $76.114,97 USD = Rp 1.217.839.520 (tanpa username kreator)
   - Total Achievement: **Rp 1.297.563.577 (~Rp 1,30 Miliar)**
-- **Data Tambahan (User Update):**
-  - Sales Organik: 66 baris = Rp 450.442.139
-  - Ads Performance: 18 baris kreator = $4.690,28 USD = Rp 75.044.554
-  - Nilai Tambahan: Rp 525.486.693
-- **Hasil Setelah Update Penambahan (Append):**
-  - Total Sales Organik: 132 baris = **Rp 530.166.196**
-  - Total Ads Performance: 19 baris = **Rp 1.292.884.074**
-  - Total Achievement Baru: **Rp 1.823.050.270 (~Rp 1,82 Miliar)**
+- **Data Riil Diperbarui (Sesuai `OMG_2_FullData_2026-10-27.xlsx`):**
+  - Sales Organik: 66 baris dengan quantity riil (total 154.662 pcs) = **Rp 450.442.139**
+  - Ads Performance: 18 baris per-kreator ($4.690,28 USD @ Rp 16.000) = **Rp 75.044.554** (100% terpetakan ke username kreator)
+  - Baris dummy unmapped `OTHER_AD_OMG_2_ORIGINAL` dihapus resmi agar tidak ada data orphan.
+- **Hasil Setelah Update & Pembersihan:**
+  - Total Sales Organik: 66 baris = **Rp 450.442.139**
+  - Total Ads Performance: 18 baris = **Rp 75.044.554** (0 unmapped, 0 null creator)
+  - Total Achievement Baru: **Rp 525.486.693 (~Rp 525,48 Juta)**
+  - Total Kreator: 155 kreator terdaftar & approved
+  - Total Video: 298 video TikTok disetujui (approved)
   - Terekam konsisten di tabel fisik `archive_*`, view `vw_archive_campaign_summary`, halaman internal performa, dan portal publik brand `/portal/260/dashboard`.
 
 #### D. Kasus Update Data Riil OMG 3 (Campaign ID 261)
