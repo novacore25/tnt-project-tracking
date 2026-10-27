@@ -40,10 +40,19 @@ Berdasarkan audit forensik data spreadsheet GOAT:
    - File Agency adalah katalog master SKU/produk (995 baris).
    - File External adalah data campaign kreator.
    - **Aturan:** Jadikan **1 campaign**: `Light+ x GOAT`.
-3. **Wardah (Wardah vs Wardah 4 Glasting):**
-   - Memiliki 0 link video overlap dan jenis produk berbeda.
-   - **Aturan:** Pisahkan menjadi **2 campaign**: `Wardah x GOAT 1` dan `Wardah x GOAT 4 (Glasting Lip Matte)`.
-4. **Mooi (Mooi x JAR vs Mooi 2):**
+3. **Wardah (Wardah 1, 2, 3, 4):**
+   - Keempat file memiliki **0 link video overlap** (100% video unik).
+   - **Aturan:** Pisahkan menjadi **4 campaign berurutan**:
+     * `Wardah x GOAT 1` (General Seeding & Sales)
+     * `Wardah x GOAT 2` (Bright Series & Tone Up)
+     * `Wardah x GOAT 3 (Cushion & Dew Tint)` (Cushion & Dew Tint)
+     * `Wardah x GOAT 4 (Glasting Lip Matte)` (Lip Matte)
+4. **OMG (OMG 2 vs OMG 3):**
+   - 0 link video overlap, hanya 17% kreator ikut lagi di batch 3.
+   - **Aturan:** Pisahkan menjadi **2 campaign berurutan**: `OMG x GOAT 2` dan `OMG x GOAT 3`.
+5. **BDL Skincare:**
+   - Brand baru: `BDL x GOAT` (250 VT, GMV Rp 607 Juta).
+6. **Mooi (Mooi x JAR vs Mooi 2):**
    - 0 video & 0 creator overlap.
    - **Aturan:** Pisahkan menjadi **2 campaign**: `Mooi x JAR Inhouse` dan `Mooi x GOAT 2`.
 

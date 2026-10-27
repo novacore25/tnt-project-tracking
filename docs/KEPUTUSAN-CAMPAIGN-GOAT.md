@@ -25,9 +25,12 @@ Hasil pengecekan skrip forensik terhadap seluruh 25 file menunjukkan adanya hubu
 
 | Pasangan File | Temuan Forensic | Keputusan Ingestion |
 |---|---|---|
+| **`GOAT X WARDAH 4 ... (Downloads)`** vs **`GOAT X WARDAH 4 ... (campaign goat)`** | • 100% kreator (83) & link video (61 VT) identik.<br>• MD5 size diff hanya metadata. | **Duplikat Persis:** Gunakan salah satu saja. |
 | **`Rose All Day (Internal)`** vs **`GOAT X ROSE ALL DAY (EXTERNAL)`** | • 103 link video identik (overlap).<br>• 100% kreator di file External (66 orang) ada di Internal.<br>• File Internal menyimpan database kerja (ratecard, draft, spend ads harian).<br>• File External menyimpan report final live VT & sales ke brand. | **Satukan ke 1 Campaign:** `Rose All Day x GOAT`.<br>Gunakan data External untuk video & sales, perkaya dengan rate card & spend ads dari file Internal. |
 | **`LIGHT+ (EXTERNAL)`** vs **`Light+ x GOAT Agency`** | • File Agency berisi 995 baris katalog master SKU/produk.<br>• File External berisi data kreator (166 orang) & video (279 link). | **Bukan 2 Campaign.** Jadikan 1 campaign `Light+ x GOAT`, di mana file Agency berfungsi sebagai Master SKU. |
-| **`Wardah x GOAT MANAGEMENT`** vs **`GOAT X WARDAH 4 GLASTING LIP MATTE`** | • 0 video overlap.<br>• Overlap kreator hanya 15 orang (17%).<br>• Format & produk berbeda (General vs Lip Matte). | **2 Campaign Berbeda:**<br>1. `Wardah x GOAT 1` (163 VT, GMV Rp 329 Jt)<br>2. `Wardah x GOAT 4 (Glasting Lip Matte)` (61 VT, GMV Ads Rp 624 Jt). |
+| **Silsilah Wardah (Wardah 1, 2, 3, 4)** | • **0 link video overlap** antar keempat file.<br>• W1 (General): 107 VT, GMV Rp 329 Jt.<br>• W2 (Bright+): 53 VT, GMV Rp 614 Jt.<br>• W3 (Cushion & Dew Tint): 434 VT, GMV Rp 606 Jt.<br>• W4 (Glasting Lip Matte): 61 VT, GMV Rp 625 Jt. | **4 Campaign Berurutan (Bukan Duplikat):**<br>1. `Wardah x GOAT 1`<br>2. `Wardah x GOAT 2`<br>3. `Wardah x GOAT 3 (Cushion & Dew Tint)`<br>4. `Wardah x GOAT 4 (Glasting Lip Matte)` |
+| **Silsilah OMG (OMG 2 vs OMG 3)** | • **0 link video overlap**.<br>• OMG 2: 154 VT, GMV Rp 1,29 Miliar.<br>• OMG 3: 156 VT, GMV Rp 315 Jt. | **2 Campaign Berurutan (Bukan Duplikat):**<br>1. `OMG x GOAT 2`<br>2. `OMG x GOAT 3` |
+| **BDL Skincare (`BDL X GOAT (EXTERNAL).xlsx`)** | • Brand baru, belum ada di 25 file lama.<br>• 110 kreator, 250 VT, GMV Rp 607 Juta. | **Campaign Baru:** `BDL x GOAT`. |
 | **`Mooi x JARInhouse (Ext)`** vs **`GOAT X MOOI 2`** | • 0 video overlap.<br>• 0 kreator overlap.<br>• File JARInhouse adalah talent pool awal (53 talent). | **2 Campaign Berbeda:**<br>1. `Mooi x JAR Inhouse`<br>2. `Mooi x GOAT 2` (568 VT, GMV Rp 41 Jt). |
 
 ---
@@ -69,24 +72,29 @@ Beberapa file memiliki sheet interim/draft yang menumpuk dengan sheet final. **W
 
 ---
 
-## 3. Matriks 14 Campaign Full Performance GOAT
+## 3. Matriks 19 Campaign Full Performance GOAT (Termasuk Tambahan 5 Campaign)
 
 | No | Nama Campaign di Sistem | Brand | Kreator Total (Jual) | Video | GMV Organik | GMV Ads | Total GMV |
 |---|---|---|:---:|:---:|---:|---:|---:|
-| 1 | **Ellips x GOAT** | Ellips | 197 *(47)* | 92 VT | Rp 688.824.858 | Rp 29.314.150 | **Rp 718.139.008** |
-| 2 | **Wardah x GOAT 4 (Glasting)** | Wardah | 88 *(11)* | 61 VT | Rp 517.377 | Rp 624.550.738 | **Rp 625.068.115** |
-| 3 | **SALSA x GOAT 2** | SALSA | 297 *(104)* | 392 VT | Rp 154.346.978 | Rp 202.015.375 | **Rp 356.362.353** |
-| 4 | **Wardah x GOAT 1** | Wardah | 90 *(46)* | 163 VT | Rp 329.317.055 | Rp 0 | **Rp 329.317.055** |
-| 5 | **Rose All Day x GOAT** | Rose All Day | 84 *(58)* | 127 VT | Rp 9.710.748 | Rp 234.504.752 | **Rp 244.215.500** |
-| 6 | **PWS x GOAT 2** | PWS | 284 *(39)* | 283 VT | Rp 147.741.540 | Rp 380.233.456 | **Rp 527.974.996** |
-| 7 | **Lea Gloria x GOAT** | Lea Gloria | 171 *(73)* | 238 VT | Rp 34.793.504 | Rp 103.284.030 | **Rp 138.077.534** |
-| 8 | **DLF x GOAT** | DLF | 233 *(42)* | 323 VT | Rp 113.945.977 | Rp 21.811.253 | **Rp 135.757.230** |
-| 9 | **Skin Game x GOAT** | Skin Game | 97 *(26)* | 105 VT | Rp 8.811.142 | Rp 52.210.509 | **Rp 61.021.651** |
-| 10 | **Mooi x GOAT 2** | Mooi | 300 *(55)* | 568 VT | Rp 27.805.409 | Rp 13.352.017 | **Rp 41.157.426** |
-| 11 | **Deto Life x GOAT** | Deto Life | 99 *(29)* | 136 VT | Rp 7.721.890 | Rp 24.642.276 | **Rp 32.364.166** |
-| 12 | **PrettyMe x GOAT 2 (Sale)** | PrettyMe | 54 *(22)* | 72 VT | Rp 24.889.528 | Rp 0 | **Rp 24.889.528** |
-| 13 | **Light+ x GOAT** | Light+ | 166 *(11)* | 279 VT | Rp 7.364.685 | Rp 16.649.866 | **Rp 24.014.551** |
-| 14 | **FlimColla x GOAT** | FlimColla | 118 *(22)* | 144 VT | Rp 11.014.208 | Rp 11.448.337 | **Rp 22.462.545** |
+| 1 | **OMG x GOAT 2** *(Baru)* | OMG | 157 *(68)* | 154 VT | Rp 79.724.057 | Rp 1.217.839.557 | **Rp 1.297.563.614** |
+| 2 | **BDL x GOAT** *(Baru)* | BDL | 110 *(69)* | 250 VT | Rp 393.401.644 | Rp 214.596.419 | **Rp 607.998.063** |
+| 3 | **Wardah x GOAT 2** *(Baru)* | Wardah | 99 *(26)* | 53 VT | Rp 4.238.135 | Rp 610.705.486 | **Rp 614.943.621** |
+| 4 | **Wardah x GOAT 3 (Cushion & Dew Tint)** *(Baru)* | Wardah | 136 *(31)* | 434 VT | Rp 2.891.050 | Rp 603.503.855 | **Rp 606.394.905** |
+| 5 | **OMG x GOAT 3** *(Baru)* | OMG | 242 *(34)* | 156 VT | Rp 10.690.668 | Rp 304.699.637 | **Rp 315.390.305** |
+| 6 | **Ellips x GOAT** | Ellips | 197 *(47)* | 92 VT | Rp 688.824.858 | Rp 29.314.150 | **Rp 718.139.008** |
+| 7 | **Wardah x GOAT 4 (Glasting Lip Matte)** | Wardah | 88 *(11)* | 61 VT | Rp 517.377 | Rp 624.550.738 | **Rp 625.068.115** |
+| 8 | **SALSA x GOAT 2** | SALSA | 297 *(104)* | 392 VT | Rp 154.346.978 | Rp 202.015.375 | **Rp 356.362.353** |
+| 9 | **Wardah x GOAT 1** | Wardah | 90 *(46)* | 163 VT | Rp 329.317.055 | Rp 0 | **Rp 329.317.055** |
+| 10 | **Rose All Day x GOAT** | Rose All Day | 84 *(58)* | 127 VT | Rp 9.710.748 | Rp 234.504.752 | **Rp 244.215.500** |
+| 11 | **PWS x GOAT 2** | PWS | 284 *(39)* | 283 VT | Rp 147.741.540 | Rp 380.233.456 | **Rp 527.974.996** |
+| 12 | **Lea Gloria x GOAT** | Lea Gloria | 171 *(73)* | 238 VT | Rp 34.793.504 | Rp 103.284.030 | **Rp 138.077.534** |
+| 13 | **DLF x GOAT** | DLF | 233 *(42)* | 323 VT | Rp 113.945.977 | Rp 21.811.253 | **Rp 135.757.230** |
+| 14 | **Skin Game x GOAT** | Skin Game | 97 *(26)* | 105 VT | Rp 8.811.142 | Rp 52.210.509 | **Rp 61.021.651** |
+| 15 | **Mooi x GOAT 2** | Mooi | 300 *(55)* | 568 VT | Rp 27.805.409 | Rp 13.352.017 | **Rp 41.157.426** |
+| 16 | **Deto Life x GOAT** | Deto Life | 99 *(29)* | 136 VT | Rp 7.721.890 | Rp 24.642.276 | **Rp 32.364.166** |
+| 17 | **PrettyMe x GOAT 2 (Sale)** | PrettyMe | 54 *(22)* | 72 VT | Rp 24.889.528 | Rp 0 | **Rp 24.889.528** |
+| 18 | **Light+ x GOAT** | Light+ | 166 *(11)* | 279 VT | Rp 7.364.685 | Rp 16.649.866 | **Rp 24.014.551** |
+| 19 | **FlimColla x GOAT** | FlimColla | 118 *(22)* | 144 VT | Rp 11.014.208 | Rp 11.448.337 | **Rp 22.462.545** |
 
 *(Campaign awareness/seeding tanpa report sales seperti Animate, AHW Skin Lab, PrettyMe Exposure, Fameux, Ebelin, Magic Box, dan LUX tetap dimasukkan sebagai campaign arsip dengan data kreator & link video lengkap).*
 
