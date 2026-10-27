@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { ArrowLeft, Save, Plus, AlertCircle, CheckCircle2, Wand2, Loader2, Download } from "lucide-react";
+import { ArrowLeft, Save, Plus, AlertCircle, CheckCircle2, Wand2, Loader2, Download, Trash2, Eraser, ArrowUp } from "lucide-react";
 import * as XLSX from "xlsx";
 import { useDatabaseStore } from "@/store/useDatabaseStore";
 import { useAuth } from "@/providers/AuthProvider";
@@ -137,6 +137,12 @@ const rederiveRows = (list: SpreadsheetRow[]): SpreadsheetRow[] => {
       return next;
     }
 
+    // Baris yang belum pernah dicek lewat tombol "Cek Data" (status masih undefined),
+    // biarkan tetap undefined agar tidak muncul penanda merah/popup sebelum PIC klik "Cek Data".
+    if (next.status === undefined) {
+      return next;
+    }
+
     const unameLower = uname.toLowerCase();
     const isDuplicateInSheet = seen.has(unameLower);
     seen.add(unameLower);
@@ -164,6 +170,78 @@ const rederiveRows = (list: SpreadsheetRow[]): SpreadsheetRow[] => {
     }
     return next;
   });
+};
+
+const CellHoverToolbar = ({
+  rowIdx,
+  field,
+  onClear,
+  onDeleteShiftUp,
+  onDeleteRow,
+}: {
+  rowIdx: number;
+  field: keyof SpreadsheetRow;
+  onClear: (rowIdx: number, field: keyof SpreadsheetRow) => void;
+  onDeleteShiftUp: (rowIdx: number, field: keyof SpreadsheetRow) => void;
+  onDeleteRow: (rowIdx: number) => void;
+}) => {
+  const isFirstRow = rowIdx === 0;
+  return (
+    <div
+      className={`absolute ${
+        isFirstRow ? 'top-full pt-1' : 'bottom-full pb-1'
+      } left-1/2 -translate-x-1/2 hidden group-hover:flex z-40 pointer-events-auto select-none`}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div className="flex items-center gap-1 bg-slate-900/95 text-white text-[10px] font-medium px-2 py-1 rounded-md shadow-2xl border border-slate-700 whitespace-nowrap backdrop-blur-xs animate-in fade-in zoom-in-95 duration-100">
+        <button
+          type="button"
+          title="Kosongkan isi data di sel ini"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onClear(rowIdx, field);
+          }}
+          className="px-1.5 py-0.5 hover:bg-slate-800 rounded flex items-center gap-1 transition-colors text-slate-200 hover:text-amber-300 cursor-pointer"
+        >
+          <Eraser className="w-3 h-3 text-amber-400" />
+          <span>Hapus Data</span>
+        </button>
+
+        <div className="w-[1px] h-3 bg-slate-700" />
+
+        <button
+          type="button"
+          title="Hapus sel ini dan naikkan data di bawahnya ke atas (Shift Up)"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onDeleteShiftUp(rowIdx, field);
+          }}
+          className="px-1.5 py-0.5 hover:bg-slate-800 rounded flex items-center gap-1 transition-colors text-slate-200 hover:text-cyan-300 cursor-pointer"
+        >
+          <ArrowUp className="w-3 h-3 text-cyan-400" />
+          <span>Hapus Sel (Naik)</span>
+        </button>
+
+        <div className="w-[1px] h-3 bg-slate-700" />
+
+        <button
+          type="button"
+          title="Hapus seluruh baris ini"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onDeleteRow(rowIdx);
+          }}
+          className="px-1.5 py-0.5 hover:bg-rose-950/80 rounded flex items-center gap-1 transition-colors text-rose-300 hover:text-white cursor-pointer"
+        >
+          <Trash2 className="w-3 h-3 text-rose-400" />
+          <span>Hapus Baris</span>
+        </button>
+      </div>
+    </div>
+  );
 };
 
 export default function SpreadsheetImportCreatorClient() {
@@ -414,30 +492,87 @@ export default function SpreadsheetImportCreatorClient() {
         newRows[targetRowIndex].errorMsg = undefined;
       }
       
-      setRows(rederiveRows(newRows));
-
-      // Paste selesai: cek ke database diam-diam supaya status duplicate /
-      // kelengkapan akurat. Autofill tidak dijalankan otomatis agar input manual PIC terjaga
-      // (gunakan tombol 🪄 Auto per kolom jika ingin menarik data dari Creator Pool).
-      scheduleVerify();
+      setRows(newRows);
+      // Pengecekan data TIDAK dijalankan otomatis saat paste.
+      // Verifikasi hanya berjalan ketika PIC mengklik tombol "Cek Data" secara manual.
     }
   };
 
-  const handleUsernameBlur = async (idx: number, val: string) => {
-    const uname = val.replace(/^@/, '').toLowerCase().trim();
-    if (!uname) return;
-    scheduleVerify();
+  const handleUsernameBlur = async (_idx: number, _val: string) => {
+    // Tidak auto-verify saat blur; verifikasi hanya berjalan saat PIC klik "Cek Data".
   };
 
-  // Auto-verify: begitu data di-paste atau username diubah, data dicek diam-diam
-  // supaya sel yang bermasalah langsung merah tanpa PIC harus klik "Cek Data".
-  const autoVerifyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const verifyDataRef = useRef<(() => Promise<boolean>) | null>(null);
-  const scheduleVerify = () => {
-    if (autoVerifyTimer.current) clearTimeout(autoVerifyTimer.current);
-    autoVerifyTimer.current = setTimeout(() => { verifyDataRef.current?.(); }, 700);
+  const handleClearCell = (rowIdx: number, field: keyof SpreadsheetRow) => {
+    const newRows = [...rows];
+    const targetRow = { ...newRows[rowIdx] };
+    
+    if (field === 'rate_card') {
+      targetRow.rate_card = '0';
+    } else if (field === 'qty_vt') {
+      targetRow.qty_vt = '0';
+      const live = Number(targetRow.qty_live) || 0;
+      targetRow.content_type = determineContentType(0, live);
+    } else if (field === 'qty_live') {
+      targetRow.qty_live = '0';
+      const vt = Number(targetRow.qty_vt) || 0;
+      targetRow.content_type = determineContentType(vt, 0);
+    } else if (field === 'username') {
+      targetRow.username = '';
+      targetRow.status = undefined;
+      targetRow.errorMsg = undefined;
+      targetRow.creatorId = undefined;
+      targetRow.existingData = undefined;
+      targetRow.action = undefined;
+    } else {
+      (targetRow as any)[field] = '';
+    }
+    
+    newRows[rowIdx] = targetRow;
+    setRows(rederiveRows(newRows));
   };
-  useEffect(() => () => { if (autoVerifyTimer.current) clearTimeout(autoVerifyTimer.current); }, []);
+
+  const handleDeleteCellShiftUp = (rowIdx: number, field: keyof SpreadsheetRow) => {
+    const newRows = rows.map(r => ({ ...r }));
+    
+    // Geser nilai dari rowIdx sampai baris sebelum terakhir ke atas
+    for (let i = rowIdx; i < newRows.length - 1; i++) {
+      (newRows[i] as any)[field] = (newRows[i + 1] as any)[field];
+    }
+    
+    // Baris paling bawah diisi default
+    const defaultVal = field === 'rate_card' ? '0' : field === 'qty_vt' ? '1' : field === 'qty_live' ? '0' : '';
+    (newRows[newRows.length - 1] as any)[field] = defaultVal;
+    
+    // Update content_type jika qty_vt / qty_live bergeser
+    if (field === 'qty_vt' || field === 'qty_live') {
+      for (let i = rowIdx; i < newRows.length; i++) {
+        const vt = Number(newRows[i].qty_vt) || 0;
+        const live = Number(newRows[i].qty_live) || 0;
+        newRows[i].content_type = determineContentType(vt, live);
+      }
+    }
+    
+    // Reset status verifikasi jika username bergeser
+    if (field === 'username') {
+      for (let i = rowIdx; i < newRows.length; i++) {
+        newRows[i].status = undefined;
+        newRows[i].errorMsg = undefined;
+        newRows[i].creatorId = undefined;
+        newRows[i].existingData = undefined;
+        newRows[i].action = undefined;
+      }
+    }
+
+    setRows(rederiveRows(newRows));
+  };
+
+  const handleDeleteRow = (rowIdx: number) => {
+    let newRows = rows.filter((_, i) => i !== rowIdx);
+    if (newRows.length === 0) {
+      newRows = [getEmptyRow()];
+    }
+    setRows(rederiveRows(newRows));
+  };
 
   const updateCell = (idx: number, field: keyof SpreadsheetRow, value: string) => {
     const newRows = [...rows];
@@ -456,16 +591,14 @@ export default function SpreadsheetImportCreatorClient() {
       newRows[idx].content_type = determineContentType(vt, live);
     }
     
-    // Username diubah -> hasil pengecekan database tidak berlaku lagi, force re-check.
+    // Username diubah -> hasil pengecekan database sebelumnya tidak berlaku lagi
     if (field === 'username') {
       newRows[idx] = { ...newRows[idx], status: undefined, errorMsg: undefined, creatorId: undefined, existingData: undefined, action: undefined };
       setRows(newRows);
-      scheduleVerify();
       return;
     }
     
-    // Status dihitung ulang dari isi baris, bukan dihapus: merah hanya hilang
-    // pada kolom yang sudah diperbaiki.
+    // Status dihitung ulang dari isi baris hanya jika baris sudah pernah dicek
     setRows(rederiveRows(newRows));
   };
 
@@ -894,9 +1027,6 @@ export default function SpreadsheetImportCreatorClient() {
     }
   };
 
-  // Simpan referensi fungsi terbaru agar auto-verify memanggil versi terkini.
-  useEffect(() => { verifyDataRef.current = verifyData; });
-
   const handleSimpan = async () => {
     const isReady = await verifyData();
     if (isReady) {
@@ -1246,11 +1376,28 @@ export default function SpreadsheetImportCreatorClient() {
                   if (!row) return null;
                   return (
                     <tr key={row.id || idx} className="hover:bg-slate-50/50">
-                      <td className="px-2 py-1 border-b border-r border-slate-300 text-center text-xs text-slate-400 font-mono bg-slate-50">
-                        {idx + 1}
+                      <td className="px-2 py-1 border-b border-r border-slate-300 text-center text-xs font-mono bg-slate-50 relative group">
+                        <div className="flex items-center justify-center relative min-h-[36px]">
+                          <span className="text-slate-400 group-hover:hidden">{idx + 1}</span>
+                          <button
+                            type="button"
+                            title="Hapus baris ini"
+                            onClick={() => handleDeleteRow(idx)}
+                            className="hidden group-hover:flex items-center justify-center w-6 h-6 rounded hover:bg-rose-100 text-rose-600 transition-colors bg-white shadow-xs cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </td>
                       
                       <td className="relative p-0 border-b border-r border-slate-300 group">
+                        <CellHoverToolbar
+                          rowIdx={idx}
+                          field="username"
+                          onClear={handleClearCell}
+                          onDeleteShiftUp={handleDeleteCellShiftUp}
+                          onDeleteRow={handleDeleteRow}
+                        />
                         {(() => {
                           const isDup = row.status === 'error' && Boolean(row.errorMsg?.includes('duplikat'));
                           return (
@@ -1268,6 +1415,13 @@ export default function SpreadsheetImportCreatorClient() {
                       </td>
                       
                       <td className="relative p-0 border-b border-r border-slate-300 group">
+                        <CellHoverToolbar
+                          rowIdx={idx}
+                          field="no_wa"
+                          onClear={handleClearCell}
+                          onDeleteShiftUp={handleDeleteCellShiftUp}
+                          onDeleteRow={handleDeleteRow}
+                        />
                         <input 
                           type="text" 
                           value={row.no_wa || ''} 
@@ -1279,6 +1433,13 @@ export default function SpreadsheetImportCreatorClient() {
                       </td>
                       
                       <td className="relative p-0 border-b border-r border-slate-300 group">
+                        <CellHoverToolbar
+                          rowIdx={idx}
+                          field="followers"
+                          onClear={handleClearCell}
+                          onDeleteShiftUp={handleDeleteCellShiftUp}
+                          onDeleteRow={handleDeleteRow}
+                        />
                         <input 
                           type="text" 
                           value={row.followers || ''} 
@@ -1290,10 +1451,24 @@ export default function SpreadsheetImportCreatorClient() {
                       </td>
 
                       <td className="relative p-0 border-b border-r border-slate-300 group">
+                        <CellHoverToolbar
+                          rowIdx={idx}
+                          field="level"
+                          onClear={handleClearCell}
+                          onDeleteShiftUp={handleDeleteCellShiftUp}
+                          onDeleteRow={handleDeleteRow}
+                        />
                         <input type="text" value={row.level || ''} onChange={(e) => updateCell(idx, 'level', e.target.value)} onPaste={(e) => handlePaste(e, idx, 'level')} placeholder={row.username ? 'Auto' : ''} className="w-full h-full min-h-[36px] px-3 py-1 outline-none text-sm transition-colors focus:bg-blue-50 w-24 placeholder-slate-300" />
                       </td>
                       
                       <td className="relative p-0 border-b border-r border-slate-300 group">
+                        <CellHoverToolbar
+                          rowIdx={idx}
+                          field="gmv_30_days"
+                          onClear={handleClearCell}
+                          onDeleteShiftUp={handleDeleteCellShiftUp}
+                          onDeleteRow={handleDeleteRow}
+                        />
                         <input 
                           type="text" 
                           value={row.gmv_30_days || ''} 
@@ -1304,6 +1479,13 @@ export default function SpreadsheetImportCreatorClient() {
                         />
                       </td>
                       <td className="relative p-0 border-b border-r border-slate-300 group">
+                        <CellHoverToolbar
+                          rowIdx={idx}
+                          field="gmv_30_days_video"
+                          onClear={handleClearCell}
+                          onDeleteShiftUp={handleDeleteCellShiftUp}
+                          onDeleteRow={handleDeleteRow}
+                        />
                         <input 
                           type="text" 
                           value={row.gmv_30_days_video || ''} 
@@ -1314,6 +1496,13 @@ export default function SpreadsheetImportCreatorClient() {
                         />
                       </td>
                       <td className="relative p-0 border-b border-r border-slate-300 group">
+                        <CellHoverToolbar
+                          rowIdx={idx}
+                          field="gmv_30_days_live"
+                          onClear={handleClearCell}
+                          onDeleteShiftUp={handleDeleteCellShiftUp}
+                          onDeleteRow={handleDeleteRow}
+                        />
                         <input 
                           type="text" 
                           value={row.gmv_30_days_live || ''} 
@@ -1325,11 +1514,25 @@ export default function SpreadsheetImportCreatorClient() {
                       </td>
                       
                       <td className="relative p-0 border-b border-r border-slate-300 group">
+                        <CellHoverToolbar
+                          rowIdx={idx}
+                          field="rate_card"
+                          onClear={handleClearCell}
+                          onDeleteShiftUp={handleDeleteCellShiftUp}
+                          onDeleteRow={handleDeleteRow}
+                        />
                         <input type="text" value={row.rate_card || ''} onChange={(e) => updateCell(idx, 'rate_card', e.target.value)} onPaste={(e) => handlePaste(e, idx, 'rate_card')} className={`w-full h-full min-h-[36px] px-3 py-1 outline-none text-sm transition-colors focus:bg-blue-50 w-40`} />
                       </td>
                       
                       {/* QTY VT */}
                       <td className="relative p-0 border-b border-r border-slate-300 group" onMouseEnter={() => handleDragFillEnter(idx)}>
+                        <CellHoverToolbar
+                          rowIdx={idx}
+                          field="qty_vt"
+                          onClear={handleClearCell}
+                          onDeleteShiftUp={handleDeleteCellShiftUp}
+                          onDeleteRow={handleDeleteRow}
+                        />
                         {(() => {
                           const bad = (row.status === 'incomplete' || row.status === 'error') && !hasQty(row);
                           return (
@@ -1348,6 +1551,13 @@ export default function SpreadsheetImportCreatorClient() {
                       
                       {/* QTY LIVE */}
                       <td className="relative p-0 border-b border-r border-slate-300 group" onMouseEnter={() => handleDragFillEnter(idx)}>
+                        <CellHoverToolbar
+                          rowIdx={idx}
+                          field="qty_live"
+                          onClear={handleClearCell}
+                          onDeleteShiftUp={handleDeleteCellShiftUp}
+                          onDeleteRow={handleDeleteRow}
+                        />
                         {(() => {
                           const bad = (row.status === 'incomplete' || row.status === 'error') && !hasQty(row);
                           return (

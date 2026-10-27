@@ -52,3 +52,6 @@ yarn-error.log*
 # File yang sudah terlanjur ter-track tidak dihapus dari riwayat oleh
 # .gitignore; see docs/audit/2026-09-30-AUDIT.md section 6.1.
 web-app/scripts/
+# Local deployment & scratch scripts
+scripts/
+
