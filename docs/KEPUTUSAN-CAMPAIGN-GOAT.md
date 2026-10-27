@@ -279,6 +279,21 @@ Data TNT pada tabel utama terisolasi secara fisik dan tidak akan tersentuh sama 
   - File spreadsheet di lokal user (`Wardah_1...xlsx`, `Wardah_4...xlsx`, `OMG_3...xlsx`, `Light...xlsx`) juga telah diperbarui pada sheet `Videos` dan `Creators`.
   - Ketika tim menyerahkan rekap URL video nantinya, fitur Excel Sync (`campaignExcelSyncActions.ts`) akan otomatis meng-update kolom `link_video` berdasarkan `campaign_creator_id` dan `urutan`.
 
+#### L. Penyesuaian Massal Minimum 1 VT Placeholder untuk Seluruh Kreator (6 Campaign - 28 Oktober 2026)
+- **Konteks:** Sesuai instruksi owner ("semua creator yang vtnya masih 0 dibikin jadi 1 vt aja bro"), seluruh kreator terdaftar yang sebelumnya memiliki 0 VT pada 6 campaign aktif (Wardah 1, 2, 3, 4, OMG 3, Light+) dibuatkan masing-masing 1 baris video placeholder (`urutan = 1`, `link_video = ''`, `vt_approval = 'approved'`).
+- **Rincian Eksekusi (Total 133 Kreator):**
+  1. **OMG 3 (261):** 7 kreator ditambahkan 1 VT -> Total video naik dari 563 ke **570 VT**.
+  2. **Wardah 1 (262):** 34 kreator ditambahkan 1 VT -> Total video naik dari 119 ke **153 VT**.
+  3. **Wardah 2 (263):** 52 kreator ditambahkan 1 VT -> Total video naik dari 93 ke **145 VT**.
+  4. **Wardah 3 (264):** 11 kreator ditambahkan 1 VT -> Total video naik dari 544 ke **555 VT**.
+  5. **Wardah 4 (265):** 18 kreator ditambahkan 1 VT -> Total video naik dari 151 ke **169 VT**.
+  6. **Light+ (279):** 11 kreator ditambahkan 1 VT -> Total video naik dari 424 ke **435 VT**.
+- **Hasil Akhir:** Pada keenam campaign ini, **0 kreator yang memiliki 0 VT**. Seluruh 924 relasi kreator terdaftar kini memiliki data video di database VPS dan spreadsheet lokal.
+- **Penerapan Teknis:**
+  - Script SQL: `docs/sql/100-set-1vt-for-zero-vt-creators-6-campaigns.sql` dieksekusi sukses di PostgreSQL VPS.
+  - File spreadsheet di `C:\Users\Banzilla\Downloads\` disinkronkan ke sheet `Videos` dan `Creators`. (Khusus Wardah 3 yang sedang dibuka di Excel, file salinan updated disimpan di `Wardah_3..._updated.xlsx`).
+
+
 
 
 
