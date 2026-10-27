@@ -20,7 +20,9 @@
 | Dokumen | Kapan dibaca |
 |---|---|
 | `.opencode/skill/tnt-project/SKILL.md` | **Selalu** — konteks domain, jebakan terverifikasi, aturan kerja |
+| `.opencode/skill/goat-campaign/SKILL.md` | **Arsip Campaign GOAT** — analisis forensik 25 spreadsheet, aturan deduplikasi antar-sheet/file, pemetaan kolom |
 | `.opencode/skill/creator-scraper/SKILL.md` | **Scraping Creator & Staging** — peta DOM TikTok Partner Center, rumus GMV RIIL/ESTIMASI, infinite scroll out-of-order, captcha pause/resume |
+| `docs/KEPUTUSAN-CAMPAIGN-GOAT.md` | **Keputusan Arsip Campaign GOAT** — isolasi role executive, multi-entity `company`, pemetaan 25 file, pencegahan double count |
 | `docs/KEPUTUSAN-SCRAPING-CREATOR-STAGING.md` | **Keputusan Auto-Scraping Creator & Staging** — 12 keputusan owner, skema `creator_staging`, Buku Catatan anti-duplikat, alur local queue → Staging |
 | `docs/LOG-PERTEMUAN-2026-10-01.md` | **Sesi 30 Sep–1 Okt 2026** — masalah → diagnosis → solusi, angka sebelum/sesudah, item tertunda + pemiliknya |
 | `docs/KEPUTUSAN-PEMBAYARAN.md` | **Migrasi payment** — 10 keputusan user yang sudah dikunci + realitas DB terverifikasi |
@@ -236,6 +238,17 @@
     - Pisahkan parser Rupiah (`M` = Miliar / $10^9$) dan Non-Rupiah (`M` = Million / $10^6$).
     - Gunakan "Buku Catatan" (`knownUsernames` dari Staging + Creator Pool) agar kartu yang sudah ada langsung di-skip tanpa membuka tab detail.
     - Selama auto-scrape berjalan (loop tanpa henti sampai klik STOP, termasuk *infinite scroll jiggle* & tunggu baris *out-of-order* / *skeleton*), simpan ke local storage dulu; tombol **"Tambahkan ke Staging"** muncul setelah STOP ditekan.
+
+29. **Arsip Campaign GOAT & Isolasi Khusus Role Executive (`docs/KEPUTUSAN-CAMPAIGN-GOAT.md`):**
+    - Data arsip perusahaan lama owner (**GOAT**) disimpan dengan `campaigns.company = 'GOAT'` (default TNT).
+    - Switcher perusahaan `[ TNT | GOAT ]` **HANYA boleh tampil dan diakses oleh akun dengan role `executive`**. Role lain wajib terkunci 100% hanya di TNT baik di UI maupun Server Actions.
+    - Video GOAT disimpan menggunakan URL TikTok publik asli tanpa memerlukan deteksi `product_id` / `content_uid` Partner Center.
+    - **Pencegahan Double-Count:** Perhatikan aturan deduplikasi di `docs/KEPUTUSAN-CAMPAIGN-GOAT.md`:
+      - Sheet `R` (interim) vs `Report Campaign` (final) pada SALSA 2 dan DLF tumpang tindih tinggi (70%–86%); utamakan `Report Campaign`.
+      - Sheet `Report` (interim) vs `Report Campaign` (final) pada PWS 2 tumpang tindih 93%; utamakan `Report Campaign`.
+      - File `Rose All Day (Internal)` dan `(External)` adalah **1 campaign yang sama** (merge data kerja & data laporan).
+      - File `PrettyMe` memiliki **2 campaign berbeda** dalam 1 file (`Exposure` vs `Sale 2`).
+      - File `Deto Life` memiliki 5 sheet produk terpisah yang digabung dalam payung campaign `Deto Life x GOAT`.
 
 ## Git
 
