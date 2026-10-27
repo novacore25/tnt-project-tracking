@@ -6,9 +6,18 @@ import { cookies } from 'next/headers';
 import { normalizeKurs } from '@/utils/computed';
 
 export async function loginPortal(campaignId: number, pin: string) {
-  const [campaign] = await db.execute(sql`
+  let [campaign] = await db.execute(sql`
     SELECT id, pin FROM campaigns WHERE id = ${campaignId} LIMIT 1
   `) as any[];
+
+  if (!campaign) {
+    const [archiveCamp] = await db.execute(sql`
+      SELECT id, pin FROM archive_campaigns WHERE id = ${campaignId} LIMIT 1
+    `) as any[];
+    if (archiveCamp) {
+      campaign = archiveCamp;
+    }
+  }
 
   if (!campaign) {
     return { success: false, message: 'Campaign tidak ditemukan.' };
@@ -61,11 +70,284 @@ export async function getPortalData(campaignId: number) {
   
   if (!pin) return { authenticated: false };
 
-  const [campaign] = await db.execute(sql`
+  let [campaign] = await db.execute(sql`
     SELECT * FROM campaigns WHERE id = ${campaignId} LIMIT 1
   `) as any[];
 
+  let isArchive = false;
+  if (!campaign) {
+    const [archiveCamp] = await db.execute(sql`
+      SELECT * FROM archive_campaigns WHERE id = ${campaignId} LIMIT 1
+    `) as any[];
+    if (archiveCamp) {
+      campaign = archiveCamp;
+      isArchive = true;
+    }
+  }
+
   if (!campaign || campaign.pin !== pin) return { authenticated: false };
+
+  // ============================================================
+  // CABANG KHUSUS CAMPAIGN ARSIP (COMPANY LAIN)
+  // ============================================================
+  if (isArchive) {
+    const [ccRes, vidRes, salesRes, adsRes] = await Promise.all([
+      db.execute(sql`
+        SELECT 
+          id, creator_id, approval, created_at, content_type, qty_vt, qty_live, tier, price,
+          username, nama_asli, link_account
+        FROM archive_campaign_creators
+        WHERE campaign_id = ${campaignId}
+        ORDER BY id ASC
+      `).catch(() => []) as Promise<any[]>,
+      db.execute(sql`
+        SELECT v.id, v.campaign_creator_id, v.urutan, v.link_video, v.link_draft, v.concept, v.vt_approval, cc.username as creator_username
+        FROM archive_videos v
+        JOIN archive_campaign_creators cc ON v.campaign_creator_id = cc.id
+        WHERE cc.campaign_id = ${campaignId}
+        ORDER BY v.id ASC
+      `).catch(() => []) as Promise<any[]>,
+      db.execute(sql`
+        SELECT tanggal, gmv, quantity, creator_username, content_uid, content_type, campaign_id, price, order_id
+        FROM archive_sales
+        WHERE campaign_id = ${campaignId}
+      `).catch(() => []) as Promise<any[]>,
+      db.execute(sql`
+        SELECT id, campaign_id, creator_id, creator_username as username, campaign_ads_name, ad_id, ad_name, cost_usd, gross_revenue_usd, kurs, tanggal
+        FROM archive_ads_performance
+        WHERE campaign_id = ${campaignId}
+      `).catch(() => []) as Promise<any[]>,
+    ]);
+
+    const rawCc = (ccRes as any[]) || [];
+    const manualVideos = (vidRes as any[]) || [];
+    const salesData = (salesRes as any[]) || [];
+    const rawAdsData = (adsRes as any[]) || [];
+
+    // Aggregasi sales organik
+    let calcOrganicGmv = 0;
+    let totalItemsSold = 0;
+    const salesByCreator = new Map<string, { gmv: number; itemsSold: number }>();
+    const salesByUid = new Map<string, { gmv: number; quantity: number }>();
+
+    for (const s of salesData) {
+      const gmv = Number(s.gmv) || 0;
+      const qty = Number(s.quantity) || 0;
+      calcOrganicGmv += gmv;
+      totalItemsSold += qty;
+
+      const u = (s.creator_username || '').toLowerCase().trim();
+      if (u) {
+        if (!salesByCreator.has(u)) salesByCreator.set(u, { gmv: 0, itemsSold: 0 });
+        const sc = salesByCreator.get(u)!;
+        sc.gmv += gmv;
+        sc.itemsSold += qty;
+      }
+
+      const uid = (s.content_uid || s.order_id || '').toString().trim();
+      if (uid) {
+        if (!salesByUid.has(uid)) salesByUid.set(uid, { gmv: 0, quantity: 0 });
+        const su = salesByUid.get(uid)!;
+        su.gmv += gmv;
+        su.quantity += qty;
+      }
+    }
+
+    // Aggregasi Ads
+    const latestAdsMap = new Map<string, any>();
+    for (const row of rawAdsData) {
+      const existing = latestAdsMap.get(row.ad_id);
+      if (!existing || new Date(row.tanggal) > new Date(existing.tanggal)) {
+        latestAdsMap.set(row.ad_id, row);
+      }
+    }
+
+    let globalAdsGmv = 0;
+    const adsByCreator = new Map<string, number>();
+    for (const ad of latestAdsMap.values()) {
+      const kurs = normalizeKurs(ad.kurs);
+      const grossRevenueUsd = Number(ad.gross_revenue_usd) || 0;
+      const adGmvIdr = grossRevenueUsd * kurs;
+      globalAdsGmv += adGmvIdr;
+
+      const u = (ad.username || '').toLowerCase().trim();
+      if (u) {
+        adsByCreator.set(u, (adsByCreator.get(u) || 0) + adGmvIdr);
+      }
+    }
+
+    // Videos grouped by creator
+    const creatorVideoGroupsMap = new Map<string, any>();
+    const allApprovedVideoIds = new Set<string>();
+
+    for (const v of manualVideos) {
+      const u = (v.creator_username || '').toLowerCase().trim();
+      if (!u) continue;
+
+      if (!creatorVideoGroupsMap.has(u)) {
+        creatorVideoGroupsMap.set(u, {
+          creator_username: u,
+          total_videos: 0,
+          total_gmv: 0,
+          total_views: 0,
+          total_likes: 0,
+          videos: []
+        });
+      }
+
+      const group = creatorVideoGroupsMap.get(u)!;
+      const uid = String(v.id);
+      allApprovedVideoIds.add(uid);
+
+      const sInfo = salesByUid.get(uid) || { gmv: 0, quantity: 0 };
+      group.videos.push({
+        id: v.id,
+        content_uid: uid,
+        creator_username: u,
+        link_video: v.link_video,
+        views: 0,
+        likes: 0,
+        gmv: sInfo.gmv,
+        post_time: null,
+        isAuto: false
+      });
+      group.total_videos += 1;
+      group.total_gmv += sInfo.gmv;
+    }
+
+    const portalVideos = Array.from(creatorVideoGroupsMap.values());
+
+    // Enriched Creator Data
+    const enrichedCcData = rawCc.map((cc: any) => {
+      const u = (cc.username || '').toLowerCase().trim();
+      const sInfo = salesByCreator.get(u) || { gmv: 0, itemsSold: 0 };
+      const adGmv = adsByCreator.get(u) || 0;
+      const vGroup = creatorVideoGroupsMap.get(u);
+      const totalVt = vGroup ? vGroup.total_videos : 0;
+      const isApproved = cc.approval === 'approved' || cc.approval === 'alternate';
+
+      return {
+        ...cc,
+        creators: {
+          id: cc.creator_id || cc.id,
+          username: cc.username,
+          nama_asli: cc.nama_asli,
+          link_account: cc.link_account,
+        },
+        gmv_organic: sInfo.gmv,
+        items_sold: sInfo.itemsSold,
+        total_vt: totalVt,
+        gmv_ads: adGmv,
+        total_gmv: sInfo.gmv + adGmv,
+        views: 0,
+        likes: 0,
+        total_livestreams: 0,
+        er: 0,
+        client_approval: isApproved ? 'approved' : 'pending'
+      };
+    });
+
+    const approvedCreatorsCount = enrichedCcData.filter((c: any) => c.approval === 'approved' || c.approval === 'alternate').length;
+    const activeCreatorsCount = enrichedCcData.filter((c: any) => c.gmv_organic > 0 || c.total_vt > 0).length;
+    const inactiveCreatorsCount = Math.max(0, approvedCreatorsCount - activeCreatorsCount);
+
+    const approvedPerfCreators = enrichedCcData
+      .filter((c: any) => c.approval === 'approved' || c.approval === 'alternate')
+      .map((c: any) => ({
+        id: c.id,
+        creator_id: c.creator_id,
+        username: c.username || 'unknown',
+        nama_asli: c.nama_asli || '',
+        link_account: c.link_account || '',
+        tier: c.tier || '-',
+        gmv: Number(c.total_gmv) || 0,
+        views: 0,
+        likes: 0,
+        items_sold: Number(c.items_sold) || 0,
+        total_vt: Number(c.total_vt) || 0,
+        er: 0
+      }));
+
+    const top10ByGmv = [...approvedPerfCreators].sort((a, b) => b.gmv - a.gmv).slice(0, 10);
+    const top10ByViews = [...approvedPerfCreators].slice(0, 10);
+    const top10ByER = [...approvedPerfCreators].slice(0, 10);
+    const top10ByItemsSold = [...approvedPerfCreators].sort((a, b) => b.items_sold - a.items_sold).slice(0, 10);
+
+    const revenuePerActiveCreator = activeCreatorsCount > 0 ? (calcOrganicGmv + globalAdsGmv) / activeCreatorsCount : 0;
+    const revenuePerVideo = allApprovedVideoIds.size > 0 ? (calcOrganicGmv + globalAdsGmv) / allApprovedVideoIds.size : 0;
+
+    return {
+      authenticated: true,
+      campaign,
+      summary: {
+        organic_gmv: calcOrganicGmv,
+        total_views: 0,
+        total_likes: 0,
+        total_videos: allApprovedVideoIds.size
+      },
+      totalSales: {
+        creatorsWithVideo: activeCreatorsCount,
+        creatorsWithLive: 0
+      },
+      totalAwareness: {
+        total_views: 0,
+        total_likes: 0
+      },
+      dailyPerf: [],
+      ccData: enrichedCcData,
+      samples: [],
+      schedules: [],
+      videos: portalVideos,
+      skus: [],
+      liveHistory: [],
+      rpc: {
+        organic_gmv: calcOrganicGmv,
+        unattributed_gmv: 0,
+        total_views: 0,
+        total_likes: 0,
+        total_videos: allApprovedVideoIds.size,
+        total_approved_creators: approvedCreatorsCount,
+        total_pending_creators: 0
+      },
+      fastCountsData: {
+        approved: approvedCreatorsCount,
+        pending: 0,
+        active: activeCreatorsCount,
+        inactive: inactiveCreatorsCount,
+        pending_with_videos: 0
+      },
+      fastVideoCountsData: {
+        total_approved: allApprovedVideoIds.size,
+        total_pending: 0,
+        total_livestream: 0
+      },
+      initialTotalAdsGmv: globalAdsGmv,
+      topSkus: [],
+      actualLives: [],
+      salesPerProduct: [],
+      totalItemsSold,
+      monthlyStats: [],
+      metrics: {
+        activeCreatorsCount,
+        inactiveCreatorsCount,
+        totalApprovedVtCount: allApprovedVideoIds.size,
+        revenuePerActiveCreator,
+        revenuePerVideo,
+        averageViewsPerVideo: 0,
+        likeER: 0,
+        conversionRate: 0,
+        salesToLikesRatio: 0
+      },
+      top10Creators: {
+        byGmv: top10ByGmv,
+        byViews: top10ByViews,
+        byER: top10ByER,
+        byItemsSold: top10ByItemsSold
+      },
+      winningConcepts: [],
+      winningProducts: []
+    };
+  }
 
   // Parallel fetch campaign dataset using 100% verified schema
   const [
@@ -1253,13 +1535,29 @@ export async function submitClientApproval(campaignId: number, campaignCreatorId
   const pin = cookieStore.get(`portal_pin_${campaignId}`)?.value;
   if (!pin) throw new Error('Not authenticated');
 
-  const [campaign] = await db.execute(sql`SELECT pin FROM campaigns WHERE id = ${campaignId} LIMIT 1`) as any[];
+  let [campaign] = await db.execute(sql`SELECT pin FROM campaigns WHERE id = ${campaignId} LIMIT 1`) as any[];
+  let isArchive = false;
+  if (!campaign) {
+    const [archiveCamp] = await db.execute(sql`SELECT pin FROM archive_campaigns WHERE id = ${campaignId} LIMIT 1`) as any[];
+    if (archiveCamp) {
+      campaign = archiveCamp;
+      isArchive = true;
+    }
+  }
+
   if (!campaign || campaign.pin !== pin) throw new Error('Unauthorized');
 
-  await db.execute(sql`
-    UPDATE campaign_creators SET client_approval = ${status}
-    WHERE id = ${campaignCreatorId} AND campaign_id = ${campaignId}
-  `);
+  if (isArchive) {
+    await db.execute(sql`
+      UPDATE archive_campaign_creators SET approval = ${status}
+      WHERE id = ${campaignCreatorId} AND campaign_id = ${campaignId}
+    `);
+  } else {
+    await db.execute(sql`
+      UPDATE campaign_creators SET client_approval = ${status}
+      WHERE id = ${campaignCreatorId} AND campaign_id = ${campaignId}
+    `);
+  }
 
   return { success: true };
 }
@@ -1342,10 +1640,18 @@ export async function batchUpdateResiByClient(campaignId: number, updates: Batch
 
 export async function updateClientNotes(campaignId: number, ccId: number, notes: string) {
   try {
-    await db.execute(sql`
-      UPDATE campaign_creators SET notes_client = ${notes}
-      WHERE id = ${ccId} AND campaign_id = ${campaignId}
-    `);
+    const [archiveCamp] = await db.execute(sql`SELECT id FROM archive_campaigns WHERE id = ${campaignId} LIMIT 1`) as any[];
+    if (archiveCamp) {
+      await db.execute(sql`
+        UPDATE archive_campaign_creators SET notes_client = ${notes}
+        WHERE id = ${ccId} AND campaign_id = ${campaignId}
+      `);
+    } else {
+      await db.execute(sql`
+        UPDATE campaign_creators SET notes_client = ${notes}
+        WHERE id = ${ccId} AND campaign_id = ${campaignId}
+      `);
+    }
     return { success: true };
   } catch (error: any) {
     console.error("Error updating client notes:", error);

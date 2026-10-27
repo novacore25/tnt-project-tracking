@@ -16,9 +16,18 @@ export default async function PortalLogin({ params }: { params: Promise<{ id: st
   const cookieStore = await cookies();
   const pinCookie = cookieStore.get(`portal_pin_${campaignId}`)?.value;
   
-  const [campaign] = await db.execute(sql`
+  let [campaign] = await db.execute(sql`
     SELECT nama, pin FROM campaigns WHERE id = ${campaignId} LIMIT 1
   `) as any[];
+
+  if (!campaign) {
+    const [archiveCamp] = await db.execute(sql`
+      SELECT nama, pin FROM archive_campaigns WHERE id = ${campaignId} LIMIT 1
+    `) as any[];
+    if (archiveCamp) {
+      campaign = archiveCamp;
+    }
+  }
 
   if (!campaign) {
     return <div className="p-8 text-center text-red-500">Campaign tidak ditemukan.</div>;
