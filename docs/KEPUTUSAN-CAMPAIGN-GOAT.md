@@ -124,3 +124,37 @@ DELETE FROM campaigns WHERE company = 'OTHER';
 COMMIT;
 ```
 Data TNT pada tabel utama terisolasi secara fisik dan tidak akan tersentuh sama sekali.
+
+---
+
+### 7. Excel Sync Multi-Sheet & Portal Publik Brand Arsip (Update 27 Okt 2026)
+
+#### A. Isolasi Fitur Excel Sync (Multi-Sheet Export & Import)
+- **Tombol `Excel Sync (Arsip)` & Modal `<CampaignExcelSyncModal>`:**
+  Hanya tampil pada detail campaign Company Lain (`company === 'OTHER'`), tersembunyi 100% pada campaign operasional TNT.
+- **Server Action `campaignExcelSyncActions.ts`:**
+  Memvalidasi `campaignId` hanya terhadap tabel `archive_campaigns`. Akses ditolak jika id menunjuk ke campaign operasional TNT. Seluruh operasi ekspor dan impor membaca serta menulis **eksklusif ke tabel fisik `archive_*`**.
+- **Mode Impor (Append vs Replace):**
+  - **Append (Penambahan):** Menambahkan data baru tanpa menghapus data historis/baseline yang sudah ada sebelumnya.
+  - **Replace (Timpa):** Menghapus data kategori terkait (`archive_sales` atau `archive_ads_performance`) sebelum memasukkan baris baru.
+
+#### B. Akses Portal Publik Brand Arsip (`/portal/[id]`)
+- URL portal publik `/portal/[id]` mendukung ID dari `archive_campaigns` jika tidak ditemukan di `campaigns`.
+- PIN default tetap `1234`, membuka portal brand publik `/portal/[id]/dashboard`.
+- `portalActions.ts` menyajikan data ringkasan, kreator, video, dan performa dari tabel `archive_*`.
+
+#### C. Kasus Penambahan Data OMG 2 (Campaign ID 260)
+- **Status Awal (Baseline):**
+  - Sales Organik: 66 baris = Rp 79.724.057
+  - Ads Performance: 1 baris global = $76.114,97 USD = Rp 1.217.839.520
+  - Total Achievement: **Rp 1.297.563.577 (~Rp 1,30 Miliar)**
+- **Data Tambahan (User Update):**
+  - Sales Organik: 66 baris = Rp 450.442.139
+  - Ads Performance: 18 baris kreator = $4.690,28 USD = Rp 75.044.554
+  - Nilai Tambahan: Rp 525.486.693
+- **Hasil Setelah Update Penambahan (Append):**
+  - Total Sales Organik: 132 baris = **Rp 530.166.196**
+  - Total Ads Performance: 19 baris = **Rp 1.292.884.074**
+  - Total Achievement Baru: **Rp 1.823.050.270 (~Rp 1,82 Miliar)**
+  - Terekam konsisten di tabel fisik `archive_*`, view `vw_archive_campaign_summary`, halaman internal performa, dan portal publik brand `/portal/260/dashboard`.
+
