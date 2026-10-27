@@ -24,7 +24,7 @@ const navItems = [
 
 export function Sidebar() {
   const pathname = usePathname();
-  const { profile } = useAuth();
+  const { profile, selectedCompany, setSelectedCompany } = useAuth();
   // Default to false (collapsed) per user request
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -61,19 +61,24 @@ export function Sidebar() {
     setHoveredItem(null);
   };
 
+  // Jika sedang mode 'Company Lain', fokuskan hanya ke Campaign & Ads Report
+  const displayedNavItems = selectedCompany === 'OTHER'
+    ? navItems.filter(item => item.href === '/campaigns' || item.href === '/ads-report')
+    : navItems;
+
   return (
     <>
       <div className={cn("navdemo", isExpanded ? "expanded" : "collapsed")}>
         <div className={cn("navbrand", !isExpanded && "flex-col gap-2 pt-6 pb-2")}>
           {isExpanded ? (
             <div>
-              TNT App
-              <small>Campaign Management</small>
+              {selectedCompany === 'OTHER' ? 'Arsip App' : 'TNT App'}
+              <small>{selectedCompany === 'OTHER' ? 'Company Lain' : 'Campaign Management'}</small>
             </div>
           ) : (
             <div className="flex items-center justify-center mb-2">
-            <img src="/icon-tnt-rounded.png" alt="TNT Logo" className="w-8 h-8 object-cover rounded-md" />
-          </div>
+              <img src="/icon-tnt-rounded.png" alt="TNT Logo" className="w-8 h-8 object-cover rounded-md" />
+            </div>
           )}
           
           <button 
@@ -104,8 +109,68 @@ export function Sidebar() {
           </div>
         )}
 
+        {/* Switcher Company: Khusus Role Executive */}
+        {profile?.role === 'executive' && isExpanded && (
+          <div className="px-3 py-2 mb-2 bg-white/5 rounded-lg border border-white/10 mx-2">
+            <div className="text-[10px] font-bold tracking-wider text-white/50 uppercase mb-1.5 flex items-center justify-between">
+              <span>Perusahaan</span>
+              <span className={cn(
+                "text-[9px] px-1.5 py-0.5 rounded font-mono font-bold",
+                selectedCompany === 'TNT' ? "bg-p300/30 text-p100" : "bg-amber-500/30 text-amber-300"
+              )}>
+                {selectedCompany === 'TNT' ? 'AKTIF' : 'LAIN'}
+              </span>
+            </div>
+            <div className="grid grid-cols-2 p-0.5 bg-black/40 rounded-md border border-white/5 text-[11px] font-semibold">
+              <button
+                type="button"
+                onClick={() => setSelectedCompany('TNT')}
+                className={cn(
+                  "py-1 rounded text-center transition-all",
+                  selectedCompany === 'TNT' 
+                    ? "bg-p300 text-white font-bold shadow-sm" 
+                    : "text-white/60 hover:text-white"
+                )}
+              >
+                TNT
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedCompany('OTHER')}
+                className={cn(
+                  "py-1 rounded text-center transition-all",
+                  selectedCompany === 'OTHER' 
+                    ? "bg-amber-600 text-white font-bold shadow-sm" 
+                    : "text-white/60 hover:text-white"
+                )}
+              >
+                Company Lain
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Collapsed Switcher (Khusus Executive) */}
+        {profile?.role === 'executive' && !isExpanded && (
+          <div className="flex justify-center mb-2 px-1">
+            <button
+              type="button"
+              onClick={() => setSelectedCompany(selectedCompany === 'TNT' ? 'OTHER' : 'TNT')}
+              className={cn(
+                "w-8 h-8 rounded-md flex items-center justify-center text-[10px] font-bold border transition-all",
+                selectedCompany === 'TNT'
+                  ? "bg-p300/20 text-p100 border-p300/40 hover:bg-p300/30"
+                  : "bg-amber-600/30 text-amber-300 border-amber-500/50 hover:bg-amber-600/40"
+              )}
+              title={`Perusahaan: ${selectedCompany === 'TNT' ? 'TNT' : 'Company Lain'} (Klik untuk switch)`}
+            >
+              {selectedCompany === 'TNT' ? 'TNT' : 'LAIN'}
+            </button>
+          </div>
+        )}
+
         <nav className="flex-1 flex flex-col overflow-y-auto mt-2">
-          {navItems.map((item) => {
+          {displayedNavItems.map((item) => {
             const isActive = pathname
               ? item.href === '/creator-pool'
                 ? pathname === '/creator-pool' || (pathname.startsWith('/creator-pool/') && !pathname.startsWith('/creator-pool/staging'))
@@ -139,13 +204,13 @@ export function Sidebar() {
             );
           })}
           
-          {/* Khusus Manager, Finance, Executive, Admin */}
-          {['manager', 'finance', 'executive', 'admin'].includes(profile?.role) && (
+          {/* Khusus Manager, Finance, Executive, Admin (Hanya tampil di mode TNT) */}
+          {selectedCompany === 'TNT' && !!profile?.role && ['manager', 'finance', 'executive', 'admin'].includes(profile.role) && (
             <div className="mt-2">
               <div className="navsection">Manager Tools</div>
               
               {/* Manajemen Akun: Hanya Manager, Executive, Admin */}
-              {['manager', 'executive', 'admin'].includes(profile?.role) && (
+              {!!profile?.role && ['manager', 'executive', 'admin'].includes(profile.role) && (
                 <Link
                   href="/manajemen-akun"
                   className={cn(
@@ -175,8 +240,8 @@ export function Sidebar() {
             </div>
           )}
 
-          {/* Khusus Manager, Finance, Executive, Admin */}
-          {['manager', 'finance', 'executive', 'admin'].includes(profile?.role) && (
+          {/* Khusus Finance (Hanya tampil di mode TNT) */}
+          {selectedCompany === 'TNT' && !!profile?.role && ['manager', 'finance', 'executive', 'admin'].includes(profile.role) && (
             <div className="mt-2">
               <div className="navsection">Finance</div>
               <Link
@@ -207,7 +272,7 @@ export function Sidebar() {
           </button>
           {isExpanded && (
             <p className="text-[10px] text-center text-white/30 mt-4 font-medium tracking-wide">
-              TNT Agency &copy; {new Date().getFullYear()}
+              {selectedCompany === 'OTHER' ? 'Arsip Company Lain' : 'TNT Agency'} &copy; {new Date().getFullYear()}
             </p>
           )}
         </div>

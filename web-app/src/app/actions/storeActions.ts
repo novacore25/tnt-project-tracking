@@ -103,6 +103,25 @@ export async function getAuthProfileAction() {
  */
 export async function getInitialStoreData() {
   try {
+    const session = await auth();
+    let isExecutive = false;
+    if (session?.user?.email) {
+      const pRows = (await db.execute(sql`
+        SELECT role FROM profiles WHERE LOWER(email) = ${session.user.email.toLowerCase()} LIMIT 1
+      `)) as unknown as { role: string }[];
+      if (pRows?.[0]?.role === 'executive') {
+        isExecutive = true;
+      }
+    }
+
+    const campaignsQuery = isExecutive
+      ? sql`SELECT * FROM campaigns ORDER BY id DESC`
+      : sql`SELECT * FROM campaigns WHERE company = 'TNT' OR company IS NULL ORDER BY id DESC`;
+
+    const summaryQuery = isExecutive
+      ? sql`SELECT * FROM public.vw_campaign_summary`
+      : sql`SELECT * FROM public.vw_campaign_summary WHERE company = 'TNT' OR company IS NULL`;
+
     const [
       allBrands,
       allCampaigns,
@@ -113,12 +132,12 @@ export async function getInitialStoreData() {
       campaignSummaryRes,
     ] = await Promise.all([
       db.execute(sql`SELECT * FROM brands ORDER BY id ASC`).catch(() => []),
-      db.execute(sql`SELECT * FROM campaigns ORDER BY id DESC`).catch(() => []),
+      db.execute(campaignsQuery).catch(() => []),
       db.execute(sql`SELECT * FROM niches ORDER BY id ASC`).catch(() => []),
       db.execute(sql`SELECT * FROM skus ORDER BY id DESC`).catch(() => []),
       db.execute(sql`SELECT id, full_name as nama, email, avatar_url, role, status FROM profiles`).catch(() => []),
       db.execute(sql`SELECT * FROM ad_name_mapping ORDER BY id DESC`).catch(() => []),
-      db.execute(sql`SELECT * FROM public.vw_campaign_summary`).catch(() => []),
+      db.execute(summaryQuery).catch(() => []),
     ]);
 
     return {
@@ -166,7 +185,7 @@ export async function createCampaignAction(data: any) {
         target_creator_live, target_creator_live_nano, target_creator_live_micro, target_creator_live_macro, target_creator_live_mega,
         target_views, budget_creator_plafon, budget_ads_plafon,
         vsa_gmv_max, pic, assist, file_concept_url, status, campaign_group, require_client_approval,
-        pin, tiktok_campaign_ids
+        pin, tiktok_campaign_ids, company
       ) VALUES (
         ${data.brand_id}, ${data.nama}, ${data.tipe_campaign}, ${data.persiapan_14hari || null}, ${data.start_date}, ${data.end_date},
         ${data.target_gmv ? Number(data.target_gmv) : null}, ${data.target_video ? Number(data.target_video) : null}, ${data.target_creator ? Number(data.target_creator) : null},
@@ -174,7 +193,7 @@ export async function createCampaignAction(data: any) {
         ${data.target_creator_live ? Number(data.target_creator_live) : null}, ${data.target_creator_live_nano ? Number(data.target_creator_live_nano) : 0}, ${data.target_creator_live_micro ? Number(data.target_creator_live_micro) : 0}, ${data.target_creator_live_macro ? Number(data.target_creator_live_macro) : 0}, ${data.target_creator_live_mega ? Number(data.target_creator_live_mega) : 0},
         ${data.target_views ? Number(data.target_views) : null}, ${Number(data.budget_creator_plafon || 0)}, ${Number(data.budget_ads_plafon || 0)},
         ${data.vsa_gmv_max ? Number(data.vsa_gmv_max) : null}, ${data.pic || null}, ${data.assist || null}, ${data.file_concept_url || null}, ${data.status || 'aktif'}, ${data.campaign_group || 'Tim Campaign'}, ${data.require_client_approval || false},
-        ${data.pin ? String(data.pin).trim() : '1234'}, ${sql`${rawTiktokIds}::text[]`}
+        ${data.pin ? String(data.pin).trim() : '1234'}, ${sql`${rawTiktokIds}::text[]`}, ${data.company || 'TNT'}
       )
       RETURNING *
     `) as any[];

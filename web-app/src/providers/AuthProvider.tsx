@@ -17,6 +17,8 @@ type UserCampaign = {
   all_campaigns: boolean;
 };
 
+export type CompanyType = 'TNT' | 'OTHER';
+
 type AuthContextType = {
   profile: Profile | null;
   userCampaigns: UserCampaign[];
@@ -26,6 +28,8 @@ type AuthContextType = {
   isFinance: boolean;
   isExecutive: boolean;
   isAnggota: boolean;
+  selectedCompany: CompanyType;
+  setSelectedCompany: (company: CompanyType) => void;
 };
 
 const AuthContext = createContext<AuthContextType>({
@@ -37,15 +41,28 @@ const AuthContext = createContext<AuthContextType>({
   isFinance: false,
   isExecutive: false,
   isAnggota: false,
+  selectedCompany: 'TNT',
+  setSelectedCompany: () => {},
 });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [userCampaigns, setUserCampaigns] = useState<UserCampaign[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [selectedCompanyState, setSelectedCompanyState] = useState<CompanyType>('TNT');
 
   useEffect(() => {
     let mounted = true;
+
+    // Load saved company selection from localStorage if available
+    try {
+      const savedCompany = localStorage.getItem('selected_company');
+      if (savedCompany === 'OTHER' || savedCompany === 'TNT') {
+        setSelectedCompanyState(savedCompany);
+      }
+    } catch {
+      // ignore localStorage errors in private browsing
+    }
 
     async function loadAuth() {
       try {
@@ -68,6 +85,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
+  const setSelectedCompany = (company: CompanyType) => {
+    setSelectedCompanyState(company);
+    try {
+      localStorage.setItem('selected_company', company);
+    } catch {
+      // ignore
+    }
+  };
+
   const canEditCampaign = (campaignId: number | string) => {
     if (isLoading) return false;
     if (!profile) return false;
@@ -81,11 +107,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const isManager = profile?.role === 'manager' || profile?.role === 'admin';
   const isFinance = profile?.role === 'finance' || profile?.role === 'executive' || profile?.role === 'admin';
-  const isExecutive = profile?.role === 'executive' || profile?.role === 'admin';
+  const isExecutive = profile?.role === 'executive';
   const isAnggota = profile?.role === 'anggota' || profile?.role === 'staff';
 
+  // Guard: Hanya role 'executive' yang boleh mengakses 'OTHER'. Role lain selalu 'TNT'.
+  const selectedCompany: CompanyType = profile?.role === 'executive' ? selectedCompanyState : 'TNT';
+
   return (
-    <AuthContext.Provider value={{ profile, userCampaigns, isLoading, canEditCampaign, isManager, isFinance, isExecutive, isAnggota }}>
+    <AuthContext.Provider value={{
+      profile,
+      userCampaigns,
+      isLoading,
+      canEditCampaign,
+      isManager,
+      isFinance,
+      isExecutive,
+      isAnggota,
+      selectedCompany,
+      setSelectedCompany,
+    }}>
       {children}
     </AuthContext.Provider>
   );

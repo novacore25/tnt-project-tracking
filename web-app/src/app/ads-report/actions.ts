@@ -15,8 +15,11 @@ export async function getAdsReportData(params: {
   objectives?: string[];
   sortKey: string;
   sortDir: 'asc' | 'desc';
+  company?: string;
 }) {
-  await requireUser();
+  const { profile } = await requireUser();
+  const isExecutive = profile?.role === 'executive';
+  const effectiveCompany = isExecutive ? (params.company || 'TNT') : 'TNT';
 
   let adsQuery = sql`
     SELECT 
@@ -24,17 +27,25 @@ export async function getAdsReportData(params: {
       json_build_object('username', cr.username) as creators
     FROM ads_performance ap
     LEFT JOIN creators cr ON ap.creator_id = cr.id
+    LEFT JOIN campaigns c ON ap.campaign_id = c.id
+    WHERE (
+      ${effectiveCompany === 'OTHER' ? sql`c.company = 'OTHER'` : sql`(c.company = 'TNT' OR c.company IS NULL)`}
+    )
   `;
 
   if (params.campaignAdsName) {
-    adsQuery = sql`${adsQuery} WHERE ap.campaign_ads_name = ${params.campaignAdsName}`;
+    adsQuery = sql`${adsQuery} AND ap.campaign_ads_name = ${params.campaignAdsName}`;
   }
 
   adsQuery = sql`${adsQuery} ORDER BY ap.tanggal DESC`;
 
+  const campaignsQuery = isExecutive && effectiveCompany === 'OTHER'
+    ? sql`SELECT id, nama, company FROM campaigns WHERE company = 'OTHER'`
+    : sql`SELECT id, nama, company FROM campaigns WHERE company = 'TNT' OR company IS NULL`;
+
   const [rawAdsRows, campaignsRows, budgetRows] = await Promise.all([
     db.execute(adsQuery),
-    db.execute(sql`SELECT id, nama FROM campaigns`),
+    db.execute(campaignsQuery),
     db.execute(sql`SELECT * FROM ads_allocations`)
   ]);
 

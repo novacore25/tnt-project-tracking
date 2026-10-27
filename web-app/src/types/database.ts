@@ -39,6 +39,7 @@ export type Campaign = {
   creator_filter_type?: string | null;
   creator_filter_usernames?: string | null;
   campaign_group?: string | null;
+  company?: string;
   created_at: string;
 };
 
@@ -224,6 +225,8 @@ export type CampaignSummary = {
   budget_ads_terpakai: number;
   sisa_budget_ads: number;
   total_pembayaran_kreator: number;
+  company?: string;
+  campaign_group?: string | null;
   require_client_approval: boolean;
 };
 

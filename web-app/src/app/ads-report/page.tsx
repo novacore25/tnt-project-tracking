@@ -368,8 +368,18 @@ export default function AdsReportPage() {
   const [appliedCampaignAdsName, setAppliedCampaignAdsName] = useState<string>('');
   const [selectedObjectives, setSelectedObjectives] = useState<string[]>([]);
   
-  const { profile } = useAuth();
+  const { profile, selectedCompany } = useAuth();
   const isManager = profile?.role === 'manager' || profile?.role === 'executive';
+
+  const scopedCampaigns = useMemo(() => {
+    return campaigns.filter(c => 
+      selectedCompany === 'OTHER' ? c.company === 'OTHER' : (c.company === 'TNT' || !c.company)
+    );
+  }, [campaigns, selectedCompany]);
+
+  useEffect(() => {
+    setSelectedCampaignId(null);
+  }, [selectedCompany]);
 
   const [displayLimit, setDisplayLimit] = useState(100);
 
@@ -408,7 +418,8 @@ export default function AdsReportPage() {
           searchQuery: deferredSearchQuery || undefined,
           objectives: selectedObjectives.length > 0 ? selectedObjectives : undefined,
           sortKey: sortConfig?.key || 'tanggal',
-          sortDir: sortConfig?.direction || 'desc'
+          sortDir: sortConfig?.direction || 'desc',
+          company: selectedCompany,
         });
         
         setAdsPerformance(result.data || []);
@@ -422,7 +433,7 @@ export default function AdsReportPage() {
       setIsLoading(false);
     };
     fetchAds();
-  }, [appliedStartDate, appliedEndDate, selectedCampaignId, appliedCampaignAdsName, deferredSearchQuery, sortConfig, selectedObjectives]);
+  }, [appliedStartDate, appliedEndDate, selectedCampaignId, appliedCampaignAdsName, deferredSearchQuery, sortConfig, selectedObjectives, selectedCompany]);
   
   // Inline Auto-Save States
   type PendingAdChange = { campaign_id?: number | null; campaign_ads_name?: string | null; creator_id?: number | null; kurs?: number; ad_id?: string; ad_name?: string; tanggal?: string; original: any };
@@ -691,7 +702,7 @@ export default function AdsReportPage() {
   const handleExport = () => {
     const dataToExport = adsPerformance.map(ad => ({
       "Tanggal": ad.tanggal,
-      "Campaign": campaigns.find(c => c.id === ad.campaign_id)?.nama || 'Unknown',
+      "Campaign": scopedCampaigns.find(c => c.id === ad.campaign_id)?.nama || 'Unknown',
       "Creator": ad.creators?.username || 'Unknown',
       "Ad Name": ad.ad_name,
       "Ad ID": ad.ad_id,
@@ -1209,7 +1220,7 @@ export default function AdsReportPage() {
                     selectedAds={selectedAds}
                     setSelectedAds={setSelectedAds}
                     setExpandedGroups={setExpandedGroups}
-                    campaigns={campaigns}
+                    campaigns={scopedCampaigns}
                     creators={creators}
                     globalCampaignAdsOptions={globalCampaignAdsOptions}
                     setCellChange={setCellChange}
@@ -1236,7 +1247,7 @@ export default function AdsReportPage() {
                         selectedAds={selectedAds}
                         setSelectedAds={setSelectedAds}
                         setExpandedGroups={setExpandedGroups}
-                        campaigns={campaigns}
+                        campaigns={scopedCampaigns}
                     creators={creators}
                         globalCampaignAdsOptions={globalCampaignAdsOptions}
                         setCellChange={setCellChange}
@@ -1290,7 +1301,7 @@ export default function AdsReportPage() {
                           selectedAds={selectedAds}
                           setSelectedAds={setSelectedAds}
                           setExpandedGroups={setExpandedGroups}
-                          campaigns={campaigns}
+                          campaigns={scopedCampaigns}
                     creators={creators}
                           globalCampaignAdsOptions={globalCampaignAdsOptions}
                           setCellChange={setCellChange}

@@ -1,124 +1,117 @@
-# KEPUTUSAN-CAMPAIGN-GOAT.md — Arsip Campaign GOAT
+# KEPUTUSAN-CAMPAIGN-GOAT.md — Arsip Multi-Entity "Company Lain" (Eks-GOAT)
 
-> **Dokumentasi resmi hasil audit & analisis forensic 25 file spreadsheet GOAT di `C:\Users\Banzilla\Downloads\campaign goat`.**
-> Tanggal audit: 27 Oktober 2026
+> **Dokumentasi resmi hasil audit, forensic parsing 25 spreadsheet, isolasi multi-entity database, dan SOP rollback.**  
+> Tanggal audit & implementasi: 27 Oktober 2026
 
 ---
 
-## 1. Latar Belakang & Tujuan
+## 1. Latar Belakang & Prinsip Utama
 
-Owner TNT sebelumnya memiliki perusahaan bernama **GOAT**. Sistem Project Tracking System TNT akan difungsikan untuk mengarsipkan seluruh riwayat performa, campaign, kreator, video, dan ads dari GOAT agar tersimpan secara permanen dan terstruktur.
+Owner TNT sebelumnya memiliki riwayat campaign dari perusahaan terdahulu (**GOAT**). Sistem Project Tracking System TNT difungsikan untuk mengarsipkan seluruh riwayat performa, campaign, kreator, video, dan ads dari masa lalu tersebut agar tersimpan rapi, permanen, dan dapat diakses untuk portofolio tanpa mencemari metrik operasional TNT.
 
-### Prinsip Utama (Guard & Otorisasi):
-1. **Khusus Role `executive`:** Menu switch perusahaan `[ TNT | GOAT ]` serta seluruh data campaign/performa GOAT **hanya boleh diakses dan dilihat oleh role `executive`**.
-2. **Isolasi Mutlak:** User dengan role lain (`admin`, `manager`, `finance`, `leader`, `creator`) terkunci 100% pada TNT dan tidak boleh mengetahui/melihat keberadaan arsip GOAT.
-3. **Kesesuaian Tampilan Dashboard:** Tampilan sub-menu campaign GOAT dibuat sama persis dengan sistem TNT (`/performa`, `/listing`, `/video`, `/ads-report`) dan saling terkoneksi.
-4. **Video Berbasis Link Publik:** Video disimpan langsung menggunakan link TikTok asli (`https://www.tiktok.com/@...` atau `https://vt.tiktok.com/...`) tanpa membutuhkan scraping `product_id` atau `content_uid` Partner Center.
+### Prinsip Utama (Guard & Isolasi):
+1. **Khusus Role `executive`:** Switcher entitas `[ TNT | Company Lain ]` di sidebar serta seluruh data arsip **hanya boleh tampil dan diakses oleh akun dengan role `executive`**. Role `admin`, `manager`, `finance`, `leader`, `creator` terkunci 100% pada TNT baik di antarmuka UI maupun Server Actions (`storeActions.ts`, `ads-report/actions.ts`).
+2. **Tanpa Nama "GOAT" di Antarmuka:** Sesuai arahan owner, tidak boleh ada penamaan "GOAT" atau "x GOAT" pada antarmuka sistem. Switcher dinamai netral **`Company Lain`** dan seluruh campaign menggunakan penomoran netral (contoh: `Wardah 1`, `Wardah 2`, `OMG 2`, `BDL`, `Ellips`, dst).
+3. **Kesesuaian Tampilan Dashboard:** Tampilan sub-menu campaign dibuat sama persis dengan sistem TNT (`/performa`, `/listing`, `/video`, `/ads-report`) dan terhubung langsung ke database.
+4. **Video Berbasis Link Publik:** Video disimpan langsung menggunakan link TikTok publik asli tanpa memerlukan deteksi scraping `product_id` atau `content_uid` Partner Center.
+5. **Mekanisme Rollback Bersih & Terisolasi:** Disediakan tombol satu-klik "Rollback Data Company Lain" di header campaign (khusus role `executive`) dan script SQL rollback berbasis `DELETE FROM campaigns WHERE company = 'OTHER'`. Seluruh relasi (`campaign_creators`, `videos`, `sales`, `ads_performance`) terhapus secara `CASCADE` otomatis tanpa menyentuh data TNT sedikit pun.
 
 ---
 
 ## 2. Temuan Audit: Analisis Duplikasi & Hubungan Antar-Sheet / Antar-File
 
-Hasil pengecekan skrip forensik terhadap seluruh 25 file menunjukkan adanya hubungan tumpang tindih (*overlap*) baik antar-file maupun antar-sheet dalam file yang sama:
+Hasil analisis forensik terhadap 25 file di folder `C:\Users\Banzilla\Downloads\campaign goat\` dan 5 file di `C:\Users\Banzilla\Downloads\` menghasilkan aturan penanganan tumpang tindih (*overlap*) sebagai berikut:
 
-### 2.1 File yang Berpasangan / Identik Antar-File (Cross-File)
-
-| Pasangan File | Temuan Forensic | Keputusan Ingestion |
-|---|---|---|
-| **`GOAT X WARDAH 4 ... (Downloads)`** vs **`GOAT X WARDAH 4 ... (campaign goat)`** | • 100% kreator (83) & link video (61 VT) identik.<br>• MD5 size diff hanya metadata. | **Duplikat Persis:** Gunakan salah satu saja. |
-| **`Rose All Day (Internal)`** vs **`GOAT X ROSE ALL DAY (EXTERNAL)`** | • 103 link video identik (overlap).<br>• 100% kreator di file External (66 orang) ada di Internal.<br>• File Internal menyimpan database kerja (ratecard, draft, spend ads harian).<br>• File External menyimpan report final live VT & sales ke brand. | **Satukan ke 1 Campaign:** `Rose All Day x GOAT`.<br>Gunakan data External untuk video & sales, perkaya dengan rate card & spend ads dari file Internal. |
-| **`LIGHT+ (EXTERNAL)`** vs **`Light+ x GOAT Agency`** | • File Agency berisi 995 baris katalog master SKU/produk.<br>• File External berisi data kreator (166 orang) & video (279 link). | **Bukan 2 Campaign.** Jadikan 1 campaign `Light+ x GOAT`, di mana file Agency berfungsi sebagai Master SKU. |
-| **Silsilah Wardah (Wardah 1, 2, 3, 4)** | • **0 link video overlap** antar keempat file.<br>• W1 (General): 107 VT, GMV Rp 329 Jt.<br>• W2 (Bright+): 53 VT, GMV Rp 614 Jt.<br>• W3 (Cushion & Dew Tint): 434 VT, GMV Rp 606 Jt.<br>• W4 (Glasting Lip Matte): 61 VT, GMV Rp 625 Jt. | **4 Campaign Berurutan (Bukan Duplikat):**<br>1. `Wardah x GOAT 1`<br>2. `Wardah x GOAT 2`<br>3. `Wardah x GOAT 3 (Cushion & Dew Tint)`<br>4. `Wardah x GOAT 4 (Glasting Lip Matte)` |
-| **Silsilah OMG (OMG 2 vs OMG 3)** | • **0 link video overlap**.<br>• OMG 2: 154 VT, GMV Rp 1,29 Miliar.<br>• OMG 3: 156 VT, GMV Rp 315 Jt. | **2 Campaign Berurutan (Bukan Duplikat):**<br>1. `OMG x GOAT 2`<br>2. `OMG x GOAT 3` |
-| **BDL Skincare (`BDL X GOAT (EXTERNAL).xlsx`)** | • Brand baru, belum ada di 25 file lama.<br>• 110 kreator, 250 VT, GMV Rp 607 Juta. | **Campaign Baru:** `BDL x GOAT`. |
-| **`Mooi x JARInhouse (Ext)`** vs **`GOAT X MOOI 2`** | • 0 video overlap.<br>• 0 kreator overlap.<br>• File JARInhouse adalah talent pool awal (53 talent). | **2 Campaign Berbeda:**<br>1. `Mooi x JAR Inhouse`<br>2. `Mooi x GOAT 2` (568 VT, GMV Rp 41 Jt). |
-
----
+### 2.1 Hubungan Antar-File (Cross-File)
+- **`Wardah 4 (Downloads)` vs `Wardah 4 (campaign goat)`:** 100% data kreator & link video identik (MD5 beda metadata). Diambil satu kali sebagai `Wardah 4 (Glasting Lip Matte)`.
+- **`Rose All Day (Internal)` vs `Rose All Day (External)`:** 103 link video identik. File External menyimpan data report VT & sales final, file Internal menyimpan database kerja harian dan spend ads. Digabungkan menjadi 1 campaign: `Rose All Day`.
+- **`LIGHT+ (External)` vs `Light+ x GOAT Agency`:** File Agency berisi 995 baris katalog master SKU/produk, sedangkan file External berisi data kreator & video. Digabungkan menjadi 1 campaign: `Light+`.
+- **Silsilah Wardah:** 0 overlap video antar 4 file. Diakomodasi sebagai 4 campaign berurutan: `Wardah 1`, `Wardah 2`, `Wardah 3 (Cushion & Dew Tint)`, dan `Wardah 4 (Glasting Lip Matte)`.
+- **Silsilah OMG:** 0 overlap video. Diakomodasi sebagai 2 campaign: `OMG 2` dan `OMG 3`.
+- **BDL Skincare:** Brand independen baru dengan 110 kreator dan 250 VT. Dimasukkan sebagai `BDL`.
+- **`Mooi x JARInhouse` vs `Mooi 2`:** 0 video overlap. `Mooi JAR Inhouse` merupakan talent pool awal (53 talent), sedangkan `Mooi 2` adalah campaign eksekusi aktif (824 video).
 
 ### 2.2 Duplikasi Antar-Sheet dalam 1 File (Intra-File Overlap)
+- **SALSA 2 (`SALSA 2 (External).xlsx`):** Sheet `R` (draft interim) vs `Report Campaign` (final) overlap 86% kreator dan 154 video. **Gunakan `Report Campaign`** sebagai kebenaran final.
+- **PWS 2 (`PWS 2 (External) GOAT.xlsx`):** Sheet `Report` (interim) vs `Report Campaign` (final) overlap 93% kreator. **Gunakan `Report Campaign`**. GMV Max ads diambil dari sheet `'GMV MAX '` (Rp 380.233.440).
+- **DLF (`DLF X GOAT MANAGEMENT (EXTERNAL).xlsx`):** Sheet `R` vs `Report Campaign` overlap 71%. Gunakan `Report Campaign` dan deduplikasi video via `DISTINCT link_video`.
+- **PrettyMe (`PRETTYME X GOAT MANAGEMENT.xlsx`):** Terdiri dari 2 sheet dengan 0% overlap: `Exposure Creator List` (awareness) dan `Report Campaign Sale 2` (sales). Dipecah menjadi 2 campaign: `PrettyMe 1 (Exposure)` dan `PrettyMe 2 (Sale)`.
+- **Deto Life (`GOAT X DETO LIFE (External).xlsx`):** Terdiri dari 5 sheet produk: `Detobets`, `Gerd Zero`, `Diabetolac`, `Warung Herba`, dan `Stevia`. Digabungkan dalam payung campaign `Deto Life`.
 
-Beberapa file memiliki sheet interim/draft yang menumpuk dengan sheet final. **WAJIB dideduplikasi agar angka GMV, video, dan kreator tidak terhitung ganda:**
-
-1. **SALSA 2 (`SALSA 2 (External).xlsx`):**
-   * Sheet `R` memiliki 44 kreator & 185 video.
-   * Sheet `Report Campaign` memiliki 64 kreator & 360 video.
-   * **Overlap:** 38 kreator (86%) dan 154 video sama.
-   * **Aturan:** Gunakan `Report Campaign` sebagai master kebenaran. Abaikan sheet `R` untuk mencegah double-counting.
-2. **PWS 2 (`PWS 2 (External) GOAT.xlsx`):**
-   * Sheet `Report` (46 kreator, 168 video).
-   * Sheet `Report Campaign` (49 kreator, 274 video).
-   * **Overlap:** 43 kreator (93%) dan 159 video sama.
-   * **Aturan:** Gunakan `Report Campaign` sebagai master kebenaran.
-3. **DLF (`DLF X GOAT MANAGEMENT (EXTERNAL).xlsx`):**
-   * Sheet `R` (69 kreator, 207 video) vs Sheet `Report Campaign` (62 kreator, 250 video).
-   * **Overlap:** 49 kreator (71%) dan 138 video sama.
-   * **Aturan:** Ambil dari `Report Campaign`, lakukan union distinct link video jika ada video unik di `R`.
-4. **PrettyMe (`PRETTYME X GOAT MANAGEMENT.xlsx`) — 2 Campaign dalam 1 File:**
-   * Sheet `Exposure Creator List`: 39 kreator, 79 video link.
-   * Sheet `Report Campaign Sale 2`: 53 kreator, 72 video link.
-   * **Overlap:** 0 kreator & 0 video (0% overlap).
-   * **Keputusan:** Dipecah menjadi **2 campaign**:
-     * `PrettyMe x GOAT (Exposure)`
-     * `PrettyMe x GOAT 2 (Sale)`
-5. **Deto Life (`GOAT X DETO LIFE (External).xlsx`) — Multi-Produk Sub-Campaign:**
-   * Terdapat 5 sheet report produk: `Detobets` (9 VT), `Gerd Zero` (67 VT), `Diabetolac` (45 VT), `Warung Herba` (3 VT), `Stevia` (13 VT).
-   * **Keputusan:** Digabungkan ke dalam payung campaign `Deto Life x GOAT` dengan atribut produk/toko yang tercatat rapi per video/kreator.
-6. **LIGHT+ (`LIGHT+ x GOAT (EXTERNAL).xlsx`):**
-   * Memiliki `Creator Adress` (Batch 1: 91 kreator) dan `Creator Address BATCH 2` (Batch 2: 68 kreator).
-   * Sheet `Daily Report Campaign` (135 VT) dan `Link VT (Terupdate 21 Apr)` (146 VT).
-   * **Aturan:** Lakukan union `DISTINCT link_video` dari kedua sheet video.
-7. **Ellips (`GOAT X ELLIPS.xlsx`):**
-   * Sheet `Creator Address` vs `Copy of Creator Address` memiliki overlap 98% (sheet duplikat backup). Ambil satu saja.
+### 2.3 Pencegahan Kesalahan Konversi Data (Nomor HP & Satuan Kalodata)
+1. **Nomor HP Indonesia vs GMV:** Pada `Animate (Internal).xlsx`, sheet `List Creator` memiliki pergeseran kolom di mana nomor HP (`0812...`, `0856...`) berpotensi terbaca sebagai nilai GMV Rp 85 Miliar. Dipasang filter regex ketat untuk mendeteksi digit 10–13 yang diawali `8` atau `628` agar tidak pernah terkonversi menjadi nominal rupiah.
+2. **Satuan Kalodata (`m` vs `b`):** Huruf `m` pada metrik TikTok/Kalodata berarti **Million** ($10^6$ / Juta), sedangkan `b` berarti **Billion** ($10^9$ / Miliar), dan `k` berarti **Thousand** ($10^3$ / Ribu).
 
 ---
 
-## 3. Matriks Rekapitulasi Lengkap Seluruh Campaign GOAT
+## 3. Matriks Rekapitulasi Lengkap 27 Campaign Company Lain (Terverifikasi di Database)
 
-Berikut adalah hasil rekapitulasi data riil seluruh 27 campaign GOAT (mencakup 25 file lama + 5 file baru yang sudah dideduplikasi):
+Berikut adalah data riil yang telah terverifikasi di PostgreSQL VPS (`db_tnt_project_system`) melalui view `vw_campaign_summary` dengan filter `company = 'OTHER'`:
 
-| No | Nama Campaign | GMV Organik | GMV Ads | Total Kreator | Total Video | Total Live | GMV Live | Total GMV Keseluruhan |
-|:--:|---|---:|---:|:---:|:---:|:---:|---:|---:|
-| 1 | **OMG x GOAT 2** | Rp 79.724.057 | Rp 1.217.839.557 | 157 | 154 VT | 0 | Rp 0 | **Rp 1.297.563.614** |
-| 2 | **Wardah x GOAT 4 (Glasting)** | Rp 517.377 | Rp 624.550.738 | 88 | 61 VT | 0 | Rp 0 | **Rp 625.068.115** |
-| 3 | **Wardah x GOAT 2** | Rp 4.238.135 | Rp 610.705.486 | 99 | 53 VT | 0 | Rp 0 | **Rp 614.943.621** |
-| 4 | **BDL x GOAT** | Rp 393.401.644 | Rp 214.596.419 | 110 | 250 VT | 0 | Rp 0 | **Rp 607.998.063** |
-| 5 | **Wardah x GOAT 3 (Cushion & Dew)** | Rp 2.891.050 | Rp 603.503.855 | 136 | 434 VT | 40 | Rp 0 | **Rp 606.394.905** |
-| 6 | **PWS x GOAT 2** | Rp 147.741.540 | Rp 380.233.456 | 284 | 283 VT | 67 | Rp 0 | **Rp 527.974.996** |
-| 7 | **SALSA x GOAT 2** | Rp 154.346.978 | Rp 202.015.375 | 297 | 392 VT | 59 | Rp 0 | **Rp 356.362.353** |
-| 8 | **Wardah x GOAT 1** | Rp 329.317.055 | Rp 0 | 90 | 163 VT | 0 | Rp 0 | **Rp 329.317.055** |
-| 9 | **OMG x GOAT 3** | Rp 10.690.668 | Rp 304.699.637 | 242 | 156 VT | 10 | Rp 0 | **Rp 315.390.305** |
-| 10 | **Rose All Day x GOAT** | Rp 9.710.748 | Rp 234.504.752 | 84 | 127 VT | 42 | Rp 0 | **Rp 244.215.500** |
-| 11 | **Lea Gloria x GOAT** | Rp 34.793.504 | Rp 103.284.030 | 171 | 238 VT | 0 | Rp 0 | **Rp 138.077.534** |
-| 12 | **DLF x GOAT** | Rp 113.945.977 | Rp 21.811.253 | 233 | 323 VT | 38 | Rp 0 | **Rp 135.757.230** |
-| 13 | **Skin Game x GOAT** | Rp 8.811.142 | Rp 52.210.509 | 97 | 105 VT | 0 | Rp 0 | **Rp 61.021.651** |
-| 14 | **Ellips x GOAT** | Rp 1.546.753 | Rp 58.404.298 | 197 | 92 VT | 3 | Rp 214.944 | **Rp 60.165.995** |
-| 15 | **Mooi x GOAT 2** | Rp 27.805.409 | Rp 13.352.017 | 300 | 568 VT | 20 | Rp 0 | **Rp 41.157.426** |
-| 16 | **Deto Life x GOAT** | Rp 7.721.890 | Rp 24.642.276 | 99 | 136 VT | 0 | Rp 0 | **Rp 32.364.166** |
-| 17 | **PrettyMe x GOAT 2 (Sale)** | Rp 24.889.528 | Rp 0 | 54 | 72 VT | 0 | Rp 0 | **Rp 24.889.528** |
-| 18 | **Light+ x GOAT** | Rp 7.364.685 | Rp 16.649.866 | 166 | 279 VT | 16 | Rp 0 | **Rp 24.014.551** |
-| 19 | **FlimColla x GOAT** | Rp 11.014.208 | Rp 11.448.337 | 118 | 144 VT | 0 | Rp 0 | **Rp 22.462.545** |
-| 20 | **Animate x GOAT** | Rp 0 | Rp 0 | 130 | 197 VT | 10 | Rp 2.980.000 | **Rp 2.980.000** |
-| 21 | **PrettyMe x GOAT (Exposure)** | Rp 0 | Rp 0 | 39 | 79 VT | 0 | Rp 0 | **Rp 0** |
-| 22 | **AHW Skin Lab x GOAT** | Rp 0 | Rp 0 | 131 | 17 VT | 12 | Rp 0 | **Rp 0** |
-| 23 | **Fameux x GOAT** | Rp 0 | Rp 0 | 59 | 36 VT | 0 | Rp 0 | **Rp 0** |
-| 24 | **Ebelin x GOAT** | Rp 0 | Rp 0 | 57 | 2 VT | 0 | Rp 0 | **Rp 0** |
-| 25 | **Magic Box x GOAT** | Rp 0 | Rp 0 | 54 | 0 VT | 0 | Rp 0 | **Rp 0** |
-| 26 | **LUX x GOAT** | Rp 0 | Rp 0 | 7 | 4 VT | 0 | Rp 0 | **Rp 0** |
-| 27 | **Mooi x JAR Inhouse** | Rp 0 | Rp 0 | 53 | 0 VT | 0 | Rp 0 | **Rp 0** |
-|---|---|---:|---:|:---:|:---:|:---:|---:|---:|
-| **TOTAL** | **REKAPITULASI GOAT** | **Rp 1.370.472.348** | **Rp 4.694.451.861** | **3.552** | **4.365 VT** | **317** | **Rp 3.194.944** | **Rp 6.068.119.153** |
+| ID | Nama Campaign | GMV Organik | GMV Ads | GMV Live | Total Video | Total Creator | Total GMV |
+|:--:|---|---:|---:|---:|:---:|:---:|---:|
+| 281 | **Animate** | Rp 2.426.310.000 | Rp 0 | Rp 2.426.310.000 | 197 | 281 | **Rp 2.426.310.000** |
+| 260 | **OMG 2** | Rp 79.724.057 | Rp 1.217.839.520 | Rp 0 | 298 | 155 | **Rp 1.297.563.577** |
+| 265 | **Wardah 4 (Glasting Lip Matte)** | Rp 517.377 | Rp 624.550.720 | Rp 0 | 127 | 86 | **Rp 625.068.097** |
+| 263 | **Wardah 2** | Rp 4.238.135 | Rp 610.705.440 | Rp 0 | 93 | 99 | **Rp 614.943.575** |
+| 266 | **BDL** | Rp 393.401.644 | Rp 214.596.480 | Rp 0 | 250 | 109 | **Rp 607.998.124** |
+| 264 | **Wardah 3 (Cushion & Dew Tint)** | Rp 2.891.050 | Rp 603.503.840 | Rp 0 | 544 | 145 | **Rp 606.394.890** |
+| 269 | **PWS 2** | Rp 132.392.153 | Rp 380.233.440 | Rp 0 | 274 | 274 | **Rp 512.625.593** |
+| 268 | **SALSA 2** | Rp 154.346.978 | Rp 202.015.360 | Rp 0 | 362 | 286 | **Rp 356.362.338** |
+| 262 | **Wardah 1** | Rp 336.872.439 | Rp 0 | Rp 0 | 107 | 88 | **Rp 336.872.439** |
+| 261 | **OMG 3** | Rp 10.690.668 | Rp 304.699.680 | Rp 0 | 558 | 245 | **Rp 315.390.348** |
+| 270 | **Rose All Day** | Rp 9.710.748 | Rp 234.504.800 | Rp 0 | 187 | 222 | **Rp 244.215.548** |
+| 272 | **Lea Gloria** | Rp 34.793.504 | Rp 103.284.000 | Rp 0 | 239 | 171 | **Rp 138.077.504** |
+| 271 | **DLF** | Rp 95.760.000 | Rp 21.631.200 | Rp 0 | 259 | 223 | **Rp 117.391.200** |
+| 273 | **Skin Game** | Rp 8.811.142 | Rp 52.210.560 | Rp 0 | 108 | 97 | **Rp 61.021.702** |
+| 274 | **Mooi 2** | Rp 27.805.409 | Rp 13.352.000 | Rp 0 | 824 | 293 | **Rp 41.157.409** |
+| 276 | **Deto Life** | Rp 9.949.057 | Rp 24.642.240 | Rp 0 | 136 | 97 | **Rp 34.591.297** |
+| 267 | **Ellips** | Rp 1.546.753 | Rp 30.255.680 | Rp 0 | 248 | 193 | **Rp 31.802.433** |
+| 278 | **PrettyMe 2 (Sale)** | Rp 24.889.528 | Rp 0 | Rp 0 | 72 | 57 | **Rp 24.889.528** |
+| 279 | **Light+** | Rp 7.364.685 | Rp 16.649.920 | Rp 0 | 422 | 155 | **Rp 24.014.605** |
+| 280 | **FlimColla** | Rp 12.013.448 | Rp 11.448.320 | Rp 0 | 252 | 117 | **Rp 23.461.768** |
+| 275 | **Mooi JAR Inhouse** | Rp 0 | Rp 0 | Rp 0 | 0 | 0 | **Rp 0** |
+| 285 | **Magic Box** | Rp 0 | Rp 0 | Rp 0 | 0 | 54 | **Rp 0** |
+| 277 | **PrettyMe 1 (Exposure)** | Rp 0 | Rp 0 | Rp 0 | 79 | 41 | **Rp 0** |
+| 282 | **AHW Skin Lab** | Rp 0 | Rp 0 | Rp 0 | 139 | 387 | **Rp 0** |
+| 286 | **LUX** | Rp 0 | Rp 0 | Rp 0 | 4 | 7 | **Rp 0** |
+| 284 | **Ebelin** | Rp 0 | Rp 0 | Rp 0 | 0 | 0 | **Rp 0** |
+| 283 | **Fameux** | Rp 0 | Rp 0 | Rp 0 | 0 | 59 | **Rp 0** |
+|--|---|---:|---:|---:|:---:|:---:|---:|
+| **TOTAL** | **REKAPITULASI 27 CAMPAIGN** | **Rp 3.774.028.775** | **Rp 4.666.123.200** | **Rp 2.426.310.000** | **5.779 VT** | **3.941** | **Rp 8.440.151.975** |
 
-*(Campaign awareness/seeding tanpa report sales seperti Animate, AHW Skin Lab, PrettyMe Exposure, Fameux, Ebelin, Magic Box, dan LUX tetap dimasukkan sebagai campaign arsip dengan data kreator & link video lengkap).*
+> **Catatan Ekosistem Paragon Group:**
+> Dari total di atas, kontribusi brand Paragon Group (`OMG 2`, `OMG 3`, `Wardah 1`, `Wardah 2`, `Wardah 3`, `Wardah 4`) mencapai **Rp 3.796.232.926** (~Rp 3,80 Miliar).
 
 ---
 
-## 4. Rencana Eksekusi Teknis
+## 4. Arsitektur Teknis & Mekanisme Rollback
 
-1. **Database Schema:**
-   - Tambah kolom `company VARCHAR(20) DEFAULT 'TNT'` di tabel `campaigns` via migration resmi di `web-app/supabase/migrations/`.
-   - Update view performa (`vw_campaign_summary`) atau filter backend agar mendukung pemisahan entitas.
-2. **Otorisasi & Guard:**
-   - Company Switcher hanya muncul jika `profile.role === 'executive'`.
-   - Server Actions memfilter otomatis `company = 'TNT'` untuk non-executive.
-3. **Ingestion Script:**
-   - Script otomatisasi berbasis Python/Node.js yang membaca file-file Excel GOAT dengan menerapkan aturan deduplikasi di atas.
+### 4.1 Skema Database (`web-app/supabase/migrations/20261027210000_add_company_to_campaigns.sql`)
+1. Kolom `company VARCHAR(50) DEFAULT 'TNT' NOT NULL` pada tabel `campaigns`.
+2. Index performa `idx_campaigns_company`.
+3. View `vw_campaign_summary` diperbarui untuk mengekspos `c.company` dan `c.campaign_group` tanpa merusak kalkulasi agregasi organik + ads.
+
+### 4.2 Isolasi Server & Otorisasi
+- **`AuthProvider.tsx`:** Hook `useAuth()` mengelola state `selectedCompany: 'TNT' | 'OTHER'`. Jika `profile?.role !== 'executive'`, nilai selalu dipaksa ke `'TNT'`.
+- **`storeActions.ts:getInitialStoreData`:** Jika sesi user bukan `executive`, query `campaigns` dan `vw_campaign_summary` otomatis difilter `WHERE company = 'TNT' OR company IS NULL`. Data Company Lain tidak pernah dikirim ke browser non-eksekutif.
+- **`ads-report/actions.ts:getAdsReportData`:** Memvalidasi parameter `company` di sisi server. Non-eksekutif selalu diarahkan ke `effectiveCompany = 'TNT'`.
+
+### 4.3 SOP & Prosedur Rollback Data Company Lain
+Jika data Company Lain perlu ditarik, dibersihkan, atau diganti dengan data baru, terdapat 2 mekanisme aman:
+
+#### Opsi 1: Melalui UI Web App (Satu Klik Khusus Executive)
+1. Login dengan akun berekskutif (`role = 'executive'`).
+2. Aktifkan mode `Company Lain` via switcher di Sidebar.
+3. Di bagian atas halaman `/campaigns`, muncul banner amber berlabel **Mode Arsip: Company Lain**.
+4. Klik tombol merah **Rollback Data Company Lain**.
+5. Konfirmasi dua kali prompt peringatan. Sistem akan memanggil Server Action `rollbackCompanyLainAction()`. Seluruh 27 campaign akan terhapus beserta seluruh data turunannya secara otomatis.
+
+#### Opsi 2: Melalui Terminal VPS / SQL Script
+Jalankan file rollback resmi `web-app/supabase/rollback_company_lain.sql` atau perintah SQL langsung:
+```sql
+BEGIN;
+DELETE FROM campaigns WHERE company = 'OTHER';
+COMMIT;
+```
+Karena relasi foreign key pada `campaign_creators`, `videos`, `sales`, dan `ads_performance` terpasang `ON DELETE CASCADE`, seluruh baris turunan akan terhapus bersih dalam 1 transaksi, sementara data TNT (`company = 'TNT'`) tetap utuh 100%.
