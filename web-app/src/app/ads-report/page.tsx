@@ -34,14 +34,14 @@ const MemoizedTableRow = React.memo(({
   const creatorUsername = ad.creators?.username;
   const pendingCreator = creators?.find((c: any) => c.id === pendingCreatorId);
   const currentCreatorLabel = pendingCreator ? `@${pendingCreator.username}` : (creatorUsername ? `@${creatorUsername}` : '');
-const cost = isParent && groupStats ? groupStats.cost_usd : (ad.cost_usd || 0);
-    const impr = isParent && groupStats ? groupStats.impressions : (ad.impressions || 0);
-    const clicks = isParent && groupStats ? groupStats.clicks : (ad.clicks || 0);
-    const ppv = isParent && groupStats ? groupStats.product_page_views : (ad.product_page_views || 0);
-    const checkouts = isParent && groupStats ? groupStats.checkouts_initiated : (ad.checkouts_initiated || 0);
-    const purchases = isParent && groupStats ? groupStats.purchases : (ad.purchases || 0);
-    const items = isParent && groupStats ? groupStats.items_purchased : (ad.items_purchased || 0);
-    const rev = isParent && groupStats ? groupStats.gross_revenue_usd : (ad.gross_revenue_usd || 0);
+  const cost = Number(isParent && groupStats ? groupStats.cost_usd : (ad?.cost_usd || 0)) || 0;
+  const impr = Number(isParent && groupStats ? groupStats.impressions : (ad?.impressions || 0)) || 0;
+  const clicks = Number(isParent && groupStats ? groupStats.clicks : (ad?.clicks || 0)) || 0;
+  const ppv = Number(isParent && groupStats ? groupStats.product_page_views : (ad?.product_page_views || 0)) || 0;
+  const checkouts = Number(isParent && groupStats ? groupStats.checkouts_initiated : (ad?.checkouts_initiated || 0)) || 0;
+  const purchases = Number(isParent && groupStats ? groupStats.purchases : (ad?.purchases || 0)) || 0;
+  const items = Number(isParent && groupStats ? groupStats.items_purchased : (ad?.items_purchased || 0)) || 0;
+  const rev = Number(isParent && groupStats ? groupStats.gross_revenue_usd : (ad?.gross_revenue_usd || 0)) || 0;
 
     const ppvRate = clicks > 0 ? (ppv / clicks) * 100 : 0;
     const roas = cost > 0 ? (rev / cost) : 0;
@@ -94,7 +94,7 @@ const cost = isParent && groupStats ? groupStats.cost_usd : (ad.cost_usd || 0);
               <input
                 type="date"
                 className="w-full p-1 border border-transparent hover:border-slate-300 rounded text-xs text-slate-700 focus:ring-1 focus:ring-indigo-500 bg-transparent"
-                value={pendingTanggal || ''}
+                value={pendingTanggal ? String(pendingTanggal).split('T')[0] : ''}
                 onChange={(e) => setCellChange(ad.id, 'tanggal', e.target.value, ad)}
               />
             ) : (
@@ -211,7 +211,7 @@ const cost = isParent && groupStats ? groupStats.cost_usd : (ad.cost_usd || 0);
           {isChild ? (
             <div className="flex flex-col items-end gap-0.5">
               <span>{cost > 0 ? '+' : ''}${cost.toFixed(2)}</span>
-              <span className="text-[10px] text-slate-400">({ad.lifetime_cost_usd?.toFixed(2) || '0.00'})</span>
+              <span className="text-[10px] text-slate-400">({Number(ad.lifetime_cost_usd || 0).toFixed(2)})</span>
             </div>
           ) : (
             `$${cost.toFixed(2)}`
@@ -221,7 +221,7 @@ const cost = isParent && groupStats ? groupStats.cost_usd : (ad.cost_usd || 0);
           {isChild ? (
             <div className="flex flex-col items-end gap-0.5">
               <span>{impr > 0 ? '+' : ''}{impr.toLocaleString('id-ID')}</span>
-              <span className="text-[10px] text-slate-400">({ad.lifetime_impressions?.toLocaleString('id-ID') || '0'})</span>
+              <span className="text-[10px] text-slate-400">({Number(ad.lifetime_impressions || 0).toLocaleString('id-ID')})</span>
             </div>
           ) : (
             impr.toLocaleString('id-ID')
@@ -231,7 +231,7 @@ const cost = isParent && groupStats ? groupStats.cost_usd : (ad.cost_usd || 0);
           {isChild ? (
             <div className="flex flex-col items-end gap-0.5">
               <span>{clicks > 0 ? '+' : ''}{clicks.toLocaleString('id-ID')}</span>
-              <span className="text-[10px] text-slate-400">({ad.lifetime_clicks?.toLocaleString('id-ID') || '0'})</span>
+              <span className="text-[10px] text-slate-400">({Number(ad.lifetime_clicks || 0).toLocaleString('id-ID')})</span>
             </div>
           ) : (
             clicks.toLocaleString('id-ID')
@@ -241,7 +241,7 @@ const cost = isParent && groupStats ? groupStats.cost_usd : (ad.cost_usd || 0);
           {isChild ? (
             <div className="flex flex-col items-end gap-0.5">
               <span>{ppv > 0 ? '+' : ''}{ppv.toLocaleString('id-ID')}</span>
-              <span className="text-[10px] text-slate-400">({ad.lifetime_product_page_views?.toLocaleString('id-ID') || '0'})</span>
+              <span className="text-[10px] text-slate-400">({Number(ad.lifetime_product_page_views || 0).toLocaleString('id-ID')})</span>
             </div>
           ) : (
             ppv.toLocaleString('id-ID')
@@ -254,7 +254,7 @@ const cost = isParent && groupStats ? groupStats.cost_usd : (ad.cost_usd || 0);
           {isChild ? (
             <div className="flex flex-col items-end gap-0.5">
               <span>{checkouts > 0 ? '+' : ''}{checkouts.toLocaleString('id-ID')}</span>
-              <span className="text-[10px] text-slate-400">({ad.lifetime_checkouts_initiated?.toLocaleString('id-ID') || '0'})</span>
+              <span className="text-[10px] text-slate-400">({Number(ad.lifetime_checkouts_initiated || 0).toLocaleString('id-ID')})</span>
             </div>
           ) : (
             checkouts.toLocaleString('id-ID')
@@ -264,7 +264,7 @@ const cost = isParent && groupStats ? groupStats.cost_usd : (ad.cost_usd || 0);
           {isChild ? (
             <div className="flex flex-col items-end gap-0.5">
               <span>{purchases > 0 ? '+' : ''}{purchases.toLocaleString('id-ID')}</span>
-              <span className="text-[10px] text-slate-400">({ad.lifetime_purchases?.toLocaleString('id-ID') || '0'})</span>
+              <span className="text-[10px] text-slate-400">({Number(ad.lifetime_purchases || 0).toLocaleString('id-ID')})</span>
             </div>
           ) : (
             purchases.toLocaleString('id-ID')
@@ -274,7 +274,7 @@ const cost = isParent && groupStats ? groupStats.cost_usd : (ad.cost_usd || 0);
           {isChild ? (
             <div className="flex flex-col items-end gap-0.5">
               <span>{items > 0 ? '+' : ''}{items.toLocaleString('id-ID')}</span>
-              <span className="text-[10px] text-slate-400">({ad.lifetime_items_purchased?.toLocaleString('id-ID') || '0'})</span>
+              <span className="text-[10px] text-slate-400">({Number(ad.lifetime_items_purchased || 0).toLocaleString('id-ID')})</span>
             </div>
           ) : (
             items.toLocaleString('id-ID')
@@ -284,7 +284,7 @@ const cost = isParent && groupStats ? groupStats.cost_usd : (ad.cost_usd || 0);
           {isChild ? (
             <div className="flex flex-col items-end gap-0.5">
               <span>{rev > 0 ? '+' : ''}${rev.toFixed(2)}</span>
-              <span className="text-[10px] text-slate-400">({ad.lifetime_gross_revenue_usd?.toFixed(2) || '0.00'})</span>
+              <span className="text-[10px] text-slate-400">({Number(ad.lifetime_gross_revenue_usd || 0).toFixed(2)})</span>
             </div>
           ) : (
             `$${rev.toFixed(2)}`
@@ -326,8 +326,8 @@ const cost = isParent && groupStats ? groupStats.cost_usd : (ad.cost_usd || 0);
     );
 
 }, (prevProps: any, nextProps: any) => {
-  const isSelectedPrev = prevProps.selectedAds.includes(prevProps.ad.id);
-  const isSelectedNext = nextProps.selectedAds.includes(nextProps.ad.id);
+  const isSelectedPrev = prevProps.selectedAds?.includes(prevProps.ad?.id);
+  const isSelectedNext = nextProps.selectedAds?.includes(nextProps.ad?.id);
   
   return (
       prevProps.isExpanded === nextProps.isExpanded &&
@@ -1246,14 +1246,14 @@ export default function AdsReportPage() {
                       {isExpanded && group.rows.map((childAd, index) => {
                         const prevAd = index > 0 ? group.rows[index - 1] : null;
                         
-                        const cost_usd_diff = prevAd ? (childAd.cost_usd - prevAd.cost_usd) : childAd.cost_usd;
-                        const impressions_diff = prevAd ? (childAd.impressions - prevAd.impressions) : childAd.impressions;
-                        const clicks_diff = prevAd ? (childAd.clicks - prevAd.clicks) : childAd.clicks;
-                        const product_page_views_diff = prevAd ? (childAd.product_page_views - prevAd.product_page_views) : childAd.product_page_views;
-                        const checkouts_initiated_diff = prevAd ? (childAd.checkouts_initiated - prevAd.checkouts_initiated) : childAd.checkouts_initiated;
-                        const purchases_diff = prevAd ? (childAd.purchases - prevAd.purchases) : childAd.purchases;
-                        const items_purchased_diff = prevAd ? (childAd.items_purchased - prevAd.items_purchased) : childAd.items_purchased;
-                        const gross_revenue_usd_diff = prevAd ? (childAd.gross_revenue_usd - prevAd.gross_revenue_usd) : childAd.gross_revenue_usd;
+                        const cost_usd_diff = prevAd ? (Number(childAd.cost_usd || 0) - Number(prevAd.cost_usd || 0)) : Number(childAd.cost_usd || 0);
+                        const impressions_diff = prevAd ? (Number(childAd.impressions || 0) - Number(prevAd.impressions || 0)) : Number(childAd.impressions || 0);
+                        const clicks_diff = prevAd ? (Number(childAd.clicks || 0) - Number(prevAd.clicks || 0)) : Number(childAd.clicks || 0);
+                        const product_page_views_diff = prevAd ? (Number(childAd.product_page_views || 0) - Number(prevAd.product_page_views || 0)) : Number(childAd.product_page_views || 0);
+                        const checkouts_initiated_diff = prevAd ? (Number(childAd.checkouts_initiated || 0) - Number(prevAd.checkouts_initiated || 0)) : Number(childAd.checkouts_initiated || 0);
+                        const purchases_diff = prevAd ? (Number(childAd.purchases || 0) - Number(prevAd.purchases || 0)) : Number(childAd.purchases || 0);
+                        const items_purchased_diff = prevAd ? (Number(childAd.items_purchased || 0) - Number(prevAd.items_purchased || 0)) : Number(childAd.items_purchased || 0);
+                        const gross_revenue_usd_diff = prevAd ? (Number(childAd.gross_revenue_usd || 0) - Number(prevAd.gross_revenue_usd || 0)) : Number(childAd.gross_revenue_usd || 0);
 
                         const modifiedChildAd = {
                           ...childAd,
@@ -1266,14 +1266,14 @@ export default function AdsReportPage() {
                           items_purchased: items_purchased_diff,
                           gross_revenue_usd: gross_revenue_usd_diff,
                           
-                          lifetime_cost_usd: childAd.cost_usd,
-                          lifetime_impressions: childAd.impressions,
-                          lifetime_clicks: childAd.clicks,
-                          lifetime_product_page_views: childAd.product_page_views,
-                          lifetime_checkouts_initiated: childAd.checkouts_initiated,
-                          lifetime_purchases: childAd.purchases,
-                          lifetime_items_purchased: childAd.items_purchased,
-                          lifetime_gross_revenue_usd: childAd.gross_revenue_usd,
+                          lifetime_cost_usd: Number(childAd.cost_usd || 0),
+                          lifetime_impressions: Number(childAd.impressions || 0),
+                          lifetime_clicks: Number(childAd.clicks || 0),
+                          lifetime_product_page_views: Number(childAd.product_page_views || 0),
+                          lifetime_checkouts_initiated: Number(childAd.checkouts_initiated || 0),
+                          lifetime_purchases: Number(childAd.purchases || 0),
+                          lifetime_items_purchased: Number(childAd.items_purchased || 0),
+                          lifetime_gross_revenue_usd: Number(childAd.gross_revenue_usd || 0),
                         };
 
                         return (

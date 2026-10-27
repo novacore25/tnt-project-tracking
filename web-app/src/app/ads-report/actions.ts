@@ -38,7 +38,18 @@ export async function getAdsReportData(params: {
     db.execute(sql`SELECT * FROM ads_allocations`)
   ]);
 
-  let rawAllData = (rawAdsRows as unknown as any[]) || [];
+  let rawAllData = ((rawAdsRows as unknown as any[]) || []).map(r => ({
+    ...r,
+    cost_usd: Number(r.cost_usd) || 0,
+    gross_revenue_usd: Number(r.gross_revenue_usd) || 0,
+    kurs: Number(r.kurs) || 16000,
+    impressions: Number(r.impressions) || 0,
+    clicks: Number(r.clicks) || 0,
+    purchases: Number(r.purchases) || 0,
+    product_page_views: Number(r.product_page_views) || 0,
+    checkouts_initiated: Number(r.checkouts_initiated) || 0,
+    items_purchased: Number(r.items_purchased) || 0,
+  }));
   const campaignsData = (campaignsRows as unknown as any[]) || [];
   const budgetData = (budgetRows as unknown as any[]) || [];
 
