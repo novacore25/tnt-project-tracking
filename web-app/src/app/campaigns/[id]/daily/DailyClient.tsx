@@ -217,7 +217,11 @@ export default function CampaignDailyPerformanceClient({ campaignId }: { campaig
         const u = (s.creator_username || '').toLowerCase().trim();
         if (approvedUsernameSet.size > 0 && !approvedUsernameSet.has(u)) return;
         const rawPid = s.product_id ? String(s.product_id).trim() : '';
-        if (!hasSkus || !rawPid || !skuSet.has(rawPid)) return;
+        if (hasSkus) {
+          if (!rawPid || !skuSet.has(rawPid)) return;
+        } else {
+          if (s.campaign_id && Number(s.campaign_id) !== Number(campaignId)) return;
+        }
 
         const dateStr = toWIBDateStr(s.tanggal);
         if (!dateStr) return;
@@ -389,7 +393,11 @@ export default function CampaignDailyPerformanceClient({ campaignId }: { campaig
       if (allOrganicVideos.length > 0) {
         allOrganicVideos.forEach(v => {
           const rawPid = v.product_id ? String(v.product_id).trim() : '';
-          if (!hasSkus || !rawPid || !skuSet.has(rawPid)) return;
+          if (hasSkus) {
+            if (!rawPid || !skuSet.has(rawPid)) return;
+          } else {
+            if (v.campaign_id && Number(v.campaign_id) !== Number(campaignId)) return;
+          }
           if (!v.content_uid) return;
           const uidStr = v.content_uid.toString().trim();
           const cType = (v.content_type || '').toLowerCase();

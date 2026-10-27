@@ -323,10 +323,13 @@ export async function getPortalData(campaignId: number) {
   const salesByUid = new Map<string, { gmv: number; quantity: number }>();
   const monthlyMap: Record<string, { gmvOrganic: number; gmvAds: number; videos: Set<string>; videoCreators: Set<string>; liveSessions: Set<string> }> = {};
 
-  if (hasSkus) {
-    salesData.forEach((s: any) => {
-      const pidStr = String(s.product_id || '').trim();
+  salesData.forEach((s: any) => {
+    const pidStr = String(s.product_id || '').trim();
+    if (hasSkus) {
       if (!skuSet.has(pidStr)) return;
+    } else {
+      if (s.campaign_id && Number(s.campaign_id) !== Number(campaignId)) return;
+    }
 
       const rawU = (s.creator_username || '').toLowerCase().trim();
       const u = aliasToPrimaryMap.get(rawU) || rawU;
@@ -381,15 +384,17 @@ export async function getPortalData(campaignId: number) {
         }
       }
     });
-  }
 
   // 3. Organic Videos Aggregation (matching internal PerformaClient orgUidMap logic)
   const orgUidMap = new Map<string, { views: number; likes: number; creator: string; contentType: string; postTime: string }>();
 
-  if (hasSkus) {
-    organicVideos.forEach((v: any) => {
-      const pidStr = String(v.product_id || '').trim();
+  organicVideos.forEach((v: any) => {
+    const pidStr = String(v.product_id || '').trim();
+    if (hasSkus) {
       if (!skuSet.has(pidStr)) return;
+    } else {
+      if (v.campaign_id && Number(v.campaign_id) !== Number(campaignId)) return;
+    }
 
       const uid = v.content_uid ? String(v.content_uid).trim() : '';
       if (!uid) return;
@@ -414,7 +419,6 @@ export async function getPortalData(campaignId: number) {
         cur.likes = Math.max(cur.likes, likes);
       }
     });
-  }
 
   let calcTotalViews = 0;
   let calcTotalLikes = 0;

@@ -245,57 +245,65 @@ export default function CampaignPerformaClient({ campaignId }: { campaignId: num
       let calcOrganicGmv = 0;
       let calcUnattributedGmv = 0;
 
-      if (currentHasSkus) {
-        salesData.forEach((s: any) => {
+      // Sales Aggregation:
+      // Jika campaign punya SKU (currentHasSkus), wajib filter product_id yang cocok dengan SKU.
+      // Jika campaign TIDAK punya SKU (misal Company Lain / arsip / non-SKU campaign),
+      // maka seluruh baris penjualan yang memiliki campaign_id cocok langsung dihitung.
+      salesData.forEach((s: any) => {
+        if (currentHasSkus) {
           if (!s.product_id || !skuSet.has(s.product_id)) return;
-          const rawU = (s.creator_username || '').toLowerCase();
-          const u = aliasToPrimaryMap.get(rawU) || rawU;
-          const gmv = Number(s.gmv || 0);
-          const qty = Number(s.quantity || 0);
-          const cType = (s.content_type || '').toLowerCase();
+        } else {
+          if (s.campaign_id && Number(s.campaign_id) !== Number(campaignId)) return;
+        }
+        const rawU = (s.creator_username || '').toLowerCase();
+        const u = aliasToPrimaryMap.get(rawU) || rawU;
+        const gmv = Number(s.gmv || 0);
+        const qty = Number(s.quantity || 0);
+        const cType = (s.content_type || '').toLowerCase();
 
-          if (approvedUsernames.has(rawU) || approvedUsernames.has(u)) {
-            calcOrganicGmv += gmv;
-            const perf = getOrCreatePerf(u);
-            perf.gmv_organic += gmv;
-            perf.items_sold += qty;
-            if (s.content_uid) {
-              if (cType === 'livestream' || cType === 'live') {
-                perf.live_uids.add(s.content_uid);
-              } else {
-                perf.video_uids.add(s.content_uid);
-              }
+        if (approvedUsernames.has(rawU) || approvedUsernames.has(u)) {
+          calcOrganicGmv += gmv;
+          const perf = getOrCreatePerf(u);
+          perf.gmv_organic += gmv;
+          perf.items_sold += qty;
+          if (s.content_uid) {
+            if (cType === 'livestream' || cType === 'live') {
+              perf.live_uids.add(s.content_uid);
+            } else {
+              perf.video_uids.add(s.content_uid);
             }
-          } else {
-            calcUnattributedGmv += gmv;
           }
-        });
-      }
+        } else {
+          calcUnattributedGmv += gmv;
+        }
+      });
 
       const orgUidMap = new Map<string, { views: number; likes: number; creator: string; contentType: string }>();
-      if (currentHasSkus) {
-        (orgVidsData || []).forEach((v: any) => {
+      (orgVidsData || []).forEach((v: any) => {
+        if (currentHasSkus) {
           if (!v.product_id || !skuSet.has(v.product_id)) return;
-          const uid = v.content_uid;
-          if (!uid) return;
+        } else {
+          if (v.campaign_id && Number(v.campaign_id) !== Number(campaignId)) return;
+        }
+        const uid = v.content_uid;
+        if (!uid) return;
 
-          const rawCreator = (v.creator_username || '').toLowerCase();
-          const mappedCreator = aliasToPrimaryMap.get(rawCreator) || rawCreator;
+        const rawCreator = (v.creator_username || '').toLowerCase();
+        const mappedCreator = aliasToPrimaryMap.get(rawCreator) || rawCreator;
 
-          if (!orgUidMap.has(uid)) {
-            orgUidMap.set(uid, {
-              creator: mappedCreator,
-              views: Number(v.video_views || 0),
-              likes: Number(v.video_likes || 0),
-              contentType: (v.content_type || 'video').toLowerCase()
-            });
-          } else {
-            const cur = orgUidMap.get(uid)!;
-            cur.views = Math.max(cur.views, Number(v.video_views || 0));
-            cur.likes = Math.max(cur.likes, Number(v.video_likes || 0));
-          }
-        });
-      }
+        if (!orgUidMap.has(uid)) {
+          orgUidMap.set(uid, {
+            creator: mappedCreator,
+            views: Number(v.video_views || 0),
+            likes: Number(v.video_likes || 0),
+            contentType: (v.content_type || 'video').toLowerCase()
+          });
+        } else {
+          const cur = orgUidMap.get(uid)!;
+          cur.views = Math.max(cur.views, Number(v.video_views || 0));
+          cur.likes = Math.max(cur.likes, Number(v.video_likes || 0));
+        }
+      });
 
       let calcTotalViews = 0;
       let calcTotalLikes = 0;
@@ -320,84 +328,82 @@ export default function CampaignPerformaClient({ campaignId }: { campaignId: num
         }
       }
 
-      if (currentHasSkus) {
-        for (const perf of perfMap.values()) {
-          perf.video_views = 0;
-          perf.video_likes = 0;
-        }
-
-        // 1. Process organic_videos from TikTok reports
-        for (const [uid, v] of orgUidMap.entries()) {
-          const isLive = v.contentType === 'livestream' || v.contentType === 'live';
-          if (!isLive) {
-            allApprovedVideoIds.add(uid);
-            calcTotalViews += v.views;
-            calcTotalLikes += v.likes;
-          } else {
-            allUniqueLiveIds.add(uid);
-          }
-
-          if (v.creator) {
-            const perf = getOrCreatePerf(v.creator);
-            if (!isLive) {
-              perf.video_views += v.views;
-              perf.video_likes += v.likes;
-              perf.video_uids.add(uid);
-            } else {
-              perf.live_uids.add(uid);
-            }
-          }
-        }
-
-        // 2. Process manual videos from DB (videos table) to include real-time PIC inputs
-        for (const cc of ccData) {
-          const u = cc.creators?.username?.toLowerCase();
-          const perf = u ? getOrCreatePerf(u) : null;
-          const isApproved = cc.approval === 'approved' || cc.approval === 'alternate';
-          const vids = cc.videos || [];
-
-          for (const v of vids) {
-            if (campaignSkuIds.size > 0 && v.sku_id && !campaignSkuIds.has(v.sku_id)) continue;
-            const id = v.content_uid || (v.link_video ? (v.link_video.match(/video\/(\d+)/)?.[1] || v.link_video) : null);
-            if (id) {
-              // Pisahkan live dari video (keputusan owner 2 Okt 2026):
-              // video hanya menghitung video, live hanya menghitung live.
-              // Sumber kebenaran = `organic_videos.content_type`, karena
-              // tabel `videos` tidak punya kolom tipe. 654 baris di tabel
-              // `videos` ternyata livestream (docs/sql/58). Link video tidak
-              // bisa jadi patokan: 0 link mengandung '/live/'.
-              if (liveUidSet.has(id)) {
-                allUniqueLiveIds.add(id);
-                if (perf) perf.live_uids.add(id);
-                continue;                      // BUKAN video
-              }
-              if (isApproved) {
-                allApprovedVideoIds.add(id);
-              } else {
-                if (!allApprovedVideoIds.has(id)) {
-                  allPendingVideoIds.add(id);
-                }
-              }
-              if (perf) {
-                perf.video_uids.add(id);
-              }
-            }
-          }
-        }
-
-        for (const perf of perfMap.values()) {
-          if (perf.video_uids.size > 0) perf.video_count = perf.video_uids.size;
-          if (perf.live_uids.size > 0) perf.live_count = perf.live_uids.size;
-        }
-
-        calcUniqueVideos = allApprovedVideoIds.size;
-        calcUniqueLivestreams = allUniqueLiveIds.size;
-
-        setInitialTotalViews(calcTotalViews);
-        setInitialTotalLikes(calcTotalLikes);
-        setInitialTotalVideos(calcUniqueVideos);
-        setInitialTotalLivestreams(calcUniqueLivestreams);
+      for (const perf of perfMap.values()) {
+        perf.video_views = 0;
+        perf.video_likes = 0;
       }
+
+      // 1. Process organic_videos from TikTok reports
+      for (const [uid, v] of orgUidMap.entries()) {
+        const isLive = v.contentType === 'livestream' || v.contentType === 'live';
+        if (!isLive) {
+          allApprovedVideoIds.add(uid);
+          calcTotalViews += v.views;
+          calcTotalLikes += v.likes;
+        } else {
+          allUniqueLiveIds.add(uid);
+        }
+
+        if (v.creator) {
+          const perf = getOrCreatePerf(v.creator);
+          if (!isLive) {
+            perf.video_views += v.views;
+            perf.video_likes += v.likes;
+            perf.video_uids.add(uid);
+          } else {
+            perf.live_uids.add(uid);
+          }
+        }
+      }
+
+      // 2. Process manual videos from DB (videos table) to include real-time PIC inputs
+      for (const cc of ccData) {
+        const u = cc.creators?.username?.toLowerCase();
+        const perf = u ? getOrCreatePerf(u) : null;
+        const isApproved = cc.approval === 'approved' || cc.approval === 'alternate';
+        const vids = cc.videos || [];
+
+        for (const v of vids) {
+          if (campaignSkuIds.size > 0 && v.sku_id && !campaignSkuIds.has(v.sku_id)) continue;
+          const id = v.content_uid || (v.link_video ? (v.link_video.match(/video\/(\d+)/)?.[1] || v.link_video) : null);
+          if (id) {
+            // Pisahkan live dari video (keputusan owner 2 Okt 2026):
+            // video hanya menghitung video, live hanya menghitung live.
+            // Sumber kebenaran = `organic_videos.content_type`, karena
+            // tabel `videos` tidak punya kolom tipe. 654 baris di tabel
+            // `videos` ternyata livestream (docs/sql/58). Link video tidak
+            // bisa jadi patokan: 0 link mengandung '/live/'.
+            if (liveUidSet.has(id)) {
+              allUniqueLiveIds.add(id);
+              if (perf) perf.live_uids.add(id);
+              continue;                      // BUKAN video
+            }
+            if (isApproved) {
+              allApprovedVideoIds.add(id);
+            } else {
+              if (!allApprovedVideoIds.has(id)) {
+                allPendingVideoIds.add(id);
+              }
+            }
+            if (perf) {
+              perf.video_uids.add(id);
+            }
+          }
+        }
+      }
+
+      for (const perf of perfMap.values()) {
+        if (perf.video_uids.size > 0) perf.video_count = perf.video_uids.size;
+        if (perf.live_uids.size > 0) perf.live_count = perf.live_uids.size;
+      }
+
+      calcUniqueVideos = allApprovedVideoIds.size;
+      calcUniqueLivestreams = allUniqueLiveIds.size;
+
+      setInitialTotalViews(calcTotalViews);
+      setInitialTotalLikes(calcTotalLikes);
+      setInitialTotalVideos(calcUniqueVideos);
+      setInitialTotalLivestreams(calcUniqueLivestreams);
 
       setInitialTotalOrganic(calcOrganicGmv);
       setInitialUnattributedGmv(calcUnattributedGmv);
@@ -410,7 +416,13 @@ export default function CampaignPerformaClient({ campaignId }: { campaignId: num
               content_uid: s.content_uid,
               content_type: s.content_type
             }))
-        : [];
+        : salesData
+            .filter((s: any) => !s.campaign_id || Number(s.campaign_id) === Number(campaignId))
+            .map((s: any) => ({
+              creator_username: s.creator_username,
+              content_uid: s.content_uid,
+              content_type: s.content_type
+            }));
 
       const latestAdsMap = new Map();
       if (rawAdsData) {
@@ -498,66 +510,62 @@ export default function CampaignPerformaClient({ campaignId }: { campaignId: num
           const mappedV = aliasMap[rawV] || rawV;
           return mappedV === usernameLower;
         }) || [];
-        const dbVideos = currentHasSkus ? (cc.videos || []).filter((v: any) => {
+        const dbVideos = (cc.videos || []).filter((v: any) => {
           if (campaignSkuIds.size > 0 && v.sku_id && !campaignSkuIds.has(v.sku_id)) return false;
           return true;
-        }) : [];
+        });
         const uniqueVideoIds = new Map<string, string>(); 
         const uniqueLiveIds = new Set<string>();
 
-        if (currentHasSkus) {
-          dbVideos.forEach((v: any) => {
-            const id = v.content_uid || (v.link_video ? (v.link_video.match(/video\/(\d+)/)?.[1] || v.link_video) : null);
-            if (id) {
-                uniqueVideoIds.set(id, v.vt_approval || 'approved');
-            }
-          });
+        dbVideos.forEach((v: any) => {
+          const id = v.content_uid || (v.link_video ? (v.link_video.match(/video\/(\d+)/)?.[1] || v.link_video) : null);
+          if (id) {
+              uniqueVideoIds.set(id, v.vt_approval || 'approved');
+          }
+        });
 
-          // Also include tracked videos from TikTok reports & sales
-          perf.video_uids.forEach((vid: string) => {
-            if (!uniqueVideoIds.has(vid)) {
-              uniqueVideoIds.set(vid, 'approved');
-            }
-          });
-          perf.live_uids.forEach((lid: string) => {
-            uniqueLiveIds.add(lid);
-          });
+        // Also include tracked videos from TikTok reports & sales
+        perf.video_uids.forEach((vid: string) => {
+          if (!uniqueVideoIds.has(vid)) {
+            uniqueVideoIds.set(vid, 'approved');
+          }
+        });
+        perf.live_uids.forEach((lid: string) => {
+          uniqueLiveIds.add(lid);
+        });
 
-          autoSalesVideos.forEach((s: any) => {
-             let vid = s.content_uid;
-             if (vid && vid.startsWith('video_')) {
-               const parts = vid.split('_');
-               if (parts.length >= 2) {
-                 vid = parts[1];
+        autoSalesVideos.forEach((s: any) => {
+           let vid = s.content_uid;
+           if (vid && vid.startsWith('video_')) {
+             const parts = vid.split('_');
+             if (parts.length >= 2) {
+               vid = parts[1];
+             }
+           }
+           if (vid) {
+             if ((s.content_type || '').toLowerCase() === 'livestream' || (s.content_type || '').toLowerCase() === 'live') {
+               uniqueLiveIds.add(vid);
+             } else {
+               if (!uniqueVideoIds.has(vid)) {
+                 uniqueVideoIds.set(vid, 'approved');
                }
              }
-             if (vid) {
-               if ((s.content_type || '').toLowerCase() === 'livestream' || (s.content_type || '').toLowerCase() === 'live') {
-                 uniqueLiveIds.add(vid);
-               } else {
-                 if (!uniqueVideoIds.has(vid)) {
-                   uniqueVideoIds.set(vid, 'approved');
-                 }
-               }
-             }
-          });
-        }
+           }
+        });
 
         let approvedVtCount = 0;
         let pendingVtCount = 0;
         
-        if (currentHasSkus) {
-          if (cc.approval === 'pending') {
-              pendingVtCount = uniqueVideoIds.size;
-              approvedVtCount = 0;
-          } else {
-              approvedVtCount = uniqueVideoIds.size;
-              pendingVtCount = 0;
-          }
+        if (cc.approval === 'pending') {
+            pendingVtCount = uniqueVideoIds.size;
+            approvedVtCount = 0;
+        } else {
+            approvedVtCount = uniqueVideoIds.size;
+            pendingVtCount = 0;
         }
 
         const totalVt = approvedVtCount + pendingVtCount;
-        const totalLive = currentHasSkus ? Math.max(trackedLives, uniqueLiveIds.size) : 0;
+        const totalLive = Math.max(trackedLives, uniqueLiveIds.size);
 
         const conceptsSet = new Set<string>();
         dbVideos.forEach((v: any) => {
@@ -1041,18 +1049,20 @@ export default function CampaignPerformaClient({ campaignId }: { campaignId: num
   const paginatedStats = filteredCreatorStats.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   // Aggregation moved up to prevent TDZ
+  // Gatekeeper: Zero-out HANYA jika campaign TNT murni tanpa SKU dan tanpa data apapun
+  const isGated = !hasSkus && campaign?.company !== 'OTHER' && initialTotalOrganic === 0 && initialTotalVideos === 0;
 
-  const totalApprovedVideos = !hasSkus ? 0 : (isFiltered 
+  const totalApprovedVideos = isGated ? 0 : (isFiltered 
     ? fbApprovedVideos 
     : (fastVideoCountsData && fastVideoCountsData.approved > 0 
         ? fastVideoCountsData.approved 
         : (initialTotalVideos || Number(rpcPerformance?.total_videos || 0) || fbApprovedVideos)));
 
-  const totalPendingVideos = !hasSkus ? 0 : (isFiltered 
+  const totalPendingVideos = isGated ? 0 : (isFiltered 
     ? fbPendingVideos 
     : (fastVideoCountsData ? fastVideoCountsData.pending : fbPendingVideos));
 
-  const totalCampaignLivestreams = !hasSkus ? 0 : (isFiltered 
+  const totalCampaignLivestreams = isGated ? 0 : (isFiltered 
     ? fbLivestreams 
     : (fastVideoCountsData && fastVideoCountsData.livestream > 0 
         ? fastVideoCountsData.livestream 
@@ -1060,7 +1070,7 @@ export default function CampaignPerformaClient({ campaignId }: { campaignId: num
             ? initialTotalLivestreams 
             : (Number(totalSales?.totalLivestreams || 0) || fbLivestreams))));
 
-  const totalOrganic = !hasSkus ? 0 : (isFiltered ? fbOrganic : (initialTotalOrganic || fbOrganic));
+  const totalOrganic = isGated ? 0 : (isFiltered ? fbOrganic : (initialTotalOrganic || fbOrganic));
   // Total Ads GMV = ALL ads in this campaign (global, same as Ads Report page)
   // Always use client-side calculation for consistency with Ads Report
   const totalAdsGmv = isFiltered ? fbAds : initialTotalAdsGmv; 
@@ -1068,7 +1078,7 @@ export default function CampaignPerformaClient({ campaignId }: { campaignId: num
   const mappedAdsGmv = isFiltered ? fbAds : initialMappedAdsGmv;
   const unmappedAdsGmv = Math.max(0, totalAdsGmv - mappedAdsGmv);
   
-  const unattributedGmv = !hasSkus ? 0 : (isFiltered ? 0 : initialUnattributedGmv);
+  const unattributedGmv = isGated ? 0 : (isFiltered ? 0 : initialUnattributedGmv);
   
   // Total All = Approved GMV (totalOrganic) + Ads GMV
   // As per user request: unattributed GMV is kept separate and NOT included in Total Achievement
@@ -1079,16 +1089,16 @@ export default function CampaignPerformaClient({ campaignId }: { campaignId: num
   const attributionGap = unattributedGmv;
   const gapPercentage = totalOrganic > 0 ? Math.round((attributionGap / (totalOrganic + attributionGap)) * 100) : 0;
 
-  const totalCampaignViews = !hasSkus ? 0 : (isFiltered ? fbViews : (initialTotalViews || Number(rpcPerformance?.total_views || 0) || fbViews));
-  const totalCampaignLikes = !hasSkus ? 0 : (isFiltered ? fbLikes : (initialTotalLikes || Number(rpcPerformance?.total_likes || 0) || fbLikes));
-  const totalCampaignVideos = !hasSkus ? 0 : (isFiltered 
+  const totalCampaignViews = isGated ? 0 : (isFiltered ? fbViews : (initialTotalViews || Number(rpcPerformance?.total_views || 0) || fbViews));
+  const totalCampaignLikes = isGated ? 0 : (isFiltered ? fbLikes : (initialTotalLikes || Number(rpcPerformance?.total_likes || 0) || fbLikes));
+  const totalCampaignVideos = isGated ? 0 : (isFiltered 
     ? fbVideos 
     : (fastVideoCountsData && (fastVideoCountsData.approved + fastVideoCountsData.pending) > 0
         ? (fastVideoCountsData.approved + fastVideoCountsData.pending)
         : (initialTotalVideos || Number(rpcPerformance?.total_videos || 0) || fbVideos)));
   
-  const creatorsWithVideo = !hasSkus ? 0 : (isFiltered ? fbWithVideo : Number(totalSales?.creatorsWithVideo || fbWithVideo));
-  const creatorsWithLive = !hasSkus ? 0 : (isFiltered ? fbWithLive : Number(totalSales?.creatorsWithLive || fbWithLive));
+  const creatorsWithVideo = isGated ? 0 : (isFiltered ? fbWithVideo : Number(totalSales?.creatorsWithVideo || fbWithVideo));
+  const creatorsWithLive = isGated ? 0 : (isFiltered ? fbWithLive : Number(totalSales?.creatorsWithLive || fbWithLive));
   
   const targetVideo = campaign.target_video || 0;
   const percentCapaiVideo = targetVideo > 0 ? Math.round((totalCampaignVideos / targetVideo) * 100) : 0;
