@@ -190,5 +190,22 @@ Data TNT pada tabel utama terisolasi secara fisik dan tidak akan tersentuh sama 
   - Total Video: 107 video TikTok disetujui (approved)
   - Sinkron di tabel `archive_*`, view `vw_archive_campaign_summary`, dan portal publik brand `/portal/262/dashboard`.
 
+#### F. Kasus Update Data Riil Wardah 2 (Campaign ID 263)
+- **Status Awal (Baseline):**
+  - Sales Organik: 24 baris = Rp 4.238.135 (quantity = 1 pcs)
+  - Ads Performance: 1 baris dummy global = $38.169,09 USD = Rp 610.705.440 (tanpa username kreator)
+  - Total Achievement: **Rp 614.943.575 (~Rp 615 Juta)**
+- **Data Riil Diperbarui (User Update):**
+  - Sales Organik: 24 baris dengan nominal & quantity riil (total 2.803 pcs) = **Rp 63.572.025**
+  - Ads Performance: 24 baris per-kreator ($99.331,29 USD @ Rp 16.000) = **Rp 1.589.300.626**
+- **Hasil Setelah Update:**
+  - Total Sales Organik: 24 baris = **Rp 63.572.025**
+  - Total Ads Performance: 24 baris = **Rp 1.589.300.626**
+  - Total Achievement Baru: **Rp 1.652.872.651 (~Rp 1,65 Miliar)**
+  - Total Kreator: 99 kreator terdaftar & approved
+  - Total Video: 93 video TikTok disetujui (approved)
+  - Sinkron di tabel `archive_*`, view `vw_archive_campaign_summary`, dan portal publik brand `/portal/263/dashboard`.
+
+
 
 
