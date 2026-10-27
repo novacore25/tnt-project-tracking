@@ -256,21 +256,26 @@ Data TNT pada tabel utama terisolasi secara fisik dan tidak akan tersentuh sama 
   - Total Video: 274 video TikTok disetujui (approved)
   - Sinkron di tabel `archive_*`, view `vw_archive_campaign_summary`, dan portal publik brand `/portal/269/dashboard`.
 
-#### J. Kasus Update Data Riil Light+ (Campaign ID 279)
-- **Status Awal (Baseline):**
-  - Sales Organik: 11 baris = Rp 7.364.685
-  - Ads Performance: 1 baris dummy global (`OTHER_AD_Light+_16`) = Rp 16.649.920 (tanpa username kreator)
-  - Total Achievement: **Rp 24.014.605 (~Rp 24 Juta)**
-- **Data Riil Diperbarui (User Update):**
-  - Sales Organik: 83 baris dengan nominal & quantity riil (total 3.065 pcs) = **Rp 116.748.451**
-  - Ads Performance: 69 baris per-kreator ($117.164,87 USD @ Rp 16.000) = **Rp 1.874.637.872** (100% terpetakan ke username kreator, top kreator: `putri.antris` & `sis.915` masing-masing Rp 140,5 Juta ads)
-- **Hasil Setelah Update:**
-  - Total Sales Organik: 83 baris = **Rp 116.748.451**
-  - Total Ads Performance: 69 baris = **Rp 1.874.637.872**
-  - Total Achievement Baru: **Rp 1.991.386.323 (~Rp 1,99 Miliar)**
-  - Total Kreator: 155 kreator terdaftar & approved (seluruh 77 kreator aktif sales/ads 100% cocok dengan kreator campaign)
-  - Total Video: 422 video TikTok disetujui (approved)
-  - Sinkron di tabel `archive_*`, view `vw_archive_campaign_summary`, dan portal publik brand `/portal/279/dashboard`.
+#### K. Penyesuaian Video Placeholder Sementara (0 VT ke Target Riil Tim) — Wardah 4, OMG 3, Light+ (28 Oktober 2026)
+- **Konteks:** Hasil audit komparasi menunjukkan terdapat kreator dengan GMV sales organik jutaan rupiah namun baris videonya belum terinput pada sheet `Videos`. Sesuai konfirmasi owner & tim lapangan, video ditambahkan dengan status `approved`, kuota target disesuaikan, dan link video dikosongkan sementara (`link_video = ''`) sambil menunggu rekap link publik oleh tim.
+- **Rincian Perubahan:**
+  1. **Wardah 4 (Glasting Lip Matte - Campaign ID 265):**
+     - `@pilaaa.66`: ditambahkan **5 VT** (urutan 1–5, qty_vt = 5)
+     - `@katanyakezia`: ditambahkan **7 VT** (urutan 1–7, qty_vt = 7)
+     - `@naatt167`: ditambahkan **4 VT** (urutan 1–4, qty_vt = 4)
+     - `@alansecond7`: ditambahkan **8 VT** (urutan 1–8, qty_vt = 8)
+     - **Hasil:** Total achievement video naik dari 127 VT menjadi **151 VT**.
+  2. **OMG 3 (Campaign ID 261):**
+     - `@kikiromli89`: ditambahkan **5 VT** (urutan 1–5, qty_vt = 5)
+     - **Hasil:** Total achievement video naik dari 558 VT menjadi **563 VT**.
+  3. **Light+ (Campaign ID 279):**
+     - `@goat`: ditambahkan **2 VT** (urutan 1–2, qty_vt = 2)
+     - **Hasil:** Total achievement video naik dari 422 VT menjadi **424 VT**.
+- **Penerapan Teknis:**
+  - Script SQL: `docs/sql/98-add-empty-videos-goat-creators.sql` telah dieksekusi di database PostgreSQL VPS.
+  - File spreadsheet di lokal user (`Wardah_4...xlsx`, `OMG_3...xlsx`, `Light...xlsx`) juga telah diperbarui pada sheet `Videos` dan `Creators`.
+  - Ketika tim menyerahkan rekap URL video nantinya, fitur Excel Sync (`campaignExcelSyncActions.ts`) akan otomatis meng-update kolom `link_video` berdasarkan `campaign_creator_id` dan `urutan`.
+
 
 
 
