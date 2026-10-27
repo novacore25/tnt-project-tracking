@@ -422,10 +422,10 @@ export async function updateCreatorMaster(creatorId: number, updateData: any) {
 export async function addCreatorSnapshot(creatorId: number, snapshot: any) {
   await db.execute(sql`
     INSERT INTO creator_snapshots (
-      creator_id, followers, level, gmv_30d, gmv_30d_organic, gmv_30d_live, ratecard, tanggal_update, audience_age, tier
+      creator_id, followers, level, gmv_30d, gmv_30d_video, gmv_30d_live, ratecard, tanggal_update, audience_age, tier
     ) VALUES (
       ${creatorId}, ${snapshot.followers || null}, ${snapshot.level || null}, ${snapshot.gmv_30d || null},
-      ${snapshot.gmv_30d_organic || null}, ${snapshot.gmv_30d_live || null}, ${snapshot.ratecard || null},
+      ${snapshot.gmv_30d_video ?? snapshot.gmv_30d_organic ?? null}, ${snapshot.gmv_30d_live || null}, ${snapshot.ratecard || null},
       ${snapshot.tanggal_update || sql`CURRENT_DATE`}, ${snapshot.audience_age || null}, ${snapshot.tier || null}
     )
   `);

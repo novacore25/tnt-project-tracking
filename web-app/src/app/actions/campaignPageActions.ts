@@ -1439,7 +1439,7 @@ export async function commitBulkImportVideosAction(
 
         // Insert initial snapshot
         await tx.execute(sql`
-          INSERT INTO creator_snapshots (creator_id, followers, gmv_30d, gmv_30d_organic, gmv_30d_live, tanggal_update, updated_by)
+          INSERT INTO creator_snapshots (creator_id, followers, gmv_30d, gmv_30d_video, gmv_30d_live, tanggal_update, updated_by)
           VALUES (${creatorId}, 0, 0, 0, 0, CURRENT_DATE, ${picName || 'Bulk Import'})
           ON CONFLICT DO NOTHING
         `);

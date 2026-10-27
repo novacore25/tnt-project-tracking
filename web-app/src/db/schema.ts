@@ -156,7 +156,7 @@ export const creatorSnapshots = pgTable('creator_snapshots', {
   followers: integer('followers'),
   level: integer('level'),
   gmv30d: bigint('gmv_30d', { mode: 'number' }),
-  gmv30dOrganic: bigint('gmv_30d_organic', { mode: 'number' }),
+  gmv30dVideo: bigint('gmv_30d_video', { mode: 'number' }),
   gmv30dLive: bigint('gmv_30d_live', { mode: 'number' }),
   updatedBy: text('updated_by'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
