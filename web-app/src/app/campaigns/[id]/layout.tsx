@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useDatabaseStore } from "@/store/useDatabaseStore";
 import Link from "next/link";
@@ -8,7 +8,8 @@ import { Settings2 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/Dialog";
 import { CampaignFilterProvider, useCampaignFilter } from "@/providers/CampaignFilterProvider";
-import { Search } from "lucide-react";
+import { Search, FileSpreadsheet } from "lucide-react";
+import { CampaignExcelSyncModal } from "@/components/campaign/CampaignExcelSyncModal";
 
 export default function CampaignLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -69,6 +70,7 @@ function CampaignLayoutInner({ children }: { children: React.ReactNode }) {
 
   const portalLink = typeof window !== 'undefined' ? `${window.location.origin}/portal/${campaign?.id || campaignId}` : `/portal/${campaign?.id || campaignId}`;
   
+  const [isExcelModalOpen, setIsExcelModalOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [formData, setFormData] = useState({
     nama: '',
@@ -179,6 +181,17 @@ function CampaignLayoutInner({ children }: { children: React.ReactNode }) {
             >
               <Search className="w-4 h-4" />
               Creator Filter {appliedFilterType !== 'none' && '(Active)'}
+            </button>
+
+            {/* EXCEL SYNC BUTTON */}
+            <button
+              type="button"
+              onClick={() => setIsExcelModalOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border bg-white border-slate-200 text-slate-700 hover:bg-slate-50 shadow-sm transition-colors"
+              title="Export & Import Seluruh Data Campaign (Excel)"
+            >
+              <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+              Excel Sync
             </button>
 
             <Dialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen}>
@@ -400,6 +413,13 @@ function CampaignLayoutInner({ children }: { children: React.ReactNode }) {
           })}
         </nav>
       </div>
+
+      <CampaignExcelSyncModal
+        campaignId={campaignId}
+        campaignName={campaign?.nama}
+        isOpen={isExcelModalOpen}
+        onClose={() => setIsExcelModalOpen(false)}
+      />
 
       <div className="pt-[8px]">
         {children}
