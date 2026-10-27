@@ -238,6 +238,23 @@ Data TNT pada tabel utama terisolasi secara fisik dan tidak akan tersentuh sama 
   - Total Video: 127 video TikTok disetujui (approved)
   - Sinkron di tabel `archive_*`, view `vw_archive_campaign_summary`, dan portal publik brand `/portal/265/dashboard`.
 
+#### I. Kasus Update Data Riil PWS 2 (Campaign ID 269)
+- **Status Awal (Baseline):**
+  - Sales Organik: 37 baris = Rp 132.392.153 (quantity = 1 pcs)
+  - Ads Performance: 1 baris dummy global = $23.764,59 USD = Rp 380.233.440 (tanpa username kreator)
+  - Total Achievement: **Rp 512.625.593 (~Rp 512 Juta)**
+- **Data Riil Diperbarui (User Update):**
+  - Sales Organik: 37 baris dengan nominal & quantity riil (total 29.656 pcs) = **Rp 794.352.918**
+  - Ads Performance: 37 baris per-kreator ($148.941,17 USD @ Rp 16.000) = **Rp 2.383.058.765** (100% terpetakan ke username kreator, top kreator: `angelmatondang` Rp 2,26 Miliar ads)
+- **Hasil Setelah Update:**
+  - Total Sales Organik: 37 baris = **Rp 794.352.918**
+  - Total Ads Performance: 37 baris = **Rp 2.383.058.765**
+  - Total Achievement Baru: **Rp 3.177.411.683 (~Rp 3,18 Miliar)** (Target Paragon > Rp 3 Miliar tercapai)
+  - Total Kreator: 274 kreator terdaftar & approved
+  - Total Video: 274 video TikTok disetujui (approved)
+  - Sinkron di tabel `archive_*`, view `vw_archive_campaign_summary`, dan portal publik brand `/portal/269/dashboard`.
+
+
 
 
 
