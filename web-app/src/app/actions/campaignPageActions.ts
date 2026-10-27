@@ -377,9 +377,16 @@ export async function fetchPerformaPageFullDataAction(campaignId: number) {
           WHERE campaign_id = ${campaignId}
         `).catch(() => []) as Promise<any[]>,
         db.execute(sql`
-          SELECT id, campaign_id, creator_id, creator_username as username, campaign_ads_name, ad_id, ad_name, cost_usd, gross_revenue_usd, kurs, tanggal
-          FROM archive_ads_performance
-          WHERE campaign_id = ${campaignId}
+          SELECT 
+            ap.id, ap.campaign_id, 
+            COALESCE(ap.creator_id, cc.creator_id, cc.id) as creator_id,
+            ap.creator_username as username, 
+            ap.campaign_ads_name, ap.ad_id, ap.ad_name, ap.cost_usd, ap.gross_revenue_usd, ap.kurs, ap.tanggal
+          FROM archive_ads_performance ap
+          LEFT JOIN archive_campaign_creators cc 
+            ON ap.campaign_id = cc.campaign_id 
+           AND LOWER(TRIM(ap.creator_username)) = LOWER(TRIM(cc.username))
+          WHERE ap.campaign_id = ${campaignId}
         `).catch(() => []) as Promise<any[]>,
       ]);
 

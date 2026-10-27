@@ -434,6 +434,16 @@ export default function CampaignPerformaClient({ campaignId }: { campaignId: num
         }
       }
       
+      const creatorIdByUsername = new Map<string, number>();
+      for (const cc of ccData) {
+        const creator = Array.isArray(cc.creators) ? cc.creators[0] : cc.creators;
+        const u = (creator?.username || cc.username || '').toLowerCase().trim();
+        const cid = Number(creator?.id || cc.creator_id || cc.id);
+        if (u && cid) {
+          creatorIdByUsername.set(u, cid);
+        }
+      }
+
       const adsStatsByCreator: Record<number, { gmvAds: number, costAds: number, itemsSoldAds: number }> = {};
       let globalAdsGmv = 0;
       let globalAdsGmvUsd = 0;
@@ -454,14 +464,17 @@ export default function CampaignPerformaClient({ campaignId }: { campaignId: num
         globalAdsGmvUsd += grossRevenueUsd;
         globalAdsSpend += costUsd;
 
-        if (ad.creator_id) {
+        const uLower = String(ad.username || ad.creator_username || '').toLowerCase().trim();
+        const mappedCreatorId = Number(ad.creator_id) || (uLower ? creatorIdByUsername.get(uLower) : null);
+
+        if (mappedCreatorId) {
           mappedAdsGmv += grossRevenueUsd * kurs;
-          if (!adsStatsByCreator[ad.creator_id]) {
-            adsStatsByCreator[ad.creator_id] = { gmvAds: 0, costAds: 0, itemsSoldAds: 0 };
+          if (!adsStatsByCreator[mappedCreatorId]) {
+            adsStatsByCreator[mappedCreatorId] = { gmvAds: 0, costAds: 0, itemsSoldAds: 0 };
           }
-          adsStatsByCreator[ad.creator_id].gmvAds += grossRevenueUsd * kurs;
-          adsStatsByCreator[ad.creator_id].costAds += costUsd * kurs;
-          adsStatsByCreator[ad.creator_id].itemsSoldAds += purchases;
+          adsStatsByCreator[mappedCreatorId].gmvAds += grossRevenueUsd * kurs;
+          adsStatsByCreator[mappedCreatorId].costAds += costUsd * kurs;
+          adsStatsByCreator[mappedCreatorId].itemsSoldAds += purchases;
         } else {
           unmappedAdsGmvVal += grossRevenueUsd * kurs;
           unmappedAdsCostVal += costUsd * kurs;
