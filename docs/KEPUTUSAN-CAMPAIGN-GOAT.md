@@ -85,33 +85,42 @@ Berikut adalah data riil yang telah terverifikasi di PostgreSQL VPS (`db_tnt_pro
 
 ---
 
-## 4. Arsitektur Teknis & Mekanisme Rollback
+## 4. Arsitektur Teknis Tabel Terpisah Fisik & Mekanisme Rollback
 
-### 4.1 Skema Database (`web-app/supabase/migrations/20261027210000_add_company_to_campaigns.sql`)
-1. Kolom `company VARCHAR(50) DEFAULT 'TNT' NOT NULL` pada tabel `campaigns`.
-2. Index performa `idx_campaigns_company`.
-3. View `vw_campaign_summary` diperbarui untuk mengekspos `c.company` dan `c.campaign_group` tanpa merusak kalkulasi agregasi organik + ads.
+### 4.1 Pemisahan Fisik Tabel (`web-app/supabase/migrations/20261027220000_create_archive_tables_and_isolate_tnt.sql`)
+Sesuai arahan owner agar data Company Lain tidak bercampur sama sekali dengan operasional TNT maupun integrasi TikTok Partner Center, dibuat tabel-tabel fisik khusus arsip:
+1. `archive_campaigns` — Master 27 campaign arsip.
+2. `archive_campaign_creators` — 3.941 data kreator per campaign dengan username, nama asli, dan link akun tersimpan mandiri.
+3. `archive_videos` — 5.779 link video TikTok publik yang terasosiasi ke kreator arsip.
+4. `archive_sales` — 678 baris transaksi penjualan organik dengan relasi langsung ke `campaign_id`.
+5. `archive_ads_performance` — 17 baris performa ads Video Shopping Ads.
+6. `vw_archive_campaign_summary` — View ringkasan agregasi metrik arsip (GMV, video, kreator).
+
+**Status Tabel Utama TNT:**
+Seluruh baris Company Lain telah dihapus total dari tabel `campaigns`, `campaign_creators`, `videos`, `sales`, dan `ads_performance`. Tabel operasional TNT kini **100% murni data TNT**, sehingga sinkronisasi otomatis TikTok Partner Center, audit keuangan, dan pelaporan internal TNT terbebas mutlak dari risiko percampuran data.
 
 ### 4.2 Isolasi Server & Otorisasi
 - **`AuthProvider.tsx`:** Hook `useAuth()` mengelola state `selectedCompany: 'TNT' | 'OTHER'`. Jika `profile?.role !== 'executive'`, nilai selalu dipaksa ke `'TNT'`.
-- **`storeActions.ts:getInitialStoreData`:** Jika sesi user bukan `executive`, query `campaigns` dan `vw_campaign_summary` otomatis difilter `WHERE company = 'TNT' OR company IS NULL`. Data Company Lain tidak pernah dikirim ke browser non-eksekutif.
-- **`ads-report/actions.ts:getAdsReportData`:** Memvalidasi parameter `company` di sisi server. Non-eksekutif selalu diarahkan ke `effectiveCompany = 'TNT'`.
+- **`storeActions.ts:getInitialStoreData`:** Jika sesi user adalah `executive`, query mengambil gabungan data TNT (`campaigns`) dan arsip (`archive_campaigns`). Jika bukan `executive`, sistem HANYA membaca tabel `campaigns` dan sama sekali tidak mengeksekusi query ke tabel `archive_*`.
+- **`campaignPageActions.ts:fetchPerformaPageFullDataAction`:** Memeriksa apakah `campaignId` berada di `archive_campaigns`. Jika iya, seluruh query diarahkan secara eksklusif ke tabel-tabel `archive_*`.
+- **`ads-report/actions.ts:getAdsReportData`:** Jika mode `Company Lain`, query dialihkan membaca tabel `archive_ads_performance` dan `archive_campaigns`.
 
 ### 4.3 SOP & Prosedur Rollback Data Company Lain
-Jika data Company Lain perlu ditarik, dibersihkan, atau diganti dengan data baru, terdapat 2 mekanisme aman:
+Jika data Company Lain perlu dibersihkan atau diganti dengan data baru, terdapat 2 mekanisme aman:
 
 #### Opsi 1: Melalui UI Web App (Satu Klik Khusus Executive)
 1. Login dengan akun berekskutif (`role = 'executive'`).
 2. Aktifkan mode `Company Lain` via switcher di Sidebar.
 3. Di bagian atas halaman `/campaigns`, muncul banner amber berlabel **Mode Arsip: Company Lain**.
 4. Klik tombol merah **Rollback Data Company Lain**.
-5. Konfirmasi dua kali prompt peringatan. Sistem akan memanggil Server Action `rollbackCompanyLainAction()`. Seluruh 27 campaign akan terhapus beserta seluruh data turunannya secara otomatis.
+5. Konfirmasi dua kali prompt peringatan. Server Action `rollbackCompanyLainAction()` akan menjalankan perintah `TRUNCATE archive_sales, archive_videos, archive_ads_performance, archive_campaign_creators, archive_campaigns CASCADE;`.
 
 #### Opsi 2: Melalui Terminal VPS / SQL Script
 Jalankan file rollback resmi `web-app/supabase/rollback_company_lain.sql` atau perintah SQL langsung:
 ```sql
 BEGIN;
+TRUNCATE archive_sales, archive_videos, archive_ads_performance, archive_campaign_creators, archive_campaigns CASCADE;
 DELETE FROM campaigns WHERE company = 'OTHER';
 COMMIT;
 ```
-Karena relasi foreign key pada `campaign_creators`, `videos`, `sales`, dan `ads_performance` terpasang `ON DELETE CASCADE`, seluruh baris turunan akan terhapus bersih dalam 1 transaksi, sementara data TNT (`company = 'TNT'`) tetap utuh 100%.
+Data TNT pada tabel utama terisolasi secara fisik dan tidak akan tersentuh sama sekali.

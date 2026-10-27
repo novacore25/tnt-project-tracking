@@ -21,33 +21,59 @@ export async function getAdsReportData(params: {
   const isExecutive = profile?.role === 'executive';
   const effectiveCompany = isExecutive ? (params.company || 'TNT') : 'TNT';
 
-  let adsQuery = sql`
-    SELECT 
-      ap.*,
-      json_build_object('username', cr.username) as creators
-    FROM ads_performance ap
-    LEFT JOIN creators cr ON ap.creator_id = cr.id
-    LEFT JOIN campaigns c ON ap.campaign_id = c.id
-    WHERE (
-      ${effectiveCompany === 'OTHER' ? sql`c.company = 'OTHER'` : sql`(c.company = 'TNT' OR c.company IS NULL)`}
-    )
-  `;
+  let rawAdsRows: any[] = [];
+  let campaignsRows: any[] = [];
+  let budgetRows: any[] = [];
 
-  if (params.campaignAdsName) {
-    adsQuery = sql`${adsQuery} AND ap.campaign_ads_name = ${params.campaignAdsName}`;
+  if (isExecutive && effectiveCompany === 'OTHER') {
+    let adsQuery = sql`
+      SELECT 
+        ap.*,
+        json_build_object('username', ap.creator_username) as creators
+      FROM archive_ads_performance ap
+      JOIN archive_campaigns c ON ap.campaign_id = c.id
+    `;
+
+    if (params.campaignAdsName) {
+      adsQuery = sql`${adsQuery} WHERE ap.campaign_ads_name = ${params.campaignAdsName}`;
+    }
+
+    adsQuery = sql`${adsQuery} ORDER BY ap.tanggal DESC`;
+
+    const [rawAds, camps, budgets] = await Promise.all([
+      db.execute(adsQuery),
+      db.execute(sql`SELECT id, nama, company FROM archive_campaigns ORDER BY nama ASC`),
+      db.execute(sql`SELECT * FROM ads_allocations`)
+    ]);
+    rawAdsRows = (rawAds as any[]) || [];
+    campaignsRows = (camps as any[]) || [];
+    budgetRows = (budgets as any[]) || [];
+  } else {
+    let adsQuery = sql`
+      SELECT 
+        ap.*,
+        json_build_object('username', cr.username) as creators
+      FROM ads_performance ap
+      LEFT JOIN creators cr ON ap.creator_id = cr.id
+      LEFT JOIN campaigns c ON ap.campaign_id = c.id
+      WHERE (c.company = 'TNT' OR c.company IS NULL)
+    `;
+
+    if (params.campaignAdsName) {
+      adsQuery = sql`${adsQuery} AND ap.campaign_ads_name = ${params.campaignAdsName}`;
+    }
+
+    adsQuery = sql`${adsQuery} ORDER BY ap.tanggal DESC`;
+
+    const [rawAds, camps, budgets] = await Promise.all([
+      db.execute(adsQuery),
+      db.execute(sql`SELECT id, nama, company FROM campaigns WHERE company = 'TNT' OR company IS NULL ORDER BY nama ASC`),
+      db.execute(sql`SELECT * FROM ads_allocations`)
+    ]);
+    rawAdsRows = (rawAds as any[]) || [];
+    campaignsRows = (camps as any[]) || [];
+    budgetRows = (budgets as any[]) || [];
   }
-
-  adsQuery = sql`${adsQuery} ORDER BY ap.tanggal DESC`;
-
-  const campaignsQuery = isExecutive && effectiveCompany === 'OTHER'
-    ? sql`SELECT id, nama, company FROM campaigns WHERE company = 'OTHER'`
-    : sql`SELECT id, nama, company FROM campaigns WHERE company = 'TNT' OR company IS NULL`;
-
-  const [rawAdsRows, campaignsRows, budgetRows] = await Promise.all([
-    db.execute(adsQuery),
-    db.execute(campaignsQuery),
-    db.execute(sql`SELECT * FROM ads_allocations`)
-  ]);
 
   let rawAllData = ((rawAdsRows as unknown as any[]) || []).map(r => ({
     ...r,

@@ -114,13 +114,8 @@ export async function getInitialStoreData() {
       }
     }
 
-    const campaignsQuery = isExecutive
-      ? sql`SELECT * FROM campaigns ORDER BY id DESC`
-      : sql`SELECT * FROM campaigns WHERE company = 'TNT' OR company IS NULL ORDER BY id DESC`;
-
-    const summaryQuery = isExecutive
-      ? sql`SELECT * FROM public.vw_campaign_summary`
-      : sql`SELECT * FROM public.vw_campaign_summary WHERE company = 'TNT' OR company IS NULL`;
+    const campaignsQuery = sql`SELECT * FROM campaigns ORDER BY id DESC`;
+    const summaryQuery = sql`SELECT * FROM public.vw_campaign_summary`;
 
     const [
       allBrands,
@@ -130,6 +125,8 @@ export async function getInitialStoreData() {
       allProfiles,
       allAdNameMapping,
       campaignSummaryRes,
+      archiveCampaignsRes,
+      archiveSummaryRes,
     ] = await Promise.all([
       db.execute(sql`SELECT * FROM brands ORDER BY id ASC`).catch(() => []),
       db.execute(campaignsQuery).catch(() => []),
@@ -138,16 +135,26 @@ export async function getInitialStoreData() {
       db.execute(sql`SELECT id, full_name as nama, email, avatar_url, role, status FROM profiles`).catch(() => []),
       db.execute(sql`SELECT * FROM ad_name_mapping ORDER BY id DESC`).catch(() => []),
       db.execute(summaryQuery).catch(() => []),
+      isExecutive ? db.execute(sql`SELECT * FROM archive_campaigns ORDER BY id DESC`).catch(() => []) : Promise.resolve([]),
+      isExecutive ? db.execute(sql`SELECT * FROM public.vw_archive_campaign_summary`).catch(() => []) : Promise.resolve([]),
     ]);
+
+    const combinedCampaigns = isExecutive
+      ? [...((allCampaigns as any[]) || []), ...((archiveCampaignsRes as any[]) || [])]
+      : ((allCampaigns as any[]) || []);
+
+    const combinedSummary = isExecutive
+      ? [...((campaignSummaryRes as any[]) || []), ...((archiveSummaryRes as any[]) || [])]
+      : ((campaignSummaryRes as any[]) || []);
 
     return {
       brands: (allBrands as any[]) || [],
-      campaigns: (allCampaigns as any[]) || [],
+      campaigns: combinedCampaigns,
       niches: (allNiches as any[]) || [],
       skus: (allSkus as any[]) || [],
       profiles: (allProfiles as any[]) || [],
       ad_name_mapping: (allAdNameMapping as any[]) || [],
-      vw_campaign_summary: (campaignSummaryRes as any[]) || [],
+      vw_campaign_summary: combinedSummary,
     };
   } catch (error: any) {
     console.error('Error in getInitialStoreData:', error);

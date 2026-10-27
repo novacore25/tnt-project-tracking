@@ -6,7 +6,7 @@ import { requireRole } from '@/lib/guards';
 import { revalidatePath } from 'next/cache';
 
 /**
- * Mendapatkan ringkasan jumlah data Company Lain (company = 'OTHER') saat ini.
+ * Mendapatkan ringkasan jumlah data Company Lain saat ini dari tabel archive_*.
  * Khusus role executive.
  */
 export async function getCompanyLainStatsAction() {
@@ -17,10 +17,9 @@ export async function getCompanyLainStatsAction() {
       COUNT(DISTINCT c.id) as campaign_count,
       COUNT(DISTINCT cc.id) as creator_count,
       COUNT(DISTINCT v.id) as video_count
-    FROM campaigns c
-    LEFT JOIN campaign_creators cc ON c.id = cc.campaign_id
-    LEFT JOIN videos v ON cc.id = v.campaign_creator_id
-    WHERE c.company = 'OTHER'
+    FROM archive_campaigns c
+    LEFT JOIN archive_campaign_creators cc ON c.id = cc.campaign_id
+    LEFT JOIN archive_videos v ON cc.id = v.campaign_creator_id
   `)) as any[];
 
   return {
@@ -31,26 +30,24 @@ export async function getCompanyLainStatsAction() {
 }
 
 /**
- * Rollback seluruh data Company Lain (company = 'OTHER').
- * Menghapus campaign dan secara CASCADE membersihkan:
- * - campaign_creators
- * - videos
- * - sales
- * - ads_performance
- * - daily_performance
+ * Rollback seluruh data Company Lain dari tabel archive_*.
+ * Menghapus seluruh data dari tabel fisik archive_* terpisah.
  * 
  * GUARD: Hanya role executive yang boleh mengeksekusi ini.
- * Data TNT (company = 'TNT') terjamin aman 100%.
+ * Data TNT terjamin aman 100% karena berada pada tabel yang berbeda.
  */
 export async function rollbackCompanyLainAction() {
   await requireRole('executive');
 
   try {
     const deletedCampaigns = (await db.execute(sql`
-      DELETE FROM campaigns 
-      WHERE company = 'OTHER'
-      RETURNING id, nama
+      SELECT id, nama FROM archive_campaigns
     `)) as any[];
+
+    await db.execute(sql`
+      TRUNCATE archive_sales, archive_videos, archive_ads_performance, archive_campaign_creators, archive_campaigns CASCADE;
+      DELETE FROM campaigns WHERE company = 'OTHER';
+    `);
 
     revalidatePath('/campaigns');
     revalidatePath('/ads-report');

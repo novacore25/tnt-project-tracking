@@ -352,6 +352,76 @@ export async function fetchDailyPerformancePageDataAction(campaignId: number) {
 // ============================================================
 export async function fetchPerformaPageFullDataAction(campaignId: number) {
   try {
+    // 1. Cek apakah ini campaign arsip Company Lain (archive_campaigns)
+    const [archiveCamp] = (await db.execute(sql`SELECT * FROM archive_campaigns WHERE id = ${campaignId} LIMIT 1`).catch(() => [])) as any[];
+    if (archiveCamp) {
+      const [ccRes, vidRes, salesRes, adsRes] = await Promise.all([
+        db.execute(sql`
+          SELECT 
+            id, creator_id, approval, created_at, content_type, qty_vt, qty_live, tier, price,
+            username, nama_asli, link_account
+          FROM archive_campaign_creators
+          WHERE campaign_id = ${campaignId}
+          ORDER BY id ASC
+        `).catch(() => []) as Promise<any[]>,
+        db.execute(sql`
+          SELECT v.id, v.campaign_creator_id, v.urutan, v.link_video, v.link_draft, v.concept, v.vt_approval
+          FROM archive_videos v
+          JOIN archive_campaign_creators cc ON v.campaign_creator_id = cc.id
+          WHERE cc.campaign_id = ${campaignId}
+          ORDER BY v.id ASC
+        `).catch(() => []) as Promise<any[]>,
+        db.execute(sql`
+          SELECT tanggal, gmv, quantity, creator_username, content_uid, content_type, campaign_id, price, order_id
+          FROM archive_sales
+          WHERE campaign_id = ${campaignId}
+        `).catch(() => []) as Promise<any[]>,
+        db.execute(sql`
+          SELECT id, campaign_id, creator_id, creator_username as username, campaign_ads_name, ad_id, ad_name, cost_usd, gross_revenue_usd, kurs, tanggal
+          FROM archive_ads_performance
+          WHERE campaign_id = ${campaignId}
+        `).catch(() => []) as Promise<any[]>,
+      ]);
+
+      const rawCc = ccRes || [];
+      const videos = vidRes || [];
+      const sales = salesRes || [];
+      const ads = adsRes || [];
+
+      const videosByCcId = new Map<number, any[]>();
+      for (const v of videos) {
+        if (!videosByCcId.has(v.campaign_creator_id)) {
+          videosByCcId.set(v.campaign_creator_id, []);
+        }
+        videosByCcId.get(v.campaign_creator_id)!.push(v);
+      }
+
+      const campaignCreators = rawCc.map((r: any) => ({
+        ...r,
+        creators: {
+          id: r.creator_id || r.id,
+          username: r.username,
+          nama_asli: r.nama_asli,
+          link_account: r.link_account,
+        },
+        videos: videosByCcId.get(r.id) || []
+      }));
+
+      return {
+        success: true,
+        campaign: archiveCamp,
+        concepts: [],
+        skus: [],
+        campaignCreators,
+        videos,
+        sales,
+        ads,
+        organicVideos: [],
+        creatorAliases: [],
+        creatorAddresses: []
+      };
+    }
+
     const [campaignRes, conceptsRes, skusRes, ccRes, vidRes, salesRes, adsRes, orgRes, aliasesRes, addressesRes] = await Promise.all([
       db.execute(sql`SELECT * FROM campaigns WHERE id = ${campaignId} LIMIT 1`) as Promise<any[]>,
       db.execute(sql`
