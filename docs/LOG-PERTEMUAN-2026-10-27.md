@@ -56,3 +56,21 @@ Struktur file Excel multi-sheet (`Campaign_{nama}_FullData_{tanggal}.xlsx`):
 Sistem mendukung 2 mode import:
 - **Append**: Menambahkan baris transaksi atau ads baru tanpa menghapus data yang telah tersimpan sebelumnya.
 - **Replace**: Mengganti total riwayat penjualan/iklan campaign tersebut dengan data riil pada file Excel (disertai konfirmasi pencegahan ketidaksengajaan).
+
+---
+
+## 5. Pengujian Update Data Riil — OMG 2 (Campaign 260)
+
+Pengujian pembaruan data penuh (multi-sheet: Campaign, Creators, Videos, Sales Organik, Ads Performance) berhasil diterapkan pada campaign **OMG 2 (ID: 260)**:
+
+| Parameter | Sebelum Update | Sesudah Update | Keterangan |
+|---|---:|---:|---|
+| **Target GMV** | Rp 1.297.563.614 | Rp 1.297.563.614 | Target fixed |
+| **Jumlah Kreator** | 155 kreator | 155 kreator | 155 kreator aktif |
+| **Jumlah Video VT** | 298 video | 298 video | Link video publik terupdate |
+| **GMV Organik** | Rp 79.724.057 | **Rp 450.442.139** | Naik signifikan dari 66 transaksi riil |
+| **Ads Performance** | 1 baris umum | **18 baris iklan kreator** | Terpetakan per creator username |
+| **GMV Ads (VSA)** | Rp 1.217.839.520 | **Rp 75.044.554** | Revenue USD x Kurs IDR terverifikasi |
+| **Total Achievement** | Rp 1.297.563.577 | **Rp 525.486.693** | Organik + Ads langsung tersinkron |
+
+Hasil terverifikasi 100% konsisten baik di halaman internal `/campaigns/260/performa` maupun di portal publik `/portal/260/dashboard`.
