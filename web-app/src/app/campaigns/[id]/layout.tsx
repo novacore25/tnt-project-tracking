@@ -183,16 +183,18 @@ function CampaignLayoutInner({ children }: { children: React.ReactNode }) {
               Creator Filter {appliedFilterType !== 'none' && '(Active)'}
             </button>
 
-            {/* EXCEL SYNC BUTTON */}
-            <button
-              type="button"
-              onClick={() => setIsExcelModalOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border bg-white border-slate-200 text-slate-700 hover:bg-slate-50 shadow-sm transition-colors"
-              title="Export & Import Seluruh Data Campaign (Excel)"
-            >
-              <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
-              Excel Sync
-            </button>
+            {/* EXCEL SYNC BUTTON (KHUSUS ARSIP COMPANY LAIN / DATA LAMA) */}
+            {(campaign as any)?.company === 'OTHER' && (
+              <button
+                type="button"
+                onClick={() => setIsExcelModalOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border bg-amber-50 border-amber-300 text-amber-900 hover:bg-amber-100 shadow-sm transition-colors"
+                title="Export & Import Seluruh Data Campaign Arsip (Excel)"
+              >
+                <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+                Excel Sync (Arsip)
+              </button>
+            )}
 
             <Dialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen}>
               <DialogTrigger asChild>
@@ -414,12 +416,14 @@ function CampaignLayoutInner({ children }: { children: React.ReactNode }) {
         </nav>
       </div>
 
-      <CampaignExcelSyncModal
-        campaignId={campaignId}
-        campaignName={campaign?.nama}
-        isOpen={isExcelModalOpen}
-        onClose={() => setIsExcelModalOpen(false)}
-      />
+      {(campaign as any)?.company === 'OTHER' && (
+        <CampaignExcelSyncModal
+          campaignId={campaignId}
+          campaignName={campaign?.nama}
+          isOpen={isExcelModalOpen}
+          onClose={() => setIsExcelModalOpen(false)}
+        />
+      )}
 
       <div className="pt-[8px]">
         {children}

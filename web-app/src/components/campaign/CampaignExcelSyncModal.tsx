@@ -511,6 +511,11 @@ export function CampaignExcelSyncModal({
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-xs font-semibold px-2 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-300">
+              Khusus Company Lain (Data Arsip)
+            </span>
+          </div>
           <DialogTitle className="flex items-center gap-2 text-xl font-bold text-slate-800">
             <FileSpreadsheet className="w-6 h-6 text-emerald-600" />
             Excel Data Sync — {campaignName}
