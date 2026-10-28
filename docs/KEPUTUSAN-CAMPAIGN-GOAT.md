@@ -106,17 +106,9 @@ Seluruh baris Thick & Thin Media telah dihapus total dari tabel `campaigns`, `ca
 - **`ads-report/actions.ts:getAdsReportData`:** Jika mode `Thick & Thin Media`, query dialihkan membaca tabel `archive_ads_performance` dan `archive_campaigns`.
 
 ### 4.3 SOP & Prosedur Rollback Data Thick & Thin Media
-Jika data Thick & Thin Media perlu dibersihkan atau diganti dengan data baru, terdapat 2 mekanisme aman:
+Per arahan owner (28 Okt 2026), banner dan tombol rollback di antarmuka halaman `/campaigns` telah **ditiadakan/dihilangkan** agar UI tetap bersih, profesional, dan menghindari risiko tombol destruktif tertekan secara tidak sengaja. 
 
-#### Opsi 1: Melalui UI Web App (Satu Klik Khusus Executive)
-1. Login dengan akun berekskutif (`role = 'executive'`).
-2. Aktifkan mode `Thick & Thin Media` via switcher di Sidebar.
-3. Di bagian atas halaman `/campaigns`, muncul banner amber berlabel **Mode Arsip: Thick & Thin Media**.
-4. Klik tombol merah **Rollback Data Thick & Thin Media**.
-5. Konfirmasi dua kali prompt peringatan. Server Action `rollbackCompanyLainAction()` akan menjalankan perintah `TRUNCATE archive_sales, archive_videos, archive_ads_performance, archive_campaign_creators, archive_campaigns CASCADE;`.
-
-#### Opsi 2: Melalui Terminal VPS / SQL Script
-Jalankan file rollback resmi `web-app/supabase/rollback_company_lain.sql` atau perintah SQL langsung:
+Jika sewaktu-waktu data Thick & Thin Media perlu di-rollback atau dibersihkan ulang, proses dilakukan secara aman dan terkendali melalui chat asisten ini atau langsung melalui terminal VPS / script SQL:
 ```sql
 BEGIN;
 TRUNCATE archive_sales, archive_videos, archive_ads_performance, archive_campaign_creators, archive_campaigns CASCADE;
