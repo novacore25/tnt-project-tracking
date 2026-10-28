@@ -28,16 +28,16 @@ export default function CampaignsPage() {
 
   const handleRollback = async () => {
     if (profile?.role !== 'executive') return;
-    const confirm1 = confirm("⚠️ PERINGATAN ROLLBACK\n\nApakah Anda yakin ingin membatalkan/menghapus seluruh arsip data 'Company Lain'?\n\nSemua campaign, creator terkait, video, sales, dan ads performance Company Lain akan dihapus permanen.\nData TNT 100% aman dan tidak tersentuh.");
+    const confirm1 = confirm("⚠️ PERINGATAN ROLLBACK\n\nApakah Anda yakin ingin membatalkan/menghapus seluruh arsip data 'Thick & Thin Media'?\n\nSemua campaign, creator terkait, video, sales, dan ads performance Thick & Thin Media akan dihapus permanen.\nData TNT 100% aman dan tidak tersentuh.");
     if (!confirm1) return;
-    const confirm2 = confirm("🚨 KONFIRMASI TERAKHIR\n\nKetik OK untuk melanjutkan proses rollback data Company Lain.");
+    const confirm2 = confirm("🚨 KONFIRMASI TERAKHIR\n\nKetik OK untuk melanjutkan proses rollback data Thick & Thin Media.");
     if (!confirm2) return;
 
     setIsRollingBack(true);
     try {
       const res = await rollbackCompanyLainAction();
       if (res.success) {
-        alert(`✅ Rollback berhasil! ${res.deletedCount} campaign Company Lain telah dibersihkan.`);
+        alert(`✅ Rollback berhasil! ${res.deletedCount} campaign Thick & Thin Media telah dibersihkan.`);
         window.location.reload();
       } else {
         alert(`❌ Gagal rollback: ${res.error}`);
@@ -213,14 +213,14 @@ export default function CampaignsPage() {
 
   return (
     <div className="space-y-[32px]">
-      {/* Banner Khusus Mode Company Lain (Arsip Eksekutif) */}
+      {/* Banner Khusus Mode Thick & Thin Media (Arsip Eksekutif) */}
       {selectedCompany === 'OTHER' && (
         <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-amber-900 dark:text-amber-200">
           <div className="flex items-center gap-2.5">
             <Archive className="w-5 h-5 text-amber-600 shrink-0" />
             <div>
-              <p className="text-sm font-semibold">Mode Arsip: Company Lain (Khusus Eksekutif)</p>
-              <p className="text-xs text-amber-800/80 dark:text-amber-300/80">Data historis performa perusahaan lama. Data ini terisolasi dan tidak mempengaruhi metrik TNT.</p>
+              <p className="text-sm font-semibold">Mode Arsip: Thick & Thin Media (Khusus Eksekutif)</p>
+              <p className="text-xs text-amber-800/80 dark:text-amber-300/80">Data historis performa Thick & Thin Media. Data ini terisolasi dan tidak mempengaruhi metrik TNT.</p>
             </div>
           </div>
           {profile?.role === 'executive' && (
@@ -230,7 +230,7 @@ export default function CampaignsPage() {
               className="btn btn-outline border-amber-300 text-amber-800 hover:bg-amber-100 dark:border-amber-700 dark:text-amber-300 text-xs px-3 py-1.5 shrink-0 self-start sm:self-center flex items-center gap-1.5 font-semibold"
             >
               <Trash2 className="w-3.5 h-3.5 text-red-600" />
-              {isRollingBack ? 'Membatalkan...' : 'Rollback Data Company Lain'}
+              {isRollingBack ? 'Membatalkan...' : 'Rollback Data Thick & Thin Media'}
             </button>
           )}
         </div>
@@ -239,11 +239,11 @@ export default function CampaignsPage() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-[16px]">
         <div>
           <h1 className="text-[28px] font-extrabold tracking-tight mb-[4px]">
-            {selectedCompany === 'OTHER' ? 'Campaigns (Company Lain)' : 'Campaigns'}
+            {selectedCompany === 'OTHER' ? 'Campaigns (Thick & Thin Media)' : 'Campaigns'}
           </h1>
           <p className="text-[14px] text-text-soft">
             {selectedCompany === 'OTHER' 
-              ? 'Arsip campaign masa lalu perusahaan lain.' 
+              ? 'Arsip campaign Thick & Thin Media.' 
               : 'Pilih campaign untuk melihat detail dan mengelola creator.'}
           </p>
         </div>

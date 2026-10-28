@@ -247,7 +247,7 @@ export default function CampaignPerformaClient({ campaignId }: { campaignId: num
 
       // Sales Aggregation:
       // Jika campaign punya SKU (currentHasSkus), wajib filter product_id yang cocok dengan SKU.
-      // Jika campaign TIDAK punya SKU (misal Company Lain / arsip / non-SKU campaign),
+      // Jika campaign TIDAK punya SKU (misal Thick & Thin Media / arsip / non-SKU campaign),
       // maka seluruh baris penjualan yang memiliki campaign_id cocok langsung dihitung.
       salesData.forEach((s: any) => {
         if (currentHasSkus) {

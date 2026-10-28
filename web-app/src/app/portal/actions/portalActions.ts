@@ -88,7 +88,7 @@ export async function getPortalData(campaignId: number) {
   if (!campaign || campaign.pin !== pin) return { authenticated: false };
 
   // ============================================================
-  // CABANG KHUSUS CAMPAIGN ARSIP (COMPANY LAIN)
+  // CABANG KHUSUS CAMPAIGN ARSIP (THICK & THIN MEDIA)
   // ============================================================
   if (isArchive) {
     const [ccRes, vidRes, salesRes, adsRes] = await Promise.all([

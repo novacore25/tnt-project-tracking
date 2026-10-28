@@ -183,7 +183,7 @@ function CampaignLayoutInner({ children }: { children: React.ReactNode }) {
               Creator Filter {appliedFilterType !== 'none' && '(Active)'}
             </button>
 
-            {/* EXCEL SYNC BUTTON (KHUSUS ARSIP COMPANY LAIN / DATA LAMA) */}
+            {/* EXCEL SYNC BUTTON (KHUSUS ARSIP THICK & THIN MEDIA / DATA LAMA) */}
             {(campaign as any)?.company === 'OTHER' && (
               <button
                 type="button"

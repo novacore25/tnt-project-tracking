@@ -61,7 +61,7 @@ export function Sidebar() {
     setHoveredItem(null);
   };
 
-  // Jika sedang mode 'Company Lain', fokuskan hanya ke Campaign & Ads Report
+  // Jika sedang mode 'Thick & Thin Media', fokuskan hanya ke Campaign & Ads Report
   const displayedNavItems = selectedCompany === 'OTHER'
     ? navItems.filter(item => item.href === '/campaigns' || item.href === '/ads-report')
     : navItems;
@@ -72,8 +72,8 @@ export function Sidebar() {
         <div className={cn("navbrand", !isExpanded && "flex-col gap-2 pt-6 pb-2")}>
           {isExpanded ? (
             <div>
-              {selectedCompany === 'OTHER' ? 'Arsip App' : 'TNT App'}
-              <small>{selectedCompany === 'OTHER' ? 'Company Lain' : 'Campaign Management'}</small>
+              {selectedCompany === 'OTHER' ? 'Thick & Thin App' : 'TNT App'}
+              <small>{selectedCompany === 'OTHER' ? 'Thick & Thin Media' : 'Campaign Management'}</small>
             </div>
           ) : (
             <div className="flex items-center justify-center mb-2">
@@ -118,7 +118,7 @@ export function Sidebar() {
                 "text-[9px] px-1.5 py-0.5 rounded font-mono font-bold",
                 selectedCompany === 'TNT' ? "bg-p300/30 text-p100" : "bg-amber-500/30 text-amber-300"
               )}>
-                {selectedCompany === 'TNT' ? 'AKTIF' : 'LAIN'}
+                {selectedCompany === 'TNT' ? 'AKTIF' : 'TTM'}
               </span>
             </div>
             <div className="grid grid-cols-2 p-0.5 bg-black/40 rounded-md border border-white/5 text-[11px] font-semibold">
@@ -138,13 +138,13 @@ export function Sidebar() {
                 type="button"
                 onClick={() => setSelectedCompany('OTHER')}
                 className={cn(
-                  "py-1 rounded text-center transition-all",
+                  "py-1 px-1 rounded text-center transition-all text-[10px] leading-tight",
                   selectedCompany === 'OTHER' 
                     ? "bg-amber-600 text-white font-bold shadow-sm" 
                     : "text-white/60 hover:text-white"
                 )}
               >
-                Company Lain
+                Thick & Thin Media
               </button>
             </div>
           </div>
@@ -162,9 +162,9 @@ export function Sidebar() {
                   ? "bg-p300/20 text-p100 border-p300/40 hover:bg-p300/30"
                   : "bg-amber-600/30 text-amber-300 border-amber-500/50 hover:bg-amber-600/40"
               )}
-              title={`Perusahaan: ${selectedCompany === 'TNT' ? 'TNT' : 'Company Lain'} (Klik untuk switch)`}
+              title={`Perusahaan: ${selectedCompany === 'TNT' ? 'TNT' : 'Thick & Thin Media'} (Klik untuk switch)`}
             >
-              {selectedCompany === 'TNT' ? 'TNT' : 'LAIN'}
+              {selectedCompany === 'TNT' ? 'TNT' : 'TTM'}
             </button>
           </div>
         )}
@@ -272,7 +272,7 @@ export function Sidebar() {
           </button>
           {isExpanded && (
             <p className="text-[10px] text-center text-white/30 mt-4 font-medium tracking-wide">
-              {selectedCompany === 'OTHER' ? 'Arsip Company Lain' : 'TNT Agency'} &copy; {new Date().getFullYear()}
+              {selectedCompany === 'OTHER' ? 'Thick & Thin Media' : 'TNT Agency'} &copy; {new Date().getFullYear()}
             </p>
           )}
         </div>

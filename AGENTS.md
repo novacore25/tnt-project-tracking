@@ -239,10 +239,10 @@
     - Gunakan "Buku Catatan" (`knownUsernames` dari Staging + Creator Pool) agar kartu yang sudah ada langsung di-skip tanpa membuka tab detail.
     - Selama auto-scrape berjalan (loop tanpa henti sampai klik STOP, termasuk *infinite scroll jiggle* & tunggu baris *out-of-order* / *skeleton*), simpan ke local storage dulu; tombol **"Tambahkan ke Staging"** muncul setelah STOP ditekan.
 
-29. **Arsip Campaign GOAT & Isolasi Khusus Role Executive (`docs/KEPUTUSAN-CAMPAIGN-GOAT.md`):**
-    - Data arsip perusahaan lama owner (**GOAT**) disimpan dengan `campaigns.company = 'GOAT'` (default TNT).
-    - Switcher perusahaan `[ TNT | GOAT ]` **HANYA boleh tampil dan diakses oleh akun dengan role `executive`**. Role lain wajib terkunci 100% hanya di TNT baik di UI maupun Server Actions.
-    - Video GOAT disimpan menggunakan URL TikTok publik asli tanpa memerlukan deteksi `product_id` / `content_uid` Partner Center.
+29. **Arsip Campaign Thick & Thin Media & Isolasi Khusus Role Executive (`docs/KEPUTUSAN-CAMPAIGN-GOAT.md`):**
+    - Data arsip perusahaan terdahulu (**Thick & Thin Media**) disimpan dengan `company = 'OTHER'` pada tabel fisik terpisah `archive_*`.
+    - Switcher perusahaan `[ TNT | Thick & Thin Media ]` **HANYA boleh tampil dan diakses oleh akun dengan role `executive`**. Role lain wajib terkunci 100% hanya di TNT baik di UI maupun Server Actions.
+    - Video Thick & Thin Media disimpan menggunakan URL TikTok publik asli tanpa memerlukan deteksi `product_id` / `content_uid` Partner Center.
     - **Pencegahan Double-Count:** Perhatikan aturan deduplikasi di `docs/KEPUTUSAN-CAMPAIGN-GOAT.md`:
       - Sheet `R` (interim) vs `Report Campaign` (final) pada SALSA 2 dan DLF tumpang tindih tinggi (70%–86%); utamakan `Report Campaign`.
       - Sheet `Report` (interim) vs `Report Campaign` (final) pada PWS 2 tumpang tindih 93%; utamakan `Report Campaign`.

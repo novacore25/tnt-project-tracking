@@ -352,7 +352,7 @@ export async function fetchDailyPerformancePageDataAction(campaignId: number) {
 // ============================================================
 export async function fetchPerformaPageFullDataAction(campaignId: number) {
   try {
-    // 1. Cek apakah ini campaign arsip Company Lain (archive_campaigns)
+    // 1. Cek apakah ini campaign arsip Thick & Thin Media (archive_campaigns)
     const [archiveCamp] = (await db.execute(sql`SELECT * FROM archive_campaigns WHERE id = ${campaignId} LIMIT 1`).catch(() => [])) as any[];
     if (archiveCamp) {
       const [ccRes, vidRes, salesRes, adsRes] = await Promise.all([

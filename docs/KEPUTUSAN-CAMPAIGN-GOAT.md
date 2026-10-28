@@ -1,7 +1,7 @@
-# KEPUTUSAN-CAMPAIGN-GOAT.md — Arsip Multi-Entity "Company Lain" (Eks-GOAT)
+# KEPUTUSAN-CAMPAIGN-GOAT.md — Arsip Multi-Entity "Thick & Thin Media" (Eks-GOAT)
 
 > **Dokumentasi resmi hasil audit, forensic parsing 25 spreadsheet, isolasi multi-entity database, dan SOP rollback.**  
-> Tanggal audit & implementasi: 27 Oktober 2026
+> Tanggal audit & implementasi: 27–28 Oktober 2026
 
 ---
 
@@ -10,11 +10,11 @@
 Owner TNT sebelumnya memiliki riwayat campaign dari perusahaan terdahulu (**GOAT**). Sistem Project Tracking System TNT difungsikan untuk mengarsipkan seluruh riwayat performa, campaign, kreator, video, dan ads dari masa lalu tersebut agar tersimpan rapi, permanen, dan dapat diakses untuk portofolio tanpa mencemari metrik operasional TNT.
 
 ### Prinsip Utama (Guard & Isolasi):
-1. **Khusus Role `executive`:** Switcher entitas `[ TNT | Company Lain ]` di sidebar serta seluruh data arsip **hanya boleh tampil dan diakses oleh akun dengan role `executive`**. Role `admin`, `manager`, `finance`, `leader`, `creator` terkunci 100% pada TNT baik di antarmuka UI maupun Server Actions (`storeActions.ts`, `ads-report/actions.ts`).
-2. **Tanpa Nama "GOAT" di Antarmuka:** Sesuai arahan owner, tidak boleh ada penamaan "GOAT" atau "x GOAT" pada antarmuka sistem. Switcher dinamai netral **`Company Lain`** dan seluruh campaign menggunakan penomoran netral (contoh: `Wardah 1`, `Wardah 2`, `OMG 2`, `BDL`, `Ellips`, dst).
+1. **Khusus Role `executive`:** Switcher entitas `[ TNT | Thick & Thin Media ]` di sidebar serta seluruh data arsip **hanya boleh tampil dan diakses oleh akun dengan role `executive`**. Role `admin`, `manager`, `finance`, `leader`, `creator` terkunci 100% pada TNT baik di antarmuka UI maupun Server Actions (`storeActions.ts`, `ads-report/actions.ts`).
+2. **Tanpa Nama "GOAT" di Antarmuka:** Sesuai arahan owner per 28 Oktober 2026, penamaan entitas arsip di antarmuka sistem dan dokumen resmi dinamai **Thick & Thin Media** (tidak menggunakan nama "Company Lain" maupun "GOAT"). Seluruh campaign menggunakan penomoran netral (contoh: `Wardah 1`, `Wardah 2`, `OMG 2`, `BDL`, `Ellips`, dst).
 3. **Kesesuaian Tampilan Dashboard:** Tampilan sub-menu campaign dibuat sama persis dengan sistem TNT (`/performa`, `/listing`, `/video`, `/ads-report`) dan terhubung langsung ke database.
 4. **Video Berbasis Link Publik:** Video disimpan langsung menggunakan link TikTok publik asli tanpa memerlukan deteksi scraping `product_id` atau `content_uid` Partner Center.
-5. **Mekanisme Rollback Bersih & Terisolasi:** Disediakan tombol satu-klik "Rollback Data Company Lain" di header campaign (khusus role `executive`) dan script SQL rollback berbasis `DELETE FROM campaigns WHERE company = 'OTHER'`. Seluruh relasi (`campaign_creators`, `videos`, `sales`, `ads_performance`) terhapus secara `CASCADE` otomatis tanpa menyentuh data TNT sedikit pun.
+5. **Mekanisme Rollback Bersih & Terisolasi:** Disediakan tombol satu-klik "Rollback Data Thick & Thin Media" di header campaign (khusus role `executive`) dan script SQL rollback berbasis `DELETE FROM campaigns WHERE company = 'OTHER'`. Seluruh relasi (`campaign_creators`, `videos`, `sales`, `ads_performance`) terhapus secara `CASCADE` otomatis tanpa menyentuh data TNT sedikit pun.
 
 ---
 
@@ -88,7 +88,7 @@ Berikut adalah data riil yang telah terverifikasi di PostgreSQL VPS (`db_tnt_pro
 ## 4. Arsitektur Teknis Tabel Terpisah Fisik & Mekanisme Rollback
 
 ### 4.1 Pemisahan Fisik Tabel (`web-app/supabase/migrations/20261027220000_create_archive_tables_and_isolate_tnt.sql`)
-Sesuai arahan owner agar data Company Lain tidak bercampur sama sekali dengan operasional TNT maupun integrasi TikTok Partner Center, dibuat tabel-tabel fisik khusus arsip:
+Sesuai arahan owner agar data Thick & Thin Media tidak bercampur sama sekali dengan operasional TNT maupun integrasi TikTok Partner Center, dibuat tabel-tabel fisik khusus arsip:
 1. `archive_campaigns` — Master 27 campaign arsip.
 2. `archive_campaign_creators` — 3.941 data kreator per campaign dengan username, nama asli, dan link akun tersimpan mandiri.
 3. `archive_videos` — 5.779 link video TikTok publik yang terasosiasi ke kreator arsip.
@@ -97,22 +97,22 @@ Sesuai arahan owner agar data Company Lain tidak bercampur sama sekali dengan op
 6. `vw_archive_campaign_summary` — View ringkasan agregasi metrik arsip (GMV, video, kreator).
 
 **Status Tabel Utama TNT:**
-Seluruh baris Company Lain telah dihapus total dari tabel `campaigns`, `campaign_creators`, `videos`, `sales`, dan `ads_performance`. Tabel operasional TNT kini **100% murni data TNT**, sehingga sinkronisasi otomatis TikTok Partner Center, audit keuangan, dan pelaporan internal TNT terbebas mutlak dari risiko percampuran data.
+Seluruh baris Thick & Thin Media telah dihapus total dari tabel `campaigns`, `campaign_creators`, `videos`, `sales`, dan `ads_performance`. Tabel operasional TNT kini **100% murni data TNT**, sehingga sinkronisasi otomatis TikTok Partner Center, audit keuangan, dan pelaporan internal TNT terbebas mutlak dari risiko percampuran data.
 
 ### 4.2 Isolasi Server & Otorisasi
 - **`AuthProvider.tsx`:** Hook `useAuth()` mengelola state `selectedCompany: 'TNT' | 'OTHER'`. Jika `profile?.role !== 'executive'`, nilai selalu dipaksa ke `'TNT'`.
 - **`storeActions.ts:getInitialStoreData`:** Jika sesi user adalah `executive`, query mengambil gabungan data TNT (`campaigns`) dan arsip (`archive_campaigns`). Jika bukan `executive`, sistem HANYA membaca tabel `campaigns` dan sama sekali tidak mengeksekusi query ke tabel `archive_*`.
 - **`campaignPageActions.ts:fetchPerformaPageFullDataAction`:** Memeriksa apakah `campaignId` berada di `archive_campaigns`. Jika iya, seluruh query diarahkan secara eksklusif ke tabel-tabel `archive_*`.
-- **`ads-report/actions.ts:getAdsReportData`:** Jika mode `Company Lain`, query dialihkan membaca tabel `archive_ads_performance` dan `archive_campaigns`.
+- **`ads-report/actions.ts:getAdsReportData`:** Jika mode `Thick & Thin Media`, query dialihkan membaca tabel `archive_ads_performance` dan `archive_campaigns`.
 
-### 4.3 SOP & Prosedur Rollback Data Company Lain
-Jika data Company Lain perlu dibersihkan atau diganti dengan data baru, terdapat 2 mekanisme aman:
+### 4.3 SOP & Prosedur Rollback Data Thick & Thin Media
+Jika data Thick & Thin Media perlu dibersihkan atau diganti dengan data baru, terdapat 2 mekanisme aman:
 
 #### Opsi 1: Melalui UI Web App (Satu Klik Khusus Executive)
 1. Login dengan akun berekskutif (`role = 'executive'`).
-2. Aktifkan mode `Company Lain` via switcher di Sidebar.
-3. Di bagian atas halaman `/campaigns`, muncul banner amber berlabel **Mode Arsip: Company Lain**.
-4. Klik tombol merah **Rollback Data Company Lain**.
+2. Aktifkan mode `Thick & Thin Media` via switcher di Sidebar.
+3. Di bagian atas halaman `/campaigns`, muncul banner amber berlabel **Mode Arsip: Thick & Thin Media**.
+4. Klik tombol merah **Rollback Data Thick & Thin Media**.
 5. Konfirmasi dua kali prompt peringatan. Server Action `rollbackCompanyLainAction()` akan menjalankan perintah `TRUNCATE archive_sales, archive_videos, archive_ads_performance, archive_campaign_creators, archive_campaigns CASCADE;`.
 
 #### Opsi 2: Melalui Terminal VPS / SQL Script

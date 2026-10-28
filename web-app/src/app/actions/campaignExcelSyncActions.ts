@@ -6,15 +6,15 @@ import { requireUser } from "@/lib/guards";
 import { revalidatePath } from "next/cache";
 
 /**
- * Mengambil seluruh data satu campaign arsip (Company Lain / data lama)
+ * Mengambil seluruh data satu campaign arsip (Thick & Thin Media / data lama)
  * untuk diexport ke format Excel multi-sheet.
- * KHUSUS untuk tabel archive_* (Company Lain). Menolak jika campaign operasional TNT.
+ * KHUSUS untuk tabel archive_* (Thick & Thin Media). Menolak jika campaign operasional TNT.
  */
 export async function exportCampaignFullDataAction(campaignId: number) {
   await requireUser();
 
   try {
-    // 1. Cek apakah ini campaign arsip (Company Lain)
+    // 1. Cek apakah ini campaign arsip (Thick & Thin Media)
     const [archiveCamp] = (await db.execute(sql`
       SELECT * FROM archive_campaigns WHERE id = ${campaignId} LIMIT 1
     `).catch(() => [])) as any[];
@@ -22,7 +22,7 @@ export async function exportCampaignFullDataAction(campaignId: number) {
     if (!archiveCamp) {
       return {
         success: false,
-        error: "Fitur Excel Sync ini khusus untuk campaign arsip Company Lain (data lama).",
+        error: "Fitur Excel Sync ini khusus untuk campaign arsip Thick & Thin Media (data lama).",
       };
     }
 
@@ -79,7 +79,7 @@ export async function exportCampaignFullDataAction(campaignId: number) {
 
 /**
  * Mengimpor dan memperbarui kembali data campaign arsip dari file Excel yang telah diedit oleh tim.
- * KHUSUS untuk tabel archive_* (Company Lain / data lama).
+ * KHUSUS untuk tabel archive_* (Thick & Thin Media / data lama).
  * Seluruh data disimpan terisolasi di:
  * 1. archive_campaigns
  * 2. archive_campaign_creators
@@ -156,7 +156,7 @@ export async function importCampaignFullDataAction(
     if (!archiveCamp) {
       return {
         success: false,
-        error: "Operasi ditolak: Fitur Excel Sync ini khusus untuk campaign arsip Company Lain (data lama).",
+        error: "Operasi ditolak: Fitur Excel Sync ini khusus untuk campaign arsip Thick & Thin Media (data lama).",
       };
     }
 

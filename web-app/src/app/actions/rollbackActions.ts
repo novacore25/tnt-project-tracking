@@ -6,7 +6,7 @@ import { requireRole } from '@/lib/guards';
 import { revalidatePath } from 'next/cache';
 
 /**
- * Mendapatkan ringkasan jumlah data Company Lain saat ini dari tabel archive_*.
+ * Mendapatkan ringkasan jumlah data Thick & Thin Media saat ini dari tabel archive_*.
  * Khusus role executive.
  */
 export async function getCompanyLainStatsAction() {
@@ -30,7 +30,7 @@ export async function getCompanyLainStatsAction() {
 }
 
 /**
- * Rollback seluruh data Company Lain dari tabel archive_*.
+ * Rollback seluruh data Thick & Thin Media dari tabel archive_*.
  * Menghapus seluruh data dari tabel fisik archive_* terpisah.
  * 
  * GUARD: Hanya role executive yang boleh mengeksekusi ini.
