@@ -300,6 +300,25 @@ Data TNT pada tabel utama terisolasi secara fisik dan tidak akan tersentuh sama 
 - **Penerapan Teknis:**
   - Script SQL: `docs/sql/101-adjust-all-archive-creators-to-4-6-vt.sql` sukses dieksekusi di database PostgreSQL VPS (`db_tnt_project_system`).
 
+#### N. Penambahan 807 Kreator Baru pada 7 Campaign Thick & Thin Media (28 Oktober 2026)
+- **Konteks:** Menindaklanjuti instruksi owner untuk menambah kuota kreator pada 7 campaign spesifik (OMG 2, OMG 3, Wardah 1-4, PWS 2) dengan membagi daftar 902 baris (849 kreator unik) dari tim, dengan aturan anti-duplikasi ketat serta paket video rata-rata 2 atau 3 VT.
+- **Hasil Alokasi Kreator & Target Baru:**
+  1. **OMG 2 (ID 260):** Target kreator dinaikkan dari 155 menjadi **374** (+219 kreator baru, +547 video baru)
+  2. **OMG 3 (ID 261):** Target kreator dinaikkan dari 245 menjadi **437** (+192 kreator baru, +480 video baru)
+  3. **Wardah 1 (ID 262):** Target kreator dinaikkan dari 88 menjadi **157** (+69 kreator baru, +172 video baru)
+  4. **Wardah 2 (ID 263):** Target kreator dinaikkan dari 99 menjadi **169** (+70 kreator baru, +175 video baru)
+  5. **Wardah 3 (ID 264):** Target kreator dinaikkan dari 145 menjadi **238** (+93 kreator baru, +232 video baru)
+  6. **Wardah 4 (ID 265):** Target kreator dinaikkan dari 90 menjadi **183** (+93 kreator baru, +232 video baru)
+  7. **PWS 2 (ID 269):** Target kreator dinaikkan dari 274 menjadi **345** (+71 kreator baru, +177 video baru)
+- **Rincian Video Kreator Baru:**
+  - Total kreator baru di-insert: **807 kreator** (100% unik tanpa duplikasi antar-campaign maupun terhadap kreator eksisting).
+  - Sebanyak 404 kreator dialokasikan **2 VT**, dan 403 kreator dialokasikan **3 VT** (selang-seling, rata-rata 2,5 VT).
+  - Total video baru di-insert (`archive_videos`): **2.015 baris** (`link_video = ''`, `vt_approval = 'approved'`).
+  - Sisa kreator belum terpakai dari daftar input: **42 kreator cadangan** yang siap digunakan jika diperlukan di masa mendatang.
+- **Penerapan Teknis:**
+  - Script SQL: `docs/sql/102-add-creators-to-7-campaigns.sql` sukses dieksekusi di database PostgreSQL VPS (`db_tnt_project_system`).
+
+
 
 
 
