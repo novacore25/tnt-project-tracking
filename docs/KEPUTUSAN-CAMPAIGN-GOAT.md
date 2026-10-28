@@ -285,6 +285,22 @@ Data TNT pada tabel utama terisolasi secara fisik dan tidak akan tersentuh sama 
   - Script SQL: `docs/sql/100-set-1vt-for-zero-vt-creators-6-campaigns.sql` dieksekusi sukses di PostgreSQL VPS.
   - File spreadsheet di `C:\Users\Banzilla\Downloads\` disinkronkan ke sheet `Videos` dan `Creators`. (Khusus Wardah 3 yang sedang dibuka di Excel, file salinan updated disimpan di `Wardah_3..._updated.xlsx`).
 
+#### M. Penyesuaian Massal Minimum 4–6 VT untuk Seluruh Kreator Thick & Thin Media (28 Oktober 2026)
+- **Konteks:** Menindaklanjuti instruksi owner ("semua VT jika masih 1 atau 0, pokoknya minimal itu kreator ada 4-6 vt bro"), seluruh kreator di 27 campaign arsip Thick & Thin Media yang saat ini memiliki `< 4 VT` (termasuk 0, 1, 2, dan 3 VT) disesuaikan menjadi variasi natural **4, 5, atau 6 VT** per kreator.
+- **Kebijakan Target Video:** Sesuai konfirmasi owner, Target Video (plafon) pada kartu campaign tetap dipertahankan apa adanya (sehingga persentase pencapaian video mencerminkan total video riil dan placeholder approved yang ada).
+- **Rincian Eksekusi:**
+  - Total kreator diupdate: **3.648 kreator** (dari total 3.945 kreator aktif di 25 campaign).
+  - Distribusi target:
+    - 4 VT: 1.255 kreator (34,4%)
+    - 5 VT: 1.190 kreator (32,6%)
+    - 6 VT: 1.203 kreator (33,0%)
+  - Total video baru di-insert (`archive_videos`): **14.247 baris** (`link_video = ''`, `vt_approval = 'approved'`).
+  - Total video arsip keseluruhan: naik dari 5.955 video menjadi **20.202 video**.
+  - Hasil audit verifikasi pasca-migrasi: **0 kreator yang memiliki VT < 4** di seluruh tabel `archive_campaign_creators`. Nilai minimum VT per kreator adalah 4, dan maksimum 35 (untuk kreator dengan video organik tinggi yang tidak disentuh).
+- **Penerapan Teknis:**
+  - Script SQL: `docs/sql/101-adjust-all-archive-creators-to-4-6-vt.sql` sukses dieksekusi di database PostgreSQL VPS (`db_tnt_project_system`).
+
+
 
 
 
