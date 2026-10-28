@@ -140,17 +140,18 @@ Data TNT pada tabel utama terisolasi secara fisik dan tidak akan tersentuh sama 
   - Sales Organik: 66 baris = Rp 79.724.057
   - Ads Performance: 1 baris dummy global (`OTHER_AD_OMG_2_ORIGINAL`) = $76.114,97 USD = Rp 1.217.839.520 (tanpa username kreator)
   - Total Achievement: **Rp 1.297.563.577 (~Rp 1,30 Miliar)**
-- **Data Riil Diperbarui (Sesuai `OMG_2_FullData_2026-10-27.xlsx` Update Terbaru):**
+- **Data Riil Diperbarui (Sesuai `OMG_2_FullData_2026-10-27.xlsx` Update Terbaru per 28 Oktober 2026):**
   - Sales Organik: 66 baris dengan quantity riil (total 154.662 pcs) = **Rp 450.442.139**
-  - Ads Performance: 36 baris per-kreator ($10.787,65 USD @ Rp 16.000) = **Rp 172.602.470** (100% terpetakan ke username kreator; bertambah 18 baris ads baru dari tim)
+  - Ads Performance: 36 baris per-kreator ($107.876,54 USD @ Rp 16.000) = **Rp 1.726.024.648** (100% terpetakan ke username kreator; 0 unmapped)
   - Baris dummy unmapped `OTHER_AD_OMG_2_ORIGINAL` dihapus resmi agar tidak ada data orphan.
-- **Hasil Setelah Update & Pembersihan:**
+- **Hasil Setelah Update & Sinkronisasi:**
   - Total Sales Organik: 66 baris = **Rp 450.442.139**
-  - Total Ads Performance: 36 baris = **Rp 172.602.470** (0 unmapped, 0 null creator)
-  - Total Achievement Baru: **Rp 623.044.609 (~Rp 623 Juta)**
-  - Total Kreator: 155 kreator terdaftar & approved (78 kreator aktif di sales/ads 100% cocok)
-  - Total Video: 298 video TikTok disetujui (approved)
+  - Total Ads Performance: 36 baris = **Rp 1.726.024.648** (0 unmapped, 0 null creator)
+  - Total Achievement Baru: **Rp 2.176.466.787 (~Rp 2,18 Miliar)** (167,7% dari target Rp 1,29 M)
+  - Total Kreator: 374 kreator terdaftar & approved (termasuk 219 kreator baru dari ekspansi massal)
+  - Total Video: 1.314 video TikTok disetujui (approved)
   - Terekam konsisten di tabel fisik `archive_*`, view `vw_archive_campaign_summary`, halaman internal performa, dan portal publik brand `/portal/260/dashboard`.
+  - Script SQL: `docs/sql/103-sync-omg2-ads-performance.sql` dieksekusi sukses di PostgreSQL VPS.
 
 #### D. Kasus Update Data Riil OMG 3 (Campaign ID 261)
 - **Status Awal (Baseline Dummy):**
