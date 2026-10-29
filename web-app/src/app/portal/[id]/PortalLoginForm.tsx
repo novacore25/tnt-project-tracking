@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Lock } from "lucide-react";
+import { Lock, PlayCircle } from "lucide-react";
+import PortalTutorialModal from "./PortalTutorialModal";
 import { loginPortal } from "../actions/portalActions";
 import { useRouter } from "next/navigation";
 
@@ -10,6 +11,7 @@ export default function PortalLoginForm({ campaignId }: { campaignId: number }) 
   const [pin, setPin] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [showTutorial, setShowTutorial] = useState(false);
 
   const verifyPin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -55,6 +57,19 @@ export default function PortalLoginForm({ campaignId }: { campaignId: number }) 
           {loading ? "Memverifikasi..." : "Akses Dashboard"}
         </button>
       </form>
+
+      <div className="mt-6 pt-4 border-t border-slate-100 text-center">
+        <button
+          type="button"
+          onClick={() => setShowTutorial(true)}
+          className="inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-800 font-medium hover:underline transition-colors"
+        >
+          <PlayCircle className="w-4 h-4" />
+          Tonton Tutorial Penggunaan
+        </button>
+      </div>
+
+      <PortalTutorialModal isOpen={showTutorial} onClose={() => setShowTutorial(false)} />
     </div>
   );
 }

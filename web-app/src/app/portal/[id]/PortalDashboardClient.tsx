@@ -3,7 +3,8 @@
 import React, { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
-import { TrendingUp, Video, Users, Package, Calendar, CheckCircle, CheckCircle2, XCircle, Activity, BarChart3, ChevronDown, ChevronUp, Search, ChevronLeft, ChevronRight, Filter, ArrowUp, ArrowDown, ArrowUpDown, Download, ShoppingCart, Loader2, Eye, ExternalLink } from "lucide-react";
+import { TrendingUp, Video, Users, Package, Calendar, CheckCircle, CheckCircle2, XCircle, Activity, BarChart3, ChevronDown, ChevronUp, Search, ChevronLeft, ChevronRight, Filter, ArrowUp, ArrowDown, ArrowUpDown, Download, ShoppingCart, Loader2, Eye, ExternalLink, PlayCircle } from "lucide-react";
+import PortalTutorialModal from "./PortalTutorialModal";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/Table";
 import { submitClientApproval, updateResiByClient, batchUpdateResiByClient, type BatchUpdateData, updateClientNotes } from "../actions/portalActions";
 import { sumNum } from "@/utils/computed";
@@ -35,6 +36,7 @@ export default function PortalDashboardClient({ data, campaignId }: { data: any,
   const [autoSavingItems, setAutoSavingItems] = useState<Record<number, boolean>>({});
   const [autoSavingNotes, setAutoSavingNotes] = useState<Record<number, boolean>>({});
   const [isSavingBatch, setIsSavingBatch] = useState(false);
+  const [showTutorial, setShowTutorial] = useState(false);
   
   // Filter, Sort, & Pagination States
   const PAGE_SIZE = 50;
@@ -1111,14 +1113,23 @@ export default function PortalDashboardClient({ data, campaignId }: { data: any,
               {campaign.status}
             </Badge>
           </div>
-          <button 
-            onClick={handleExportExcel}
-            disabled={isExporting}
-            className={`flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-emerald-500 to-green-600 text-white text-sm font-medium rounded-lg hover:from-emerald-600 hover:to-green-700 transition-all shadow-sm hover:shadow-md ${isExporting ? 'opacity-80 cursor-not-allowed' : ''}`}
-          >
-            {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-            {isExporting ? 'Menyiapkan Data...' : 'Export Excel'}
-          </button>
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+            <button
+              onClick={() => setShowTutorial(true)}
+              className="flex items-center gap-2 px-3.5 py-2 bg-white border border-slate-200 text-slate-700 hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50/50 text-sm font-medium rounded-lg transition-all shadow-sm hover:shadow"
+            >
+              <PlayCircle className="w-4 h-4 text-blue-600" />
+              Tonton Tutorial Penggunaan
+            </button>
+            <button 
+              onClick={handleExportExcel}
+              disabled={isExporting}
+              className={`flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-emerald-500 to-green-600 text-white text-sm font-medium rounded-lg hover:from-emerald-600 hover:to-green-700 transition-all shadow-sm hover:shadow-md ${isExporting ? 'opacity-80 cursor-not-allowed' : ''}`}
+            >
+              {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+              {isExporting ? 'Menyiapkan Data...' : 'Export Excel'}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -3218,6 +3229,9 @@ export default function PortalDashboardClient({ data, campaignId }: { data: any,
           </div>
         )}
       </div>
+
+      {/* Tutorial Video Modal */}
+      <PortalTutorialModal isOpen={showTutorial} onClose={() => setShowTutorial(false)} />
     </div>
   );
 }
