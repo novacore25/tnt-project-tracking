@@ -197,10 +197,15 @@ export default function CampaignPerformaClient({ campaignId }: { campaignId: num
 
       // 3. Fast In-Memory Aggregation of Sales and Organic Videos
       const approvedUsernames = new Set<string>();
+      const pendingUsernames = new Set<string>();
       for (const cc of ccData) {
         const u = cc.creators?.username?.toLowerCase();
-        if (u && (cc.approval === 'approved' || cc.approval === 'alternate')) {
-          approvedUsernames.add(u);
+        if (u) {
+          if (cc.approval === 'approved' || cc.approval === 'alternate') {
+            approvedUsernames.add(u);
+          } else if (cc.approval === 'pending') {
+            pendingUsernames.add(u);
+          }
         }
       }
 
@@ -215,10 +220,17 @@ export default function CampaignPerformaClient({ campaignId }: { campaignId: num
       }
       setAliasMap(aliasObj);
 
-      // Also ensure any alias of an approved creator is recognized as approved
+      // Also ensure any alias of an approved/pending creator is recognized
       for (const a of (res.creatorAliases || [])) {
-        if (a.alias && a.primary_username && approvedUsernames.has(a.primary_username.toLowerCase())) {
-          approvedUsernames.add(a.alias.toLowerCase());
+        if (a.alias && a.primary_username) {
+          const primLower = a.primary_username.toLowerCase();
+          const aliasLower = a.alias.toLowerCase();
+          if (approvedUsernames.has(primLower)) {
+            approvedUsernames.add(aliasLower);
+          }
+          if (pendingUsernames.has(primLower)) {
+            pendingUsernames.add(aliasLower);
+          }
         }
       }
 
@@ -334,24 +346,40 @@ export default function CampaignPerformaClient({ campaignId }: { campaignId: num
       }
 
       // 1. Process organic_videos from TikTok reports
+      // HANYA video dari kreator yang statusnya approved/alternate yang dihitung ke target approved.
+      // Video dari kreator pending masuk ke allPendingVideoIds.
+      // Video dari kreator not_approved atau pihak luar acak yang pasang keranjang kuning diabaikan.
       for (const [uid, v] of orgUidMap.entries()) {
         const isLive = v.contentType === 'livestream' || v.contentType === 'live';
-        if (!isLive) {
-          allApprovedVideoIds.add(uid);
-          calcTotalViews += v.views;
-          calcTotalLikes += v.likes;
-        } else {
-          allUniqueLiveIds.add(uid);
-        }
+        const rawCreator = (v.creator || '').toLowerCase().trim();
+        const mappedCreator = aliasToPrimaryMap.get(rawCreator) || rawCreator;
+        const isApproved = approvedUsernames.has(rawCreator) || approvedUsernames.has(mappedCreator);
+        const isPending = pendingUsernames.has(rawCreator) || pendingUsernames.has(mappedCreator);
 
-        if (v.creator) {
-          const perf = getOrCreatePerf(v.creator);
+        if (isApproved) {
           if (!isLive) {
-            perf.video_views += v.views;
-            perf.video_likes += v.likes;
-            perf.video_uids.add(uid);
+            allApprovedVideoIds.add(uid);
+            calcTotalViews += v.views;
+            calcTotalLikes += v.likes;
           } else {
-            perf.live_uids.add(uid);
+            allUniqueLiveIds.add(uid);
+          }
+
+          if (mappedCreator) {
+            const perf = getOrCreatePerf(mappedCreator);
+            if (!isLive) {
+              perf.video_views += v.views;
+              perf.video_likes += v.likes;
+              perf.video_uids.add(uid);
+            } else {
+              perf.live_uids.add(uid);
+            }
+          }
+        } else if (isPending) {
+          if (!isLive) {
+            allPendingVideoIds.add(uid);
+          } else {
+            allUniqueLiveIds.add(uid);
           }
         }
       }

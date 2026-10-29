@@ -152,7 +152,9 @@ export async function syncUnmappedForProduct(productId: string, campaignId: numb
         SELECT cc.id
         FROM campaign_creators cc
         JOIN creators cr ON cc.creator_id = cr.id
-        WHERE cc.campaign_id = ${campaignId} AND LOWER(cr.username) = ${cleanUname}
+        WHERE cc.campaign_id = ${campaignId} 
+          AND LOWER(cr.username) = ${cleanUname}
+          AND LOWER(cc.approval) IN ('approved', 'alternate')
         LIMIT 1
       `);
       const ccId = (ccRes as any[])[0]?.id;

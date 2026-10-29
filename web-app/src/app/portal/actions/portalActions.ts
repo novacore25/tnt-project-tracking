@@ -546,6 +546,7 @@ export async function getPortalData(campaignId: number) {
 
   // 1. Approved Creators (matching internal logic: approved or alternate)
   const approvedUsernames = new Set<string>();
+  const pendingUsernames = new Set<string>();
   const allUsernames = new Set<string>();
   
   rawCc.forEach((cc: any) => {
@@ -554,6 +555,8 @@ export async function getPortalData(campaignId: number) {
       allUsernames.add(u);
       if (cc.approval === 'approved' || cc.approval === 'alternate') {
         approvedUsernames.add(u);
+      } else if (cc.approval === 'pending') {
+        pendingUsernames.add(u);
       }
     }
   });
@@ -566,10 +569,17 @@ export async function getPortalData(campaignId: number) {
     }
   }
 
-  // Also ensure any alias of an approved creator is recognized as approved
+  // Also ensure any alias of an approved/pending creator is recognized
   for (const a of creatorAliasesData) {
-    if (a.alias && a.primary_username && approvedUsernames.has(String(a.primary_username).toLowerCase().trim())) {
-      approvedUsernames.add(String(a.alias).toLowerCase().trim());
+    if (a.alias && a.primary_username) {
+      const prim = String(a.primary_username).toLowerCase().trim();
+      const alias = String(a.alias).toLowerCase().trim();
+      if (approvedUsernames.has(prim)) {
+        approvedUsernames.add(alias);
+      }
+      if (pendingUsernames.has(prim)) {
+        pendingUsernames.add(alias);
+      }
     }
   }
 
@@ -712,41 +722,52 @@ export async function getPortalData(campaignId: number) {
 
   for (const [uid, v] of orgUidMap.entries()) {
     const isLive = v.contentType === 'livestream' || v.contentType === 'live';
-    if (!isLive) {
-      calcUniqueVideos++;
-      calcApprovedOrgVideoUids.add(uid);
-      calcTotalViews += v.views;
-      calcTotalLikes += v.likes;
-    } else {
-      calcUniqueLivestreams++;
-    }
+    const rawCreator = (v.creator || '').toLowerCase().trim();
+    const mappedCreator = aliasToPrimaryMap.get(rawCreator) || rawCreator;
+    const isApproved = approvedUsernames.has(rawCreator) || approvedUsernames.has(mappedCreator);
+    const isPending = pendingUsernames.has(rawCreator) || pendingUsernames.has(mappedCreator);
 
-    if (v.creator) {
-      const perf = getOrCreatePerf(v.creator);
+    if (isApproved) {
       if (!isLive) {
-        perf.video_views += v.views;
-        perf.video_likes += v.likes;
-        perf.video_uids.add(uid);
+        calcUniqueVideos++;
+        calcApprovedOrgVideoUids.add(uid);
+        calcTotalViews += v.views;
+        calcTotalLikes += v.likes;
       } else {
-        perf.live_uids.add(uid);
+        calcUniqueLivestreams++;
       }
-    }
 
-    const vidDate = extractTikTokUploadDate(uid) || (v.postTime ? String(v.postTime).substring(0, 10) : null);
-    if (vidDate) {
-      let mStr = vidDate.substring(0, 7);
-      const campaignStartStr = campaign?.start_date ? String(campaign.start_date).substring(0, 10) : null;
-      if (mStr === '2026-08' && campaignStartStr && campaignStartStr.startsWith('2026-08')) {
-        mStr = '2026-09';
+      if (mappedCreator) {
+        const perf = getOrCreatePerf(mappedCreator);
+        if (!isLive) {
+          perf.video_views += v.views;
+          perf.video_likes += v.likes;
+          perf.video_uids.add(uid);
+        } else {
+          perf.live_uids.add(uid);
+        }
       }
-      if (!monthlyMap[mStr]) {
-        monthlyMap[mStr] = { gmvOrganic: 0, gmvAds: 0, videos: new Set(), videoCreators: new Set(), liveSessions: new Set() };
+
+      const vidDate = extractTikTokUploadDate(uid) || (v.postTime ? String(v.postTime).substring(0, 10) : null);
+      if (vidDate) {
+        let mStr = vidDate.substring(0, 7);
+        const campaignStartStr = campaign?.start_date ? String(campaign.start_date).substring(0, 10) : null;
+        if (mStr === '2026-08' && campaignStartStr && campaignStartStr.startsWith('2026-08')) {
+          mStr = '2026-09';
+        }
+        if (!monthlyMap[mStr]) {
+          monthlyMap[mStr] = { gmvOrganic: 0, gmvAds: 0, videos: new Set(), videoCreators: new Set(), liveSessions: new Set() };
+        }
+        if (v.contentType !== 'livestream' && v.contentType !== 'live') {
+          monthlyMap[mStr].videos.add(uid);
+          if (mappedCreator) monthlyMap[mStr].videoCreators.add(mappedCreator);
+        } else {
+          monthlyMap[mStr].liveSessions.add(uid);
+        }
       }
-      if (v.contentType !== 'livestream' && v.contentType !== 'live') {
-        monthlyMap[mStr].videos.add(uid);
-        if (v.creator) monthlyMap[mStr].videoCreators.add(v.creator);
-      } else {
-        monthlyMap[mStr].liveSessions.add(uid);
+    } else if (isPending) {
+      if (isLive) {
+        calcUniqueLivestreams++;
       }
     }
   }

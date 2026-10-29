@@ -335,7 +335,9 @@ export async function executeSalesImportChunkAction(salesRows: any[], videoRows:
               const ccRes = await tx.execute(sql`
                 SELECT cc.id FROM campaign_creators cc
                 JOIN creators c ON cc.creator_id = c.id
-                WHERE cc.campaign_id = ${firstRow.campaign_id} AND LOWER(c.username) = ${uname}
+                WHERE cc.campaign_id = ${firstRow.campaign_id} 
+                  AND LOWER(c.username) = ${uname}
+                  AND LOWER(cc.approval) IN ('approved', 'alternate')
                 LIMIT 1
               `);
               const ccId = (ccRes as unknown as any[])[0]?.id;
