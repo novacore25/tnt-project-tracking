@@ -513,13 +513,13 @@ export async function executeAdsImportAction(
           ${item.tanggal},
           ${Number(item.cost_usd) || 0},
           ${Number(item.gross_revenue_usd) || 0},
-          ${Number(item.impressions) || 0},
-          ${Number(item.clicks) || 0},
-          ${Number(item.purchases) || 0},
+          ${Math.round(Number(item.impressions) || 0)},
+          ${Math.round(Number(item.clicks) || 0)},
+          ${Math.round(Number(item.purchases) || 0)},
           ${kursVal},
-          ${Number(item.product_page_views) || 0},
-          ${Number(item.checkouts_initiated) || 0},
-          ${Number(item.items_purchased) || 0},
+          ${Math.round(Number(item.product_page_views) || 0)},
+          ${Math.round(Number(item.checkouts_initiated) || 0)},
+          ${Math.round(Number(item.items_purchased) || 0)},
           ${rawClean}::jsonb
         )`;
       });
