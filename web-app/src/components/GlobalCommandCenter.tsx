@@ -58,30 +58,47 @@ export function GlobalCommandCenter({ role, onSuccess }: { role: string, onSucce
 
       (data || []).forEach(b => {
         const items = b.payment_items || [];
-        if (items.some((i: any) => ['manager_approved', 'finance_selected'].includes(i.final_status))) counts.exec_approval++;
-        if (items.some((i: any) => i.final_status === 'pending')) counts.manager_review++;
-        if (items.some((i: any) => ['executive_1_approved', 'pending_finance_outstanding'].includes(i.final_status))) counts.review++;
-        if (items.some((i: any) => ['finance_selected', 'ready_to_pay', 'executive_approved'].includes(i.final_status))) counts.transfer++;
+        const isExecStage = ['pending_executive_1', 'pending_executive'].includes(b.status);
+        const isMgrStage = b.status === 'pending_manager';
+        const isFinStage = b.status === 'pending_finance';
+        const isTransferStage = b.status === 'ready_to_pay';
+
+        if (isExecStage && items.some((i: any) => ['manager_approved', 'finance_selected'].includes(i.final_status))) {
+          counts.exec_approval++;
+        }
+        if (isMgrStage && items.some((i: any) => i.final_status === 'pending')) {
+          counts.manager_review++;
+        }
+        if (isFinStage && items.some((i: any) => ['executive_1_approved', 'pending_finance_outstanding'].includes(i.final_status))) {
+          counts.review++;
+        }
+        if (isTransferStage && items.some((i: any) => ['finance_selected', 'ready_to_pay', 'executive_approved'].includes(i.final_status) && i.final_status !== 'paid')) {
+          counts.transfer++;
+        }
       });
       setTabCounts(counts);
 
       let processedBatches = (data || []).map(b => {
         let validItems = b.payment_items || [];
         if (subTab === 'manager_review') {
+          if (b.status !== 'pending_manager') return null;
           validItems = validItems.filter((i:any) => i.final_status === 'pending');
         } else if (subTab === 'review') {
+          if (b.status !== 'pending_finance') return null;
           validItems = validItems.filter((i:any) => ['executive_1_approved', 'pending_finance_outstanding'].includes(i.final_status));
         } else if (subTab === 'transfer') {
-          validItems = validItems.filter((i:any) => ['finance_selected', 'ready_to_pay', 'executive_approved'].includes(i.final_status));
+          if (b.status !== 'ready_to_pay') return null;
+          validItems = validItems.filter((i:any) => ['finance_selected', 'ready_to_pay', 'executive_approved'].includes(i.final_status) && i.final_status !== 'paid');
         } else if (subTab === 'exec_approval') {
+          if (!['pending_executive_1', 'pending_executive'].includes(b.status)) return null;
           validItems = validItems.filter((i:any) => ['manager_approved', 'finance_selected'].includes(i.final_status));
         }
         return { ...b, payment_items: validItems };
-      }).filter(b => b.payment_items.length > 0);
+      }).filter((b): b is any => b !== null && b.payment_items.length > 0);
 
-      // In all tabs and roles, rely on item presence instead of strictly blocking by batch status.
-      // This ensures mixed-status batches (e.g. some items approved while others are still pending)
-      // never cause pending items to become hidden from Manager, Executive, or Finance.
+      // Pastikan batch ditempatkan ketat sesuai tahapannya (batch status).
+      // Batches yang masih pending_manager tidak akan bocor ke Approval Executive,
+      // sehingga tampilan Executive rapi dan terisolasi per meja tugas.
 
       setBatches(processedBatches);
       setExpandedBatches(new Set(processedBatches.map(b => b.id)));
@@ -195,14 +212,11 @@ export function GlobalCommandCenter({ role, onSuccess }: { role: string, onSucce
     
     setIsSubmitting(true);
     try {
-      const res = await bulkMarkPaidFinance(Array.from(selectedItems), {
+      await bulkMarkPaidFinance(Array.from(selectedItems), {
         actualPaymentDate: transferDate,
         buktiTransferUrl: buktiUrl,
         senderAccountId: senderAccountId
       });
-      if (res && !res.success) {
-        throw new Error(res.error || "Unknown error from server");
-      }
       alert("Berhasil menandai lunas!");
       setShowTransferModal(false);
       setSelectedItems(new Set());
@@ -225,22 +239,22 @@ export function GlobalCommandCenter({ role, onSuccess }: { role: string, onSucce
       {(tabCounts.manager_review > 0 || tabCounts.review > 0 || tabCounts.transfer > 0 || tabCounts.exec_approval > 0) && (
         <div className="mt-4 pt-4 border-t border-slate-100 flex flex-wrap justify-center gap-2 text-xs">
           <span className="text-slate-400 self-center">Antrean di meja lain:</span>
-          {tabCounts.manager_review > 0 && (
+          {tabCounts.manager_review > 0 && (role === 'executive' || role === 'manager') && subTab !== 'manager_review' && (
             <button onClick={() => setSubTab('manager_review')} className="px-3 py-1 bg-amber-50 text-amber-800 rounded-full font-semibold border border-amber-200 hover:bg-amber-100 transition-colors">
               Review Manager ({tabCounts.manager_review})
             </button>
           )}
-          {tabCounts.review > 0 && (
+          {tabCounts.review > 0 && (role === 'executive' || role === 'finance') && subTab !== 'review' && (
             <button onClick={() => setSubTab('review')} className="px-3 py-1 bg-purple-50 text-purple-800 rounded-full font-semibold border border-purple-200 hover:bg-purple-100 transition-colors">
               Review Finance ({tabCounts.review})
             </button>
           )}
-          {tabCounts.transfer > 0 && (
+          {tabCounts.transfer > 0 && (role === 'executive' || role === 'finance') && subTab !== 'transfer' && (
             <button onClick={() => setSubTab('transfer')} className="px-3 py-1 bg-emerald-50 text-emerald-800 rounded-full font-semibold border border-emerald-200 hover:bg-emerald-100 transition-colors">
               Siap Bayar ({tabCounts.transfer})
             </button>
           )}
-          {tabCounts.exec_approval > 0 && (
+          {tabCounts.exec_approval > 0 && role === 'executive' && subTab !== 'exec_approval' && (
             <button onClick={() => setSubTab('exec_approval')} className="px-3 py-1 bg-blue-50 text-blue-800 rounded-full font-semibold border border-blue-200 hover:bg-blue-100 transition-colors">
               Approval Executive ({tabCounts.exec_approval})
             </button>
