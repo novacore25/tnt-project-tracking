@@ -393,9 +393,13 @@ export default function CampaignPerformaClient({ campaignId }: { campaignId: num
 
         for (const v of vids) {
           if (campaignSkuIds.size > 0 && v.sku_id && !campaignSkuIds.has(v.sku_id)) continue;
+          // Validasi: Dilarang menghitung link draft Google Drive sebagai video
+          if (!v.content_uid && v.link_video && /drive\.google\.com|docs\.google\.com/i.test(v.link_video)) continue;
+
           const id = v.content_uid 
-            || (v.link_video ? (v.link_video.match(/video\/(\d+)/)?.[1] || v.link_video) : null)
-            || (v.id ? `vid_${v.id}` : null);
+            ? String(v.content_uid).trim()
+            : (v.link_video ? (v.link_video.match(/video\/(\d+)/)?.[1] || v.link_video) : null);
+          if (!id) continue;
           if (id) {
             // Pisahkan live dari video (keputusan owner 2 Okt 2026):
             // video hanya menghitung video, live hanya menghitung live.
@@ -561,9 +565,10 @@ export default function CampaignPerformaClient({ campaignId }: { campaignId: num
         const uniqueLiveIds = new Set<string>();
 
         dbVideos.forEach((v: any) => {
+          if (!v.content_uid && v.link_video && /drive\.google\.com|docs\.google\.com/i.test(v.link_video)) return;
           const id = v.content_uid 
-            || (v.link_video ? (v.link_video.match(/video\/(\d+)/)?.[1] || v.link_video) : null)
-            || (v.id ? `vid_${v.id}` : null);
+            ? String(v.content_uid).trim()
+            : (v.link_video ? (v.link_video.match(/video\/(\d+)/)?.[1] || v.link_video) : null);
           if (id) {
               uniqueVideoIds.set(id, v.vt_approval || 'approved');
           }

@@ -188,10 +188,24 @@ export default function ImportVideoClient({
     const rawLines = rawInput
       .split("\n")
       .map(l => l.trim())
-      .filter(l => l.length > 0 && l.startsWith("http"));
+      .filter(l => l.length > 0);
 
     if (rawLines.length === 0) {
       alert("Harap masukkan setidaknya 1 link TikTok yang valid (dimulai dengan http:// atau https://).");
+      return;
+    }
+
+    // Cek apakah ada link Google Drive yang dimasukkan
+    const driveLinks = rawLines.filter(l => /drive\.google\.com|docs\.google\.com/i.test(l));
+    if (driveLinks.length > 0) {
+      alert(`DILARANG memasukkan link Google Drive di halaman Import Video TikTok!\n\nLink berikut terdeteksi sebagai Google Drive (draft review):\n${driveLinks.slice(0, 3).join('\n')}${driveLinks.length > 3 ? `\n...dan ${driveLinks.length - 3} lainnya` : ''}\n\nHalaman ini KHUSUS untuk link video TikTok publik yang sudah tayang. Link draft Google Drive harus dimasukkan ke kolom 'Link Draft Video' di halaman Konsep & Draft.`);
+      return;
+    }
+
+    // Cek apakah ada link yang bukan TikTok
+    const nonTikTok = rawLines.filter(l => !/tiktok\.com/i.test(l));
+    if (nonTikTok.length > 0) {
+      alert(`Format link tidak valid! Halaman ini HANYA menerima tautan video TikTok publik.\n\nLink yang tidak sesuai:\n${nonTikTok.slice(0, 3).join('\n')}`);
       return;
     }
 
@@ -551,7 +565,7 @@ export default function ImportVideoClient({
                 Input Link Video TikTok
               </h2>
               <p className="text-xs text-slate-500 mt-0.5">
-                Paste link TikTok satu per baris (mendukung link pendek <code>vt.tiktok.com</code> maupun link lengkap).
+                Paste link TikTok satu per baris (mendukung link pendek <code>vt.tiktok.com</code> maupun link lengkap). <span className="text-rose-600 font-semibold">Hanya link TikTok yang diterima; DILARANG memasukkan link Google Drive draft.</span>
               </p>
             </div>
 

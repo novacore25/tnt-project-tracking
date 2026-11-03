@@ -967,6 +967,11 @@ export const CreatorRow = React.memo(({
                                           onBlur={(e) => {
                                             const val = e.target.value.trim();
                                             if (val !== (v.link_draft || '')) {
+                                              if (val && /tiktok\.com/i.test(val)) {
+                                                alert("PERHATIAN: Link yang Anda masukkan adalah link TikTok!\n\nKolom ini KHUSUS untuk Link Draft Video (Google Drive).\nLink postingan video TikTok harus diimpor melalui menu Import Video TikTok.");
+                                                e.target.value = v.link_draft || '';
+                                                return;
+                                              }
                                               const payload = { 
                                                 link_draft: val,
                                                 link_draft_updated_by: profile?.nama || 'User',

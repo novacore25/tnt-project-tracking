@@ -94,6 +94,7 @@ export function CampaignExcelSyncModal({
     counts?: any;
     error?: string;
   } | null>(null);
+  const [validationErrors, setValidationErrors] = useState<string[]>([]);
 
   // =========================================================================
   // HANDLER EXPORT EXCEL
@@ -284,7 +285,7 @@ export function CampaignExcelSyncModal({
           "Petunjuk & Aturan": "2. SHEET CREATORS: Kolom 'Username' adalah kunci utama. Jangan pakai spasi atau tanda @ di username.",
         },
         {
-          "Petunjuk & Aturan": "3. SHEET VIDEOS: Kolom 'Username Creator' harus sesuai dengan salah satu username yang terdaftar di sheet Creators.",
+          "Petunjuk & Aturan": "3. SHEET VIDEOS: Kolom 'Link Video TikTok' HANYA menerima tautan video TikTok publik (contoh: https://www.tiktok.com/@user/video/123...). Kolom 'Link Draft Video' HANYA menerima link Google Drive draft video. DILARANG menukar kedua link ini atau memasukkan Google Drive ke kolom video TikTok!",
         },
         {
           "Petunjuk & Aturan": "4. SHEET SALES ORGANIK: Nilai GMV diisi angka murni tanpa simbol 'Rp' atau titik pemisah ribuan.",
@@ -325,6 +326,7 @@ export function CampaignExcelSyncModal({
     setSelectedFile(file);
     setIsParsing(true);
     setImportResult(null);
+    setValidationErrors([]);
 
     try {
       const buffer = await file.arrayBuffer();
@@ -383,13 +385,36 @@ export function CampaignExcelSyncModal({
       // 3. Parse Sheet Videos
       const wsVideos = findSheet(["Videos", "Video", "VT"]);
       const videosList: any[] = [];
+      const linkErrors: string[] = [];
       if (wsVideos) {
         const rows = XLSX.utils.sheet_to_json<any>(wsVideos);
+        let rowIdx = 1;
         for (const r of rows) {
+          rowIdx++;
           const u = (r["Username Creator"] || r["username"] || "").toString().trim().replace(/^@/, "");
           const link = (r["Link Video TikTok"] || r["link_video"] || "").toString().trim();
           const draft = (r["Link Draft Video"] || r["link_draft"] || "").toString().trim();
           if (!u || u === "contoh_creator" || (!link && !draft)) continue;
+
+          // Validasi ketat Link Video TikTok:
+          if (link) {
+            const isTikTok = /tiktok\.com/i.test(link);
+            const isDrive = /drive\.google\.com|docs\.google\.com/i.test(link);
+            if (isDrive) {
+              linkErrors.push(`Baris ${rowIdx} (Creator @${u}): 'Link Video TikTok' berisi link Google Drive ('${link}'). Kolom ini HANYA menerima tautan video TikTok publik! Dilarang memasukkan link draft.`);
+            } else if (!isTikTok) {
+              linkErrors.push(`Baris ${rowIdx} (Creator @${u}): 'Link Video TikTok' bukan link TikTok yang valid ('${link}').`);
+            }
+          }
+
+          // Validasi ketat Link Draft Video:
+          if (draft) {
+            const isTikTok = /tiktok\.com/i.test(draft);
+            if (isTikTok) {
+              linkErrors.push(`Baris ${rowIdx} (Creator @${u}): 'Link Draft Video' berisi link postingan TikTok ('${draft}'). Kolom ini HANYA menerima link Google Drive draft video! Link video TikTok harus dimasukkan ke kolom 'Link Video TikTok'.`);
+            }
+          }
+
           videosList.push({
             creator_username: u,
             urutan: parseCleanNumber(r["Urutan VT"] || r["urutan"]) || 1,
@@ -399,6 +424,10 @@ export function CampaignExcelSyncModal({
             vt_approval: (r["Status Approval VT"] || r["vt_approval"] || "approved").toString().trim(),
           });
         }
+      }
+
+      if (linkErrors.length > 0) {
+        setValidationErrors(linkErrors);
       }
 
       // 4. Parse Sheet Sales Organik
@@ -463,6 +492,11 @@ export function CampaignExcelSyncModal({
   // =========================================================================
   const handleSubmitImport = async () => {
     if (!parsedPayload) return;
+
+    if (validationErrors.length > 0) {
+      alert(`Terdapat ${validationErrors.length} kesalahan penempatan link pada file Excel:\n\n${validationErrors.slice(0, 3).join('\n')}${validationErrors.length > 3 ? `\n...dan ${validationErrors.length - 3} lainnya` : ''}\n\nImpor DITOLAK. Harap perbaiki link pada file Excel Anda terlebih dahulu sebelum mengimpor.`);
+      return;
+    }
 
     if (modeSales === "replace") {
       const ok = confirm(
@@ -745,6 +779,27 @@ export function CampaignExcelSyncModal({
                   )}
                 </div>
 
+                {/* Validation Errors Banner */}
+                {validationErrors.length > 0 && (
+                  <div className="bg-rose-50 border-2 border-rose-300 rounded-xl p-4 text-rose-900 space-y-2">
+                    <div className="flex items-center gap-2 font-bold text-rose-800 text-sm">
+                      <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
+                      <span>{validationErrors.length} Kesalahan Penempatan Link Ditemukan (Impor Ditolak)</span>
+                    </div>
+                    <p className="text-xs text-rose-700 leading-relaxed">
+                      Sistem menolak impor ini karena terdapat link yang salah kolom (misalnya link Google Drive dimasukkan ke kolom Video TikTok, atau link TikTok dimasukkan ke kolom Draft). Harap perbaiki file Excel Anda terlebih dahulu:
+                    </p>
+                    <div className="max-h-40 overflow-y-auto space-y-1 bg-white p-2.5 rounded-lg border border-rose-200 text-xs font-mono text-rose-800">
+                      {validationErrors.map((err, i) => (
+                        <div key={i} className="flex items-start gap-1.5">
+                          <span className="text-rose-500 font-bold shrink-0">•</span>
+                          <span>{err}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* Mode Penggantian Data */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                   <div className="border border-slate-200 rounded-lg p-3 bg-slate-50 space-y-1.5">
@@ -797,14 +852,23 @@ export function CampaignExcelSyncModal({
                   </button>
                   <button
                     type="button"
-                    disabled={isImporting}
+                    disabled={isImporting || validationErrors.length > 0}
                     onClick={handleSubmitImport}
-                    className="flex items-center gap-2 px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-lg shadow-sm transition-all disabled:opacity-50"
+                    className={`flex items-center gap-2 px-5 py-2 font-semibold text-xs rounded-lg shadow-sm transition-all disabled:opacity-50 ${
+                      validationErrors.length > 0
+                        ? "bg-rose-600 text-white cursor-not-allowed"
+                        : "bg-indigo-600 hover:bg-indigo-700 text-white"
+                    }`}
                   >
                     {isImporting ? (
                       <>
                         <Loader2 className="w-4 h-4 animate-spin" />
                         Menerapkan ke Database...
+                      </>
+                    ) : validationErrors.length > 0 ? (
+                      <>
+                        <AlertCircle className="w-4 h-4" />
+                        Perbaiki Error Link Sebelum Impor
                       </>
                     ) : (
                       <>
