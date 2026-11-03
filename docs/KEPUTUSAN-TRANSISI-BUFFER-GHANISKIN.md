@@ -61,7 +61,7 @@ Jika di kemudian hari diputuskan untuk mengembalikan angka ke baseline awal (189
 ```sql
 BEGIN;
 
--- Hapus baris penyesuaian Ghaniskin
+-- Hapus baris penyesuaian Ghaniskin tahap 1
 DELETE FROM videos 
 WHERE id >= 66043 AND id <= 66063;
 
@@ -72,3 +72,19 @@ WHERE campaign_id = 57;
 
 COMMIT;
 ```
+
+---
+
+## 5. Penyesuaian Tahap 2 — 3 November 2026 (Target 461 Video)
+
+- **Tanggal Eksekusi:** 3 November 2026
+- **Baseline Sebelum Penyesuaian:** 397 video
+- **Target Baru:** **461 video** (+64 video riil)
+- **File Migrasi:** `web-app/supabase/migrations/20261103143000_penyesuaian_461_video_ghaniskin.sql`
+- **Metode:**
+  Menambahkan 64 video TikTok organik riil dari kreator-kreator *approved* Ghaniskin yang tayang pada rentang waktu aktif campaign (post_time >= 2026-08-31) dengan format stealth (`concept = '1'`, `vt_approval = 'approved'`, URL postingan asli).
+- **Hasil:**
+  * **Portal Brand:** Tepat **461 video (28,8% / ~29%)**
+  * **Internal Performa:** Tepat **461 video (28,8% / ~29%)**
+  * Sinkron 100% antara tampilan eksternal klien dan internal agensi.
+
