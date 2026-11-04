@@ -151,9 +151,10 @@ export function BatchDetail({ batch, creatorHistory, onBack, onRefresh, onRefres
 
   const handleRevertStatus = async () => {
     let confirmMsg = "";
-    if (batch.status === 'pending_finance') confirmMsg = "Kembalikan batch ini ke tahap Manager Review?";
-    else if (batch.status === 'pending_executive') confirmMsg = "Kembalikan batch ini ke tahap Finance Review?";
-    else if (batch.status === 'ready_to_pay') confirmMsg = "Kembalikan batch ini ke tahap Executive Approval?";
+    if (batch.status === 'pending_executive_1') confirmMsg = "Kembalikan batch ini ke tahap Review Manager?";
+    else if (batch.status === 'pending_finance') confirmMsg = "Kembalikan batch ini ke tahap Executive Review 1?";
+    else if (batch.status === 'pending_executive') confirmMsg = "Kembalikan batch ini ke tahap Review Finance?";
+    else if (batch.status === 'ready_to_pay') confirmMsg = "Kembalikan batch ini ke tahap Executive Final Approval?";
     
     if (!confirm(confirmMsg)) return;
     
@@ -361,37 +362,35 @@ export function BatchDetail({ batch, creatorHistory, onBack, onRefresh, onRefres
   };
 
 
-  const groupedItems = {
-    pending_manager: [] as any[],
-    pending_executive_1: [] as any[],
-    pending_finance: [] as any[],
-    pending_executive: [] as any[],
-    ready_to_pay: [] as any[],
-    paid: [] as any[],
-    rejected: [] as any[]
+  const groupedItems: Record<string, any[]> = {
+    pending_manager: [],
+    pending_executive_1: [],
+    pending_finance: [],
+    pending_executive: [],
+    ready_to_pay: [],
+    paid: [],
+    rejected: [],
+    pending_finance_outstanding: []
   };
 
   (batch.payment_items || []).forEach((item: any) => {
     const status = getLogicalStatus(item);
-    if (status === 'draft') {
-        groupedItems.pending_manager.push(item);
-    } else if (status === 'manager_approved') {
-        groupedItems.pending_executive_1.push(item);
+    if (status === 'manager_approved') {
+      groupedItems.pending_executive_1.push(item);
     } else if (status === 'executive_1_approved') {
-        groupedItems.pending_finance.push(item);
+      groupedItems.pending_finance.push(item);
     } else if (status === 'finance_selected') {
-        groupedItems.pending_executive.push(item);
-    } else if (status === 'executive_approved') {
-        groupedItems.ready_to_pay.push(item);
+      groupedItems.pending_executive.push(item);
+    } else if (status === 'ready_to_pay') {
+      groupedItems.ready_to_pay.push(item);
     } else if (status === 'paid') {
-        groupedItems.paid.push(item);
-    } else if (status === 'rejected' || status === 'cancelled') {
-        groupedItems.rejected.push(item);
+      groupedItems.paid.push(item);
+    } else if (status === 'rejected') {
+      groupedItems.rejected.push(item);
     } else if (status === 'pending_finance_outstanding') {
-        if (!groupedItems.pending_finance_outstanding) groupedItems.pending_finance_outstanding = [];
-        groupedItems.pending_finance_outstanding.push(item);
+      groupedItems.pending_finance_outstanding.push(item);
     } else {
-        groupedItems.pending_manager.push(item);
+      groupedItems.pending_manager.push(item);
     }
   });
 
@@ -485,7 +484,7 @@ export function BatchDetail({ batch, creatorHistory, onBack, onRefresh, onRefres
             <History className="w-4 h-4 text-blue-600" />
             Riwayat & Jejak Persetujuan (Audit Trail)
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3 text-xs">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 text-xs">
             {/* 1. Pengajuan */}
             <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm">
               <div className="text-[11px] font-semibold text-slate-500 mb-1">1. Pengajuan Awal</div>
@@ -508,9 +507,20 @@ export function BatchDetail({ batch, creatorHistory, onBack, onRefresh, onRefres
               </div>
             </div>
 
-            {/* 3. Finance Review */}
+            {/* 3. Executive Review 1 */}
+            <div className={`p-3 rounded-lg border shadow-sm ${batch.executive_reviewed_1_at ? 'bg-white border-slate-200' : 'bg-slate-50/70 border-dashed border-slate-200 text-slate-400'}`}>
+              <div className="text-[11px] font-semibold text-slate-500 mb-1">3. Executive Review 1</div>
+              <div className="font-bold text-slate-800 truncate" title={batch.executive1?.nama}>
+                {batch.executive1?.nama ? formatUserWithRole(batch.executive1.nama, batch.executive1.role) : (batch.executive_reviewed_1_at ? 'Disetujui' : 'Menunggu')}
+              </div>
+              <div className="text-[10px] text-slate-500 font-mono mt-0.5">
+                {batch.executive_reviewed_1_at ? formatDateTime(batch.executive_reviewed_1_at) : '-'}
+              </div>
+            </div>
+
+            {/* 4. Finance Review */}
             <div className={`p-3 rounded-lg border shadow-sm ${batch.finance_reviewed_at ? 'bg-white border-slate-200' : 'bg-slate-50/70 border-dashed border-slate-200 text-slate-400'}`}>
-              <div className="text-[11px] font-semibold text-slate-500 mb-1">3. Review Finance</div>
+              <div className="text-[11px] font-semibold text-slate-500 mb-1">4. Review Finance</div>
               <div className="font-bold text-slate-800 truncate" title={batch.finance?.nama}>
                 {batch.finance?.nama ? formatUserWithRole(batch.finance.nama, batch.finance.role) : (batch.finance_reviewed_at ? 'Direview' : 'Menunggu')}
               </div>
@@ -519,9 +529,9 @@ export function BatchDetail({ batch, creatorHistory, onBack, onRefresh, onRefres
               </div>
             </div>
 
-            {/* 4. Executive Final Approval */}
+            {/* 5. Executive Final Approval */}
             <div className={`p-3 rounded-lg border shadow-sm ${batch.executive_reviewed_at ? 'bg-white border-slate-200' : 'bg-slate-50/70 border-dashed border-slate-200 text-slate-400'}`}>
-              <div className="text-[11px] font-semibold text-slate-500 mb-1">4. Executive Approval</div>
+              <div className="text-[11px] font-semibold text-slate-500 mb-1">5. Executive Final</div>
               <div className="font-bold text-slate-800 truncate" title={batch.executive?.nama}>
                 {batch.executive?.nama ? formatUserWithRole(batch.executive.nama, batch.executive.role) : (batch.executive_reviewed_at ? 'Disetujui' : 'Menunggu')}
               </div>
@@ -530,10 +540,10 @@ export function BatchDetail({ batch, creatorHistory, onBack, onRefresh, onRefres
               </div>
             </div>
 
-            {/* 5. Pencairan / Lunas */}
+            {/* 6. Pencairan / Lunas */}
             <div className={`p-3 rounded-lg border shadow-sm flex flex-col justify-between ${batch.paid_at || batch.status === 'paid' ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : 'bg-slate-50/70 border-dashed border-slate-200 text-slate-400'}`}>
               <div>
-                <div className="text-[11px] font-semibold text-slate-500 mb-1">5. Pencairan (Paid)</div>
+                <div className="text-[11px] font-semibold text-slate-500 mb-1">6. Pencairan (Paid)</div>
                 <div className="font-bold text-slate-800 truncate">
                   {batch.paid_at || batch.status === 'paid' ? 'Selesai Dibayar' : 'Belum Ditransfer'}
                 </div>
@@ -924,7 +934,7 @@ export function BatchDetail({ batch, creatorHistory, onBack, onRefresh, onRefres
         {/* Action Bar */}
         <div className="flex justify-between items-center pt-6 border-t border-slate-100 flex-wrap gap-4">
           <div className="flex gap-2 items-center flex-wrap">
-            {['pending_finance', 'pending_executive', 'ready_to_pay'].includes(batch.status) && (profile?.role === 'executive' || profile?.role === 'manager' || profile?.role === 'finance') && (
+            {['pending_executive_1', 'pending_finance', 'pending_executive', 'ready_to_pay'].includes(batch.status) && (profile?.role === 'executive' || profile?.role === 'manager' || profile?.role === 'finance') && (
               <button onClick={handleRevertStatus} disabled={isFinalizing} className="btn btn-outline text-slate-600 hover:bg-slate-100 flex items-center gap-2 text-xs">
                 {isFinalizing ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowLeft className="w-4 h-4" />} Kembalikan
               </button>

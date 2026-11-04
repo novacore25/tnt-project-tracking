@@ -124,6 +124,29 @@ function GlobalBudgetingContent() {
   const totalPaid = batches.filter(b => b.status === 'paid').length;
   const totalAll = batches.length;
 
+  const renderBatchStatusBadge = (status: string) => {
+    switch (status) {
+      case 'draft':
+        return <span className="px-2.5 py-1 bg-slate-100 text-slate-600 rounded-full text-[11px] font-bold">Draft</span>;
+      case 'pending_manager':
+        return <span className="px-2.5 py-1 bg-amber-50 text-amber-700 border border-amber-200 rounded-full text-[11px] font-bold whitespace-nowrap">1. Review Manager</span>;
+      case 'pending_executive_1':
+        return <span className="px-2.5 py-1 bg-purple-50 text-purple-700 border border-purple-200 rounded-full text-[11px] font-bold whitespace-nowrap">2. Exec Review 1</span>;
+      case 'pending_finance':
+        return <span className="px-2.5 py-1 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-full text-[11px] font-bold whitespace-nowrap">3. Review Finance</span>;
+      case 'pending_executive':
+        return <span className="px-2.5 py-1 bg-blue-50 text-blue-700 border border-blue-200 rounded-full text-[11px] font-bold whitespace-nowrap">4. Exec Final Approval</span>;
+      case 'ready_to_pay':
+        return <span className="px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full text-[11px] font-bold whitespace-nowrap">5. Siap Transfer</span>;
+      case 'paid':
+        return <span className="px-2.5 py-1 bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-full text-[11px] font-bold whitespace-nowrap">Selesai (Paid)</span>;
+      case 'rejected':
+        return <span className="px-2.5 py-1 bg-rose-50 text-rose-700 border border-rose-200 rounded-full text-[11px] font-bold whitespace-nowrap">Ditolak</span>;
+      default:
+        return <span className="px-2.5 py-1 bg-slate-100 text-slate-700 rounded-full text-[11px] font-bold uppercase whitespace-nowrap">{status}</span>;
+    }
+  };
+
   const EditableCell = ({ campaignId, field, value }: { campaignId: number, field: 'budget_creator_plafon' | 'budget_ads_plafon', value: number }) => {
     const cellKey = `${campaignId}_${field}`;
     const isEditing = editingCell === cellKey;
@@ -297,7 +320,7 @@ function GlobalBudgetingContent() {
                           <td className="px-4 py-3 text-center">{b.payment_items?.length}</td>
                           <td className="px-4 py-3 text-right font-bold text-slate-800">Rp {totalNominal.toLocaleString()}</td>
                           <td className="px-4 py-3 text-center">
-                            <span className="px-2 py-1 bg-slate-100 text-slate-700 rounded text-xs font-semibold uppercase">{b.status}</span>
+                            {renderBatchStatusBadge(b.status)}
                           </td>
                           <td className="px-4 py-3 text-center">
                             <button onClick={() => setSelectedBatchId(b.id)} className="text-blue-600 font-semibold hover:bg-blue-50 px-3 py-1 rounded-md transition-all text-xs">Detail</button>

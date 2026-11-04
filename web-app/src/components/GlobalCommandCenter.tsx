@@ -240,6 +240,30 @@ export function GlobalCommandCenter({ role, onSuccess }: { role: string, onSucce
     }
   };
 
+  const renderItemStatusBadge = (status: string) => {
+    switch (status) {
+      case 'pending':
+        return <span className="text-[11px] font-semibold px-2 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 rounded whitespace-nowrap">1. Menunggu Manager</span>;
+      case 'manager_approved':
+        return <span className="text-[11px] font-semibold px-2 py-0.5 bg-purple-50 text-purple-700 border border-purple-200 rounded whitespace-nowrap">2. Menunggu Exec 1</span>;
+      case 'executive_1_approved':
+        return <span className="text-[11px] font-semibold px-2 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded whitespace-nowrap">3. Menunggu Finance</span>;
+      case 'pending_finance_outstanding':
+        return <span className="text-[11px] font-semibold px-2 py-0.5 bg-amber-50 text-amber-800 border border-amber-300 rounded whitespace-nowrap">Ditunda Finance</span>;
+      case 'finance_selected':
+        return <span className="text-[11px] font-semibold px-2 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 rounded whitespace-nowrap">4. Menunggu Exec Final</span>;
+      case 'ready_to_pay':
+      case 'executive_approved':
+        return <span className="text-[11px] font-semibold px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded whitespace-nowrap">5. Siap Transfer</span>;
+      case 'paid':
+        return <span className="text-[11px] font-semibold px-2 py-0.5 bg-emerald-100 text-emerald-800 border border-emerald-300 rounded whitespace-nowrap">Lunas</span>;
+      case 'rejected':
+        return <span className="text-[11px] font-semibold px-2 py-0.5 bg-rose-50 text-rose-700 border border-rose-200 rounded whitespace-nowrap">Ditolak</span>;
+      default:
+        return <span className="text-[11px] font-medium px-2 py-0.5 bg-slate-100 text-slate-600 rounded whitespace-nowrap">{status}</span>;
+    }
+  };
+
   const renderEmptyState = () => (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-12 text-center">
       <CheckCircle className="w-12 h-12 text-emerald-500 mx-auto mb-4" />
@@ -379,7 +403,13 @@ export function GlobalCommandCenter({ role, onSuccess }: { role: string, onSucce
               subTab === 'transfer' ? (role === 'executive' ? '(Tahap 5: Siap Bayar / Transfer)' : '(Siap Bayar / Transfer)') : ''
             }
           </h2>
-          <p className="text-sm text-slate-500">Centang tagihan yang ingin diproses, lalu pilih aksi di bawah layar.</p>
+          <p className="text-sm text-slate-500">
+            {subTab === 'manager_review' && 'Tahap 1: Pengajuan baru masuk dari PIC. Menunggu pemeriksaan rincian tagihan oleh Manager.'}
+            {subTab === 'exec_review_1' && 'Tahap 2: Pengajuan telah disetujui Manager. Menunggu persetujuan awal (Review 1) dari Executive sebelum diteruskan ke Finance.'}
+            {subTab === 'review' && 'Tahap 3: Tagihan lolos Executive 1. Menunggu Finance memvalidasi rekening & menjadwalkan pembayaran.'}
+            {subTab === 'exec_final' && 'Tahap 4: Tagihan telah diverifikasi Finance. Menunggu Approval Final dari Executive sebelum siap ditransfer.'}
+            {subTab === 'transfer' && 'Tahap 5: Tagihan telah disetujui penuh (ACC Final). Siap ditransfer ke kreator / operasional.'}
+          </p>
         </div>
         <button
           onClick={handleSelectAll}
@@ -422,11 +452,11 @@ export function GlobalCommandCenter({ role, onSuccess }: { role: string, onSucce
                     <div>
                       <div className="flex items-center gap-2">
                         <h3 className="font-bold text-slate-800 text-base">{batch.batch_label}</h3>
-                        {batch.status === 'pending_manager' && <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-700 text-[10px] font-bold uppercase tracking-wider">Manager Review</span>}
-                        {batch.status === 'pending_executive_1' && <span className="px-2 py-0.5 rounded bg-purple-100 text-purple-700 text-[10px] font-bold uppercase tracking-wider">Executive Review 1</span>}
-                        {batch.status === 'pending_finance' && <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-700 text-[10px] font-bold uppercase tracking-wider">Finance Review</span>}
-                        {batch.status === 'pending_executive' && <span className="px-2 py-0.5 rounded bg-indigo-100 text-indigo-700 text-[10px] font-bold uppercase tracking-wider">Executive Final Approval</span>}
-                        {batch.status === 'ready_to_pay' && <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-700 text-[10px] font-bold uppercase tracking-wider">Siap Transfer</span>}
+                        {batch.status === 'pending_manager' && <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px] font-bold uppercase tracking-wider">1. Review Manager</span>}
+                        {batch.status === 'pending_executive_1' && <span className="px-2 py-0.5 rounded bg-purple-100 text-purple-700 text-[10px] font-bold uppercase tracking-wider">2. Executive Review 1</span>}
+                        {batch.status === 'pending_finance' && <span className="px-2 py-0.5 rounded bg-indigo-100 text-indigo-700 text-[10px] font-bold uppercase tracking-wider">3. Finance Review</span>}
+                        {batch.status === 'pending_executive' && <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-700 text-[10px] font-bold uppercase tracking-wider">4. Exec Final Approval</span>}
+                        {batch.status === 'ready_to_pay' && <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-700 text-[10px] font-bold uppercase tracking-wider">5. Siap Transfer</span>}
                       </div>
                       <div className="flex items-center gap-3 text-xs text-slate-500 mt-1">
                         <span>{batch.campaigns?.nama || 'Unknown Campaign'}</span>
@@ -511,9 +541,7 @@ export function GlobalCommandCenter({ role, onSuccess }: { role: string, onSucce
                                 Rp {Number(item.nominal).toLocaleString()}
                               </td>
                               <td className="py-3 text-center pr-4">
-                                <span className="text-[11px] font-medium px-2 py-1 bg-slate-100 text-slate-600 rounded whitespace-nowrap">
-                                  {item.final_status}
-                                </span>
+                                {renderItemStatusBadge(item.final_status)}
                               </td>
                             </tr>
                           );
