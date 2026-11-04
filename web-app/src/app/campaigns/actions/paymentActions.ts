@@ -1303,12 +1303,22 @@ export async function financeMarkPaid(batchId: number, payload: { actualPaymentD
   const session = await auth();
   const userId = session?.user?.id;
 
+  // Pastikan batch sudah berada di tahap ready_to_pay (telah disetujui Executive)
+  const batchCheck = (await db.execute(sql`SELECT id, status FROM payment_batches WHERE id = ${batchId}`)) as any[];
+  if (!batchCheck[0] || batchCheck[0].status !== 'ready_to_pay') {
+    throw new Error("Batch belum siap ditransfer. Wajib disetujui oleh Executive terlebih dahulu (status ready_to_pay).");
+  }
+
   // Support both executive_approved and ready_to_pay so items never get skipped
   const itemsToPayRes = await db.execute(sql`
     SELECT id FROM payment_items
-    WHERE batch_id = ${batchId} AND (final_status = 'executive_approved' OR final_status = 'ready_to_pay' OR final_status = 'finance_selected')
+    WHERE batch_id = ${batchId} AND (final_status = 'executive_approved' OR final_status = 'ready_to_pay')
   `) as any[];
   const itemIdsToPay = (itemsToPayRes || []).map(i => i.id);
+
+  if (itemIdsToPay.length === 0) {
+    throw new Error("Tidak ada item yang telah disetujui Executive dalam batch ini untuk dicairkan.");
+  }
 
   if (itemIdsToPay.length > 0) {
     await db.execute(sql`
@@ -1347,15 +1357,30 @@ export async function financeBulkMarkPaidItems(batchId: number, itemIds: number[
   const session = await auth();
   const userId = session?.user?.id;
 
+  const batchCheck = (await db.execute(sql`SELECT id, status FROM payment_batches WHERE id = ${batchId}`)) as any[];
+  if (!batchCheck[0] || batchCheck[0].status !== 'ready_to_pay') {
+    throw new Error("Batch belum siap ditransfer. Wajib disetujui oleh Executive terlebih dahulu (status ready_to_pay).");
+  }
+
   if (itemIds && itemIds.length > 0) {
+    const validItemsRes = (await db.execute(sql`
+      SELECT id FROM payment_items
+      WHERE id IN ${sqlInList(itemIds)} AND batch_id = ${batchId}
+        AND (final_status = 'executive_approved' OR final_status = 'ready_to_pay')
+    `)) as any[];
+    const validIds = (validItemsRes || []).map(i => i.id);
+    if (validIds.length === 0) {
+      throw new Error("Tidak ada tagihan yang telah disetujui Executive untuk dicairkan.");
+    }
+
     await db.execute(sql`
       UPDATE payment_items
       SET final_status = 'paid'
-      WHERE id IN ${sqlInList(itemIds)} AND batch_id = ${batchId}
+      WHERE id IN ${sqlInList(validIds)} AND batch_id = ${batchId}
     `);
 
     // Auto-sync status_bayar to campaign_creators
-    await syncPaidItemsToCampaignCreators(itemIds, payload.actualPaymentDate);
+    await syncPaidItemsToCampaignCreators(validIds, payload.actualPaymentDate);
   }
 
   await autoSplitUnpaidBatchItems(batchId);
@@ -1636,17 +1661,32 @@ export async function bulkMarkPaidFinance(itemIds: number[], payload: { actualPa
   const session = await auth();
   const userId = session?.user?.id;
 
+  // Hanya item yang berada di batch ready_to_pay dan berstatus ready_to_pay / executive_approved
+  // yang boleh ditandai lunas (paid). Tidak boleh ada yang melewati funnel Executive.
+  const validItemsRes = (await db.execute(sql`
+    SELECT pi.id, pi.batch_id
+    FROM payment_items pi
+    JOIN payment_batches pb ON pi.batch_id = pb.id
+    WHERE pi.id IN ${sqlInList(itemIds)}
+      AND (pi.final_status = 'ready_to_pay' OR pi.final_status = 'executive_approved')
+      AND pb.status = 'ready_to_pay'
+  `)) as any[];
+  const validItemIds = (validItemsRes || []).map(i => i.id);
+
+  if (validItemIds.length === 0) {
+    throw new Error("Tidak ada tagihan yang valid untuk dicairkan. Semua tagihan wajib telah disetujui Executive dan berstatus Siap Bayar.");
+  }
+
   await db.execute(sql`
     UPDATE payment_items
     SET final_status = 'paid'
-    WHERE id IN ${sqlInList(itemIds)}
+    WHERE id IN ${sqlInList(validItemIds)}
   `);
 
   // Auto-sync status_bayar to campaign_creators
-  await syncPaidItemsToCampaignCreators(itemIds, payload.actualPaymentDate);
+  await syncPaidItemsToCampaignCreators(validItemIds, payload.actualPaymentDate);
 
-  const itemsRes = await db.execute(sql`SELECT DISTINCT batch_id FROM payment_items WHERE id IN ${sqlInList(itemIds)}`);
-  const batchIds = (itemsRes as any[]).map(i => i.batch_id);
+  const batchIds = [...new Set(validItemsRes.map(i => i.batch_id))];
 
   for (const bId of batchIds) {
     await db.execute(sql`

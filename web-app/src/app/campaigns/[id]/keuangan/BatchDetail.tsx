@@ -722,10 +722,10 @@ export function BatchDetail({ batch, creatorHistory, onBack, onRefresh, onRefres
                       )}
                     </td>
                     <td className="px-4 py-3 text-xs text-slate-600 font-medium">
-                      {item.campaign_creators?.profiles?.nama 
-                        ? formatUserWithRole(item.campaign_creators.profiles.nama, item.campaign_creators.profiles.role) 
-                        : (item.nama_wa_pic || item.campaign_creators?.creators?.nama_wa_pic 
-                            ? (item.nama_wa_pic || item.campaign_creators?.creators?.nama_wa_pic)
+                      {item.nama_wa_pic || item.campaign_creators?.creators?.nama_wa_pic 
+                        ? (item.nama_wa_pic || item.campaign_creators?.creators?.nama_wa_pic)
+                        : (item.campaign_creators?.profiles?.nama 
+                            ? formatUserWithRole(item.campaign_creators.profiles.nama, item.campaign_creators.profiles.role) 
                             : (batch.submitter?.nama 
                                 ? formatUserWithRole(batch.submitter.nama, batch.submitter.role) 
                                 : '-'))}
