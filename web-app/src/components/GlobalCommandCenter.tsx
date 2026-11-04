@@ -86,12 +86,12 @@ export function GlobalCommandCenter({ role, onSuccess }: { role: string, onSucce
         } else if (subTab === 'review') {
           if (b.status !== 'pending_finance') return null;
           validItems = validItems.filter((i:any) => ['executive_1_approved', 'pending_finance_outstanding'].includes(i.final_status));
-        } else if (subTab === 'transfer') {
-          if (b.status !== 'ready_to_pay') return null;
-          validItems = validItems.filter((i:any) => ['finance_selected', 'ready_to_pay', 'executive_approved'].includes(i.final_status) && i.final_status !== 'paid');
         } else if (subTab === 'exec_approval') {
           if (!['pending_executive_1', 'pending_executive'].includes(b.status)) return null;
           validItems = validItems.filter((i:any) => ['manager_approved', 'finance_selected'].includes(i.final_status));
+        } else if (subTab === 'transfer') {
+          if (b.status !== 'ready_to_pay') return null;
+          validItems = validItems.filter((i:any) => ['finance_selected', 'ready_to_pay', 'executive_approved'].includes(i.final_status) && i.final_status !== 'paid');
         }
         return { ...b, payment_items: validItems };
       }).filter((b): b is any => b !== null && b.payment_items.length > 0);
@@ -241,22 +241,22 @@ export function GlobalCommandCenter({ role, onSuccess }: { role: string, onSucce
           <span className="text-slate-400 self-center">Antrean di meja lain:</span>
           {tabCounts.manager_review > 0 && (role === 'executive' || role === 'manager') && subTab !== 'manager_review' && (
             <button onClick={() => setSubTab('manager_review')} className="px-3 py-1 bg-amber-50 text-amber-800 rounded-full font-semibold border border-amber-200 hover:bg-amber-100 transition-colors">
-              Review Manager ({tabCounts.manager_review})
+              {role === 'executive' && '1. '}Review Manager ({tabCounts.manager_review})
             </button>
           )}
           {tabCounts.review > 0 && (role === 'executive' || role === 'finance') && subTab !== 'review' && (
             <button onClick={() => setSubTab('review')} className="px-3 py-1 bg-purple-50 text-purple-800 rounded-full font-semibold border border-purple-200 hover:bg-purple-100 transition-colors">
-              Review Finance ({tabCounts.review})
-            </button>
-          )}
-          {tabCounts.transfer > 0 && (role === 'executive' || role === 'finance') && subTab !== 'transfer' && (
-            <button onClick={() => setSubTab('transfer')} className="px-3 py-1 bg-emerald-50 text-emerald-800 rounded-full font-semibold border border-emerald-200 hover:bg-emerald-100 transition-colors">
-              Siap Bayar ({tabCounts.transfer})
+              {role === 'executive' && '2. '}Review Finance ({tabCounts.review})
             </button>
           )}
           {tabCounts.exec_approval > 0 && role === 'executive' && subTab !== 'exec_approval' && (
             <button onClick={() => setSubTab('exec_approval')} className="px-3 py-1 bg-blue-50 text-blue-800 rounded-full font-semibold border border-blue-200 hover:bg-blue-100 transition-colors">
-              Approval Executive ({tabCounts.exec_approval})
+              3. Approval Executive ({tabCounts.exec_approval})
+            </button>
+          )}
+          {tabCounts.transfer > 0 && (role === 'executive' || role === 'finance') && subTab !== 'transfer' && (
+            <button onClick={() => setSubTab('transfer')} className="px-3 py-1 bg-emerald-50 text-emerald-800 rounded-full font-semibold border border-emerald-200 hover:bg-emerald-100 transition-colors">
+              {role === 'executive' && '4. '}Siap Bayar ({tabCounts.transfer})
             </button>
           )}
         </div>
@@ -269,24 +269,13 @@ export function GlobalCommandCenter({ role, onSuccess }: { role: string, onSucce
       
       {(role === 'finance' || role === 'executive' || role === 'manager') && (
         <div className="flex bg-slate-100 p-1 rounded-lg w-fit mb-4 flex-wrap gap-1">
-          {role === 'executive' && (
-            <button 
-              className={`px-5 py-2 text-sm font-semibold rounded-md transition-all flex items-center gap-2 ${subTab === 'exec_approval' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
-              onClick={() => setSubTab('exec_approval')}
-            >
-              Approval Executive
-              {tabCounts.exec_approval > 0 && (
-                <span className="bg-blue-100 text-blue-700 text-xs px-2 py-0.5 rounded-full font-bold">
-                  {tabCounts.exec_approval}
-                </span>
-              )}
-            </button>
-          )}
+          {/* Tahap 1: Review Manager */}
           {(role === 'executive' || role === 'manager') && (
             <button 
               className={`px-5 py-2 text-sm font-semibold rounded-md transition-all flex items-center gap-2 ${subTab === 'manager_review' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
               onClick={() => setSubTab('manager_review')}
             >
+              {role === 'executive' && <span className="text-[11px] font-bold text-slate-400">1.</span>}
               Review Manager
               {tabCounts.manager_review > 0 && (
                 <span className="bg-amber-100 text-amber-800 text-xs px-2 py-0.5 rounded-full font-bold">
@@ -295,11 +284,14 @@ export function GlobalCommandCenter({ role, onSuccess }: { role: string, onSucce
               )}
             </button>
           )}
+
+          {/* Tahap 2: Review Finance */}
           {(role === 'executive' || role === 'finance') && (
             <button 
               className={`px-5 py-2 text-sm font-semibold rounded-md transition-all flex items-center gap-2 ${subTab === 'review' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
               onClick={() => setSubTab('review')}
             >
+              {role === 'executive' && <span className="text-[11px] font-bold text-slate-400">2.</span>}
               Review Finance
               {tabCounts.review > 0 && (
                 <span className="bg-purple-100 text-purple-700 text-xs px-2 py-0.5 rounded-full font-bold">
@@ -308,11 +300,30 @@ export function GlobalCommandCenter({ role, onSuccess }: { role: string, onSucce
               )}
             </button>
           )}
+
+          {/* Tahap 3: Approval Executive */}
+          {role === 'executive' && (
+            <button 
+              className={`px-5 py-2 text-sm font-semibold rounded-md transition-all flex items-center gap-2 ${subTab === 'exec_approval' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
+              onClick={() => setSubTab('exec_approval')}
+            >
+              <span className="text-[11px] font-bold text-slate-400">3.</span>
+              Approval Executive
+              {tabCounts.exec_approval > 0 && (
+                <span className="bg-blue-100 text-blue-700 text-xs px-2 py-0.5 rounded-full font-bold">
+                  {tabCounts.exec_approval}
+                </span>
+              )}
+            </button>
+          )}
+
+          {/* Tahap 4: Siap Bayar (Transfer) */}
           {(role === 'executive' || role === 'finance') && (
             <button 
               className={`px-5 py-2 text-sm font-semibold rounded-md transition-all flex items-center gap-2 ${subTab === 'transfer' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
               onClick={() => setSubTab('transfer')}
             >
+              {role === 'executive' && <span className="text-[11px] font-bold text-slate-400">4.</span>}
               Siap Bayar (Transfer)
               {tabCounts.transfer > 0 && (
                 <span className="bg-emerald-100 text-emerald-700 text-xs px-2 py-0.5 rounded-full font-bold">
@@ -329,10 +340,10 @@ export function GlobalCommandCenter({ role, onSuccess }: { role: string, onSucce
           <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
             <ShieldAlert className="w-5 h-5 text-amber-500" />
             Tumpukan Persetujuan {
-              subTab === 'manager_review' ? '(Review Manager)' :
-              subTab === 'exec_approval' ? '(Approval Executive)' :
-              subTab === 'review' ? '(Review Finance)' :
-              subTab === 'transfer' ? '(Siap Bayar / Transfer)' : ''
+              subTab === 'manager_review' ? (role === 'executive' ? '(Tahap 1: Review Manager)' : '(Review Manager)') :
+              subTab === 'review' ? (role === 'executive' ? '(Tahap 2: Review Finance)' : '(Review Finance)') :
+              subTab === 'exec_approval' ? (role === 'executive' ? '(Tahap 3: Approval Executive)' : '(Approval Executive)') :
+              subTab === 'transfer' ? (role === 'executive' ? '(Tahap 4: Siap Bayar / Transfer)' : '(Siap Bayar / Transfer)') : ''
             }
           </h2>
           <p className="text-sm text-slate-500">Centang tagihan yang ingin diproses, lalu pilih aksi di bawah layar.</p>
