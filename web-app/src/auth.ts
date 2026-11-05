@@ -67,14 +67,30 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           SELECT * FROM profiles WHERE LOWER(email) = ${email} LIMIT 1
         `).catch(() => [])) as any[];
 
+        // Blokir jika akun sudah di-nonaktifkan oleh admin/manager
+        if (existingProfile && existingProfile.status === 'inactive') {
+          console.warn(`[AUTH] Blocked inactive user login attempt: ${email}`);
+          return false;
+        }
+
+        // Tentukan role: Whitelist -> Profil DB -> Default 'anggota'
         let role = whitelist?.role || existingProfile?.role;
         if (!role) {
-          if (email === 'hibban25nzl@gmail.com' || email.includes('admin') || email.includes('executive')) {
+          if (email === 'hibban25nzl@gmail.com') {
             role = 'executive';
           } else {
-            role = 'staff';
+            role = 'anggota';
           }
         }
+
+        // Tentukan status: Whitelist selalu 'approved', existing ikut DB, user baru default 'pending'
+        let status = existingProfile?.status;
+        if (whitelist) {
+          status = 'approved';
+        } else if (!status) {
+          status = (email === 'hibban25nzl@gmail.com') ? 'approved' : 'pending';
+        }
+
         const brandId = whitelist?.brand_id ?? existingProfile?.brand_id ?? null;
         const fullName = user.name || existingProfile?.nama || email.split('@')[0];
         const avatarUrl = user.image || existingProfile?.avatar_url || '';
@@ -85,6 +101,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
               nama = ${fullName},
               avatar_url = ${avatarUrl},
               role = ${role},
+              status = ${status},
               brand_id = ${brandId}
             WHERE LOWER(email) = ${email}
           `).catch((err) => console.error('Error updating existing profile:', err));
@@ -93,18 +110,19 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           const newId = isValidUuid(user.id) ? user.id : crypto.randomUUID();
           await db.execute(sql`
             INSERT INTO profiles (id, email, nama, avatar_url, role, brand_id, status)
-            VALUES (${newId}::uuid, ${email}, ${fullName}, ${avatarUrl}, ${role}, ${brandId}, 'approved')
+            VALUES (${newId}::uuid, ${email}, ${fullName}, ${avatarUrl}, ${role}, ${brandId}, ${status})
             ON CONFLICT (email) DO UPDATE SET
               nama = EXCLUDED.nama,
               avatar_url = EXCLUDED.avatar_url,
-              role = EXCLUDED.role
+              role = EXCLUDED.role,
+              status = EXCLUDED.status
           `).catch((err) => console.error('Error inserting new profile:', err));
         }
 
         return true;
       } catch (err) {
         console.error('Error during signIn callback:', err);
-        return true;
+        return false;
       }
     },
     async jwt({ token, user }) {
@@ -112,17 +130,22 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         const email = (user?.email || (token?.email as string)).toLowerCase();
         try {
           const [profile] = (await db.execute(sql`
-            SELECT id, nama, email, avatar_url, role, brand_id FROM profiles WHERE LOWER(email) = ${email} LIMIT 1
+            SELECT id, nama, email, avatar_url, role, status, brand_id FROM profiles WHERE LOWER(email) = ${email} LIMIT 1
           `).catch(() => [])) as any[];
 
           if (profile) {
             token.id = profile.id;
             token.role = profile.role;
+            token.status = profile.status;
             token.brandId = profile.brand_id;
             token.name = profile.nama || token.name;
             token.picture = profile.avatar_url || token.picture;
           } else if (email === 'hibban25nzl@gmail.com') {
             token.role = 'executive';
+            token.status = 'approved';
+          } else {
+            token.role = 'anggota';
+            token.status = 'pending';
           }
         } catch (err) {
           console.error('Error fetching profile in jwt callback:', err);
@@ -133,7 +156,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     async session({ session, token }) {
       if (token && session.user) {
         session.user.id = token.id as string;
-        (session.user as any).role = token.role || (session.user.email === 'hibban25nzl@gmail.com' ? 'executive' : 'staff');
+        (session.user as any).role = token.role || (session.user.email === 'hibban25nzl@gmail.com' ? 'executive' : 'anggota');
+        (session.user as any).status = token.status || 'pending';
         (session.user as any).brandId = token.brandId || null;
       }
       return session;

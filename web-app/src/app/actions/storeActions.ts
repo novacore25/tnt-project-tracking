@@ -39,12 +39,13 @@ export async function getAuthProfileAction() {
 
       let role = whitelist?.role;
       if (!role) {
-        if (email === 'hibban25nzl@gmail.com' || email.includes('admin') || email.includes('executive')) {
+        if (email === 'hibban25nzl@gmail.com') {
           role = 'executive';
         } else {
-          role = 'staff';
+          role = 'anggota';
         }
       }
+      const status = whitelist ? 'approved' : (email === 'hibban25nzl@gmail.com' ? 'approved' : 'pending');
       const brandId = whitelist?.brand_id ?? null;
       const isValidUuid = (val?: any): boolean => typeof val === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(val);
       const newId = isValidUuid((session.user as any).id) ? (session.user as any).id : crypto.randomUUID();
@@ -53,11 +54,12 @@ export async function getAuthProfileAction() {
 
       await db.execute(sql`
         INSERT INTO profiles (id, email, nama, avatar_url, role, brand_id, status)
-        VALUES (${newId}::uuid, ${email}, ${fullName}, ${avatarUrl}, ${role}, ${brandId}, 'approved')
+        VALUES (${newId}::uuid, ${email}, ${fullName}, ${avatarUrl}, ${role}, ${brandId}, ${status})
         ON CONFLICT (email) DO UPDATE SET
           nama = EXCLUDED.nama,
           avatar_url = EXCLUDED.avatar_url,
-          role = EXCLUDED.role
+          role = EXCLUDED.role,
+          status = EXCLUDED.status
       `).catch((err) => console.error('Error auto-creating profile in storeActions:', err));
 
       const createdRows = (await db.execute(sql`
@@ -74,8 +76,8 @@ export async function getAuthProfileAction() {
       nama: profile?.nama || session.user.name || email.split('@')[0],
       email: profile?.email || email,
       avatar_url: profile?.avatar_url || session.user.image || null,
-      role: profile?.role || (email === 'hibban25nzl@gmail.com' ? 'executive' : 'staff'),
-      status: profile?.status || 'active'
+      role: profile?.role || (email === 'hibban25nzl@gmail.com' ? 'executive' : 'anggota'),
+      status: profile?.status || 'pending'
     };
 
     const targetUserId = validProfileId || (session.user as any).id;

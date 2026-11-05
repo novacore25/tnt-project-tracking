@@ -70,6 +70,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (mounted && res.profile) {
           setProfile(res.profile);
           setUserCampaigns(res.userCampaigns || []);
+
+          // Guard status akun:
+          // Jika pending, paksa arahkan ke /pending
+          if (res.profile.status === 'pending') {
+            if (typeof window !== 'undefined' && window.location.pathname !== '/pending') {
+              window.location.replace('/pending');
+              return;
+            }
+          } else if (res.profile.status === 'approved') {
+            // Jika sudah approved dan masih di /pending, arahkan ke dashboard
+            if (typeof window !== 'undefined' && window.location.pathname === '/pending') {
+              window.location.replace('/');
+              return;
+            }
+          }
         }
       } catch (error) {
         console.error('Error loading auth state:', error);

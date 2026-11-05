@@ -34,7 +34,7 @@ export default function ManajemenAkunClient({
     try {
       await approveUser(id);
     } catch (err: any) {
-      alert("Error: " + e.message);
+      alert("Error: " + err.message);
     }
     setLoadingId(null);
   };
@@ -45,7 +45,7 @@ export default function ManajemenAkunClient({
     try {
       await rejectUser(id);
     } catch (err: any) {
-      alert("Error: " + e.message);
+      alert("Error: " + err.message);
     }
     setLoadingId(null);
   };

@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { getToken } from "next-auth/jwt";
 
 export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
@@ -24,9 +25,41 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // If user is logged in and tries to access /login, redirect to /
-  if (sessionToken && pathname.startsWith('/login')) {
-    return NextResponse.redirect(new URL('/', request.url));
+  // If user is logged in, inspect status
+  if (sessionToken) {
+    try {
+      const secret = process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET;
+      if (secret) {
+        const token = await getToken({
+          req: request,
+          secret,
+          secureCookie: request.url.startsWith('https://'),
+        });
+
+        if (token) {
+          const isPending = token.status === 'pending';
+          const isApproved = token.status === 'approved';
+
+          // User pending dilarang mengakses halaman data, wajib ke /pending
+          if (isPending && pathname !== '/pending' && !pathname.startsWith('/api/auth') && !pathname.startsWith('/auth')) {
+            const url = request.nextUrl.clone();
+            url.pathname = '/pending';
+            return NextResponse.redirect(url);
+          }
+
+          // User approved dilarang mengakses /login atau /pending, arahkan ke /
+          if (isApproved && (pathname.startsWith('/login') || pathname === '/pending')) {
+            return NextResponse.redirect(new URL('/', request.url));
+          }
+        }
+      }
+    } catch {
+      // Abaikan error getToken dan biarkan AuthProvider client-side menangani
+    }
+
+    if (pathname.startsWith('/login')) {
+      return NextResponse.redirect(new URL('/', request.url));
+    }
   }
 
   return NextResponse.next();
