@@ -23,8 +23,8 @@ export default function RootLayout({
       </head>
       <body className={`font-sans bg-bg text-text min-h-screen flex antialiased`}>
         <GlobalLoadingOverlay />
-        <DataLoader />
         <LayoutWrapper>
+          <DataLoader />
           {children}
         </LayoutWrapper>
       </body>

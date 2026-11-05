@@ -9,13 +9,20 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isRegistering, setIsRegistering] = useState(false);
   const [namaPanggilan, setNamaPanggilan] = useState("");
+  const [loginNotice, setLoginNotice] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
       const urlParams = new URLSearchParams(window.location.search);
-      if (urlParams.get("error") === "not-registered") {
-        alert("Gagal Login: Akun Anda belum terdaftar. Silakan klik 'Daftar sekarang' terlebih dahulu.");
-        // Clean up URL
+      const error = urlParams.get("error");
+      if (error === "not-registered") {
+        setLoginNotice("Akun Anda belum terdaftar. Silakan klik 'Daftar sekarang' terlebih dahulu.");
+        window.history.replaceState({}, document.title, window.location.pathname);
+      } else if (error === "pending") {
+        setLoginNotice("Akun Anda masih Menunggu Persetujuan Manager. Hubungi Manager Anda untuk mengaktifkan akun.");
+        window.history.replaceState({}, document.title, window.location.pathname);
+      } else if (error === "inactive" || error === "AccessDenied") {
+        setLoginNotice("Akun Anda telah dinonaktifkan atau belum disetujui. Hubungi Manager/Administrator.");
         window.history.replaceState({}, document.title, window.location.pathname);
       }
     }
@@ -23,6 +30,7 @@ export default function LoginPage() {
 
   const handleAuth = async () => {
     setIsLoading(true);
+    setLoginNotice(null);
     try {
       await signIn("google", { callbackUrl: "/" });
     } catch (error: any) {
@@ -41,6 +49,16 @@ export default function LoginPage() {
           </div>
 
           <div className="bg-slate-50 p-6 rounded-xl border border-slate-100">
+            {loginNotice && (
+              <div className="mb-4 p-3.5 bg-amber-50 border border-amber-200 rounded-lg text-left text-xs text-amber-900 flex items-start gap-2.5">
+                <span className="text-base leading-none">⚠️</span>
+                <div>
+                  <p className="font-semibold">Perhatian</p>
+                  <p className="mt-0.5 leading-relaxed">{loginNotice}</p>
+                </div>
+              </div>
+            )}
+
             <p className="text-sm text-slate-600 mb-6">
               {isRegistering 
                 ? "Silakan isi nama panggilan Anda sebelum mendaftar dengan akun Google."
