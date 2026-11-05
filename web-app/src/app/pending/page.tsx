@@ -7,8 +7,15 @@ import { LogOut, RefreshCw, ShieldAlert } from "lucide-react";
 import { useAuth } from "@/providers/AuthProvider";
 
 export default function PendingPage() {
-  const { profile } = useAuth();
+  const { profile, isLoading } = useAuth();
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Jika status sudah approved, otomatis lempar ke dashboard tanpa glitch!
+  useEffect(() => {
+    if (!isLoading && profile && profile.status === 'approved') {
+      window.location.replace('/');
+    }
+  }, [profile, isLoading]);
 
   const handleLogout = async () => {
     await signOut({ callbackUrl: "/login" });
@@ -18,6 +25,20 @@ export default function PendingPage() {
     setIsRefreshing(true);
     window.location.reload();
   };
+
+  if (!isLoading && profile && profile.status === 'approved') {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4">
+        <div className="w-full max-w-md bg-white rounded-2xl shadow-xl overflow-hidden border border-emerald-100 text-center p-8 space-y-4">
+          <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto text-3xl font-bold">
+            ✓
+          </div>
+          <h1 className="text-xl font-bold text-slate-900">Akun Anda Telah Disetujui!</h1>
+          <p className="text-sm text-slate-500">Mengalihkan ke dashboard utama...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4">
