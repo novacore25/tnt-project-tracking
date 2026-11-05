@@ -19,6 +19,7 @@ export default function ManajemenAkunClient({
 }) {
   const [activeTab, setActiveTab] = useState<'persetujuan' | 'assignment' | 'whitelist'>('persetujuan');
   const [loadingId, setLoadingId] = useState<string | number | null>(null);
+  const [assignmentSearch, setAssignmentSearch] = useState('');
 
   // Whitelist Form State
   const [wlEmail, setWlEmail] = useState('');
@@ -27,6 +28,12 @@ export default function ManajemenAkunClient({
 
   const pendingUsers = initialProfiles.filter(p => p.status === 'pending');
   const activeUsers = initialProfiles.filter(p => p.status === 'approved');
+
+  const filteredAssignmentUsers = activeUsers.filter(u => {
+    const q = assignmentSearch.toLowerCase().trim();
+    if (!q) return true;
+    return (u.nama && u.nama.toLowerCase().includes(q)) || (u.email && u.email.toLowerCase().includes(q));
+  });
 
   const handleApprove = async (id: string) => {
     if (!confirm('Yakin ingin menyetujui akun ini?')) return;
@@ -260,12 +267,31 @@ export default function ManajemenAkunClient({
 
         {activeTab === 'assignment' && (
           <div className="space-y-6">
-            <p className="text-sm text-slate-600">
-              Pilih anggota tim di bawah ini untuk mengatur hak akses (*edit data, input organik, kelola keuangan*) di setiap Campaign. Anggota tanpa assignment hanya bisa melihat data saja (Read-only).
-            </p>
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <p className="text-sm text-slate-600">
+                  Atur hak akses (*edit data, input organik, kelola keuangan*) anggota tim di setiap Campaign. Anggota tanpa assignment khusus hanya dapat melihat data saja (Read-only).
+                </p>
+                <p className="text-xs text-slate-400 mt-1">
+                  Menampilkan {filteredAssignmentUsers.length} dari {activeUsers.length} anggota aktif.
+                </p>
+              </div>
+
+              {/* Pencarian Anggota */}
+              <div className="relative w-full md:w-80 shrink-0">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5 pointer-events-none" />
+                <input 
+                  type="text" 
+                  value={assignmentSearch}
+                  onChange={(e) => setAssignmentSearch(e.target.value)}
+                  placeholder="Cari nama atau email anggota..."
+                  className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white"
+                />
+              </div>
+            </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {activeUsers.filter(u => u.role !== 'manager').map(user => (
+              {filteredAssignmentUsers.map(user => (
                 <UserAssignmentCard 
                   key={user.id} 
                   user={user} 
@@ -273,9 +299,9 @@ export default function ManajemenAkunClient({
                   userCampaigns={initialUserCampaigns.filter(uc => uc.user_id === user.id)}
                 />
               ))}
-              {activeUsers.filter(u => u.role !== 'manager').length === 0 && (
+              {filteredAssignmentUsers.length === 0 && (
                 <div className="col-span-full text-center py-12 bg-slate-50 rounded-lg text-slate-500 border border-slate-200 border-dashed">
-                  Belum ada anggota tim aktif selain Manager.
+                  {assignmentSearch ? `Tidak ditemukan anggota dengan nama/email "${assignmentSearch}".` : 'Belum ada anggota tim aktif terdaftar.'}
                 </div>
               )}
             </div>
@@ -430,23 +456,39 @@ function UserAssignmentCard({ user, campaigns, userCampaigns }: { user: any, cam
   return (
     <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-sm flex flex-col">
       <div className="p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold overflow-hidden">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-10 h-10 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold overflow-hidden shrink-0">
             {user.avatar_url ? <img src={user.avatar_url} alt="" /> : user.nama.charAt(0)}
           </div>
-          <div>
-            <div className="font-semibold text-slate-900">{user.nama}</div>
-            <div className="text-xs text-slate-500">{user.email}</div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-semibold text-slate-900 truncate">{user.nama}</span>
+              <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full ${
+                user.role === 'manager' ? 'bg-amber-100 text-amber-700' :
+                user.role === 'executive' ? 'bg-purple-100 text-purple-700' :
+                user.role === 'finance' ? 'bg-emerald-100 text-emerald-700' :
+                'bg-blue-100 text-blue-700'
+              }`}>
+                {user.role}
+              </span>
+            </div>
+            <div className="text-xs text-slate-500 truncate">{user.email}</div>
           </div>
         </div>
         {hasChanges && (
-          <Button size="sm" onClick={handleSave} disabled={isSaving} className="bg-amber-600 hover:bg-amber-700 text-white">
+          <Button size="sm" onClick={handleSave} disabled={isSaving} className="bg-amber-600 hover:bg-amber-700 text-white shrink-0 ml-2">
             {isSaving ? "Menyimpan..." : "Simpan Perubahan"}
           </Button>
         )}
       </div>
       
       <div className="p-4 flex-1">
+        {(user.role === 'manager' || user.role === 'executive') && (
+          <div className="mb-3 p-2.5 bg-blue-50/70 border border-blue-200/60 rounded-lg text-xs text-blue-800 flex items-start gap-1.5">
+            <span className="shrink-0 mt-0.5">ℹ️</span>
+            <span>Role <strong>{user.role}</strong> memiliki hak akses penuh otomatis ke seluruh campaign. Checklist di bawah dapat digunakan sebagai penugasan acuan.</span>
+          </div>
+        )}
         <label className="flex items-center gap-3 p-3 rounded-lg border border-amber-200 bg-amber-50 cursor-pointer mb-4 transition-colors hover:bg-amber-100">
           <input 
             type="checkbox" 
