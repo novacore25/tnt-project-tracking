@@ -62,54 +62,47 @@ export function GlobalCommandCenter({ role, onSuccess }: { role: string, onSucce
 
       (data || []).forEach(b => {
         const items = b.payment_items || [];
-        const isMgrStage = b.status === 'pending_manager';
-        const isExec1Stage = b.status === 'pending_executive_1';
-        const isFinStage = b.status === 'pending_finance';
-        const isExecFinalStage = b.status === 'pending_executive';
-        const isTransferStage = b.status === 'ready_to_pay';
-
-        if (isMgrStage && items.some((i: any) => i.final_status === 'pending')) {
+        if (items.some((i: any) => i.final_status === 'pending')) {
           counts.manager_review++;
         }
-        if (isExec1Stage && items.some((i: any) => i.final_status === 'manager_approved')) {
+        if (items.some((i: any) => i.final_status === 'manager_approved')) {
           counts.exec_review_1++;
         }
-        if (isFinStage && items.some((i: any) => ['executive_1_approved', 'pending_finance_outstanding'].includes(i.final_status))) {
+        if (items.some((i: any) => ['executive_1_approved', 'pending_finance_outstanding'].includes(i.final_status))) {
           counts.review++;
         }
-        if (isExecFinalStage && items.some((i: any) => i.final_status === 'finance_selected')) {
+        if (items.some((i: any) => i.final_status === 'finance_selected')) {
           counts.exec_final++;
         }
-        if (isTransferStage && items.some((i: any) => ['finance_selected', 'ready_to_pay', 'executive_approved'].includes(i.final_status) && i.final_status !== 'paid')) {
+        if (items.some((i: any) => ['ready_to_pay', 'executive_approved'].includes(i.final_status) && i.final_status !== 'paid')) {
           counts.transfer++;
         }
       });
       setTabCounts(counts);
 
       let processedBatches = (data || []).map(b => {
-        let validItems = b.payment_items || [];
-        if (subTab === 'manager_review') {
-          if (b.status !== 'pending_manager') return null;
-          validItems = validItems.filter((i:any) => i.final_status === 'pending');
-        } else if (subTab === 'exec_review_1') {
-          if (b.status !== 'pending_executive_1') return null;
-          validItems = validItems.filter((i:any) => i.final_status === 'manager_approved');
-        } else if (subTab === 'review') {
-          if (b.status !== 'pending_finance') return null;
-          validItems = validItems.filter((i:any) => ['executive_1_approved', 'pending_finance_outstanding'].includes(i.final_status));
-        } else if (subTab === 'exec_final') {
-          if (b.status !== 'pending_executive') return null;
-          validItems = validItems.filter((i:any) => i.final_status === 'finance_selected');
-        } else if (subTab === 'transfer') {
-          if (b.status !== 'ready_to_pay') return null;
-          validItems = validItems.filter((i:any) => ['finance_selected', 'ready_to_pay', 'executive_approved'].includes(i.final_status) && i.final_status !== 'paid');
-        }
-        return { ...b, payment_items: validItems };
-      }).filter((b): b is any => b !== null && b.payment_items.length > 0);
+        const items = b.payment_items || [];
+        let validItems: any[] = [];
 
-      // Pastikan batch ditempatkan ketat sesuai tahapannya (batch status).
-      // Batches yang masih pending_manager tidak akan bocor ke Approval Executive,
-      // sehingga tampilan Executive rapi dan terisolasi per meja tugas.
+        if (subTab === 'manager_review') {
+          validItems = items.filter((i: any) => i.final_status === 'pending');
+        } else if (subTab === 'exec_review_1') {
+          validItems = items.filter((i: any) => i.final_status === 'manager_approved');
+        } else if (subTab === 'review') {
+          validItems = items.filter((i: any) => ['executive_1_approved', 'pending_finance_outstanding'].includes(i.final_status));
+        } else if (subTab === 'exec_final') {
+          validItems = items.filter((i: any) => i.final_status === 'finance_selected');
+        } else if (subTab === 'transfer') {
+          validItems = items.filter((i: any) => ['ready_to_pay', 'executive_approved'].includes(i.final_status) && i.final_status !== 'paid');
+        }
+
+        if (validItems.length === 0) return null;
+        return { ...b, payment_items: validItems };
+      }).filter((b): b is any => b !== null);
+
+      // Partisi item presisi: Jika 1 batch memiliki item dengan status funnel berbeda,
+      // batch akan dipecah otomatis ke meja tugas masing-masing sesuai final_status item.
+      // Tidak akan ada item finance_selected yang bocor ke Siap Transfer.
 
       setBatches(processedBatches);
       setExpandedBatches(new Set(processedBatches.map(b => b.id)));
@@ -452,11 +445,11 @@ export function GlobalCommandCenter({ role, onSuccess }: { role: string, onSucce
                     <div>
                       <div className="flex items-center gap-2">
                         <h3 className="font-bold text-slate-800 text-base">{batch.batch_label}</h3>
-                        {batch.status === 'pending_manager' && <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px] font-bold uppercase tracking-wider">1. Review Manager</span>}
-                        {batch.status === 'pending_executive_1' && <span className="px-2 py-0.5 rounded bg-purple-100 text-purple-700 text-[10px] font-bold uppercase tracking-wider">2. Executive Review 1</span>}
-                        {batch.status === 'pending_finance' && <span className="px-2 py-0.5 rounded bg-indigo-100 text-indigo-700 text-[10px] font-bold uppercase tracking-wider">3. Finance Review</span>}
-                        {batch.status === 'pending_executive' && <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-700 text-[10px] font-bold uppercase tracking-wider">4. Exec Final Approval</span>}
-                        {batch.status === 'ready_to_pay' && <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-700 text-[10px] font-bold uppercase tracking-wider">5. Siap Transfer</span>}
+                        {subTab === 'manager_review' && <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px] font-bold uppercase tracking-wider">1. Review Manager</span>}
+                        {subTab === 'exec_review_1' && <span className="px-2 py-0.5 rounded bg-purple-100 text-purple-700 text-[10px] font-bold uppercase tracking-wider">2. Executive Review 1</span>}
+                        {subTab === 'review' && <span className="px-2 py-0.5 rounded bg-indigo-100 text-indigo-700 text-[10px] font-bold uppercase tracking-wider">3. Finance Review</span>}
+                        {subTab === 'exec_final' && <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-700 text-[10px] font-bold uppercase tracking-wider">4. Exec Final Approval</span>}
+                        {subTab === 'transfer' && <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-700 text-[10px] font-bold uppercase tracking-wider">5. Siap Transfer</span>}
                       </div>
                       <div className="flex items-center gap-3 text-xs text-slate-500 mt-1">
                         <span>{batch.campaigns?.nama || 'Unknown Campaign'}</span>

@@ -1661,15 +1661,13 @@ export async function bulkMarkPaidFinance(itemIds: number[], payload: { actualPa
   const session = await auth();
   const userId = session?.user?.id;
 
-  // Hanya item yang berada di batch ready_to_pay dan berstatus ready_to_pay / executive_approved
-  // yang boleh ditandai lunas (paid). Tidak boleh ada yang melewati funnel Executive.
+  // Hanya item yang berstatus ready_to_pay / executive_approved
+  // yang boleh ditandai lunas (paid). Ini menjamin item telah disetujui Executive dan berstatus Siap Bayar.
   const validItemsRes = (await db.execute(sql`
     SELECT pi.id, pi.batch_id
     FROM payment_items pi
-    JOIN payment_batches pb ON pi.batch_id = pb.id
     WHERE pi.id IN ${sqlInList(itemIds)}
       AND (pi.final_status = 'ready_to_pay' OR pi.final_status = 'executive_approved')
-      AND pb.status = 'ready_to_pay'
   `)) as any[];
   const validItemIds = (validItemsRes || []).map(i => i.id);
 
