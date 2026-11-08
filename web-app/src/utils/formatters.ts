@@ -133,6 +133,18 @@ export function getItemApprovalHistory(item: any): Array<{ stage: string; actor:
     });
   }
 
+  if (item.finance_selected || item.finance_actor?.nama || item.finance_acted_at) {
+    const rawRole = item.finance_actor?.role || 'finance';
+    const roleCapital = rawRole.charAt(0).toUpperCase() + rawRole.slice(1);
+    history.push({
+      stage: 'Review Finance',
+      role: roleCapital,
+      actor: item.finance_actor?.nama || 'Finance',
+      time: item.finance_acted_at ? formatDateTime(item.finance_acted_at, false) : '-',
+      note: undefined,
+    });
+  }
+
   if (item.executive_actor?.nama || item.executive_acted_at) {
     const rawRole = item.executive_actor?.role || 'executive';
     const roleCapital = rawRole.charAt(0).toUpperCase() + rawRole.slice(1);

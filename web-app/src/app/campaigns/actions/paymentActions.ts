@@ -60,6 +60,9 @@ export async function getPaymentBatches(campaignId?: number, status?: string) {
             'executive_1_acted_at', pi.executive_1_acted_at,
             'executive_1_actor', (SELECT jsonb_build_object('nama', p_e1.nama, 'role', p_e1.role) FROM profiles p_e1 WHERE p_e1.id = pi.executive_1_acted_by),
             'finance_selected', pi.finance_selected,
+            'finance_acted_by', pi.finance_acted_by,
+            'finance_acted_at', pi.finance_acted_at,
+            'finance_actor', (SELECT jsonb_build_object('nama', p_fin.nama, 'role', p_fin.role) FROM profiles p_fin WHERE p_fin.id = pi.finance_acted_by),
             'executive_status', pi.executive_status,
             'executive_note', pi.executive_note,
             'executive_acted_by', pi.executive_acted_by,
@@ -104,7 +107,9 @@ export async function getPaymentBatches(campaignId?: number, status?: string) {
         -- sudah terisi. Bug lama, baru ketahuan setelah impor historis
         -- (3 Okt 2026) karena jumlah batch suddenly banyak.
         (SELECT json_build_object('nama', p.nama, 'role', p.role)
-           FROM profiles p WHERE p.id = pb.submitted_by) as submitter
+           FROM profiles p WHERE p.id = pb.submitted_by) as submitter,
+        (SELECT json_build_object('nama', p.nama, 'role', p.role)
+           FROM profiles p WHERE p.id = pb.finance_reviewed_by) as finance_actor
       FROM payment_batches pb
       LEFT JOIN campaigns c ON pb.campaign_id = c.id
       ${whereClause}
@@ -1631,7 +1636,8 @@ export async function bulkProcessFinanceReview(itemIds: number[], actionType: 'a
 
     await db.execute(sql`
       UPDATE payment_items
-      SET finance_selected = ${financeSelected}, final_status = ${finalStatus}
+      SET finance_selected = ${financeSelected}, final_status = ${finalStatus},
+          finance_acted_by = ${userId || null}, finance_acted_at = NOW()
       WHERE id IN ${sqlInList(itemIds)}
     `);
 

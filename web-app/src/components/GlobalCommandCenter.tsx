@@ -762,11 +762,11 @@ export function GlobalCommandCenter({ role, onSuccess }: { role: string, onSucce
                                             }`}>
                                               {item.finance_selected ? 'Dipilih Finance' : item.final_status === 'pending_finance_outstanding' ? 'Ditunda Finance' : 'Menunggu'}
                                             </div>
-                                            <div className="text-[10px] text-slate-600">
-                                              {item.finance_selected ? 'Masuk Antrian Final' : item.final_status === 'pending_finance_outstanding' ? 'Perlu Klarifikasi' : 'Belum Ditindak'}
+                                            <div className="text-[10px] text-slate-600 truncate" title={item.finance_actor?.nama || (batch.finance_actor?.nama || '-')}>
+                                              ACC: {item.finance_actor?.nama || (batch.finance_actor?.nama || '-')}
                                             </div>
                                             <div className="text-[9.5px] text-slate-400 mt-0.5">
-                                              Validasi Rekening
+                                              {item.finance_acted_at ? formatDateTime(item.finance_acted_at, false) : (batch.finance_reviewed_at ? formatDateTime(batch.finance_reviewed_at, false) : '-')}
                                             </div>
                                           </div>
 
