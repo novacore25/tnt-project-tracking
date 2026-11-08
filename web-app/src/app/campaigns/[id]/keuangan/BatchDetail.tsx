@@ -12,7 +12,7 @@ import { getLogicalStatus } from "@/utils/statusHelper";
 import { sumNum } from "@/utils/computed";
 import { useAuth } from "@/providers/AuthProvider";
 import { Check, X, Loader2, ArrowLeft, Send, Trash2, Pencil, Save, ChevronDown, ChevronRight, Download, Upload, Clock, UserCheck, ShieldCheck, History, ExternalLink, Link as LinkIcon, Lock } from "lucide-react";
-import { formatDateTime, formatUserWithRole } from "@/utils/formatters";
+import { formatDateTime, formatUserWithRole, getItemApprovalBadge } from "@/utils/formatters";
 import * as XLSX from "xlsx";
 
 export function BatchDetail({ batch, creatorHistory, onBack, onRefresh, onRefreshList }: { batch: any, creatorHistory: Record<number, any[]>, onBack: () => void, onRefresh: () => void, onRefreshList?: () => void }) {
@@ -761,27 +761,19 @@ export function BatchDetail({ batch, creatorHistory, onBack, onRefresh, onRefres
                       }`}>
                         {item.final_status?.replace('_', ' ') || 'pending'}
                       </span>
-                      {/* Approver terakhir agar transparan langsung di tabel */}
-                      {item.final_status === 'ready_to_pay' && item.executive_actor?.nama && (
-                        <div className="text-[10px] text-emerald-700 font-semibold mt-1 truncate" title={`Disetujui Executive: ${item.executive_actor.nama}`}>
-                          Acc: {item.executive_actor.nama}
-                        </div>
-                      )}
-                      {item.final_status === 'finance_selected' && (
-                        <div className="text-[10px] text-blue-700 font-semibold mt-1">
-                          Dipilih Finance
-                        </div>
-                      )}
-                      {item.final_status === 'executive_1_approved' && item.executive_1_actor?.nama && (
-                        <div className="text-[10px] text-indigo-700 font-semibold mt-1 truncate" title={`Disetujui Exec 1: ${item.executive_1_actor.nama}`}>
-                          Acc: {item.executive_1_actor.nama}
-                        </div>
-                      )}
-                      {item.final_status === 'manager_approved' && item.manager_actor?.nama && (
-                        <div className="text-[10px] text-purple-700 font-semibold mt-1 truncate" title={`Disetujui Manager: ${item.manager_actor.nama}`}>
-                          Acc: {item.manager_actor.nama}
-                        </div>
-                      )}
+                      {/* Badge Jejak Approval Riil: ACC : [Role] Nama [dd/mm/yyyy, hh:mm] */}
+                      {(() => {
+                        const badge = getItemApprovalBadge(item);
+                        if (!badge) return null;
+                        return (
+                          <div 
+                            className={`text-[9px] font-semibold mt-1 px-1.5 py-0.5 rounded border inline-block whitespace-nowrap max-w-[220px] truncate ${badge.className}`}
+                            title={badge.tooltip || badge.text}
+                          >
+                            {badge.text}
+                          </div>
+                        );
+                      })()}
                       {item.manager_note || item.executive_note ? (
                         <div className="text-[10px] text-red-500 mt-1 max-w-[150px] truncate" title={item.manager_note || item.executive_note}>
                           Note: {item.manager_note || item.executive_note}

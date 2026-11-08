@@ -10,7 +10,7 @@ import {
   bulkMarkPaidFinance
 } from '@/app/campaigns/actions/paymentActions';
 import { getSenderAccounts } from '@/app/campaigns/actions/paymentActions';
-import { formatDateTime, formatUserWithRole } from '@/utils/formatters';
+import { formatDateTime, formatUserWithRole, getItemApprovalBadge } from '@/utils/formatters';
 
 export function GlobalCommandCenter({ role, onSuccess }: { role: string, onSuccess?: () => void }) {
   const [batches, setBatches] = useState<any[]>([]);
@@ -535,21 +535,19 @@ export function GlobalCommandCenter({ role, onSuccess }: { role: string, onSucce
                               </td>
                               <td className="py-3 text-center pr-4">
                                 {renderItemStatusBadge(item.final_status)}
-                                {item.final_status === 'ready_to_pay' && item.executive_actor?.nama && (
-                                  <div className="text-[10px] text-emerald-700 font-semibold mt-1 truncate" title={`Disetujui Executive: ${item.executive_actor.nama}`}>
-                                    ACC: {item.executive_actor.nama}
-                                  </div>
-                                )}
-                                {item.final_status === 'executive_1_approved' && item.executive_1_actor?.nama && (
-                                  <div className="text-[10px] text-indigo-700 font-semibold mt-1 truncate" title={`Disetujui Exec 1: ${item.executive_1_actor.nama}`}>
-                                    ACC: {item.executive_1_actor.nama}
-                                  </div>
-                                )}
-                                {item.final_status === 'manager_approved' && item.manager_actor?.nama && (
-                                  <div className="text-[10px] text-purple-700 font-semibold mt-1 truncate" title={`Disetujui Manager: ${item.manager_actor.nama}`}>
-                                    ACC: {item.manager_actor.nama}
-                                  </div>
-                                )}
+                                {/* Badge Jejak Approval Riil: ACC : [Role] Nama [dd/mm/yyyy, hh:mm] */}
+                                {(() => {
+                                  const badge = getItemApprovalBadge(item);
+                                  if (!badge) return null;
+                                  return (
+                                    <div 
+                                      className={`text-[9px] font-semibold mt-1 px-1.5 py-0.5 rounded border inline-block whitespace-nowrap max-w-[220px] truncate ${badge.className}`}
+                                      title={badge.tooltip || badge.text}
+                                    >
+                                      {badge.text}
+                                    </div>
+                                  );
+                                })()}
                               </td>
                             </tr>
                           );

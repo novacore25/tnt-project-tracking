@@ -101,3 +101,141 @@ export function formatRupiah(value: number | string | null | undefined): string 
   if (isNaN(num)) return 'Rp 0';
   return `Rp ${num.toLocaleString('id-ID')}`;
 }
+
+/**
+ * Riwayat lengkap tahapan persetujuan item per stage:
+ */
+export function getItemApprovalHistory(item: any): Array<{ stage: string; actor: string; role: string; time: string; note?: string }> {
+  if (!item) return [];
+  const history: Array<{ stage: string; actor: string; role: string; time: string; note?: string }> = [];
+  
+  if (item.manager_actor?.nama || item.manager_acted_at) {
+    const rawRole = item.manager_actor?.role || 'manager';
+    const roleCapital = rawRole.charAt(0).toUpperCase() + rawRole.slice(1);
+    history.push({
+      stage: 'Review Manager',
+      role: roleCapital,
+      actor: item.manager_actor?.nama || 'Manager',
+      time: item.manager_acted_at ? formatDateTime(item.manager_acted_at, false) : '-',
+      note: item.manager_note || undefined,
+    });
+  }
+  
+  if (item.executive_1_actor?.nama || item.executive_1_acted_at) {
+    const rawRole = item.executive_1_actor?.role || 'executive';
+    const roleCapital = rawRole.charAt(0).toUpperCase() + rawRole.slice(1);
+    history.push({
+      stage: 'Review Exec 1',
+      role: roleCapital,
+      actor: item.executive_1_actor?.nama || 'Executive',
+      time: item.executive_1_acted_at ? formatDateTime(item.executive_1_acted_at, false) : '-',
+      note: item.executive_1_note || undefined,
+    });
+  }
+
+  if (item.executive_actor?.nama || item.executive_acted_at) {
+    const rawRole = item.executive_actor?.role || 'executive';
+    const roleCapital = rawRole.charAt(0).toUpperCase() + rawRole.slice(1);
+    history.push({
+      stage: 'Review Final',
+      role: roleCapital,
+      actor: item.executive_actor?.nama || 'Executive',
+      time: item.executive_acted_at ? formatDateTime(item.executive_acted_at, false) : '-',
+      note: item.executive_note || undefined,
+    });
+  }
+
+  return history;
+}
+
+/**
+ * Format badge riwayat persetujuan item:
+ * "ACC : [Role] Nama [dd/mm/yyyy, hh:mm]"
+ * Disertai tooltip lengkap rantai persetujuan (status sebelumnya).
+ */
+export function getItemApprovalBadge(item: any): { text: string; role: string; className: string; tooltip: string } | null {
+  if (!item) return null;
+  
+  const history = getItemApprovalHistory(item);
+  const tooltip = history.length > 0 
+    ? `Riwayat Persetujuan:\n` + history.map((h, idx) => `${idx + 1}. [${h.role}] ${h.actor} [${h.time}]${h.note ? ` (${h.note})` : ''}`).join('\n')
+    : '';
+
+  // 1. Siap Transfer / Paid / Executive Approved
+  if (['ready_to_pay', 'executive_approved', 'paid'].includes(item.final_status)) {
+    if (item.executive_actor?.nama) {
+      const rawRole = item.executive_actor.role || 'executive';
+      const roleCapital = rawRole.charAt(0).toUpperCase() + rawRole.slice(1);
+      const timeStr = item.executive_acted_at ? formatDateTime(item.executive_acted_at, false) : '';
+      return {
+        text: `ACC : [${roleCapital}] ${item.executive_actor.nama}${timeStr ? ` [${timeStr}]` : ''}`,
+        role: roleCapital,
+        className: 'text-emerald-700 bg-emerald-50 border-emerald-200',
+        tooltip: tooltip || `ACC : [${roleCapital}] ${item.executive_actor.nama} [${timeStr}]`
+      };
+    }
+    if (item.executive_1_actor?.nama) {
+      const rawRole = item.executive_1_actor.role || 'executive';
+      const roleCapital = rawRole.charAt(0).toUpperCase() + rawRole.slice(1);
+      const timeStr = item.executive_1_acted_at ? formatDateTime(item.executive_1_acted_at, false) : '';
+      return {
+        text: `ACC : [${roleCapital}] ${item.executive_1_actor.nama}${timeStr ? ` [${timeStr}]` : ''}`,
+        role: roleCapital,
+        className: 'text-emerald-700 bg-emerald-50 border-emerald-200',
+        tooltip: tooltip || `ACC : [${roleCapital}] ${item.executive_1_actor.nama} [${timeStr}]`
+      };
+    }
+    if (item.manager_actor?.nama) {
+      const rawRole = item.manager_actor.role || 'manager';
+      const roleCapital = rawRole.charAt(0).toUpperCase() + rawRole.slice(1);
+      const timeStr = item.manager_acted_at ? formatDateTime(item.manager_acted_at, false) : '';
+      return {
+        text: `ACC : [${roleCapital}] ${item.manager_actor.nama}${timeStr ? ` [${timeStr}]` : ''}`,
+        role: roleCapital,
+        className: 'text-purple-700 bg-purple-50 border-purple-200',
+        tooltip: tooltip || `ACC : [${roleCapital}] ${item.manager_actor.nama} [${timeStr}]`
+      };
+    }
+  }
+
+  // 2. Executive 1 Approved / Finance Selected / Pending Finance
+  if (['executive_1_approved', 'finance_selected', 'pending_finance_outstanding'].includes(item.final_status)) {
+    if (item.executive_1_actor?.nama) {
+      const rawRole = item.executive_1_actor.role || 'executive';
+      const roleCapital = rawRole.charAt(0).toUpperCase() + rawRole.slice(1);
+      const timeStr = item.executive_1_acted_at ? formatDateTime(item.executive_1_acted_at, false) : '';
+      return {
+        text: `ACC : [${roleCapital}] ${item.executive_1_actor.nama}${timeStr ? ` [${timeStr}]` : ''}`,
+        role: roleCapital,
+        className: 'text-indigo-700 bg-indigo-50 border-indigo-200',
+        tooltip: tooltip || `ACC : [${roleCapital}] ${item.executive_1_actor.nama} [${timeStr}]`
+      };
+    }
+    if (item.manager_actor?.nama) {
+      const rawRole = item.manager_actor.role || 'manager';
+      const roleCapital = rawRole.charAt(0).toUpperCase() + rawRole.slice(1);
+      const timeStr = item.manager_acted_at ? formatDateTime(item.manager_acted_at, false) : '';
+      return {
+        text: `ACC : [${roleCapital}] ${item.manager_actor.nama}${timeStr ? ` [${timeStr}]` : ''}`,
+        role: roleCapital,
+        className: 'text-purple-700 bg-purple-50 border-purple-200',
+        tooltip: tooltip || `ACC : [${roleCapital}] ${item.manager_actor.nama} [${timeStr}]`
+      };
+    }
+  }
+
+  // 3. Manager Approved
+  if (item.final_status === 'manager_approved' && item.manager_actor?.nama) {
+    const rawRole = item.manager_actor.role || 'manager';
+    const roleCapital = rawRole.charAt(0).toUpperCase() + rawRole.slice(1);
+    const timeStr = item.manager_acted_at ? formatDateTime(item.manager_acted_at, false) : '';
+    return {
+      text: `ACC : [${roleCapital}] ${item.manager_actor.nama}${timeStr ? ` [${timeStr}]` : ''}`,
+      role: roleCapital,
+      className: 'text-purple-700 bg-purple-50 border-purple-200',
+      tooltip: tooltip || `ACC : [${roleCapital}] ${item.manager_actor.nama} [${timeStr}]`
+    };
+  }
+
+  return null;
+}
