@@ -868,3 +868,18 @@ Pada 8 November 2026, tim Finance (Michael) dan Executive (Ko Calvin) menemukan 
 4. **Verifikasi Nol Duplikasi Dana (100% Aman):**
    - Audit forensik membuktikan tidak ada uang keluar ganda atau tagihan ganda yang cair di sistem.
    - Batch 1249 berhasil direkonsiliasi: 3 item lunas tetap di 1249 (`PAID`), 2 item SeaBank dipindahkan ke Batch 1298 (`Batch - Oktober 2026 - Termin 2`, `ready_to_pay`).
+
+### 11.3 Penyempurnaan Tampilan Persetujuan & Item Accordion di Dashboard Budgeting (`/budgeting`)
+1. **Penataan Vertikal Status & Badge ACC (Pencegahan Teks Terpotong):**
+   - Kapsul status tahapan (misal `3. Menunggu Finance` atau `5. Siap Transfer`) diletakkan di atas.
+   - Badge persetujuan diletakkan **vertikal persis di bawahnya** (`flex flex-col items-center gap-1.5`).
+   - Format wajib: `ACC : [Role] Nama [dd/mm/yyyy, hh:mm]` (misal: `ACC : [Executive] Calvin Adiputra [06/11/2026, 15:07]`).
+   - Seluruh teks ditampilkan utuh tanpa pemotongan/elipsis (`whitespace-nowrap`, menghapus `max-w-[220px] truncate`).
+2. **Item-Level Accordion di Global Command Center (`GlobalCommandCenter.tsx`):**
+   - Setiap baris tagihan dilengkapi tombol chevron toggle untuk membuka laci rincian (accordion) lengkap.
+   - Informasi yang disajikan:
+     a) **Funnel Progress 6 Tahap**: Status, PIC yang menindak, role, waktu penindakan (tanggal & jam), dan catatan per tahap.
+     b) **Data Kreator & Deliverable**: Username, nama asli KTP, tier, target VT, ratecard awal, dan kalkulasi sisa termin jika DP 50%.
+     c) **Rekening & Finansial**: Bank/metode, nomor rekening (bisa dicopy), atas nama, nominal bersih, biaya transfer, dan total pengeluaran.
+     d) **Kontak & Dokumen Legalitas**: PIC WA, nomor WA dealing, NIK, alamat KTP, link dokumen KTP, dan link dokumen kontrak.
+     e) **Catatan Khusus (Notes)**: Catatan pengajuan item, catatan manager, dan catatan executive.

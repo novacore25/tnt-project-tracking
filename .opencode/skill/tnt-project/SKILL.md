@@ -2987,7 +2987,16 @@ memberi informasi yang saling menguatkan, bukan noise.
    - Status `ready_to_pay` HANYA boleh aktif jika `final_status` item secara eksplisit adalah `'ready_to_pay'` atau `'executive_approved'`.
    - Dilarang membuat shortcut berbasis `executive_status === 'approved'` tanpa mengecek apakah item telah melewati seleksi Finance (`finance_selected`).
 
-#### 3. Transparansi Jejak Persetujuan (Item-Level Audit Trail)
+#### 3. Transparansi Jejak Persetujuan (Item-Level Audit Trail) & Item Accordion Detail
 1. **Audit Trail Level Item:**
    - Seluruh server query (`rpc_get_payment_batches` dan `getPaymentBatches`) wajib mengembalikan objek penindak: `manager_actor`, `executive_1_actor`, dan `executive_actor` (nama dan role dari `profiles`).
-   - Di UI `BatchDetail.tsx` dan `GlobalCommandCenter.tsx`, nama approver terakhir wajib ditampilkan langsung di tabel status (misal: `Acc: Calvin Adiputra`), dan timeline lengkap tersedia pada accordion baris kreator.
+   - Format badge status tabel wajib: `ACC : [Role] Nama [dd/mm/yyyy, hh:mm]` (misal: `ACC : [Executive] Calvin Adiputra [06/11/2026, 15:07]`).
+   - Penataan UI: Badge diletakkan **vertikal persis di bawah kapsul status** (`flex flex-col items-center gap-1.5`) dengan `whitespace-nowrap` (dilarang menggunakan `max-w-[220px] truncate` yang memotong teks dengan `...`).
+2. **Item-Level Accordion di `/budgeting` (`GlobalCommandCenter.tsx`):**
+   - Setiap baris item di tabel tagihan memiliki accordion interaktif (klik chevron atau username kreator).
+   - Accordion menampilkan 4 panel lengkap:
+     a) **Funnel Progress 6 Tahap**: Timeline visual persetujuan (Pengajuan -> Review Manager -> Review Exec 1 -> Finance -> Exec Final -> Transfer Lunas) dengan nama penindak, role, waktu tanggal-jam, dan catatan per tahap.
+     b) **Data Kreator**: Username, nama asli KTP, tier, target VT, ratecard awal, dan kalkulasi sisa termin jika DP 50%.
+     c) **Rekening & Finansial**: Bank/e-wallet, nomor rekening (selectable/copyable), nama penerima, nominal bersih, biaya transfer, dan total pengeluaran.
+     d) **Kontak & Legalitas Dokumen**: PIC WA, nomor WA dealing, NIK, alamat KTP, link dokumen KTP, dan link dokumen kontrak.
+     e) **Catatan (Notes)**: Catatan pengajuan item, catatan manager, dan catatan executive.
