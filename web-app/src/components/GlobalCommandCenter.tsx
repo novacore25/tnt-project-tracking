@@ -1,7 +1,12 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Loader2, ChevronDown, ChevronUp, CheckSquare, Square, CheckCircle, ShieldAlert, FileText, Send, Calendar, Image as ImageIcon } from 'lucide-react';
+import { 
+  Loader2, ChevronDown, ChevronUp, ChevronRight, CheckSquare, Square, 
+  CheckCircle, CheckCircle2, XCircle, Clock, ShieldAlert, FileText, 
+  Send, Calendar, Image as ImageIcon, ExternalLink, AlertCircle, 
+  User, CreditCard, Phone 
+} from 'lucide-react';
 import { 
   fetchCommandCenterBatches, 
   processBulkManagerItems,
@@ -18,6 +23,16 @@ export function GlobalCommandCenter({ role, onSuccess }: { role: string, onSucce
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [expandedBatches, setExpandedBatches] = useState<Set<number>>(new Set());
   const [selectedItems, setSelectedItems] = useState<Set<number>>(new Set());
+  const [expandedItems, setExpandedItems] = useState<Set<number>>(new Set());
+
+  const toggleExpandItem = (itemId: number) => {
+    setExpandedItems(prev => {
+      const next = new Set(prev);
+      if (next.has(itemId)) next.delete(itemId);
+      else next.add(itemId);
+      return next;
+    });
+  };
   
   // Generic Sub-Tabs for Roles: executive can access all 5 modes in funnel order, manager gets manager_review, finance gets review & transfer
   type CommandCenterSubTab = 'manager_review' | 'exec_review_1' | 'review' | 'exec_final' | 'transfer';
@@ -477,79 +492,518 @@ export function GlobalCommandCenter({ role, onSuccess }: { role: string, onSucce
                     <table className="w-full text-left text-sm">
                       <thead className="bg-slate-50 border-b border-slate-100 text-slate-500 font-medium text-xs">
                         <tr>
-                          <th className="py-2 pl-4 w-12"></th>
+                          <th className="py-2 pl-4 w-16"></th>
                           <th className="py-2">Kreator / Deskripsi</th>
                           <th className="py-2">Tgl Pengajuan</th>
                           <th className="py-2">Pembayaran ke</th>
                           <th className="py-2 text-right">Nominal</th>
-                          <th className="py-2 text-center pr-4">Status</th>
+                          <th className="py-2 text-center pr-4 min-w-[240px]">Status</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-50">
                         {batch.payment_items?.map((item: any) => {
                           const isSelected = selectedItems.has(item.id);
+                          const isItemExpanded = expandedItems.has(item.id);
                           return (
-                            <tr key={item.id} className={`transition-colors hover:bg-blue-50/30 ${isSelected ? 'bg-blue-50/50' : ''}`}>
-                              <td className="py-3 pl-4">
-                                <div className="cursor-pointer p-1 -m-1" onClick={() => toggleSelectItem(item.id)}>
-                                  {isSelected ? <CheckSquare className="w-5 h-5 text-blue-600" /> : <Square className="w-5 h-5 text-slate-300 hover:text-slate-400" />}
-                                </div>
-                              </td>
-                              <td className="py-3">
-                                <div className="font-mono text-[10px] text-slate-400 mb-0.5">{item.transaction_id || '-'}</div>
-                                {item.campaign_creators ? (
-                                  <div>
-                                    <div className="font-semibold text-slate-800">@{item.campaign_creators?.creators?.username}</div>
-                                    {item.payment_type === '50_awal' ? (
-                                      <div className="text-[11px] font-semibold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100 inline-block mt-0.5">
-                                        Termin 1 (DP 50%): Rp {Number(item.nominal).toLocaleString()} • Kurang: Rp {(Number(item.ratecard_awal || (Number(item.nominal) * 2)) - Number(item.nominal)).toLocaleString()} (Termin 2)
-                                      </div>
-                                    ) : item.payment_type === '50_akhir' ? (
-                                      <div className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100 inline-block mt-0.5">
-                                        Termin 2 (Pelunasan 50%): Rp {Number(item.nominal).toLocaleString()}
-                                      </div>
-                                    ) : item.payment_type === '100_awal' ? (
-                                      <div className="text-[11px] font-semibold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100 inline-block mt-0.5">Pembayaran Penuh 100% (Awal)</div>
-                                    ) : item.payment_type === '100_akhir' ? (
-                                      <div className="text-[11px] text-slate-600 font-medium">Pembayaran Penuh 100% (Akhir)</div>
-                                    ) : (
-                                      <div className="text-xs text-slate-500 uppercase">{item.payment_type}</div>
-                                    )}
-                                  </div>
-                                ) : (
-                                  <div>
-                                    <div className="font-semibold text-slate-800">{item.nama_penerima || 'Operasional'}</div>
-                                    <div className="text-xs text-slate-500 uppercase">{item.payment_type}</div>
-                                  </div>
-                                )}
-                              </td>
-                              <td className="py-3 text-xs text-slate-600 whitespace-nowrap">
-                                <div>{formatDateTime(item.created_at)}</div>
-                              </td>
-                              <td className="py-3 text-slate-600 text-xs">
-                                <div className="font-medium text-slate-800">{item.nama_penerima}</div>
-                                <div>{item.metode_pembayaran} • {item.nomor_rekening}</div>
-                              </td>
-                              <td className="py-3 text-right font-bold text-slate-800">
-                                Rp {Number(item.nominal).toLocaleString()}
-                              </td>
-                              <td className="py-3 text-center pr-4">
-                                {renderItemStatusBadge(item.final_status)}
-                                {/* Badge Jejak Approval Riil: ACC : [Role] Nama [dd/mm/yyyy, hh:mm] */}
-                                {(() => {
-                                  const badge = getItemApprovalBadge(item);
-                                  if (!badge) return null;
-                                  return (
-                                    <div 
-                                      className={`text-[9px] font-semibold mt-1 px-1.5 py-0.5 rounded border inline-block whitespace-nowrap max-w-[220px] truncate ${badge.className}`}
-                                      title={badge.tooltip || badge.text}
-                                    >
-                                      {badge.text}
+                            <React.Fragment key={item.id}>
+                              <tr className={`transition-colors hover:bg-blue-50/30 ${isSelected ? 'bg-blue-50/50' : ''} ${isItemExpanded ? 'bg-slate-50/50' : ''}`}>
+                                <td className="py-3 pl-4">
+                                  <div className="flex items-center gap-1.5">
+                                    <div className="cursor-pointer p-1 -m-1" onClick={() => toggleSelectItem(item.id)}>
+                                      {isSelected ? <CheckSquare className="w-5 h-5 text-blue-600" /> : <Square className="w-5 h-5 text-slate-300 hover:text-slate-400" />}
                                     </div>
-                                  );
-                                })()}
-                              </td>
-                            </tr>
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleExpandItem(item.id)}
+                                      title={isItemExpanded ? "Tutup detail" : "Buka detail item & funnel"}
+                                      className="p-1 text-slate-400 hover:text-blue-600 rounded hover:bg-slate-100 transition-colors"
+                                    >
+                                      {isItemExpanded ? <ChevronDown className="w-4 h-4 text-blue-600" /> : <ChevronRight className="w-4 h-4" />}
+                                    </button>
+                                  </div>
+                                </td>
+                                <td className="py-3">
+                                  <div className="font-mono text-[10px] text-slate-400 mb-0.5">{item.transaction_id || '-'}</div>
+                                  {item.campaign_creators ? (
+                                    <div>
+                                      <div 
+                                        className="font-semibold text-slate-800 hover:text-blue-600 cursor-pointer inline-flex items-center gap-1 group"
+                                        onClick={() => toggleExpandItem(item.id)}
+                                        title="Klik untuk membuka detail item & funnel"
+                                      >
+                                        <span>@{item.campaign_creators?.creators?.username}</span>
+                                        <span className="text-[10px] text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity font-normal underline">detail</span>
+                                      </div>
+                                      {item.payment_type === '50_awal' ? (
+                                        <div className="text-[11px] font-semibold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100 inline-block mt-0.5">
+                                          Termin 1 (DP 50%): Rp {Number(item.nominal).toLocaleString()} • Kurang: Rp {(Number(item.ratecard_awal || (Number(item.nominal) * 2)) - Number(item.nominal)).toLocaleString()} (Termin 2)
+                                        </div>
+                                      ) : item.payment_type === '50_akhir' ? (
+                                        <div className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100 inline-block mt-0.5">
+                                          Termin 2 (Pelunasan 50%): Rp {Number(item.nominal).toLocaleString()}
+                                        </div>
+                                      ) : item.payment_type === '100_awal' ? (
+                                        <div className="text-[11px] font-semibold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100 inline-block mt-0.5">Pembayaran Penuh 100% (Awal)</div>
+                                      ) : item.payment_type === '100_akhir' ? (
+                                        <div className="text-[11px] text-slate-600 font-medium">Pembayaran Penuh 100% (Akhir)</div>
+                                      ) : (
+                                        <div className="text-xs text-slate-500 uppercase">{item.payment_type}</div>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <div>
+                                      <div 
+                                        className="font-semibold text-slate-800 hover:text-blue-600 cursor-pointer"
+                                        onClick={() => toggleExpandItem(item.id)}
+                                      >
+                                        {item.nama_penerima || 'Operasional'}
+                                      </div>
+                                      <div className="text-xs text-slate-500 uppercase">{item.payment_type}</div>
+                                    </div>
+                                  )}
+                                </td>
+                                <td className="py-3 text-xs text-slate-600 whitespace-nowrap">
+                                  <div>{formatDateTime(item.created_at)}</div>
+                                </td>
+                                <td className="py-3 text-slate-600 text-xs">
+                                  <div className="font-medium text-slate-800">{item.nama_penerima}</div>
+                                  <div>{item.metode_pembayaran} • {item.nomor_rekening}</div>
+                                </td>
+                                <td className="py-3 text-right font-bold text-slate-800">
+                                  Rp {Number(item.nominal).toLocaleString()}
+                                </td>
+                                <td className="py-3 text-center pr-4 whitespace-nowrap">
+                                  <div className="flex flex-col items-center justify-center gap-1.5">
+                                    {renderItemStatusBadge(item.final_status)}
+                                    {/* Badge Jejak Approval Riil: ACC : [Role] Nama [dd/mm/yyyy, hh:mm] */}
+                                    {(() => {
+                                      const badge = getItemApprovalBadge(item);
+                                      if (!badge) return null;
+                                      return (
+                                        <div 
+                                          className={`text-[9.5px] font-semibold px-2 py-0.5 rounded border whitespace-nowrap shadow-2xs ${badge.className}`}
+                                          title={badge.tooltip || badge.text}
+                                        >
+                                          {badge.text}
+                                        </div>
+                                      );
+                                    })()}
+                                  </div>
+                                </td>
+                              </tr>
+
+                              {/* Accordion Detail Item Lengkap */}
+                              {isItemExpanded && (
+                                <tr className="bg-slate-50/80 border-b border-slate-200">
+                                  <td colSpan={6} className="p-4 sm:p-5">
+                                    <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 sm:p-5 space-y-4 animate-in fade-in-50 duration-200">
+                                      {/* 1. Header Detail */}
+                                      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
+                                        <div className="flex items-center gap-3">
+                                          <div className="w-10 h-10 rounded-full bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 font-bold text-sm">
+                                            {item.campaign_creators?.creators?.username ? item.campaign_creators.creators.username.substring(0, 2).toUpperCase() : 'CC'}
+                                          </div>
+                                          <div>
+                                            <div className="flex items-center gap-2">
+                                              <span className="font-bold text-slate-900 text-base">
+                                                @{item.campaign_creators?.creators?.username || item.nama_penerima || 'Kreator'}
+                                              </span>
+                                              <span className="text-[11px] font-mono px-2 py-0.5 bg-slate-100 text-slate-600 rounded">
+                                                {item.transaction_id || `ID: ${item.id}`}
+                                              </span>
+                                              {item.campaign_creators?.tier && (
+                                                <span className="text-[11px] font-semibold px-2 py-0.5 bg-purple-50 text-purple-700 border border-purple-200 rounded">
+                                                  Tier {item.campaign_creators.tier}
+                                                </span>
+                                              )}
+                                            </div>
+                                            <div className="text-xs text-slate-500 mt-0.5">
+                                              Campaign: <span className="font-medium text-slate-700">{batch.campaigns?.nama || '-'}</span> • Batch: <span className="font-medium text-slate-700">{batch.batch_label || `Batch #${batch.id}`}</span>
+                                            </div>
+                                          </div>
+                                        </div>
+                                        <button 
+                                          type="button" 
+                                          onClick={() => toggleExpandItem(item.id)}
+                                          className="text-xs text-slate-400 hover:text-slate-600 flex items-center gap-1 font-medium px-2.5 py-1 rounded-md hover:bg-slate-100 transition-colors"
+                                        >
+                                          <ChevronUp className="w-4 h-4" /> Tutup Detail
+                                        </button>
+                                      </div>
+
+                                      {/* 2. Funnel Progress Stepper (Alur 6 Tahap) */}
+                                      <div>
+                                        <div className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2.5 flex items-center gap-1.5">
+                                          <Clock className="w-3.5 h-3.5 text-blue-600" />
+                                          <span>Alur Funnel Persetujuan Item</span>
+                                        </div>
+                                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+                                          {/* Step 1: Submit */}
+                                          <div className="bg-slate-50 rounded-lg p-2.5 border border-slate-200/80">
+                                            <div className="flex items-center justify-between mb-1">
+                                              <span className="text-[11px] font-bold text-slate-700">1. Pengajuan</span>
+                                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                                            </div>
+                                            <div className="text-[10px] text-emerald-700 font-semibold bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100 inline-block mb-1">
+                                              Diajukan
+                                            </div>
+                                            <div className="text-[10px] text-slate-600 truncate" title={batch.submitter?.nama || 'Anggota'}>
+                                              Oleh: {batch.submitter?.nama || 'Anggota'}
+                                            </div>
+                                            <div className="text-[9.5px] text-slate-400 mt-0.5">
+                                              {formatDateTime(item.created_at, false)}
+                                            </div>
+                                          </div>
+
+                                          {/* Step 2: Manager */}
+                                          <div className={`rounded-lg p-2.5 border ${
+                                            item.manager_status === 'approved' 
+                                              ? 'bg-purple-50/50 border-purple-200' 
+                                              : item.manager_status === 'rejected'
+                                              ? 'bg-rose-50/50 border-rose-200'
+                                              : 'bg-slate-50 border-slate-200/80'
+                                          }`}>
+                                            <div className="flex items-center justify-between mb-1">
+                                              <span className="text-[11px] font-bold text-slate-700">2. Review Manager</span>
+                                              {item.manager_status === 'approved' ? (
+                                                <CheckCircle2 className="w-3.5 h-3.5 text-purple-600" />
+                                              ) : item.manager_status === 'rejected' ? (
+                                                <XCircle className="w-3.5 h-3.5 text-rose-600" />
+                                              ) : (
+                                                <Clock className="w-3.5 h-3.5 text-amber-500" />
+                                              )}
+                                            </div>
+                                            <div className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border inline-block mb-1 ${
+                                              item.manager_status === 'approved' 
+                                                ? 'text-purple-700 bg-purple-50 border-purple-200' 
+                                                : item.manager_status === 'rejected'
+                                                ? 'text-rose-700 bg-rose-50 border-rose-200'
+                                                : 'text-amber-700 bg-amber-50 border-amber-200'
+                                            }`}>
+                                              {item.manager_status === 'approved' ? 'Disetujui' : item.manager_status === 'rejected' ? 'Ditolak' : 'Menunggu'}
+                                            </div>
+                                            <div className="text-[10px] text-slate-600 truncate" title={item.manager_actor?.nama || '-'}>
+                                              ACC: {item.manager_actor?.nama || '-'}
+                                            </div>
+                                            <div className="text-[9.5px] text-slate-400 mt-0.5">
+                                              {item.manager_acted_at ? formatDateTime(item.manager_acted_at, false) : '-'}
+                                            </div>
+                                            {item.manager_note && (
+                                              <div className="text-[9.5px] text-rose-600 font-medium mt-1 truncate" title={item.manager_note}>
+                                                Note: {item.manager_note}
+                                              </div>
+                                            )}
+                                          </div>
+
+                                          {/* Step 3: Exec 1 */}
+                                          <div className={`rounded-lg p-2.5 border ${
+                                            item.executive_1_status === 'approved' 
+                                              ? 'bg-indigo-50/50 border-indigo-200' 
+                                              : item.executive_1_status === 'rejected'
+                                              ? 'bg-rose-50/50 border-rose-200'
+                                              : 'bg-slate-50 border-slate-200/80'
+                                          }`}>
+                                            <div className="flex items-center justify-between mb-1">
+                                              <span className="text-[11px] font-bold text-slate-700">3. Review Exec 1</span>
+                                              {item.executive_1_status === 'approved' ? (
+                                                <CheckCircle2 className="w-3.5 h-3.5 text-indigo-600" />
+                                              ) : item.executive_1_status === 'rejected' ? (
+                                                <XCircle className="w-3.5 h-3.5 text-rose-600" />
+                                              ) : (
+                                                <Clock className="w-3.5 h-3.5 text-slate-400" />
+                                              )}
+                                            </div>
+                                            <div className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border inline-block mb-1 ${
+                                              item.executive_1_status === 'approved' 
+                                                ? 'text-indigo-700 bg-indigo-50 border-indigo-200' 
+                                                : item.executive_1_status === 'rejected'
+                                                ? 'text-rose-700 bg-rose-50 border-rose-200'
+                                                : 'text-slate-600 bg-slate-100 border-slate-200'
+                                            }`}>
+                                              {item.executive_1_status === 'approved' ? 'Disetujui' : item.executive_1_status === 'rejected' ? 'Ditolak' : 'Menunggu'}
+                                            </div>
+                                            <div className="text-[10px] text-slate-600 truncate" title={item.executive_1_actor?.nama || '-'}>
+                                              ACC: {item.executive_1_actor?.nama || '-'}
+                                            </div>
+                                            <div className="text-[9.5px] text-slate-400 mt-0.5">
+                                              {item.executive_1_acted_at ? formatDateTime(item.executive_1_acted_at, false) : '-'}
+                                            </div>
+                                            {item.executive_1_note && (
+                                              <div className="text-[9.5px] text-rose-600 font-medium mt-1 truncate" title={item.executive_1_note}>
+                                                Note: {item.executive_1_note}
+                                              </div>
+                                            )}
+                                          </div>
+
+                                          {/* Step 4: Finance Review */}
+                                          <div className={`rounded-lg p-2.5 border ${
+                                            item.finance_selected 
+                                              ? 'bg-blue-50/50 border-blue-200' 
+                                              : item.final_status === 'pending_finance_outstanding'
+                                              ? 'bg-amber-50/50 border-amber-200'
+                                              : 'bg-slate-50 border-slate-200/80'
+                                          }`}>
+                                            <div className="flex items-center justify-between mb-1">
+                                              <span className="text-[11px] font-bold text-slate-700">4. Review Finance</span>
+                                              {item.finance_selected ? (
+                                                <CheckCircle2 className="w-3.5 h-3.5 text-blue-600" />
+                                              ) : item.final_status === 'pending_finance_outstanding' ? (
+                                                <AlertCircle className="w-3.5 h-3.5 text-amber-500" />
+                                              ) : (
+                                                <Clock className="w-3.5 h-3.5 text-slate-400" />
+                                              )}
+                                            </div>
+                                            <div className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border inline-block mb-1 ${
+                                              item.finance_selected 
+                                                ? 'text-blue-700 bg-blue-50 border-blue-200' 
+                                                : item.final_status === 'pending_finance_outstanding'
+                                                ? 'text-amber-800 bg-amber-50 border-amber-300'
+                                                : 'text-slate-600 bg-slate-100 border-slate-200'
+                                            }`}>
+                                              {item.finance_selected ? 'Dipilih Finance' : item.final_status === 'pending_finance_outstanding' ? 'Ditunda Finance' : 'Menunggu'}
+                                            </div>
+                                            <div className="text-[10px] text-slate-600">
+                                              {item.finance_selected ? 'Masuk Antrian Final' : item.final_status === 'pending_finance_outstanding' ? 'Perlu Klarifikasi' : 'Belum Ditindak'}
+                                            </div>
+                                            <div className="text-[9.5px] text-slate-400 mt-0.5">
+                                              Validasi Rekening
+                                            </div>
+                                          </div>
+
+                                          {/* Step 5: Exec Final */}
+                                          <div className={`rounded-lg p-2.5 border ${
+                                            ['ready_to_pay', 'executive_approved', 'paid'].includes(item.final_status)
+                                              ? 'bg-emerald-50/50 border-emerald-200'
+                                              : item.executive_status === 'rejected'
+                                              ? 'bg-rose-50/50 border-rose-200'
+                                              : 'bg-slate-50 border-slate-200/80'
+                                          }`}>
+                                            <div className="flex items-center justify-between mb-1">
+                                              <span className="text-[11px] font-bold text-slate-700">5. Exec Final</span>
+                                              {['ready_to_pay', 'executive_approved', 'paid'].includes(item.final_status) ? (
+                                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                                              ) : item.executive_status === 'rejected' ? (
+                                                <XCircle className="w-3.5 h-3.5 text-rose-600" />
+                                              ) : (
+                                                <Clock className="w-3.5 h-3.5 text-slate-400" />
+                                              )}
+                                            </div>
+                                            <div className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border inline-block mb-1 ${
+                                              ['ready_to_pay', 'executive_approved', 'paid'].includes(item.final_status)
+                                                ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
+                                                : item.executive_status === 'rejected'
+                                                ? 'text-rose-700 bg-rose-50 border-rose-200'
+                                                : 'text-slate-600 bg-slate-100 border-slate-200'
+                                            }`}>
+                                              {['ready_to_pay', 'executive_approved', 'paid'].includes(item.final_status) ? 'Siap Bayar' : item.executive_status === 'rejected' ? 'Ditolak' : 'Menunggu'}
+                                            </div>
+                                            <div className="text-[10px] text-slate-600 truncate" title={item.executive_actor?.nama || '-'}>
+                                              ACC: {item.executive_actor?.nama || '-'}
+                                            </div>
+                                            <div className="text-[9.5px] text-slate-400 mt-0.5">
+                                              {item.executive_acted_at ? formatDateTime(item.executive_acted_at, false) : '-'}
+                                            </div>
+                                            {item.executive_note && (
+                                              <div className="text-[9.5px] text-rose-600 font-medium mt-1 truncate" title={item.executive_note}>
+                                                Note: {item.executive_note}
+                                              </div>
+                                            )}
+                                          </div>
+
+                                          {/* Step 6: Transfer Lunas */}
+                                          <div className={`rounded-lg p-2.5 border ${
+                                            item.final_status === 'paid'
+                                              ? 'bg-green-50/50 border-green-200'
+                                              : 'bg-slate-50 border-slate-200/80'
+                                          }`}>
+                                            <div className="flex items-center justify-between mb-1">
+                                              <span className="text-[11px] font-bold text-slate-700">6. Transfer Lunas</span>
+                                              {item.final_status === 'paid' ? (
+                                                <CheckCircle2 className="w-3.5 h-3.5 text-green-600" />
+                                              ) : (
+                                                <Clock className="w-3.5 h-3.5 text-slate-400" />
+                                              )}
+                                            </div>
+                                            <div className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border inline-block mb-1 ${
+                                              item.final_status === 'paid'
+                                                ? 'text-green-800 bg-green-100 border-green-300'
+                                                : 'text-slate-600 bg-slate-100 border-slate-200'
+                                            }`}>
+                                              {item.final_status === 'paid' ? 'Lunas Ditransfer' : 'Belum Ditransfer'}
+                                            </div>
+                                            <div className="text-[10px] font-bold text-slate-800">
+                                              Rp {Number(item.actual_transfer || item.nominal || 0).toLocaleString()}
+                                            </div>
+                                            <div className="text-[9.5px] text-slate-400 mt-0.5">
+                                              {batch.transfer_date ? formatDateTime(batch.transfer_date, false) : (item.final_status === 'paid' ? 'Selesai' : '-')}
+                                            </div>
+                                          </div>
+                                        </div>
+                                      </div>
+
+                                      {/* 3. Data Grid: Detail Kreator, Rekening & Kontak */}
+                                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                        {/* Card 1: Data Kreator */}
+                                        <div className="bg-slate-50/80 rounded-lg p-3.5 border border-slate-200/70 space-y-2">
+                                          <div className="text-xs font-bold text-slate-700 flex items-center gap-1.5 border-b border-slate-200 pb-2">
+                                            <User className="w-3.5 h-3.5 text-blue-600" />
+                                            <span>Data Kreator & Deliverable</span>
+                                          </div>
+                                          <div className="space-y-1.5 text-xs">
+                                            <div className="flex justify-between">
+                                              <span className="text-slate-500">Username:</span>
+                                              <span className="font-semibold text-slate-800">@{item.campaign_creators?.creators?.username || '-'}</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                              <span className="text-slate-500">Nama Lengkap (KTP):</span>
+                                              <span className="font-medium text-slate-800">{item.campaign_creators?.creators?.nama_asli || item.nama_penerima || '-'}</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                              <span className="text-slate-500">Tier / Target:</span>
+                                              <span className="font-medium text-slate-800">
+                                                Tier {item.campaign_creators?.tier || '-'} • {item.campaign_creators?.qty_vt ? `${item.campaign_creators.qty_vt} VT` : '-'}
+                                              </span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                              <span className="text-slate-500">Tipe Pembayaran:</span>
+                                              <span className="font-medium text-slate-800">
+                                                {item.payment_type === '50_awal' ? 'Termin 1 (DP 50%)' :
+                                                 item.payment_type === '50_akhir' ? 'Termin 2 (Pelunasan 50%)' :
+                                                 item.payment_type === '100_awal' ? '100% Pembayaran di Awal' :
+                                                 item.payment_type === '100_akhir' ? '100% Pelunasan di Akhir' :
+                                                 item.payment_type || '-'}
+                                              </span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                              <span className="text-slate-500">Ratecard Awal:</span>
+                                              <span className="font-semibold text-slate-800">Rp {Number(item.ratecard_awal || 0).toLocaleString()}</span>
+                                            </div>
+                                            {item.payment_type === '50_awal' && (
+                                              <div className="flex justify-between text-indigo-700 bg-indigo-50/70 p-1.5 rounded text-[11px] font-semibold border border-indigo-100">
+                                                <span>Sisa Termin 2:</span>
+                                                <span>Rp {(Number(item.ratecard_awal || (Number(item.nominal) * 2)) - Number(item.nominal)).toLocaleString()}</span>
+                                              </div>
+                                            )}
+                                          </div>
+                                        </div>
+
+                                        {/* Card 2: Rekening & Finansial */}
+                                        <div className="bg-slate-50/80 rounded-lg p-3.5 border border-slate-200/70 space-y-2">
+                                          <div className="text-xs font-bold text-slate-700 flex items-center gap-1.5 border-b border-slate-200 pb-2">
+                                            <CreditCard className="w-3.5 h-3.5 text-emerald-600" />
+                                            <span>Detail Rekening & Transfer</span>
+                                          </div>
+                                          <div className="space-y-1.5 text-xs">
+                                            <div className="flex justify-between">
+                                              <span className="text-slate-500">Bank / Provider:</span>
+                                              <span className="font-semibold text-slate-800">{item.metode_pembayaran || item.creator_bank_accounts?.bank_name || '-'}</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                              <span className="text-slate-500">Nomor Rekening:</span>
+                                              <span className="font-mono font-bold text-slate-800 select-all">{item.nomor_rekening || item.creator_bank_accounts?.account_number || '-'}</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                              <span className="text-slate-500">Atas Nama:</span>
+                                              <span className="font-semibold text-slate-800">{item.nama_penerima || item.creator_bank_accounts?.account_holder || '-'}</span>
+                                            </div>
+                                            <div className="flex justify-between pt-1 border-t border-slate-200/60">
+                                              <span className="text-slate-500">Nominal Tagihan:</span>
+                                              <span className="font-semibold text-slate-800">Rp {Number(item.nominal).toLocaleString()}</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                              <span className="text-slate-500">Biaya Transfer:</span>
+                                              <span className="font-medium text-slate-600">Rp {Number(item.biaya_transfer || 0).toLocaleString()}</span>
+                                            </div>
+                                            <div className="flex justify-between text-emerald-800 bg-emerald-50/70 p-1.5 rounded text-[11px] font-bold border border-emerald-100">
+                                              <span>Total Ditransfer:</span>
+                                              <span>Rp {(Number(item.nominal || 0) + Number(item.biaya_transfer || 0)).toLocaleString()}</span>
+                                            </div>
+                                          </div>
+                                        </div>
+
+                                        {/* Card 3: Kontak & Legalitas */}
+                                        <div className="bg-slate-50/80 rounded-lg p-3.5 border border-slate-200/70 space-y-2">
+                                          <div className="text-xs font-bold text-slate-700 flex items-center gap-1.5 border-b border-slate-200 pb-2">
+                                            <Phone className="w-3.5 h-3.5 text-amber-600" />
+                                            <span>Kontak PIC & Legalitas</span>
+                                          </div>
+                                          <div className="space-y-1.5 text-xs">
+                                            <div className="flex justify-between">
+                                              <span className="text-slate-500">PIC WA:</span>
+                                              <span className="font-medium text-slate-800">{item.nama_wa_pic || '-'}</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                              <span className="text-slate-500">No. WA Dealing:</span>
+                                              <span className="font-medium text-slate-800 select-all">{item.nomor_wa_dealing || '-'}</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                              <span className="text-slate-500">NIK:</span>
+                                              <span className="font-mono text-slate-700">{item.nik || '-'}</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                              <span className="text-slate-500">Alamat KTP:</span>
+                                              <span className="font-medium text-slate-700 truncate max-w-[170px]" title={item.alamat_ktp || '-'}>
+                                                {item.alamat_ktp || '-'}
+                                              </span>
+                                            </div>
+                                            <div className="flex justify-between pt-1 border-t border-slate-200/60">
+                                              <span className="text-slate-500">Dokumen KTP:</span>
+                                              {item.link_ktp ? (
+                                                <a href={item.link_ktp} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline inline-flex items-center gap-1 font-semibold">
+                                                  <ExternalLink className="w-3 h-3" /> Lihat KTP
+                                                </a>
+                                              ) : (
+                                                <span className="text-slate-400">Tidak ada</span>
+                                              )}
+                                            </div>
+                                            <div className="flex justify-between">
+                                              <span className="text-slate-500">Dokumen Kontrak:</span>
+                                              {item.link_kontrak ? (
+                                                <a href={item.link_kontrak} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline inline-flex items-center gap-1 font-semibold">
+                                                  <ExternalLink className="w-3 h-3" /> Lihat Kontrak
+                                                </a>
+                                              ) : (
+                                                <span className="text-slate-400">Tidak ada</span>
+                                              )}
+                                            </div>
+                                          </div>
+                                        </div>
+                                      </div>
+
+                                      {/* 4. Catatan & Notes */}
+                                      {(item.notes || item.manager_note || item.executive_note || item.executive_1_note) && (
+                                        <div className="p-3 bg-amber-50/50 rounded-lg border border-amber-200/80 space-y-1.5">
+                                          <div className="text-xs font-bold text-amber-900 flex items-center gap-1.5">
+                                            <FileText className="w-3.5 h-3.5 text-amber-700" />
+                                            <span>Catatan Khusus (Notes)</span>
+                                          </div>
+                                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                                            {item.notes && (
+                                              <div className="bg-white p-2 rounded border border-amber-100">
+                                                <span className="font-bold text-slate-700 block text-[11px]">Catatan Pengajuan:</span>
+                                                <span className="text-slate-600">{item.notes}</span>
+                                              </div>
+                                            )}
+                                            {item.manager_note && (
+                                              <div className="bg-white p-2 rounded border border-amber-100">
+                                                <span className="font-bold text-purple-700 block text-[11px]">Catatan Manager:</span>
+                                                <span className="text-slate-600">{item.manager_note}</span>
+                                              </div>
+                                            )}
+                                            {(item.executive_note || item.executive_1_note) && (
+                                              <div className="bg-white p-2 rounded border border-amber-100">
+                                                <span className="font-bold text-indigo-700 block text-[11px]">Catatan Executive:</span>
+                                                <span className="text-slate-600">{item.executive_note || item.executive_1_note}</span>
+                                              </div>
+                                            )}
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                            </React.Fragment>
                           );
                         })}
                       </tbody>
