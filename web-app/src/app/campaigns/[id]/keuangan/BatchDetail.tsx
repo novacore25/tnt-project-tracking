@@ -761,6 +761,27 @@ export function BatchDetail({ batch, creatorHistory, onBack, onRefresh, onRefres
                       }`}>
                         {item.final_status?.replace('_', ' ') || 'pending'}
                       </span>
+                      {/* Approver terakhir agar transparan langsung di tabel */}
+                      {item.final_status === 'ready_to_pay' && item.executive_actor?.nama && (
+                        <div className="text-[10px] text-emerald-700 font-semibold mt-1 truncate" title={`Disetujui Executive: ${item.executive_actor.nama}`}>
+                          Acc: {item.executive_actor.nama}
+                        </div>
+                      )}
+                      {item.final_status === 'finance_selected' && (
+                        <div className="text-[10px] text-blue-700 font-semibold mt-1">
+                          Dipilih Finance
+                        </div>
+                      )}
+                      {item.final_status === 'executive_1_approved' && item.executive_1_actor?.nama && (
+                        <div className="text-[10px] text-indigo-700 font-semibold mt-1 truncate" title={`Disetujui Exec 1: ${item.executive_1_actor.nama}`}>
+                          Acc: {item.executive_1_actor.nama}
+                        </div>
+                      )}
+                      {item.final_status === 'manager_approved' && item.manager_actor?.nama && (
+                        <div className="text-[10px] text-purple-700 font-semibold mt-1 truncate" title={`Disetujui Manager: ${item.manager_actor.nama}`}>
+                          Acc: {item.manager_actor.nama}
+                        </div>
+                      )}
                       {item.manager_note || item.executive_note ? (
                         <div className="text-[10px] text-red-500 mt-1 max-w-[150px] truncate" title={item.manager_note || item.executive_note}>
                           Note: {item.manager_note || item.executive_note}
@@ -912,6 +933,70 @@ export function BatchDetail({ batch, creatorHistory, onBack, onRefresh, onRefres
                               <span className="col-span-2 font-medium">{bank ? bank.account_number : (item.nomor_rekening || '-')}</span>
                               <span className="text-slate-500">Atas Nama:</span>
                               <span className="col-span-2 font-medium">{bank ? bank.account_holder : (item.nama_penerima || '-')}</span>
+                            </div>
+                          </div>
+
+                          {/* Riwayat Jejak Persetujuan Khusus Item Ini */}
+                          <div className="space-y-2 md:col-span-2 bg-white p-3 rounded-lg border border-slate-200 mt-2">
+                            <div className="flex items-center gap-2 text-[11px] font-bold text-slate-700 uppercase tracking-wider">
+                              <History className="w-3.5 h-3.5 text-blue-600" />
+                              Riwayat & Jejak Persetujuan (Audit Trail Tagihan Ini)
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-2 text-xs pt-1">
+                              {/* 1. Pengajuan */}
+                              <div className="bg-slate-50 p-2 rounded border border-slate-200">
+                                <div className="text-[10px] font-semibold text-slate-500 mb-0.5">1. Pengajuan Awal</div>
+                                <div className="font-bold text-slate-800 truncate" title={item.campaign_creators?.profiles?.nama || batch.submitter?.nama}>
+                                  {item.campaign_creators?.profiles?.nama 
+                                    ? formatUserWithRole(item.campaign_creators.profiles.nama, item.campaign_creators.profiles.role) 
+                                    : (batch.submitter?.nama ? formatUserWithRole(batch.submitter.nama, batch.submitter.role) : '-')}
+                                </div>
+                                <div className="text-[9px] text-slate-500 font-mono mt-0.5">{formatDateTime(item.created_at)}</div>
+                              </div>
+
+                              {/* 2. Review Manager */}
+                              <div className={`p-2 rounded border ${item.manager_status === 'approved' ? 'bg-purple-50/50 border-purple-200' : item.manager_status === 'rejected' ? 'bg-red-50 border-red-200' : 'bg-slate-50/60 border-dashed border-slate-200 text-slate-400'}`}>
+                                <div className="text-[10px] font-semibold text-slate-500 mb-0.5">2. Review Manager</div>
+                                <div className="font-bold text-slate-800 truncate" title={item.manager_actor?.nama}>
+                                  {item.manager_actor?.nama ? formatUserWithRole(item.manager_actor.nama, item.manager_actor.role) : (item.manager_status === 'approved' ? 'Disetujui' : 'Menunggu')}
+                                </div>
+                                <div className="text-[9px] text-slate-500 font-mono mt-0.5">
+                                  {item.manager_acted_at ? formatDateTime(item.manager_acted_at) : '-'}
+                                </div>
+                              </div>
+
+                              {/* 3. Executive Review 1 */}
+                              <div className={`p-2 rounded border ${item.executive_1_status === 'approved' ? 'bg-indigo-50/50 border-indigo-200' : item.executive_1_status === 'rejected' ? 'bg-red-50 border-red-200' : 'bg-slate-50/60 border-dashed border-slate-200 text-slate-400'}`}>
+                                <div className="text-[10px] font-semibold text-slate-500 mb-0.5">3. Exec Review 1</div>
+                                <div className="font-bold text-slate-800 truncate" title={item.executive_1_actor?.nama}>
+                                  {item.executive_1_actor?.nama ? formatUserWithRole(item.executive_1_actor.nama, item.executive_1_actor.role) : (item.executive_1_status === 'approved' ? 'Disetujui' : 'Menunggu')}
+                                </div>
+                                <div className="text-[9px] text-slate-500 font-mono mt-0.5">
+                                  {item.executive_1_acted_at ? formatDateTime(item.executive_1_acted_at) : '-'}
+                                </div>
+                              </div>
+
+                              {/* 4. Review Finance */}
+                              <div className={`p-2 rounded border ${item.finance_selected ? 'bg-blue-50/50 border-blue-200' : item.final_status === 'pending_finance_outstanding' ? 'bg-amber-50 border-amber-200' : 'bg-slate-50/60 border-dashed border-slate-200 text-slate-400'}`}>
+                                <div className="text-[10px] font-semibold text-slate-500 mb-0.5">4. Review Finance</div>
+                                <div className="font-bold text-slate-800 truncate">
+                                  {item.finance_selected ? '✓ Dipilih Finance' : item.final_status === 'pending_finance_outstanding' ? 'Ditunda' : 'Menunggu'}
+                                </div>
+                                <div className="text-[9px] text-slate-500 font-mono mt-0.5">
+                                  {item.finance_selected ? 'Lolos ke Exec Final' : '-'}
+                                </div>
+                              </div>
+
+                              {/* 5. Executive Final */}
+                              <div className={`p-2 rounded border ${item.executive_status === 'approved' ? 'bg-emerald-50/50 border-emerald-200' : item.executive_status === 'rejected' ? 'bg-red-50 border-red-200' : 'bg-slate-50/60 border-dashed border-slate-200 text-slate-400'}`}>
+                                <div className="text-[10px] font-semibold text-slate-500 mb-0.5">5. Exec Final (ACC)</div>
+                                <div className="font-bold text-slate-800 truncate" title={item.executive_actor?.nama}>
+                                  {item.executive_actor?.nama ? formatUserWithRole(item.executive_actor.nama, item.executive_actor.role) : (item.executive_status === 'approved' ? 'Disetujui' : 'Menunggu')}
+                                </div>
+                                <div className="text-[9px] text-slate-500 font-mono mt-0.5">
+                                  {item.executive_acted_at ? formatDateTime(item.executive_acted_at) : '-'}
+                                </div>
+                              </div>
                             </div>
                           </div>
                         </div>

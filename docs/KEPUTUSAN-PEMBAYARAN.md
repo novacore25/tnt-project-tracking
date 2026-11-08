@@ -829,3 +829,42 @@ Backup: `backup_payment_items_20261002` (111 item) dan
 NAISDAY 19 Jun 2026, **2 baris** - Rp400.000 dan Rp73.900. Keduanya masuk,
 satu batch `2026-06-19 - PIC: Maria - NAISDAY`. Tidak kena dedup karena
 nominal berbeda.
+
+
+---
+
+## 11. Keputusan & Standard Operating Procedure (SOP) Partial Payment, Pemisahan Termin, dan Item Audit Trail (8 Nov 2026)
+
+### 11.1 Latar Belakang & Investigasi Masalah
+Pada 8 November 2026, tim Finance (Michael) dan Executive (Ko Calvin) menemukan beberapa kebingungan operasional:
+1. **Batch Keuangan Terbelah (Siap Transfer vs Selesai Dibayar dalam 1 Batch):**
+   - Contoh nyata: Batch 1249 (Lion Parcel) berisi 5 item tagihan @ Rp 100.000.
+   - Tiga item (BRI & DANA) telah ditransfer oleh Finance pada 26/10/2026.
+   - Dua item (SeaBank: @aghania02, @erayasa02) tertahan belum ditransfer.
+   - Ketika Finance hendak menandai lunas 2 tagihan tersebut, form konfirmasi memuat tanggal transfer `26/10/2026` dan link bukti GDrive lama milik 3 rekannya.
+2. **Akar Masalah Teknis:**
+   - Fitur `autoSplitUnpaidBatchItems` crash dengan error PostgreSQL 23502:
+     `null value in column "executive_status" of relation "payment_items" violates not-null constraint`.
+   - Kode lama mencoba mengosongkan status executive dengan `executive_status = NULL`, padahal kolom DB bertipe `text NOT NULL DEFAULT 'pending'`.
+   - Akibat crash ini, batch pecahan baru (`Batch - Termin 2`, ID 1270, 1271, 1297) terlanjur ter-insert tetapi kosong (0 item), sementara 2 item belum lunas tetap tersangkut di batch lama.
+3. **Ketiadaan Item-Level Audit Trail di UI:**
+   - Audit trail di timeline atas hanya membaca status level BATCH.
+   - Tabel baris kreator tidak menampilkan siapa approver (Manager / Exec 1 / Exec Final) yang menindak item tersebut.
+   - Akibatnya tim Finance dan Executive saling bertanya di WhatsApp karena tidak dapat melihat siapa yang menyetujui tagihan tersebut secara transparan di sistem.
+
+### 11.2 Keputusan Desain & Perbaikan (Non-Negotiable)
+1. **Pemisahan Batch Parsial Wajib Membelah Funnel (All-or-Nothing Per Batch):**
+   - Jika suatu batch dibayar sebagian (misal 3 dari 5 lunas):
+     a) Batch Utama ditutup menjadi `PAID` (100% Lunas) hanya berisi item-item yang benar-benar cair uangnya, lengkap dengan tanggal dan bukti transfer batch tersebut.
+     b) Item-item yang belum cair otomatis dipindahkan ke batch baru (`Batch - Termin 2`) dengan status `ready_to_pay` (atau `pending_finance` jika ditunda Finance), tanpa membawa tanggal transfer dan bukti transfer lama.
+   - Perbaikan kode: `executive_status` di-reset ke `'pending'` (bukan `NULL`).
+2. **Item-Level Audit Trail di UI (`BatchDetail.tsx` & `GlobalCommandCenter.tsx`):**
+   - Setiap baris item di UI kini menampilkan:
+     a) Pada kolom status: Nama approver terakhir (misal: `Acc: Calvin Adiputra` atau `Acc Mgr: Ruben Arianto`).
+     b) Pada accordion detail (expand): Mini audit trail 5 tahap lengkap dengan nama akun, role, dan timestamp penindakan.
+3. **Pengetatan `getLogicalStatus` (Pencegahan Loncat Funnel):**
+   - Status `ready_to_pay` HANYA dikembalikan jika `final_status` item memang `ready_to_pay` atau `executive_approved` (telah diverifikasi Finance dan disetujui Executive Final).
+   - Menghapus celah `i.executive_status === 'approved'` yang sebelumnya dapat memicu loncat status membypass Finance.
+4. **Verifikasi Nol Duplikasi Dana (100% Aman):**
+   - Audit forensik membuktikan tidak ada uang keluar ganda atau tagihan ganda yang cair di sistem.
+   - Batch 1249 berhasil direkonsiliasi: 3 item lunas tetap di 1249 (`PAID`), 2 item SeaBank dipindahkan ke Batch 1298 (`Batch - Oktober 2026 - Termin 2`, `ready_to_pay`).

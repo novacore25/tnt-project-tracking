@@ -2959,3 +2959,35 @@ memberi informasi yang saling menguatkan, bukan noise.
    - **Alokasi Campaign (`ads_allocations`):** Dompet saldo yang dijatahkan untuk campaign tertentu.
    - **Realisasi Spend:** Dihitung dari baris tanggal terakhir per ad_id pada campaign tersebut.
    - **Sisa Saldo & Alert:** $\text{Alokasi USD} - \text{Real Spend USD}$. Jika sisa saldo $< 0$, sistem memberikan indikator peringatan overspend.
+
+
+---
+
+### 3J. Logika Pembagian Batch Parsial (Partial Payment Split) & Audit Trail Item Keuangan (8 Nov 2026)
+
+#### 1. Aturan Pemisahan Batch Parsial (`autoSplitUnpaidBatchItems`)
+1. **Pemisahan Bersih & Isolasi Bukti Transfer:**
+   - Dalam sistem budgeting/pembayaran TNT, suatu batch pembayaran tidak boleh berada dalam kondisi "sebagian lunas, sebagian belum".
+   - Jika Finance mentransfer sebagian item (misal 3 lunas dari 5 diajukan):
+     - Batch asal (A) ditutup dengan status `paid` (100% lunas) berisi 3 item tersebut dengan tanggal transfer dan bukti transfer GDrive milik batch tersebut.
+     - Sisa 2 item yang belum lunas dipindahkan secara otomatis ke batch pecahan baru bertajuk `[Nama Batch] - Termin 2` dengan `actual_payment_date = NULL` dan `bukti_transfer_url = NULL`.
+2. **Jebakan `NOT NULL` pada `executive_status`:**
+   - Kolom `payment_items.executive_status` memiliki database check constraint / not-null: `text NOT NULL DEFAULT 'pending'`.
+   - **JANGAN PERNAH** menuliskan `SET executive_status = NULL`. Wajib gunakan `SET executive_status = 'pending'`.
+   - Menyetel ke `NULL` akan memicu error PostgreSQL 23502 yang membatalkan pemindahan item dan meninggalkan batch pecahan kosong (*orphan batch*).
+
+#### 2. Integritas Funnel Persetujuan (Anti-Bypass Approval)
+1. **Urutan Funnel 5 Tahap:**
+   - Tahap 1: `pending` $\rightarrow$ Review Manager (`manager_status = 'approved'`)
+   - Tahap 2: `manager_approved` $\rightarrow$ Exec Review 1 (`executive_1_status = 'approved'`)
+   - Tahap 3: `executive_1_approved` $\rightarrow$ Review Finance (`finance_selected = true` atau `pending_finance_outstanding`)
+   - Tahap 4: `finance_selected` $\rightarrow$ Exec Final Approval (`executive_status = 'approved'`)
+   - Tahap 5: `ready_to_pay` $\rightarrow$ Pencairan / Transfer oleh Finance (`final_status = 'paid'`)
+2. **Aturan `getLogicalStatus` di `src/utils/statusHelper.ts`:**
+   - Status `ready_to_pay` HANYA boleh aktif jika `final_status` item secara eksplisit adalah `'ready_to_pay'` atau `'executive_approved'`.
+   - Dilarang membuat shortcut berbasis `executive_status === 'approved'` tanpa mengecek apakah item telah melewati seleksi Finance (`finance_selected`).
+
+#### 3. Transparansi Jejak Persetujuan (Item-Level Audit Trail)
+1. **Audit Trail Level Item:**
+   - Seluruh server query (`rpc_get_payment_batches` dan `getPaymentBatches`) wajib mengembalikan objek penindak: `manager_actor`, `executive_1_actor`, dan `executive_actor` (nama dan role dari `profiles`).
+   - Di UI `BatchDetail.tsx` dan `GlobalCommandCenter.tsx`, nama approver terakhir wajib ditampilkan langsung di tabel status (misal: `Acc: Calvin Adiputra`), dan timeline lengkap tersedia pada accordion baris kreator.

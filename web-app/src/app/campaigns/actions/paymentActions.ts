@@ -53,15 +53,18 @@ export async function getPaymentBatches(campaignId?: number, status?: string) {
             'manager_note', pi.manager_note,
             'manager_acted_by', pi.manager_acted_by,
             'manager_acted_at', pi.manager_acted_at,
+            'manager_actor', (SELECT jsonb_build_object('nama', p_mgr.nama, 'role', p_mgr.role) FROM profiles p_mgr WHERE p_mgr.id = pi.manager_acted_by),
             'executive_1_status', pi.executive_1_status,
             'executive_1_note', pi.executive_1_note,
             'executive_1_acted_by', pi.executive_1_acted_by,
             'executive_1_acted_at', pi.executive_1_acted_at,
+            'executive_1_actor', (SELECT jsonb_build_object('nama', p_e1.nama, 'role', p_e1.role) FROM profiles p_e1 WHERE p_e1.id = pi.executive_1_acted_by),
             'finance_selected', pi.finance_selected,
             'executive_status', pi.executive_status,
             'executive_note', pi.executive_note,
             'executive_acted_by', pi.executive_acted_by,
             'executive_acted_at', pi.executive_acted_at,
+            'executive_actor', (SELECT jsonb_build_object('nama', p_ex.nama, 'role', p_ex.role) FROM profiles p_ex WHERE p_ex.id = pi.executive_acted_by),
             'final_status', pi.final_status,
             'transaction_id', pi.transaction_id,
             'notes', pi.notes,
@@ -1291,7 +1294,7 @@ export async function autoSplitUnpaidBatchItems(batchId: number) {
           WHEN final_status IN ('ready_to_pay', 'executive_approved', 'finance_selected', 'pending_finance_outstanding') THEN 'executive_1_approved'
           ELSE final_status
         END,
-        executive_status    = CASE WHEN final_status IN ('ready_to_pay', 'executive_approved', 'finance_selected', 'pending_finance_outstanding') THEN NULL ELSE executive_status    END,
+        executive_status    = CASE WHEN final_status IN ('ready_to_pay', 'executive_approved', 'finance_selected', 'pending_finance_outstanding') THEN 'pending' ELSE executive_status    END,
         executive_acted_by  = CASE WHEN final_status IN ('ready_to_pay', 'executive_approved', 'finance_selected', 'pending_finance_outstanding') THEN NULL ELSE executive_acted_by  END,
         executive_acted_at  = CASE WHEN final_status IN ('ready_to_pay', 'executive_approved', 'finance_selected', 'pending_finance_outstanding') THEN NULL ELSE executive_acted_at  END,
         executive_note      = CASE WHEN final_status IN ('ready_to_pay', 'executive_approved', 'finance_selected', 'pending_finance_outstanding') THEN NULL ELSE executive_note      END
