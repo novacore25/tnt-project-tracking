@@ -3000,3 +3000,14 @@ memberi informasi yang saling menguatkan, bukan noise.
      c) **Rekening & Finansial**: Bank/e-wallet, nomor rekening (selectable/copyable), nama penerima, nominal bersih, biaya transfer, dan total pengeluaran.
      d) **Kontak & Legalitas Dokumen**: PIC WA, nomor WA dealing, NIK, alamat KTP, link dokumen KTP, dan link dokumen kontrak.
      e) **Catatan (Notes)**: Catatan pengajuan item, catatan manager, dan catatan executive.
+
+### 10k. Sinkronisasi Plafon Budget Campaign vs Excel (9 Nov 2026)
+1. **Aturan Penyelarasan Plafon Budgeting:**
+   - Tabel `campaigns` mengelola plafon via `budget_creator_plafon` dan `budget_ads_plafon`.
+   - View `vw_campaign_budget_summary` mengalkulasi `sisa_creator = budget_creator_plafon - terpakai_creator` dan `sisa_ads = budget_ads_plafon - terpakai_ads`.
+   - **Pemetaan Khusus**:
+     - Spreadsheet mencatat **"Salsa Baby Care"** $\rightarrow$ di database sistem TNT adalah **`SALSA Mom & Baby` (ID: 36)**. Plafon Creator dinaikkan dari Rp 10 jt ke **Rp 25 jt** (Plafon Ads Rp 15 jt tetap, total plafon Rp 40 jt).
+     - **`VOTRE PEAU` (ID: 53)**: Koreksi typo dari Rp 4 jt menjadi **Rp 40 jt** (Plafon Ads Rp 0).
+     - **`PWS` (ID: 38)**: Plafon Creator disinkronkan dari Rp 65 jt menjadi **Rp 70 jt**.
+   - Selalu validasi `vw_campaign_budget_summary` setelah migrasi plafon untuk memastikan tidak ada selisih negatif yang tidak diinginkan.
+

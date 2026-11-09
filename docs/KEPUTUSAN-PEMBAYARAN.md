@@ -883,3 +883,16 @@ Pada 8 November 2026, tim Finance (Michael) dan Executive (Ko Calvin) menemukan 
      c) **Rekening & Finansial**: Bank/metode, nomor rekening (bisa dicopy), atas nama, nominal bersih, biaya transfer, dan total pengeluaran.
      d) **Kontak & Dokumen Legalitas**: PIC WA, nomor WA dealing, NIK, alamat KTP, link dokumen KTP, dan link dokumen kontrak.
      e) **Catatan Khusus (Notes)**: Catatan pengajuan item, catatan manager, dan catatan executive.
+
+### 11.4 Rekonsiliasi Plafon Budget 18 Campaign (9 Nov 2026)
+1. **Latar Belakang & Hasil Audit Forensik:**
+   - Audit komparasi menyeluruh antara rekapitulasi Excel 18 campaign dengan data live database sistem TNT (`vw_campaign_budget_summary`).
+   - Sebanyak 9 campaign terbukti cocok 100% hingga digit rupiah terakhir (OMG Makeup, Qahira, Salsa Cosmetics, Dioly, MD Glow, Zeluxe, Lion Parcel, Ghaniskin, MS Glow Beauty).
+   - Ditemukan kebutuhan sinkronisasi angka plafon budget pada 3 campaign agar saldo sistem klop 100% dengan Excel:
+     a) **SALSA Mom & Baby (ID: 36)** (di Excel dicatat sebagai "Salsa Baby Care"): Plafon Creator di DB sebelumnya Rp 10.000.000, dinaikkan menjadi **Rp 25.000.000** (Plafon total Rp 40.000.000, pemakaian riil Rp 22.450.000, sisa budget Rp 17.550.000 -> **100% MATCH PERSIS dengan Excel**).
+     b) **VOTRE PEAU (ID: 53)**: Plafon Creator di DB sebelumnya typo Rp 4.000.000 (kurang satu nol), dikoreksi menjadi **Rp 40.000.000** (pemakaian riil Rp 1.800.000, sisa budget Rp 38.200.000 -> **100% MATCH PERSIS dengan Excel**).
+     c) **PWS (ID: 38)**: Plafon Creator di DB sebelumnya Rp 65.000.000, disinkronkan menjadi **Rp 70.000.000** (pemakaian paid Rp 33.800.000 + pending batch 16 & 17 Rp 17.500.000 = Rp 51.300.000, sisa budget Rp 18.700.000 -> **100% MATCH PERSIS dengan Excel**).
+2. **Implementasi Migration DDL/DML:**
+   - File migration: `web-app/supabase/migrations/20261109104500_update_campaign_budget_plafon.sql`.
+   - Diterapkan langsung pada container PostgreSQL VPS Coolify (`6ve3f9zqfkypblr0f0cea4jm`).
+
