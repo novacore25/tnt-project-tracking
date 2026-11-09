@@ -3000,6 +3000,10 @@ memberi informasi yang saling menguatkan, bukan noise.
      c) **Rekening & Finansial**: Bank/e-wallet, nomor rekening (selectable/copyable), nama penerima, nominal bersih, biaya transfer, dan total pengeluaran.
      d) **Kontak & Legalitas Dokumen**: PIC WA, nomor WA dealing, NIK, alamat KTP, link dokumen KTP, dan link dokumen kontrak.
      e) **Catatan (Notes)**: Catatan pengajuan item, catatan manager, dan catatan executive.
+3. **Akumulasi Nominal Real-Time pada Floating Action Bar:**
+   - Menghitung jumlah rupiah dari seluruh item yang dicentang (`selectedTotalNominal`).
+   - Ditampilkan pada floating action bar bawah (`Terpilih: X Tagihan | Total Nominal: Rp Y`), tombol aksi, dan modal transfer lunas.
+
 
 ### 10k. Sinkronisasi Plafon Budget Campaign vs Excel (9 Nov 2026)
 1. **Aturan Penyelarasan Plafon Budgeting:**

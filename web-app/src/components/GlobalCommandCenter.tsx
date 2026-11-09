@@ -62,6 +62,19 @@ export function GlobalCommandCenter({ role, onSuccess }: { role: string, onSucce
     transfer: 0
   });
 
+  // Kalkulasi total nominal rupiah untuk seluruh tagihan yang sedang dicentang/diseleksi
+  const selectedTotalNominal = React.useMemo(() => {
+    let total = 0;
+    batches.forEach(b => {
+      b.payment_items?.forEach((i: any) => {
+        if (selectedItems.has(i.id)) {
+          total += Number(i.nominal) || 0;
+        }
+      });
+    });
+    return total;
+  }, [batches, selectedItems]);
+
   const loadData = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -180,7 +193,7 @@ export function GlobalCommandCenter({ role, onSuccess }: { role: string, onSucce
 
   const handleBulkApproveExecMgr = async () => {
     if (selectedItems.size === 0) return;
-    if (!confirm(`Anda yakin ingin menyetujui ${selectedItems.size} tagihan ini?`)) return;
+    if (!confirm(`Anda yakin ingin menyetujui ${selectedItems.size} tagihan ini (Total: Rp ${selectedTotalNominal.toLocaleString('id-ID')})?`)) return;
 
     setIsSubmitting(true);
     try {
@@ -205,7 +218,7 @@ export function GlobalCommandCenter({ role, onSuccess }: { role: string, onSucce
   const handleFinanceReview = async (action: 'approve' | 'pending' | 'reject') => {
     if (selectedItems.size === 0) return;
     let msg = action === 'approve' ? 'menyetujui' : action === 'pending' ? 'menunda (outstanding)' : 'menolak (reject)';
-    if (!confirm(`Anda yakin ingin ${msg} ${selectedItems.size} tagihan ini?`)) return;
+    if (!confirm(`Anda yakin ingin ${msg} ${selectedItems.size} tagihan ini (Total: Rp ${selectedTotalNominal.toLocaleString('id-ID')})?`)) return;
 
     setIsSubmitting(true);
     try {
@@ -1019,9 +1032,15 @@ export function GlobalCommandCenter({ role, onSuccess }: { role: string, onSucce
       {/* Floating Action Bar */}
       {selectedItems.size > 0 && (
         <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 shadow-[0_-10px_20px_rgba(0,0,0,0.05)] p-4 z-40 flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-8 animate-in slide-in-from-bottom-10">
-          <div className="font-semibold text-slate-800 text-center sm:text-left">
-            <div className="text-sm text-slate-500">Terpilih</div>
-            {selectedItems.size} Tagihan
+          <div className="font-semibold text-slate-800 text-center sm:text-left flex items-center gap-4 divide-x divide-slate-200">
+            <div>
+              <div className="text-xs text-slate-500 font-medium">Terpilih</div>
+              <div className="text-base font-bold text-slate-800">{selectedItems.size} Tagihan</div>
+            </div>
+            <div className="pl-4">
+              <div className="text-xs text-slate-500 font-medium">Total Nominal</div>
+              <div className="text-base font-bold text-emerald-600">Rp {selectedTotalNominal.toLocaleString('id-ID')}</div>
+            </div>
           </div>
           
           <div className="flex flex-wrap justify-center gap-3">
@@ -1032,7 +1051,7 @@ export function GlobalCommandCenter({ role, onSuccess }: { role: string, onSucce
                 className="btn btn-primary px-8 py-2.5 text-base shadow-lg shadow-blue-500/20 disabled:opacity-50 flex items-center gap-2"
               >
                 {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCircle className="w-5 h-5" />}
-                Approve {selectedItems.size} Tagihan {
+                Approve {selectedItems.size} Tagihan (Rp {selectedTotalNominal.toLocaleString('id-ID')}) {
                   subTab === 'manager_review' ? '(Sebagai Manager)' : 
                   subTab === 'exec_review_1' ? '(Tahap 2: Review 1 Exec)' : 
                   subTab === 'exec_final' ? '(Tahap 4: Final Exec)' : ''
@@ -1045,21 +1064,21 @@ export function GlobalCommandCenter({ role, onSuccess }: { role: string, onSucce
                   disabled={isSubmitting}
                   className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold shadow-lg shadow-emerald-500/20 transition-all flex items-center gap-2"
                 >
-                  <CheckCircle className="w-5 h-5" /> Approve
+                  <CheckCircle className="w-5 h-5" /> Approve ({selectedItems.size} • Rp {selectedTotalNominal.toLocaleString('id-ID')})
                 </button>
                 <button
                   onClick={() => handleFinanceReview('pending')}
                   disabled={isSubmitting}
                   className="px-6 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg font-bold shadow-lg shadow-amber-500/20 transition-all flex items-center gap-2"
                 >
-                  <Calendar className="w-5 h-5" /> Tunda (Outstanding)
+                  <Calendar className="w-5 h-5" /> Tunda ({selectedItems.size})
                 </button>
                 <button
                   onClick={() => handleFinanceReview('reject')}
                   disabled={isSubmitting}
                   className="px-6 py-2.5 bg-rose-500 hover:bg-rose-600 text-white rounded-lg font-bold shadow-lg shadow-rose-500/20 transition-all flex items-center gap-2"
                 >
-                  <ShieldAlert className="w-5 h-5" /> Reject Permanen
+                  <ShieldAlert className="w-5 h-5" /> Reject ({selectedItems.size})
                 </button>
               </>
             ) : subTab === 'transfer' ? (
@@ -1068,7 +1087,7 @@ export function GlobalCommandCenter({ role, onSuccess }: { role: string, onSucce
                 disabled={isSubmitting}
                 className="btn btn-primary px-8 py-2.5 text-base shadow-lg shadow-blue-500/20 disabled:opacity-50 flex items-center gap-2"
               >
-                <Send className="w-5 h-5" /> Tandai Lunas ({selectedItems.size})
+                <Send className="w-5 h-5" /> Tandai Lunas ({selectedItems.size} Tagihan • Rp {selectedTotalNominal.toLocaleString('id-ID')})
               </button>
             ) : null}
           </div>
@@ -1080,10 +1099,15 @@ export function GlobalCommandCenter({ role, onSuccess }: { role: string, onSucce
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <form onSubmit={handleFinanceSubmitTransfer} className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-in zoom-in-95">
             <div className="p-5 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
-              <h3 className="font-bold text-slate-800 text-lg flex items-center gap-2">
-                <Send className="w-5 h-5 text-blue-600" />
-                Tandai Lunas {selectedItems.size} Tagihan
-              </h3>
+              <div>
+                <h3 className="font-bold text-slate-800 text-lg flex items-center gap-2">
+                  <Send className="w-5 h-5 text-blue-600" />
+                  Tandai Lunas {selectedItems.size} Tagihan
+                </h3>
+                <div className="text-xs font-semibold text-emerald-600 mt-1">
+                  Total Nominal: Rp {selectedTotalNominal.toLocaleString('id-ID')}
+                </div>
+              </div>
               <button type="button" onClick={() => setShowTransferModal(false)} className="text-slate-400 hover:text-slate-600">✕</button>
             </div>
             
@@ -1128,7 +1152,7 @@ export function GlobalCommandCenter({ role, onSuccess }: { role: string, onSucce
                     onChange={e => setBuktiUrl(e.target.value)}
                   />
                 </div>
-                <p className="text-xs text-slate-500 mt-1.5">Satu bukti transfer ini akan terpasang ke {selectedItems.size} tagihan sekaligus secara otomatis.</p>
+                <p className="text-xs text-slate-500 mt-1.5">Satu bukti transfer ini akan terpasang ke {selectedItems.size} tagihan sekaligus senilai total Rp {selectedTotalNominal.toLocaleString('id-ID')}.</p>
               </div>
             </div>
 

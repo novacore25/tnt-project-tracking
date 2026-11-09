@@ -883,6 +883,9 @@ Pada 8 November 2026, tim Finance (Michael) dan Executive (Ko Calvin) menemukan 
      c) **Rekening & Finansial**: Bank/metode, nomor rekening (bisa dicopy), atas nama, nominal bersih, biaya transfer, dan total pengeluaran.
      d) **Kontak & Dokumen Legalitas**: PIC WA, nomor WA dealing, NIK, alamat KTP, link dokumen KTP, dan link dokumen kontrak.
      e) **Catatan Khusus (Notes)**: Catatan pengajuan item, catatan manager, dan catatan executive.
+3. **Kalkulator Akumulasi Nominal Seleksi Massal (Floating Bar & Modal):**
+   - Di bilah aksi mengambang (*floating bar*), selain jumlah item terpilih (`selectedItems.size`), kini ditampilkan **Total Nominal Rupiah** (`selectedTotalNominal`) secara *real-time*.
+   - Tombol aksi massal (`Approve` / `Tandai Lunas`) dan modal konfirmasi bulk transfer secara otomatis menyertakan total rupiah akumulasi untuk memudahkan validasi tim Finance dan Executive sebelum transfer dicairkan.
 
 ### 11.4 Rekonsiliasi Plafon Budget 18 Campaign (9 Nov 2026)
 1. **Latar Belakang & Hasil Audit Forensik:**
