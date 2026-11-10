@@ -1142,10 +1142,52 @@ export async function bulkVerifyVideoLinksAction(
       return { success: true, results: [] };
     }
 
-    const videoIds = items.map(it => it.videoId).filter(Boolean) as string[];
-    const usernames = items.map(it => it.username?.toLowerCase().trim()).filter(Boolean) as string[];
+    const videoIds = items.map(it => {
+      const exp = it.expandedUrl || it.originalUrl || '';
+      return it.videoId || exp.match(/\/(?:video|photo)\/(\d+)/)?.[1] || '';
+    }).filter(Boolean) as string[];
 
-    // 1. Fetch existing videos by content_uid across database
+    const shortUrls = items.map(it => it.originalUrl).filter(Boolean) as string[];
+
+    // 1. Fetch cached link details (creator_username, final_url) from tiktok_link_cache
+    let cachedLinks: any[] = [];
+    try {
+      if (videoIds.length > 0 || shortUrls.length > 0) {
+        cachedLinks = (await db.execute(sql`
+          SELECT video_id, short_url, creator_username, final_url
+          FROM tiktok_link_cache
+          WHERE (
+            ${videoIds.length > 0 ? sql`video_id IN ${sqlInList(videoIds)}` : sql`FALSE`}
+            OR ${shortUrls.length > 0 ? sql`short_url IN ${sqlInList(shortUrls)}` : sql`FALSE`}
+          )
+          AND creator_username IS NOT NULL AND creator_username != ''
+        `)) as any[];
+      }
+    } catch (err) {
+      console.warn('Gagal membaca tiktok_link_cache di bulkVerify:', err);
+    }
+
+    const cacheByVid = new Map<string, any>();
+    const cacheByShort = new Map<string, any>();
+    cachedLinks.forEach(c => {
+      if (c.video_id) cacheByVid.set(c.video_id, c);
+      if (c.short_url) cacheByShort.set(c.short_url, c);
+    });
+
+    const rawUsernames = items.map(it => {
+      const exp = it.expandedUrl || it.originalUrl || '';
+      const vId = it.videoId || exp.match(/\/(?:video|photo)\/(\d+)/)?.[1] || '';
+      const cached = (vId && cacheByVid.get(vId)) || (it.originalUrl && cacheByShort.get(it.originalUrl));
+      const u = it.username
+        || exp.match(/tiktok\.com\/@([a-zA-Z0-9_.-]+)\//)?.[1]
+        || it.originalUrl?.match(/tiktok\.com\/@([a-zA-Z0-9_.-]+)\//)?.[1]
+        || cached?.creator_username
+        || '';
+      return u.trim().toLowerCase();
+    }).filter(Boolean);
+    const usernames = Array.from(new Set(rawUsernames));
+
+    // 2. Fetch existing videos by content_uid across database
     let existingVideos: any[] = [];
     if (videoIds.length > 0) {
       existingVideos = (await db.execute(sql`
@@ -1167,7 +1209,7 @@ export async function bulkVerifyVideoLinksAction(
       if (v.content_uid) existingVideoMap.set(v.content_uid, v);
     });
 
-    // 2. Fetch campaign creators for this campaign matching usernames
+    // 3. Fetch campaign creators for this campaign matching usernames
     let campaignCreators: any[] = [];
     if (usernames.length > 0) {
       campaignCreators = (await db.execute(sql`
@@ -1187,7 +1229,7 @@ export async function bulkVerifyVideoLinksAction(
       if (cc.username) ccMap.set(cc.username, cc);
     });
 
-    // 3. Fetch global creators matching usernames
+    // 4. Fetch global creators matching usernames
     let globalCreators: any[] = [];
     if (usernames.length > 0) {
       globalCreators = (await db.execute(sql`
@@ -1211,11 +1253,20 @@ export async function bulkVerifyVideoLinksAction(
         || item.originalUrl?.match(/\/(?:video|photo)\/(\d+)/)?.[1] 
         || '';
       
-      const rawUserMatch = expUrl.match(/tiktok\.com\/@([a-zA-Z0-9_.-]+)\//)?.[1]
+      const cached = (vId && cacheByVid.get(vId)) || (item.originalUrl && cacheByShort.get(item.originalUrl));
+
+      const rawUserMatch = item.username
+        || expUrl.match(/tiktok\.com\/@([a-zA-Z0-9_.-]+)\//)?.[1]
         || item.originalUrl?.match(/tiktok\.com\/@([a-zA-Z0-9_.-]+)\//)?.[1]
-        || item.username
+        || cached?.creator_username
         || '';
       const uName = rawUserMatch.toLowerCase().trim();
+
+      const finalExpandedUrl = (cached?.final_url && !expUrl.match(/tiktok\.com\/@[a-zA-Z0-9_.-]+\//))
+        ? cached.final_url
+        : (uName && vId && expUrl.includes('/@/'))
+          ? expUrl.replace('/@/', `/@${uName}/`)
+          : expUrl;
 
       // 1. Cek apakah ini link mati / diarahkan ke homepage TikTok
       if (expUrl.includes('tiktok.com/?_r=1') || expUrl === 'https://www.tiktok.com/' || expUrl === 'https://m.tiktok.com/') {
@@ -1328,9 +1379,9 @@ export async function bulkVerifyVideoLinksAction(
         return {
           id: item.id,
           originalUrl: item.originalUrl,
-          expandedUrl: item.expandedUrl,
-          username: item.username,
-          videoId: item.videoId,
+          expandedUrl: finalExpandedUrl,
+          username: uName,
+          videoId: vId,
           status: 'ready_existing',
           statusText: 'Kreator Terdaftar (Campaign)',
           creatorName: ccMatch.nama_asli,
@@ -1346,9 +1397,9 @@ export async function bulkVerifyVideoLinksAction(
         return {
           id: item.id,
           originalUrl: item.originalUrl,
-          expandedUrl: item.expandedUrl,
-          username: item.username,
-          videoId: item.videoId,
+          expandedUrl: finalExpandedUrl,
+          username: uName,
+          videoId: vId,
           status: 'ready_global',
           statusText: 'Kreator Master (Akan Masuk Campaign)',
           creatorName: globalMatch.nama_asli,
@@ -1361,9 +1412,9 @@ export async function bulkVerifyVideoLinksAction(
       return {
         id: item.id,
         originalUrl: item.originalUrl,
-        expandedUrl: item.expandedUrl,
-        username: item.username,
-        videoId: item.videoId,
+        expandedUrl: finalExpandedUrl,
+        username: uName,
+        videoId: vId,
         status: 'ready_new',
         statusText: 'Kreator Baru (Auto-Detect)',
         canImport: true,

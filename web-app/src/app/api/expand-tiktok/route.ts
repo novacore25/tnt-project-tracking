@@ -155,6 +155,27 @@ function isValidShortUrl(url: string): boolean {
 const hasUsername = (url: string) => /tiktok\.com\/@([a-zA-Z0-9_.-]+)\//.test(url);
 const hasVideoId = (url: string) => /\/(?:video|photo)\/(\d+)/.test(url);
 
+async function fetchAuthorFromTikwm(url: string): Promise<string | null> {
+  try {
+    const apiUrl = `https://www.tikwm.com/api/?url=${encodeURIComponent(url)}`;
+    const res = await fetch(apiUrl, {
+      headers: { 'User-Agent': UA },
+      signal: AbortSignal.timeout(5000),
+      cache: 'no-store',
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    const uniqueId = json?.data?.author?.unique_id;
+    if (uniqueId && typeof uniqueId === 'string') {
+      return uniqueId.toLowerCase().trim();
+    }
+    return null;
+  } catch (err) {
+    console.error('[expand-tiktok] TikWM fallback failed:', err);
+    return null;
+  }
+}
+
 async function extractAuthorWithCurl(url: string): Promise<string | null> {
   try {
     const { stdout } = await execFileAsync('curl', [
@@ -282,33 +303,39 @@ export async function POST(request: Request) {
     }
 
     // Kalau redirect belum membawa username (format /@/video/ID atau /@/photo/ID),
-    // ekstrak username menggunakan curl scraper atau oEmbed fallback.
+    // ekstrak username menggunakan TikWM resolver, curl scraper, atau oEmbed fallback.
     if (!hasUsername(finalUrl)) {
       const contentMatch = finalUrl.match(/\/(video|photo)\/(\d+)/);
       const contentType = contentMatch?.[1] || 'video';
       const contentId = contentMatch?.[2];
 
-      // 1. Coba curl scraper untuk membaca author dari HTML rehidrasi TikTok
-      const authorFromCurl = await extractAuthorWithCurl(shortUrl);
-      if (authorFromCurl && contentId) {
-        finalUrl = `https://www.tiktok.com/@${authorFromCurl}/${contentType}/${contentId}`;
-      } else if (contentId && contentType === 'video') {
-        // 2. Fallback ke oEmbed (jika curl gagal / timeout)
-        try {
-          const oembedUrl = `https://www.tiktok.com/oembed?url=https://www.tiktok.com/video/${contentId}`;
-          const oembedRes = await fetch(oembedUrl, {
-            headers: { 'User-Agent': UA, 'Accept': 'application/json' },
-            signal: AbortSignal.timeout(TIMEOUT_MS),
-            cache: 'no-store',
-          });
-          if (oembedRes.ok) {
-            const oembedData = await oembedRes.json();
-            if (oembedData?.author_unique_id) {
-              finalUrl = `https://www.tiktok.com/@${oembedData.author_unique_id}/video/${contentId}`;
+      // 1. Coba TikWM metadata API (ringan, ~1 detik, anti-WAF)
+      const authorFromTikwm = await fetchAuthorFromTikwm(shortUrl);
+      if (authorFromTikwm && contentId) {
+        finalUrl = `https://www.tiktok.com/@${authorFromTikwm}/${contentType}/${contentId}`;
+      } else {
+        // 2. Coba curl scraper untuk membaca author dari HTML rehidrasi TikTok
+        const authorFromCurl = await extractAuthorWithCurl(shortUrl);
+        if (authorFromCurl && contentId) {
+          finalUrl = `https://www.tiktok.com/@${authorFromCurl}/${contentType}/${contentId}`;
+        } else if (contentId && contentType === 'video') {
+          // 3. Fallback ke oEmbed (jika curl & TikWM gagal)
+          try {
+            const oembedUrl = `https://www.tiktok.com/oembed?url=https://www.tiktok.com/video/${contentId}`;
+            const oembedRes = await fetch(oembedUrl, {
+              headers: { 'User-Agent': UA, 'Accept': 'application/json' },
+              signal: AbortSignal.timeout(TIMEOUT_MS),
+              cache: 'no-store',
+            });
+            if (oembedRes.ok) {
+              const oembedData = await oembedRes.json();
+              if (oembedData?.author_unique_id) {
+                finalUrl = `https://www.tiktok.com/@${oembedData.author_unique_id}/video/${contentId}`;
+              }
             }
+          } catch (err) {
+            console.error('Failed to fetch oEmbed for username:', err);
           }
-        } catch (err) {
-          console.error('Failed to fetch oEmbed for username:', err);
         }
       }
     }
