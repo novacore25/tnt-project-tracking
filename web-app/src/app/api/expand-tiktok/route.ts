@@ -1,8 +1,12 @@
 import { NextResponse } from 'next/server';
 import type { Session } from 'next-auth';
 import { sql } from 'drizzle-orm';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
 import { auth } from '@/auth';
 import { db } from '@/db';
+
+const execFileAsync = promisify(execFile);
 
 export const dynamic = 'force-dynamic';
 
@@ -100,7 +104,7 @@ async function readCache(shortUrl: string): Promise<CachedLink | null> {
 
 async function writeCache(shortUrl: string, finalUrl: string) {
   try {
-    const videoId = finalUrl.match(/video\/(\d+)/)?.[1] ?? null;
+    const videoId = finalUrl.match(/\/(?:video|photo)\/(\d+)/)?.[1] ?? null;
     const username = finalUrl.match(/tiktok\.com\/@([a-zA-Z0-9_.-]+)\//)?.[1]?.toLowerCase() ?? null;
 
     await db.execute(sql`
@@ -146,10 +150,29 @@ function isValidShortUrl(url: string): boolean {
   }
 }
 
-// Kalau redirect TikTok sudah membawa username, tidak perlu panggil oEmbed.
+// Kalau redirect TikTok sudah membawa username, tidak perlu panggil fallback scraper.
 // Ini menghemat ~50% request outbound ke TikTok untuk batch 50 link.
 const hasUsername = (url: string) => /tiktok\.com\/@([a-zA-Z0-9_.-]+)\//.test(url);
-const hasVideoId = (url: string) => /\/video\/(\d+)/.test(url);
+const hasVideoId = (url: string) => /\/(?:video|photo)\/(\d+)/.test(url);
+
+async function extractAuthorWithCurl(url: string): Promise<string | null> {
+  try {
+    const { stdout } = await execFileAsync('curl', [
+      '-s',
+      '-L',
+      '--max-time', '6',
+      '-A', UA,
+      url
+    ]);
+    const m = stdout.match(/"author":\{"id":.*?"uniqueId":"([^"]+)"/);
+    if (m && m[1]) return m[1].toLowerCase();
+    const m2 = stdout.match(/"uniqueId":"([^"]+)"/);
+    if (m2 && m2[1]) return m2[1].toLowerCase();
+    return null;
+  } catch {
+    return null;
+  }
+}
 
 // Hop pertama vt.tiktok.com biasanya SUDAH langsung menunjuk ke URL video
 // (terverifikasi 30 Sep 2026). Jadi kita baca header `Location` dan berhenti
@@ -258,17 +281,21 @@ export async function POST(request: Request) {
       );
     }
 
-    // oEmbed hanya dipanggil kalau username hilang (format /@/video/ID).
-
-    // oEmbed hanya dipanggil kalau username hilang (format /@/video/ID).
-    // Kalau redirect sudah membawa username, tidak perlu request tambahan.
+    // Kalau redirect belum membawa username (format /@/video/ID atau /@/photo/ID),
+    // ekstrak username menggunakan curl scraper atau oEmbed fallback.
     if (!hasUsername(finalUrl)) {
-      try {
-        const videoIdMatch = finalUrl.match(/video\/(\d+)/);
-        const videoId = videoIdMatch?.[1];
+      const contentMatch = finalUrl.match(/\/(video|photo)\/(\d+)/);
+      const contentType = contentMatch?.[1] || 'video';
+      const contentId = contentMatch?.[2];
 
-        if (videoId) {
-          const oembedUrl = `https://www.tiktok.com/oembed?url=https://www.tiktok.com/video/${videoId}`;
+      // 1. Coba curl scraper untuk membaca author dari HTML rehidrasi TikTok
+      const authorFromCurl = await extractAuthorWithCurl(shortUrl);
+      if (authorFromCurl && contentId) {
+        finalUrl = `https://www.tiktok.com/@${authorFromCurl}/${contentType}/${contentId}`;
+      } else if (contentId && contentType === 'video') {
+        // 2. Fallback ke oEmbed (jika curl gagal / timeout)
+        try {
+          const oembedUrl = `https://www.tiktok.com/oembed?url=https://www.tiktok.com/video/${contentId}`;
           const oembedRes = await fetch(oembedUrl, {
             headers: { 'User-Agent': UA, 'Accept': 'application/json' },
             signal: AbortSignal.timeout(TIMEOUT_MS),
@@ -277,15 +304,12 @@ export async function POST(request: Request) {
           if (oembedRes.ok) {
             const oembedData = await oembedRes.json();
             if (oembedData?.author_unique_id) {
-              finalUrl = `https://www.tiktok.com/@${oembedData.author_unique_id}/video/${videoId}`;
+              finalUrl = `https://www.tiktok.com/@${oembedData.author_unique_id}/video/${contentId}`;
             }
           }
+        } catch (err) {
+          console.error('Failed to fetch oEmbed for username:', err);
         }
-      } catch (err) {
-        // Bukan error fatal: tanpa username, guard di bulkVerifyVideoLinksAction
-        // akan menolak item dengan pesan yang jelas. Kalau username tetap
-        // tidak ketemu, JANGAN simpan ke cache — biar linknya bisa dicoba lagi.
-        console.error('Failed to fetch oEmbed for username:', err);
       }
     }
 

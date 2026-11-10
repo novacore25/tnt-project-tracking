@@ -46,10 +46,18 @@ export interface StagingVideoItem {
   addedAt: string;
 }
 
+export interface CampaignCreatorOption {
+  id: number;
+  creator_id: number;
+  username: string;
+  nama_asli?: string | null;
+}
+
 interface ImportVideoClientProps {
   campaignId: number;
   campaignName: string;
   skus: Array<{ id: number; nama_produk: string; kode_sku?: string }>;
+  campaignCreators?: CampaignCreatorOption[];
 }
 
 const isShortLink = (url: string) => {
@@ -61,7 +69,8 @@ const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 export default function ImportVideoClient({
   campaignId,
   campaignName,
-  skus
+  skus,
+  campaignCreators = []
 }: ImportVideoClientProps) {
   const router = useRouter();
   const { profile, canEditCampaign } = useAuth();
@@ -275,7 +284,7 @@ export default function ImportVideoClient({
         }
 
         const usernameMatch = finalLink.match(/@([a-zA-Z0-9_.-]+)/);
-        const videoIdMatch = finalLink.match(/video\/(\d+)/);
+        const videoIdMatch = finalLink.match(/(?:video|photo)\/(\d+)/);
         const username = usernameMatch ? usernameMatch[1].toLowerCase() : "";
         const videoId = videoIdMatch ? videoIdMatch[1] : "";
 
@@ -340,6 +349,8 @@ export default function ImportVideoClient({
           if (res) {
             return {
               ...item,
+              username: res.username || item.username,
+              videoId: res.videoId || item.videoId,
               status: res.status as any,
               statusText: res.statusText,
               creatorName: (res as any).creatorName,
@@ -380,6 +391,8 @@ export default function ImportVideoClient({
           if (res) {
             return {
               ...item,
+              username: res.username || item.username,
+              videoId: res.videoId || item.videoId,
               status: res.status as any,
               statusText: res.statusText,
               creatorName: (res as any).creatorName,
@@ -395,6 +408,51 @@ export default function ImportVideoClient({
       alert("Gagal verifikasi ulang: " + err.message);
     } finally {
       setIsReverifying(false);
+    }
+  };
+
+  // Update creator username for a single item (e.g. from dropdown or manual)
+  const handleUpdateItemUsername = async (id: string, newUsername: string) => {
+    const trimmed = newUsername.trim().toLowerCase();
+    const updated = stagedItems.map(item => {
+      if (item.id === id) {
+        return {
+          ...item,
+          username: trimmed,
+          status: 'ready_new' as const,
+          statusText: 'Sedang memverifikasi...',
+        };
+      }
+      return item;
+    });
+    setStagedItems(updated);
+
+    const targetItem = updated.find(i => i.id === id);
+    if (targetItem) {
+      try {
+        const verifyRes = await bulkVerifyVideoLinksAction(campaignId, [targetItem]);
+        if (verifyRes.success && verifyRes.results?.[0]) {
+          const res = verifyRes.results[0];
+          setStagedItems(prev => prev.map(item => {
+            if (item.id === id) {
+              return {
+                ...item,
+                username: res.username || item.username,
+                videoId: res.videoId || item.videoId,
+                status: res.status as any,
+                statusText: res.statusText,
+                creatorName: (res as any).creatorName,
+                ccId: (res as any).ccId,
+                creatorId: (res as any).creatorId,
+                canImport: res.canImport
+              };
+            }
+            return item;
+          }));
+        }
+      } catch (err) {
+        console.error("Gagal verifikasi kreator terpilih:", err);
+      }
     }
   };
 
@@ -899,6 +957,26 @@ export default function ImportVideoClient({
                                   </span>
                                 )}
                               </div>
+                            ) : item.videoId && item.status !== 'duplicate_db' && item.status !== 'duplicate_batch' ? (
+                              <div className="flex flex-col gap-1 max-w-[170px]">
+                                <select
+                                  value=""
+                                  onChange={(e) => {
+                                    if (e.target.value) {
+                                      handleUpdateItemUsername(item.id, e.target.value);
+                                    }
+                                  }}
+                                  className="text-[11px] bg-amber-50 border border-amber-300 rounded px-1.5 py-1 text-slate-800 font-medium focus:ring-1 focus:ring-indigo-500"
+                                >
+                                  <option value="">-- Pilih Kreator --</option>
+                                  {campaignCreators.map(c => (
+                                    <option key={c.id} value={c.username}>
+                                      @{c.username} {c.nama_asli ? `(${c.nama_asli})` : ''}
+                                    </option>
+                                  ))}
+                                </select>
+                                <span className="text-[10px] text-amber-700 italic">Pilih dari campaign</span>
+                              </div>
                             ) : (
                               <span className="text-slate-400 italic text-[11px]">-</span>
                             )}
@@ -948,13 +1026,13 @@ export default function ImportVideoClient({
                             {isDup && (
                               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-100 text-amber-800 border border-amber-200" title={item.statusText}>
                                 <AlertTriangle className="w-3 h-3 text-amber-600 shrink-0" />
-                                <span className="truncate max-w-[180px]">{item.statusText}</span>
+                                <span className="max-w-[320px] truncate">{item.statusText}</span>
                               </span>
                             )}
                             {isErr && (
                               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-rose-100 text-rose-800 border border-rose-200" title={item.statusText}>
                                 <XCircle className="w-3 h-3 text-rose-600 shrink-0" />
-                                <span className="truncate max-w-[180px]">{item.statusText}</span>
+                                <span className="max-w-[320px] truncate">{item.statusText}</span>
                               </span>
                             )}
                           </td>

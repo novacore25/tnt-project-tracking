@@ -1,8 +1,6 @@
 # Multi-stage Dockerfile for Next.js Standalone on Coolify (Root workspace)
 FROM node:20-alpine AS base
-
-FROM base AS deps
-RUN apk add --no-cache libc6-compat
+RUN apk add --no-cache curl libc6-compat
 WORKDIR /app
 
 COPY web-app/package.json web-app/package-lock.json* ./

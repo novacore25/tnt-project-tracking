@@ -41,11 +41,24 @@ export default async function ImportVideoPage({
     return [];
   })) as any[];
 
+  // Fetch registered creators for this campaign to assist manual matching if needed
+  const creatorsList = (await db.execute(sql`
+    SELECT cc.id, cc.creator_id, LOWER(c.username) as username, c.nama_asli
+    FROM campaign_creators cc
+    JOIN creators c ON cc.creator_id = c.id
+    WHERE cc.campaign_id = ${campaignId}
+    ORDER BY c.username ASC
+  `).catch((err) => {
+    console.error('Error fetching campaign creators in ImportVideoPage:', err);
+    return [];
+  })) as any[];
+
   return (
     <ImportVideoClient
       campaignId={campaignId}
       campaignName={campaignName}
       skus={skusList || []}
+      campaignCreators={creatorsList || []}
     />
   );
 }

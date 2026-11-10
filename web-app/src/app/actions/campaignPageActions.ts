@@ -1205,64 +1205,121 @@ export async function bulkVerifyVideoLinksAction(
     const seenBatchVideoIds = new Set<string>();
 
     const results = items.map(item => {
-      const vId = item.videoId;
-      const uName = item.username?.toLowerCase().trim();
+      const expUrl = item.expandedUrl || item.originalUrl || '';
+      const vId = item.videoId 
+        || expUrl.match(/\/(?:video|photo)\/(\d+)/)?.[1] 
+        || item.originalUrl?.match(/\/(?:video|photo)\/(\d+)/)?.[1] 
+        || '';
+      
+      const rawUserMatch = expUrl.match(/tiktok\.com\/@([a-zA-Z0-9_.-]+)\//)?.[1]
+        || item.originalUrl?.match(/tiktok\.com\/@([a-zA-Z0-9_.-]+)\//)?.[1]
+        || item.username
+        || '';
+      const uName = rawUserMatch.toLowerCase().trim();
 
-      if (!vId || !uName) {
+      // 1. Cek apakah ini link mati / diarahkan ke homepage TikTok
+      if (expUrl.includes('tiktok.com/?_r=1') || expUrl === 'https://www.tiktok.com/' || expUrl === 'https://m.tiktok.com/') {
         return {
           id: item.id,
           originalUrl: item.originalUrl,
           expandedUrl: item.expandedUrl,
-          username: item.username || '',
-          videoId: item.videoId || '',
+          username: '',
+          videoId: '',
           status: 'error',
-          // Kalau linknya pendek tapi gagal dikonversi, tampilkan alasan aslinya
-          // supaya PIC tidak mengira link-nya yang salah.
-          statusText: item.expandError
-            || 'Format URL TikTok tidak valid (username / Video ID tidak ditemukan)',
+          statusText: '[Link Mati] Video sudah dihapus atau di-private oleh kreator di TikTok',
           canImport: false,
         };
       }
 
-      if (seenBatchVideoIds.has(vId)) {
+      // 2. Cek apakah ini konten foto (TikTok Photo Mode / Carousel)
+      const isPhoto = expUrl.includes('/photo/') || item.originalUrl.includes('/photo/');
+      if (isPhoto) {
         return {
           id: item.id,
           originalUrl: item.originalUrl,
           expandedUrl: item.expandedUrl,
-          username: item.username,
-          videoId: item.videoId,
-          status: 'duplicate_batch',
-          statusText: 'Duplikat dalam antrean input',
+          username: uName || '',
+          videoId: vId || '',
+          status: 'error',
+          statusText: '[Bukan Video] Konten berupa Foto Slide / Carousel (TikTok Photo Mode)',
           canImport: false,
         };
       }
-      seenBatchVideoIds.add(vId);
 
-      const dbVideo = existingVideoMap.get(vId);
-      if (dbVideo) {
-        if (Number(dbVideo.campaign_id) === Number(campaignId)) {
+      // 3. PRIORITASKAN CEK DATABASE DULUAN jika Video ID ada!
+      if (vId) {
+        const dbVideo = existingVideoMap.get(vId);
+        if (dbVideo) {
+          const knownCreator = dbVideo.creator_username || uName || '';
+          if (Number(dbVideo.campaign_id) === Number(campaignId)) {
+            return {
+              id: item.id,
+              originalUrl: item.originalUrl,
+              expandedUrl: item.expandedUrl,
+              username: knownCreator,
+              videoId: vId,
+              status: 'duplicate_db',
+              statusText: knownCreator
+                ? `Sudah ada di campaign ini (@${knownCreator})`
+                : 'Sudah ada di campaign ini',
+              canImport: false,
+            };
+          } else {
+            return {
+              id: item.id,
+              originalUrl: item.originalUrl,
+              expandedUrl: item.expandedUrl,
+              username: knownCreator,
+              videoId: vId,
+              status: 'duplicate_db',
+              statusText: `Sudah terdaftar di campaign #${dbVideo.campaign_id || 'lain'}${knownCreator ? ` (@${knownCreator})` : ''}`,
+              canImport: false,
+            };
+          }
+        }
+
+        if (seenBatchVideoIds.has(vId)) {
           return {
             id: item.id,
             originalUrl: item.originalUrl,
             expandedUrl: item.expandedUrl,
-            username: item.username,
-            videoId: item.videoId,
-            status: 'duplicate_db',
-            statusText: 'Sudah ada di campaign ini',
-            canImport: false,
-          };
-        } else {
-          return {
-            id: item.id,
-            originalUrl: item.originalUrl,
-            expandedUrl: item.expandedUrl,
-            username: item.username,
-            videoId: item.videoId,
-            status: 'duplicate_db',
-            statusText: `Sudah terdaftar di campaign #${dbVideo.campaign_id || 'lain'}`,
+            username: uName || item.username,
+            videoId: vId,
+            status: 'duplicate_batch',
+            statusText: 'Duplikat dalam antrean input',
             canImport: false,
           };
         }
+        seenBatchVideoIds.add(vId);
+      }
+
+      // 4. Jika Video ID tidak ditemukan sama sekali
+      if (!vId) {
+        return {
+          id: item.id,
+          originalUrl: item.originalUrl,
+          expandedUrl: item.expandedUrl,
+          username: uName || item.username || '',
+          videoId: '',
+          status: 'error',
+          statusText: item.expandError
+            || 'Format URL TikTok tidak valid (Video ID tidak ditemukan)',
+          canImport: false,
+        };
+      }
+
+      // 5. Jika Video ID ada (baru), tetapi username belum terdeteksi
+      if (!uName) {
+        return {
+          id: item.id,
+          originalUrl: item.originalUrl,
+          expandedUrl: item.expandedUrl,
+          username: '',
+          videoId: vId,
+          status: 'error',
+          statusText: 'Username kreator tidak terdeteksi (Pilih kreator di tabel)',
+          canImport: false,
+        };
       }
 
       // Check if creator is already in this campaign
