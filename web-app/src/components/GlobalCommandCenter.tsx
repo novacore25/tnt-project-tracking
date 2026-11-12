@@ -249,7 +249,7 @@ export function GlobalCommandCenter({ role, onSuccess }: { role: string, onSucce
         buktiTransferUrl: buktiUrl,
         senderAccountId: senderAccountId
       });
-      alert("Berhasil menandai lunas!\n\nCatatan: Sisa tagihan yang belum dicairkan otomatis dipindahkan ke batch Termin baru dan kembali ke antrean 'Review Finance' sesuai SOP.");
+      alert("Berhasil menandai lunas!\n\nCatatan: Sisa tagihan yang belum dicairkan otomatis dipindahkan ke batch Termin baru dan tetap berada di antrean 'Siap Bayar' sehingga dapat langsung dicairkan tanpa perlu approval ulang.");
       setShowTransferModal(false);
       setSelectedItems(new Set());
       loadData();

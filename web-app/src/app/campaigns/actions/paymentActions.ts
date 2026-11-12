@@ -1258,20 +1258,49 @@ export async function autoSplitUnpaidBatchItems(batchId: number) {
 
   const hasPendingManager = unpaidItems.some(i => i.final_status === 'pending');
   const hasPendingExec1 = unpaidItems.some(i => i.final_status === 'manager_approved');
+  const hasPendingFinance = unpaidItems.some(i => ['executive_1_approved', 'pending_finance_outstanding'].includes(i.final_status));
+  const hasPendingExecFinal = unpaidItems.some(i => i.final_status === 'finance_selected');
 
-  // Termin 2 returned to pending_finance so Finance can review budget and re-select payable items
-  let newBatchStatus = 'pending_finance';
-  if (hasPendingManager) newBatchStatus = 'pending_manager';
-  else if (hasPendingExec1) newBatchStatus = 'pending_executive_1';
+  // Status batch baru mengikuti funnel saat ini:
+  // Jika parent batch adalah 'ready_to_pay' (atau baru saja ditandai 'paid' saat pelunasan sebagian),
+  // dan sisa tagihan memang sudah disetujui Executive ('ready_to_pay' / 'executive_approved'),
+  // maka Termin 2 TETAP berstatus 'ready_to_pay' (Siap Bayar).
+  // Sisa tagihan langsung muncul di tab Siap Bayar sehingga Finance dapat melunasinya kapan saja tanpa approval ulang.
+  let newBatchStatus = 'ready_to_pay';
+  if (hasPendingManager) {
+    newBatchStatus = 'pending_manager';
+  } else if (hasPendingExec1) {
+    newBatchStatus = 'pending_executive_1';
+  } else if (hasPendingFinance) {
+    newBatchStatus = 'pending_finance';
+  } else if (hasPendingExecFinal) {
+    newBatchStatus = 'pending_executive';
+  } else if (batch.status === 'ready_to_pay' || batch.status === 'paid') {
+    newBatchStatus = 'ready_to_pay';
+  } else {
+    newBatchStatus = batch.status || 'ready_to_pay';
+  }
 
   const newNotes = batch.notes ? `${batch.notes} (Pemisahan sisa dari ${batch.batch_label})` : `Pemisahan sisa dari ${batch.batch_label}`;
 
   const newBatchRes = await db.execute(sql`
     INSERT INTO payment_batches (
-      campaign_id, batch_label, status, submitted_by, submitted_at, manager_reviewed_by, manager_reviewed_at, notes
+      campaign_id, batch_label, status, 
+      submitted_by, submitted_at, 
+      manager_reviewed_by, manager_reviewed_at,
+      executive_reviewed_1_by, executive_reviewed_1_at,
+      finance_reviewed_by, finance_reviewed_at,
+      executive_reviewed_by, executive_reviewed_at,
+      notes
     ) VALUES (
-      ${batch.campaign_id}, ${newBatchLabel}, ${newBatchStatus}, ${batch.submitted_by}, ${batch.submitted_at || sql`NOW()`},
-      ${batch.manager_reviewed_by}, ${batch.manager_reviewed_at}, ${newNotes}
+      ${batch.campaign_id}, ${newBatchLabel}, ${newBatchStatus}, 
+      ${batch.submitted_by}, ${batch.submitted_at || sql`NOW()`},
+      ${batch.manager_reviewed_by}, ${batch.manager_reviewed_at},
+      ${batch.executive_reviewed_1_by}, ${batch.executive_reviewed_1_at},
+      ${batch.finance_reviewed_by}, ${batch.finance_reviewed_at},
+      ${newBatchStatus === 'ready_to_pay' ? batch.executive_reviewed_by : null},
+      ${newBatchStatus === 'ready_to_pay' ? batch.executive_reviewed_at : null},
+      ${newNotes}
     )
     RETURNING id
   `);
@@ -1280,31 +1309,44 @@ export async function autoSplitUnpaidBatchItems(batchId: number) {
 
   const unpaidItemIds = unpaidItems.map(i => i.id);
 
-  // Move items to new batch. If returning to pending_finance, reset items to executive_1_approved
-  // and finance_selected = false so Finance can toggle which ones are payable in this new Termin!
-  //
-  // CATATAN: kolom executive_* ikut dikosongkan kalau approval executive akhir
-  // dibatalkan oleh pemecahan ini. Kalau tidak, final_status sudah kembali ke
-  // executive_1_approved (artinya "belum disetujui executive akhir") tapi
-  // executive_acted_by masih menunjuk nama executive dari Termin sebelumnya.
-  // Itu menyesatkan kalau nanti ada sengketa "saya tidak pernah menyetujui ini".
-  //
-  // executive_1_* sengaja TIDAK disentuh: approval executive tahap 1 tetap sah,
-  // itu sebabnya statusnya kembali ke executive_1_approved dan bukan ke pending.
-  await db.execute(sql`
-    UPDATE payment_items
-    SET batch_id = ${newBatchId},
-        finance_selected = false,
-        final_status = CASE
-          WHEN final_status IN ('ready_to_pay', 'executive_approved', 'finance_selected', 'pending_finance_outstanding') THEN 'executive_1_approved'
-          ELSE final_status
-        END,
-        executive_status    = CASE WHEN final_status IN ('ready_to_pay', 'executive_approved', 'finance_selected', 'pending_finance_outstanding') THEN 'pending' ELSE executive_status    END,
-        executive_acted_by  = CASE WHEN final_status IN ('ready_to_pay', 'executive_approved', 'finance_selected', 'pending_finance_outstanding') THEN NULL ELSE executive_acted_by  END,
-        executive_acted_at  = CASE WHEN final_status IN ('ready_to_pay', 'executive_approved', 'finance_selected', 'pending_finance_outstanding') THEN NULL ELSE executive_acted_at  END,
-        executive_note      = CASE WHEN final_status IN ('ready_to_pay', 'executive_approved', 'finance_selected', 'pending_finance_outstanding') THEN NULL ELSE executive_note      END
-    WHERE id IN ${sqlInList(unpaidItemIds)}
-  `);
+  if (newBatchStatus === 'ready_to_pay') {
+    // Tetap di Siap Bayar: pertahankan final_status ready_to_pay / executive_approved,
+    // executive_status = 'approved', finance_selected = true, dan seluruh jejak audit executive!
+    await db.execute(sql`
+      UPDATE payment_items
+      SET batch_id = ${newBatchId},
+          finance_selected = true,
+          final_status = CASE 
+            WHEN final_status IN ('ready_to_pay', 'executive_approved') THEN final_status
+            ELSE 'ready_to_pay'
+          END,
+          executive_status = 'approved'
+      WHERE id IN ${sqlInList(unpaidItemIds)}
+    `);
+  } else if (newBatchStatus === 'pending_finance') {
+    // Jika kembali ke review finance, reset item agar finance bisa memilih ulang
+    await db.execute(sql`
+      UPDATE payment_items
+      SET batch_id = ${newBatchId},
+          finance_selected = false,
+          final_status = CASE
+            WHEN final_status IN ('ready_to_pay', 'executive_approved', 'finance_selected', 'pending_finance_outstanding') THEN 'executive_1_approved'
+            ELSE final_status
+          END,
+          executive_status    = CASE WHEN final_status IN ('ready_to_pay', 'executive_approved', 'finance_selected', 'pending_finance_outstanding') THEN 'pending' ELSE executive_status    END,
+          executive_acted_by  = CASE WHEN final_status IN ('ready_to_pay', 'executive_approved', 'finance_selected', 'pending_finance_outstanding') THEN NULL ELSE executive_acted_by  END,
+          executive_acted_at  = CASE WHEN final_status IN ('ready_to_pay', 'executive_approved', 'finance_selected', 'pending_finance_outstanding') THEN NULL ELSE executive_acted_at  END,
+          executive_note      = CASE WHEN final_status IN ('ready_to_pay', 'executive_approved', 'finance_selected', 'pending_finance_outstanding') THEN NULL ELSE executive_note      END
+      WHERE id IN ${sqlInList(unpaidItemIds)}
+    `);
+  } else {
+    // Funnel lain: pindahkan ke batch baru tanpa merusak approval yang sudah ada
+    await db.execute(sql`
+      UPDATE payment_items
+      SET batch_id = ${newBatchId}
+      WHERE id IN ${sqlInList(unpaidItemIds)}
+    `);
+  }
 }
 
 export async function financeMarkPaid(batchId: number, payload: { actualPaymentDate: string, buktiTransferUrl: string, senderAccountId: number }) {
