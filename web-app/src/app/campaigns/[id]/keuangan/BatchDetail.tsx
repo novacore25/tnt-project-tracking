@@ -180,6 +180,7 @@ export function BatchDetail({ batch, creatorHistory, onBack, onRefresh, onRefres
       });
       await onRefresh();
       setShowPaidForm(false);
+      alert("Pembayaran berhasil disimpan!\n\nCatatan: Sisa tagihan yang belum dicairkan otomatis dipindahkan ke batch Termin baru dan kembali ke antrean Review Finance sesuai SOP.");
     } catch (err: any) {
       alert("Error: " + err.message);
     } finally {
@@ -201,6 +202,7 @@ export function BatchDetail({ batch, creatorHistory, onBack, onRefresh, onRefres
       setImportedIds([]);
       setPayDate("");
       setBuktiUrl("");
+      alert("Pembayaran berhasil disimpan!\n\nCatatan: Sisa tagihan yang belum dicairkan otomatis dipindahkan ke batch Termin baru dan kembali ke antrean Review Finance sesuai SOP.");
     } catch (err: any) {
       alert("Error: " + err.message);
     } finally {
