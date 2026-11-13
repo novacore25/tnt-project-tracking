@@ -67,6 +67,11 @@ function extractTikTokUploadDate(videoId: string): string | null {
   try {
     const id = BigInt(videoId);
     const timestamp = Number(id >> BigInt(32)) * 1000;
+    // Guard anti-time-travel: TikTok didirikan 2016, dan video tidak mungkin di masa depan
+    const minTs = 1451606400000; // 2016-01-01
+    const maxTs = Date.now() + (2 * 24 * 60 * 60 * 1000); // Now + toleransi 2 hari
+    if (timestamp < minTs || timestamp > maxTs) return null;
+
     const date = new Date(timestamp);
     if (isNaN(date.getTime())) return null;
     return date.toISOString();
