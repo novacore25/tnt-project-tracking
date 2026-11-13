@@ -904,11 +904,36 @@ export async function getPortalData(campaignId: number) {
       adsStatsByCreator[ad.creator_id].costAds += costUsd * kurs;
       adsStatsByCreator[ad.creator_id].itemsSoldAds += purchases;
     }
+  }
 
-    if (ad.tanggal) {
-      const monthStr = String(ad.tanggal).substring(0, 7);
-      if (!monthlyMap[monthStr]) monthlyMap[monthStr] = { gmvOrganic: 0, gmvAds: 0, videos: new Set(), videoCreators: new Set(), liveSessions: new Set() };
-      monthlyMap[monthStr].gmvAds += adGmvIdr;
+  // Hitung gmvAds per bulan menggunakan delta inkremental per ad_id
+  // (sama persis dengan logika internal di DailyClient.tsx:470-520)
+  if (rawAdsData && rawAdsData.length > 0) {
+    const sortedAds = [...rawAdsData].sort((a, b) => {
+      const ta = a.tanggal ? new Date(a.tanggal).getTime() : 0;
+      const tb = b.tanggal ? new Date(b.tanggal).getTime() : 0;
+      return ta - tb;
+    });
+
+    const previousAdValues: Record<string, number> = {};
+    for (const ad of sortedAds) {
+      if (!ad.tanggal || !ad.ad_id) continue;
+      const dateStr = String(ad.tanggal).substring(0, 10);
+      const currentGmv = Number(ad.gross_revenue_usd) || 0;
+      const prevGmv = previousAdValues[ad.ad_id] || 0;
+      const deltaUsd = currentGmv - prevGmv;
+
+      previousAdValues[ad.ad_id] = currentGmv;
+
+      if (deltaUsd > 0) {
+        const kurs = normalizeKurs(ad.kurs);
+        const deltaIdr = deltaUsd * kurs;
+        const monthStr = dateStr.substring(0, 7);
+        if (!monthlyMap[monthStr]) {
+          monthlyMap[monthStr] = { gmvOrganic: 0, gmvAds: 0, videos: new Set(), videoCreators: new Set(), liveSessions: new Set() };
+        }
+        monthlyMap[monthStr].gmvAds += deltaIdr;
+      }
     }
   }
 
@@ -1081,6 +1106,15 @@ export async function getPortalData(campaignId: number) {
         gmv: calculatedGmv,
         orders: calculatedOrders
       });
+    }
+
+    if (ls.start_time) {
+      const liveDateStr = String(ls.start_time).substring(0, 10);
+      const mStr = liveDateStr.substring(0, 7);
+      if (!monthlyMap[mStr]) {
+        monthlyMap[mStr] = { gmvOrganic: 0, gmvAds: 0, videos: new Set(), videoCreators: new Set(), liveSessions: new Set() };
+      }
+      monthlyMap[mStr].liveSessions.add(uid);
     }
   });
 
