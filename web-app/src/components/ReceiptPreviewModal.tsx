@@ -57,6 +57,16 @@ export function ReceiptPreviewModal({ isOpen, onClose, data }: ReceiptPreviewMod
     setScale((prev) => Math.max(0.5, Number((prev - 0.25).toFixed(2))));
   }, []);
 
+  // Double click toggles zoom between 1x and 2x
+  const handleDoubleClick = useCallback(() => {
+    if (scale > 1.2) {
+      setScale(1);
+      setPosition({ x: 0, y: 0 });
+    } else {
+      setScale(2);
+    }
+  }, [scale]);
+
   // Mouse drag handlers
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     if (e.button !== 0) return; // Only primary left-click
@@ -186,7 +196,7 @@ export function ReceiptPreviewModal({ isOpen, onClose, data }: ReceiptPreviewMod
         {/* Interactive Pan-Zoom Viewport Container */}
         <div 
           ref={containerRef}
-          className={`flex-1 relative bg-slate-900 overflow-hidden flex items-center justify-center ${
+          className={`flex-1 relative bg-slate-950 overflow-hidden flex items-center justify-center ${
             isDragging ? 'cursor-grabbing' : 'cursor-grab'
           }`}
           onMouseDown={handleMouseDown}
@@ -197,30 +207,37 @@ export function ReceiptPreviewModal({ isOpen, onClose, data }: ReceiptPreviewMod
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
           onWheel={handleWheel}
+          onDoubleClick={handleDoubleClick}
         >
           {data.previewUrl ? (
             <>
               {/* Scaled & Panned Image Layer */}
               <div 
                 style={{
-                  transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
-                  transition: isDragging ? 'none' : 'transform 0.12s cubic-bezier(0.2, 0, 0, 1)',
+                  transform: `translate(${position.x}px, ${position.y}px)`,
+                  transition: isDragging ? 'none' : 'transform 0.08s ease-out',
                   transformOrigin: 'center center',
                 }}
-                className="will-change-transform flex items-center justify-center pointer-events-none select-none p-4"
+                className="flex items-center justify-center pointer-events-none select-none p-4"
               >
                 <img 
                   src={data.previewUrl} 
                   alt="Bukti Transfer"
                   draggable={false}
-                  className="max-h-[62vh] max-w-[85vw] sm:max-w-2xl rounded-lg shadow-2xl bg-white object-contain border border-slate-700/60"
+                  style={{
+                    width: `${Math.round(480 * scale)}px`,
+                    maxWidth: 'none',
+                    height: 'auto',
+                    imageRendering: '-webkit-optimize-contrast',
+                  }}
+                  className="rounded-lg shadow-2xl bg-white border border-slate-700/60 transition-none"
                 />
               </div>
 
               {/* Floating Top Hint */}
               <div className="absolute top-3 left-3 bg-slate-950/70 backdrop-blur-md text-slate-300 px-3 py-1.5 rounded-lg text-[11px] border border-slate-800 flex items-center gap-1.5 pointer-events-none shadow-md">
                 <Move className="w-3.5 h-3.5 text-slate-400" />
-                <span>Klik & geser untuk memindahkan struk • Scroll untuk zoom</span>
+                <span>Klik & geser untuk memindahkan • Scroll/Slider untuk zoom • Double-click zoom</span>
               </div>
 
               {/* Sleek Floating Zoom Slider & Controls Bar */}
@@ -243,7 +260,7 @@ export function ReceiptPreviewModal({ isOpen, onClose, data }: ReceiptPreviewMod
                   <input
                     type="range"
                     min="0.5"
-                    max="3"
+                    max="3.5"
                     step="0.05"
                     value={scale}
                     onChange={(e) => setScale(parseFloat(e.target.value))}
