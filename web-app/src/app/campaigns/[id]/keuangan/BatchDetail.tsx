@@ -11,9 +11,10 @@ import {
 import { getLogicalStatus } from "@/utils/statusHelper";
 import { sumNum } from "@/utils/computed";
 import { useAuth } from "@/providers/AuthProvider";
-import { Check, X, Loader2, ArrowLeft, Send, Trash2, Pencil, Save, ChevronDown, ChevronRight, Download, Upload, Clock, UserCheck, ShieldCheck, History, ExternalLink, Link as LinkIcon, Lock } from "lucide-react";
+import { Check, X, Loader2, ArrowLeft, Send, Trash2, Pencil, Save, ChevronDown, ChevronRight, Download, Upload, Clock, UserCheck, ShieldCheck, History, ExternalLink, Link as LinkIcon, Lock, Image as ImageIcon } from "lucide-react";
 import { formatDateTime, formatUserWithRole, getItemApprovalBadge } from "@/utils/formatters";
 import * as XLSX from "xlsx";
+import { ReceiptPreviewModal } from "@/components/ReceiptPreviewModal";
 
 export function BatchDetail({ batch, creatorHistory, onBack, onRefresh, onRefreshList }: { batch: any, creatorHistory: Record<number, any[]>, onBack: () => void, onRefresh: () => void, onRefreshList?: () => void }) {
   const { profile } = useAuth();
@@ -43,6 +44,9 @@ export function BatchDetail({ batch, creatorHistory, onBack, onRefresh, onRefres
   // Excel bulk import state
   const [showImportModal, setShowImportModal] = useState(false);
   const [importedIds, setImportedIds] = useState<number[]>([]);
+
+  // Modal Preview Bukti Transfer (OCR)
+  const [receiptModalData, setReceiptModalData] = useState<any | null>(null);
   const toggleRow = (id: number) => {
     setExpandedRows(prev => {
       const next = new Set(prev);
@@ -898,18 +902,36 @@ export function BatchDetail({ batch, creatorHistory, onBack, onRefresh, onRefres
                                         <span className="col-span-2 font-medium font-mono text-emerald-700">{formatDateTime(item.paid_at || batch.paid_at)}</span>
                                       </>
                                     )}
-                                    {((item.final_status === 'paid' || batch.status === 'paid') && (item.bukti_transfer_url || batch.bukti_transfer_url)) && (
+                                    {((item.final_status === 'paid' || batch.status === 'paid') && (item.bukti_transfer_preview_url || item.bukti_transfer_url || batch.bukti_transfer_url)) && (
                                       <>
                                         <span className="text-slate-500 font-semibold text-blue-700">Bukti Transfer:</span>
                                         <span className="col-span-2 font-medium">
-                                          <a 
-                                            href={item.bukti_transfer_url || batch.bukti_transfer_url} 
-                                            target="_blank" 
-                                            rel="noopener noreferrer" 
-                                            className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-50 text-blue-700 border border-blue-200 rounded-md font-semibold hover:bg-blue-100 hover:underline transition-colors"
-                                          >
-                                            <ExternalLink className="w-3.5 h-3.5" /> Lihat Bukti Transfer
-                                          </a>
+                                          {item.bukti_transfer_preview_url ? (
+                                            <button 
+                                              type="button"
+                                              onClick={() => setReceiptModalData({
+                                                creatorUsername: item.campaign_creators?.creators?.username,
+                                                namaPenerima: item.nama_penerima,
+                                                nomorRekening: item.nomor_rekening,
+                                                bankName: bank?.bank_name || item.metode_pembayaran,
+                                                nominal: Number(item.nominal || 0),
+                                                previewUrl: item.bukti_transfer_preview_url,
+                                                originalGdriveUrl: item.bukti_transfer_url || batch.bukti_transfer_url
+                                              })}
+                                              className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-md font-semibold hover:bg-emerald-100 transition-colors shadow-xs"
+                                            >
+                                              <ImageIcon className="w-3.5 h-3.5 text-emerald-600" /> Lihat Bukti Transfer (OCR)
+                                            </button>
+                                          ) : (
+                                            <a 
+                                              href={item.bukti_transfer_url || batch.bukti_transfer_url} 
+                                              target="_blank" 
+                                              rel="noopener noreferrer" 
+                                              className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-50 text-blue-700 border border-blue-200 rounded-md font-semibold hover:bg-blue-100 hover:underline transition-colors"
+                                            >
+                                              <ExternalLink className="w-3.5 h-3.5" /> Buka Google Drive
+                                            </a>
+                                          )}
                                         </span>
                                       </>
                                     )}
@@ -1272,6 +1294,13 @@ export function BatchDetail({ batch, creatorHistory, onBack, onRefresh, onRefres
           </div>
         </div>
       )}
+
+      {/* Pop-up Modal Preview Bukti Transfer (OCR) */}
+      <ReceiptPreviewModal 
+        isOpen={!!receiptModalData}
+        onClose={() => setReceiptModalData(null)}
+        data={receiptModalData}
+      />
 
     </div>
   );

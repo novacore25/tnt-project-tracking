@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   Loader2, Link as LinkIcon, Search, Download, FileSpreadsheet, 
-  CheckSquare, Square, X, Check 
+  CheckSquare, Square, X, Check, Image as ImageIcon
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { fetchCampaignCreatorMutations } from '../app/campaigns/actions/paymentActions';
 import { formatDateTime } from '@/utils/formatters';
+import { ReceiptPreviewModal } from './ReceiptPreviewModal';
 
 export function CampaignCreatorMutationTab({ campaignId }: { campaignId: number }) {
   const [mutations, setMutations] = useState<any[]>([]);
@@ -15,6 +16,9 @@ export function CampaignCreatorMutationTab({ campaignId }: { campaignId: number 
 
   // Selection state (Map: id -> item data object)
   const [selectedItems, setSelectedItems] = useState<Map<number, any>>(new Map());
+
+  // Modal Preview Bukti Transfer (OCR)
+  const [previewModalData, setPreviewModalData] = useState<any | null>(null);
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
@@ -368,13 +372,31 @@ export function CampaignCreatorMutationTab({ campaignId }: { campaignId: number 
                         {biayaTf > 0 && <div className="text-[10px] text-slate-400">+TF Rp {biayaTf.toLocaleString()}</div>}
                       </td>
                       <td className="px-4 py-3 text-center">
-                        {item.bukti_transfer || item.bukti_transfer_url || item.payment_batches?.bukti_transfer_url ? (
+                        {item.bukti_transfer_preview_url ? (
+                          <button
+                            type="button"
+                            onClick={() => setPreviewModalData({
+                              creatorUsername: username,
+                              namaPenerima: item.nama_penerima,
+                              nomorRekening: item.nomor_rekening,
+                              bankName: bankName,
+                              nominal: item.nominal,
+                              previewUrl: item.bukti_transfer_preview_url,
+                              originalGdriveUrl: item.bukti_transfer || item.bukti_transfer_url || item.payment_batches?.bukti_transfer_url
+                            })}
+                            className="inline-flex items-center gap-1 px-2 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg hover:bg-emerald-100 transition-colors shadow-xs"
+                            title="Lihat Bukti Transfer (OCR Preview)"
+                          >
+                            <ImageIcon className="w-3.5 h-3.5 text-emerald-600" />
+                            <span className="text-[11px] font-bold">Bukti TF</span>
+                          </button>
+                        ) : item.bukti_transfer || item.bukti_transfer_url || item.payment_batches?.bukti_transfer_url ? (
                           <a 
                             href={item.bukti_transfer || item.bukti_transfer_url || item.payment_batches?.bukti_transfer_url} 
                             target="_blank" 
                             rel="noreferrer" 
                             className="inline-flex items-center justify-center p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors shadow-xs" 
-                            title="Lihat Bukti Transfer"
+                            title="Lihat Bukti Transfer di Google Drive"
                           >
                             <LinkIcon className="w-4 h-4" />
                           </a>
@@ -390,6 +412,13 @@ export function CampaignCreatorMutationTab({ campaignId }: { campaignId: number 
           </table>
         </div>
       </div>
+
+      {/* Pop-up Modal Preview Bukti Transfer (OCR) */}
+      <ReceiptPreviewModal
+        isOpen={!!previewModalData}
+        onClose={() => setPreviewModalData(null)}
+        data={previewModalData}
+      />
     </div>
   );
 }

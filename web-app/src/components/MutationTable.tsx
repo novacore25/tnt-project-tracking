@@ -3,12 +3,13 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   Download, RefreshCcw, Search, Link, Loader2, ChevronLeft, ChevronRight, 
-  X, CheckSquare, Square, FileSpreadsheet, Check
+  X, CheckSquare, Square, FileSpreadsheet, Check, Image as ImageIcon
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { fetchMutationsPaginated, fetchMutationsExport, updateItemBuktiTransfer } from '../app/campaigns/actions/paymentActions';
 import { useAuth } from '@/providers/AuthProvider';
 import { formatDateTime } from '@/utils/formatters';
+import { ReceiptPreviewModal } from './ReceiptPreviewModal';
 
 export function MutationTable() {
   const { profile } = useAuth();
@@ -23,6 +24,9 @@ export function MutationTable() {
   
   // Selection state (Map: id -> item data object)
   const [selectedItems, setSelectedItems] = useState<Map<number, any>>(new Map());
+
+  // Modal Preview Bukti Transfer (OCR)
+  const [previewModalData, setPreviewModalData] = useState<any | null>(null);
 
   // Edit Bukti
   const [editingBuktiId, setEditingBuktiId] = useState<number | null>(null);
@@ -491,8 +495,25 @@ export function MutationTable() {
                           </div>
                         ) : (
                           <>
-                            {m.bukti_transfer ? (
-                              <a href={m.bukti_transfer} target="_blank" rel="noreferrer" className="inline-flex items-center justify-center p-1.5 bg-blue-50 text-blue-600 rounded hover:bg-blue-100 transition-colors" title="Lihat Bukti Transfer">
+                            {m.bukti_transfer_preview ? (
+                              <button 
+                                onClick={() => setPreviewModalData({
+                                  creatorUsername: m.username,
+                                  namaPenerima: m.nama_penerima,
+                                  nomorRekening: m.nomor_rekening,
+                                  bankName: m.bank_name || m.metode_pembayaran,
+                                  nominal: m.nominal,
+                                  previewUrl: m.bukti_transfer_preview,
+                                  originalGdriveUrl: m.bukti_transfer
+                                })}
+                                className="inline-flex items-center gap-1 px-2 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded hover:bg-emerald-100 transition-colors shadow-xs"
+                                title="Lihat Bukti Transfer (OCR Preview)"
+                              >
+                                <ImageIcon className="w-3.5 h-3.5 text-emerald-600" />
+                                <span className="text-[11px] font-bold">Bukti TF</span>
+                              </button>
+                            ) : m.bukti_transfer ? (
+                              <a href={m.bukti_transfer} target="_blank" rel="noreferrer" className="inline-flex items-center justify-center p-1.5 bg-blue-50 text-blue-600 rounded hover:bg-blue-100 transition-colors" title="Lihat Bukti Transfer di Google Drive">
                                 <Link className="w-4 h-4" />
                               </a>
                             ) : (
@@ -546,6 +567,13 @@ export function MutationTable() {
           </div>
         </div>
       )}
+
+      {/* Pop-up Modal Preview Bukti Transfer (OCR) */}
+      <ReceiptPreviewModal 
+        isOpen={!!previewModalData}
+        onClose={() => setPreviewModalData(null)}
+        data={previewModalData}
+      />
     </div>
   );
 }
