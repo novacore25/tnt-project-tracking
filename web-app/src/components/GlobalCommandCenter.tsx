@@ -17,8 +17,35 @@ import {
 } from '@/app/campaigns/actions/paymentActions';
 import { getSenderAccounts } from '@/app/campaigns/actions/paymentActions';
 import { formatDateTime, formatUserWithRole, getItemApprovalBadge } from '@/utils/formatters';
+import { useAuth } from '@/providers/AuthProvider';
+
+const getStoredSelected = (tab: string): number[] => {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(`tnt_cc_selected_${tab}`);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.map(Number).filter(n => !isNaN(n)) : [];
+  } catch {
+    return [];
+  }
+};
+
+const setStoredSelected = (tab: string, ids: number[]) => {
+  if (typeof window === 'undefined') return;
+  try {
+    if (!ids || ids.length === 0) {
+      localStorage.removeItem(`tnt_cc_selected_${tab}`);
+    } else {
+      localStorage.setItem(`tnt_cc_selected_${tab}`, JSON.stringify(ids));
+    }
+  } catch (e) {
+    console.error('Failed to save selected items to storage', e);
+  }
+};
 
 export function GlobalCommandCenter({ role, onSuccess }: { role: string, onSuccess?: () => void }) {
+  const { profile } = useAuth();
   const [batches, setBatches] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -40,6 +67,27 @@ export function GlobalCommandCenter({ role, onSuccess }: { role: string, onSucce
   const [subTab, setSubTab] = useState<CommandCenterSubTab>(
     role === 'manager' ? 'manager_review' : (role === 'finance' ? 'review' : 'manager_review')
   );
+
+  // Restore subTab dari memori browser saat reload
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const savedTab = localStorage.getItem('tnt_cc_active_subtab') as CommandCenterSubTab;
+    const allowedTabs: CommandCenterSubTab[] = 
+      role === 'executive' ? ['manager_review', 'exec_review_1', 'review', 'exec_final', 'transfer'] :
+      role === 'finance' ? ['review', 'transfer'] :
+      ['manager_review'];
+
+    if (savedTab && allowedTabs.includes(savedTab) && savedTab !== subTab) {
+      setSubTab(savedTab);
+    }
+  }, [role]);
+
+  const handleSwitchSubTab = (newTab: CommandCenterSubTab) => {
+    setSubTab(newTab);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('tnt_cc_active_subtab', newTab);
+    }
+  };
 
   // Bulk Transfer Modal State
   const [showTransferModal, setShowTransferModal] = useState(false);
@@ -142,6 +190,15 @@ export function GlobalCommandCenter({ role, onSuccess }: { role: string, onSucce
       setBatches(processedBatches);
       setExpandedBatches(new Set(processedBatches.map(b => b.id)));
       
+      // Sinkronisasi item yang dicentang dari memori lokal (localStorage)
+      const stored = getStoredSelected(subTab);
+      const validItemIds = new Set(processedBatches.flatMap(b => b.payment_items.map((i: any) => i.id)));
+      const retained = stored.filter(id => validItemIds.has(id));
+      setSelectedItems(new Set(retained));
+      if (retained.length !== stored.length) {
+        setStoredSelected(subTab, retained);
+      }
+      
       if ((role === 'finance' || role === 'executive' || subTab === 'transfer') && senderAccounts.length === 0) {
         const accounts = await getSenderAccounts();
         setSenderAccounts(accounts);
@@ -156,7 +213,6 @@ export function GlobalCommandCenter({ role, onSuccess }: { role: string, onSucce
 
   useEffect(() => {
     loadData();
-    setSelectedItems(new Set()); // Reset selections on tab change
   }, [loadData, subTab]);
 
   const toggleExpand = (id: number) => {
@@ -167,10 +223,13 @@ export function GlobalCommandCenter({ role, onSuccess }: { role: string, onSucce
   };
 
   const toggleSelectItem = (id: number) => {
-    const next = new Set(selectedItems);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-    setSelectedItems(next);
+    setSelectedItems(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      setStoredSelected(subTab, Array.from(next));
+      return next;
+    });
   };
 
   const toggleSelectBatch = (batchId: number) => {
@@ -180,22 +239,25 @@ export function GlobalCommandCenter({ role, onSuccess }: { role: string, onSucce
     const itemIds = batch.payment_items.map((i:any) => i.id);
     const allSelected = itemIds.every((id:any) => selectedItems.has(id));
     
-    const next = new Set(selectedItems);
-    if (allSelected) {
-      itemIds.forEach((id:any) => next.delete(id));
-    } else {
-      itemIds.forEach((id:any) => next.add(id));
-    }
-    setSelectedItems(next);
+    setSelectedItems(prev => {
+      const next = new Set(prev);
+      if (allSelected) {
+        itemIds.forEach((id:any) => next.delete(id));
+      } else {
+        itemIds.forEach((id:any) => next.add(id));
+      }
+      setStoredSelected(subTab, Array.from(next));
+      return next;
+    });
   };
 
   const handleSelectAll = () => {
     const allItemIds = batches.flatMap(b => b.payment_items.map((i:any) => i.id));
-    if (selectedItems.size === allItemIds.length && allItemIds.length > 0) {
-      setSelectedItems(new Set());
-    } else {
-      setSelectedItems(new Set(allItemIds));
-    }
+    setSelectedItems(prev => {
+      const next = prev.size > 0 ? new Set<number>() : new Set<number>(allItemIds);
+      setStoredSelected(subTab, Array.from(next));
+      return next;
+    });
   };
 
   const handleBulkApproveExecMgr = async () => {
@@ -213,6 +275,7 @@ export function GlobalCommandCenter({ role, onSuccess }: { role: string, onSucce
       
       alert("Berhasil memproses tagihan terpilih!");
       setSelectedItems(new Set());
+      setStoredSelected(subTab, []);
       loadData();
       if (onSuccess) onSuccess();
     } catch (err: any) {
@@ -235,6 +298,7 @@ export function GlobalCommandCenter({ role, onSuccess }: { role: string, onSucce
       }
       alert("Berhasil memproses tagihan terpilih!");
       setSelectedItems(new Set());
+      setStoredSelected(subTab, []);
       loadData();
       if (onSuccess) onSuccess();
     } catch (err: any) {
@@ -259,6 +323,7 @@ export function GlobalCommandCenter({ role, onSuccess }: { role: string, onSucce
       alert("Berhasil menandai lunas!\n\nCatatan: Sisa tagihan yang belum dicairkan otomatis dipindahkan ke batch Termin baru dan tetap berada di antrean 'Siap Bayar' sehingga dapat langsung dicairkan tanpa perlu approval ulang.");
       setShowTransferModal(false);
       setSelectedItems(new Set());
+      setStoredSelected(subTab, []);
       loadData();
       if (onSuccess) onSuccess();
     } catch (err: any) {
@@ -314,7 +379,12 @@ export function GlobalCommandCenter({ role, onSuccess }: { role: string, onSucce
       setShowRevertModal(false);
       setSingleRevertItem(null);
       setRevertReason('');
-      setSelectedItems(new Set());
+      setSelectedItems(prev => {
+        const next = new Set(prev);
+        itemIds.forEach(id => next.delete(id));
+        setStoredSelected(subTab, Array.from(next));
+        return next;
+      });
       loadData();
       if (onSuccess) onSuccess();
     } catch (err: any) {
@@ -359,27 +429,27 @@ export function GlobalCommandCenter({ role, onSuccess }: { role: string, onSucce
         <div className="mt-4 pt-4 border-t border-slate-100 flex flex-wrap justify-center gap-2 text-xs">
           <span className="text-slate-400 self-center">Antrean di meja lain:</span>
           {tabCounts.manager_review > 0 && (role === 'executive' || role === 'manager') && subTab !== 'manager_review' && (
-            <button onClick={() => setSubTab('manager_review')} className="px-3 py-1 bg-amber-50 text-amber-800 rounded-full font-semibold border border-amber-200 hover:bg-amber-100 transition-colors">
+            <button onClick={() => handleSwitchSubTab('manager_review')} className="px-3 py-1 bg-amber-50 text-amber-800 rounded-full font-semibold border border-amber-200 hover:bg-amber-100 transition-colors">
               {role === 'executive' ? '1. ' : ''}Review Manager ({tabCounts.manager_review})
             </button>
           )}
           {tabCounts.exec_review_1 > 0 && role === 'executive' && subTab !== 'exec_review_1' && (
-            <button onClick={() => setSubTab('exec_review_1')} className="px-3 py-1 bg-purple-50 text-purple-800 rounded-full font-semibold border border-purple-200 hover:bg-purple-100 transition-colors">
+            <button onClick={() => handleSwitchSubTab('exec_review_1')} className="px-3 py-1 bg-purple-50 text-purple-800 rounded-full font-semibold border border-purple-200 hover:bg-purple-100 transition-colors">
               2. Executive Review 1 ({tabCounts.exec_review_1})
             </button>
           )}
           {tabCounts.review > 0 && (role === 'executive' || role === 'finance') && subTab !== 'review' && (
-            <button onClick={() => setSubTab('review')} className="px-3 py-1 bg-amber-50 text-amber-800 rounded-full font-semibold border border-amber-200 hover:bg-amber-100 transition-colors">
+            <button onClick={() => handleSwitchSubTab('review')} className="px-3 py-1 bg-amber-50 text-amber-800 rounded-full font-semibold border border-amber-200 hover:bg-amber-100 transition-colors">
               {role === 'executive' ? '3. ' : ''}Review Finance ({tabCounts.review})
             </button>
           )}
           {tabCounts.exec_final > 0 && role === 'executive' && subTab !== 'exec_final' && (
-            <button onClick={() => setSubTab('exec_final')} className="px-3 py-1 bg-blue-50 text-blue-800 rounded-full font-semibold border border-blue-200 hover:bg-blue-100 transition-colors">
+            <button onClick={() => handleSwitchSubTab('exec_final')} className="px-3 py-1 bg-blue-50 text-blue-800 rounded-full font-semibold border border-blue-200 hover:bg-blue-100 transition-colors">
               4. Executive Final Approval ({tabCounts.exec_final})
             </button>
           )}
           {tabCounts.transfer > 0 && (role === 'executive' || role === 'finance') && subTab !== 'transfer' && (
-            <button onClick={() => setSubTab('transfer')} className="px-3 py-1 bg-emerald-50 text-emerald-800 rounded-full font-semibold border border-emerald-200 hover:bg-emerald-100 transition-colors">
+            <button onClick={() => handleSwitchSubTab('transfer')} className="px-3 py-1 bg-emerald-50 text-emerald-800 rounded-full font-semibold border border-emerald-200 hover:bg-emerald-100 transition-colors">
               {role === 'executive' ? '5. ' : ''}Siap Bayar ({tabCounts.transfer})
             </button>
           )}
@@ -397,7 +467,7 @@ export function GlobalCommandCenter({ role, onSuccess }: { role: string, onSucce
           {(role === 'executive' || role === 'manager') && (
             <button 
               className={`px-5 py-2 text-sm font-semibold rounded-md transition-all flex items-center gap-2 ${subTab === 'manager_review' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
-              onClick={() => setSubTab('manager_review')}
+              onClick={() => handleSwitchSubTab('manager_review')}
             >
               {role === 'executive' && <span className="text-[11px] font-bold text-slate-400">1.</span>}
               Review Manager
@@ -413,7 +483,7 @@ export function GlobalCommandCenter({ role, onSuccess }: { role: string, onSucce
           {role === 'executive' && (
             <button 
               className={`px-5 py-2 text-sm font-semibold rounded-md transition-all flex items-center gap-2 ${subTab === 'exec_review_1' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
-              onClick={() => setSubTab('exec_review_1')}
+              onClick={() => handleSwitchSubTab('exec_review_1')}
             >
               <span className="text-[11px] font-bold text-slate-400">2.</span>
               Executive Review 1
@@ -429,7 +499,7 @@ export function GlobalCommandCenter({ role, onSuccess }: { role: string, onSucce
           {(role === 'executive' || role === 'finance') && (
             <button 
               className={`px-5 py-2 text-sm font-semibold rounded-md transition-all flex items-center gap-2 ${subTab === 'review' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
-              onClick={() => setSubTab('review')}
+              onClick={() => handleSwitchSubTab('review')}
             >
               {role === 'executive' && <span className="text-[11px] font-bold text-slate-400">3.</span>}
               Review Finance
@@ -445,7 +515,7 @@ export function GlobalCommandCenter({ role, onSuccess }: { role: string, onSucce
           {role === 'executive' && (
             <button 
               className={`px-5 py-2 text-sm font-semibold rounded-md transition-all flex items-center gap-2 ${subTab === 'exec_final' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
-              onClick={() => setSubTab('exec_final')}
+              onClick={() => handleSwitchSubTab('exec_final')}
             >
               <span className="text-[11px] font-bold text-slate-400">4.</span>
               Executive Final Approval
@@ -461,7 +531,7 @@ export function GlobalCommandCenter({ role, onSuccess }: { role: string, onSucce
           {(role === 'executive' || role === 'finance') && (
             <button 
               className={`px-5 py-2 text-sm font-semibold rounded-md transition-all flex items-center gap-2 ${subTab === 'transfer' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
-              onClick={() => setSubTab('transfer')}
+              onClick={() => handleSwitchSubTab('transfer')}
             >
               {role === 'executive' && <span className="text-[11px] font-bold text-slate-400">5.</span>}
               Siap Bayar (Transfer)
@@ -1401,7 +1471,7 @@ export function GlobalCommandCenter({ role, onSuccess }: { role: string, onSucce
                     revertTargetFunnel === 'pending_executive' ? 'approval final executive' :
                     revertTargetFunnel === 'pending_finance' ? 'review finance' :
                     revertTargetFunnel === 'pending_executive_1' ? 'review executive 1' : 'review manager'
-                  } oleh Calvin ${(() => {
+                  } oleh ${profile?.nama || 'Executive'} ${(() => {
                     const now = new Date();
                     const pad = (n: number) => String(n).padStart(2, '0');
                     return `${pad(now.getDate())}/${pad(now.getMonth() + 1)}/${String(now.getFullYear()).slice(-2)} ${pad(now.getHours())}:${pad(now.getMinutes())}`;

@@ -1860,8 +1860,16 @@ export async function revertPaymentItemsByExecutive(
   }
 
   const session = await auth();
-  const userName = session?.user?.name || 'Calvin';
   const userId = session?.user?.id;
+  let userName = session?.user?.name;
+
+  if (userId) {
+    const profRes = await db.execute(sql`SELECT nama FROM profiles WHERE id = ${userId}::uuid LIMIT 1`);
+    if ((profRes as any[])[0]?.nama) {
+      userName = (profRes as any[])[0].nama;
+    }
+  }
+  if (!userName) userName = 'Executive';
 
   // Format DD/MM/YY HH:mm (contoh: 16/11/26 16:30)
   const now = new Date();
