@@ -1577,7 +1577,7 @@ export async function fetchCommandCenterBatches() {
   return (allBatches || []).filter((b: any) => 
     actionStatuses.includes(b.status) || 
     (b.payment_items || []).some((i: any) => 
-      ['pending', 'manager_approved', 'executive_1_approved', 'finance_selected', 'ready_to_pay', 'executive_approved'].includes(i.final_status)
+      ['pending', 'manager_approved', 'executive_1_approved', 'pending_finance_outstanding', 'finance_selected', 'ready_to_pay', 'executive_approved'].includes(i.final_status)
     )
   );
 }
@@ -1845,4 +1845,162 @@ export async function processBulkManagerItems(itemIds: number[]) {
   }
 
   revalidatePath('/budgeting');
+}
+
+export async function revertPaymentItemsByExecutive(
+  itemIds: number[],
+  targetFunnel: 'pending_executive' | 'pending_finance' | 'pending_executive_1' | 'pending_manager',
+  reason?: string
+) {
+  const denied = await requireRoleOrError('executive');
+  if (denied) return { success: false, error: denied.message } as any;
+
+  if (!itemIds || itemIds.length === 0) {
+    return { success: false, error: 'Tidak ada item yang dipilih' };
+  }
+
+  const session = await auth();
+  const userName = session?.user?.name || 'Calvin';
+  const userId = session?.user?.id;
+
+  // Format DD/MM/YY HH:mm (contoh: 16/11/26 16:30)
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const d = pad(now.getDate());
+  const m = pad(now.getMonth() + 1);
+  const y = String(now.getFullYear()).slice(-2);
+  const hh = pad(now.getHours());
+  const mm = pad(now.getMinutes());
+  const formattedTime = `${d}/${m}/${y} ${hh}:${mm}`;
+
+  let targetLabel = '';
+  let newFinalStatus = '';
+
+  if (targetFunnel === 'pending_executive') {
+    targetLabel = 'review final executive';
+    newFinalStatus = 'finance_selected';
+  } else if (targetFunnel === 'pending_finance') {
+    targetLabel = 'review finance';
+    newFinalStatus = 'pending_finance_outstanding';
+  } else if (targetFunnel === 'pending_executive_1') {
+    targetLabel = 'review executive 1';
+    newFinalStatus = 'manager_approved';
+  } else if (targetFunnel === 'pending_manager') {
+    targetLabel = 'review manager';
+    newFinalStatus = 'pending';
+  } else {
+    return { success: false, error: 'Target funnel tidak valid' };
+  }
+
+  const reasonTrimmed = reason ? reason.trim() : '';
+  const logNote = `Dikembalikan ke ${targetLabel} oleh ${userName} ${formattedTime}${reasonTrimmed ? ` (Catatan: ${reasonTrimmed})` : ''}`;
+
+  // 1. Update status pada payment_items
+  if (targetFunnel === 'pending_executive') {
+    await db.execute(sql`
+      UPDATE payment_items
+      SET 
+        final_status = ${newFinalStatus},
+        executive_status = 'pending',
+        executive_acted_by = ${userId || null},
+        executive_acted_at = NOW(),
+        executive_note = CASE 
+          WHEN executive_note IS NULL OR executive_note = '' THEN ${logNote}
+          ELSE executive_note || E'\n' || ${logNote}
+        END,
+        notes = CASE 
+          WHEN notes IS NULL OR notes = '' THEN ${logNote}
+          ELSE notes || E'\n' || ${logNote}
+        END
+      WHERE id IN ${sqlInList(itemIds)}
+    `);
+  } else if (targetFunnel === 'pending_finance') {
+    await db.execute(sql`
+      UPDATE payment_items
+      SET 
+        final_status = ${newFinalStatus},
+        finance_selected = false,
+        executive_status = 'pending',
+        executive_acted_by = ${userId || null},
+        executive_acted_at = NOW(),
+        executive_note = CASE 
+          WHEN executive_note IS NULL OR executive_note = '' THEN ${logNote}
+          ELSE executive_note || E'\n' || ${logNote}
+        END,
+        notes = CASE 
+          WHEN notes IS NULL OR notes = '' THEN ${logNote}
+          ELSE notes || E'\n' || ${logNote}
+        END
+      WHERE id IN ${sqlInList(itemIds)}
+    `);
+  } else if (targetFunnel === 'pending_executive_1') {
+    await db.execute(sql`
+      UPDATE payment_items
+      SET 
+        final_status = ${newFinalStatus},
+        finance_selected = false,
+        executive_1_status = 'pending',
+        executive_status = 'pending',
+        executive_acted_by = ${userId || null},
+        executive_acted_at = NOW(),
+        executive_note = CASE 
+          WHEN executive_note IS NULL OR executive_note = '' THEN ${logNote}
+          ELSE executive_note || E'\n' || ${logNote}
+        END,
+        notes = CASE 
+          WHEN notes IS NULL OR notes = '' THEN ${logNote}
+          ELSE notes || E'\n' || ${logNote}
+        END
+      WHERE id IN ${sqlInList(itemIds)}
+    `);
+  } else if (targetFunnel === 'pending_manager') {
+    await db.execute(sql`
+      UPDATE payment_items
+      SET 
+        final_status = ${newFinalStatus},
+        manager_status = 'pending',
+        finance_selected = false,
+        executive_1_status = 'pending',
+        executive_status = 'pending',
+        executive_acted_by = ${userId || null},
+        executive_acted_at = NOW(),
+        executive_note = CASE 
+          WHEN executive_note IS NULL OR executive_note = '' THEN ${logNote}
+          ELSE executive_note || E'\n' || ${logNote}
+        END,
+        notes = CASE 
+          WHEN notes IS NULL OR notes = '' THEN ${logNote}
+          ELSE notes || E'\n' || ${logNote}
+        END
+      WHERE id IN ${sqlInList(itemIds)}
+    `);
+  }
+
+  // 2. Sinkronisasi batch status untuk semua batch terkait
+  const itemsRes = await db.execute(sql`SELECT DISTINCT batch_id FROM payment_items WHERE id IN ${sqlInList(itemIds)}`);
+  const batchIds = (itemsRes as any[]).map(i => i.batch_id);
+
+  for (const bId of batchIds) {
+    const remRes = await db.execute(sql`SELECT final_status FROM payment_items WHERE batch_id = ${bId}`);
+    const remItems = remRes as any[];
+    const hasPendingManager = remItems?.some(i => i.final_status === 'pending');
+    const hasPendingExec1 = remItems?.some(i => i.final_status === 'manager_approved');
+    const hasPendingFinance = remItems?.some(i => ['executive_1_approved', 'pending_finance_outstanding'].includes(i.final_status));
+    const hasPendingExecFinal = remItems?.some(i => i.final_status === 'finance_selected');
+
+    if (hasPendingManager) {
+      await db.execute(sql`UPDATE payment_batches SET status = 'pending_manager' WHERE id = ${bId}`);
+    } else if (hasPendingExec1) {
+      await db.execute(sql`UPDATE payment_batches SET status = 'pending_executive_1' WHERE id = ${bId}`);
+    } else if (hasPendingFinance) {
+      await db.execute(sql`UPDATE payment_batches SET status = 'pending_finance' WHERE id = ${bId}`);
+    } else if (hasPendingExecFinal) {
+      await db.execute(sql`UPDATE payment_batches SET status = 'pending_executive' WHERE id = ${bId}`);
+    } else {
+      await db.execute(sql`UPDATE payment_batches SET status = 'ready_to_pay' WHERE id = ${bId}`);
+    }
+  }
+
+  revalidatePath('/budgeting');
+  return { success: true, count: itemIds.length, logNote };
 }

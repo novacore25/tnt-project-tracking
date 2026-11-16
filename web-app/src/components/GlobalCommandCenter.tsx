@@ -5,14 +5,15 @@ import {
   Loader2, ChevronDown, ChevronUp, ChevronRight, CheckSquare, Square, 
   CheckCircle, CheckCircle2, XCircle, Clock, ShieldAlert, FileText, 
   Send, Calendar, Image as ImageIcon, ExternalLink, AlertCircle, 
-  User, CreditCard, Phone 
+  User, CreditCard, Phone, RotateCcw
 } from 'lucide-react';
 import { 
   fetchCommandCenterBatches, 
   processBulkManagerItems,
   processBulkExecutive,
   bulkProcessFinanceReview,
-  bulkMarkPaidFinance
+  bulkMarkPaidFinance,
+  revertPaymentItemsByExecutive
 } from '@/app/campaigns/actions/paymentActions';
 import { getSenderAccounts } from '@/app/campaigns/actions/paymentActions';
 import { formatDateTime, formatUserWithRole, getItemApprovalBadge } from '@/utils/formatters';
@@ -46,6 +47,12 @@ export function GlobalCommandCenter({ role, onSuccess }: { role: string, onSucce
   const [buktiUrl, setBuktiUrl] = useState('');
   const [senderAccountId, setSenderAccountId] = useState(0);
   const [senderAccounts, setSenderAccounts] = useState<any[]>([]);
+
+  // Revert Funnel Modal State (Khusus Executive)
+  const [showRevertModal, setShowRevertModal] = useState(false);
+  const [revertTargetFunnel, setRevertTargetFunnel] = useState<'pending_executive' | 'pending_finance' | 'pending_executive_1' | 'pending_manager'>('pending_finance');
+  const [revertReason, setRevertReason] = useState('');
+  const [singleRevertItem, setSingleRevertItem] = useState<any | null>(null);
 
   // Real-time counts per sub-tab (5 tahapan funnel berurutan)
   const [tabCounts, setTabCounts] = useState<{
@@ -256,6 +263,62 @@ export function GlobalCommandCenter({ role, onSuccess }: { role: string, onSucce
       if (onSuccess) onSuccess();
     } catch (err: any) {
       alert("Gagal menandai lunas: " + err.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleOpenSingleRevert = (item: any) => {
+    setSingleRevertItem(item);
+    if (['ready_to_pay', 'executive_approved'].includes(item.final_status)) {
+      setRevertTargetFunnel('pending_executive');
+    } else if (item.final_status === 'finance_selected') {
+      setRevertTargetFunnel('pending_finance');
+    } else if (['executive_1_approved', 'pending_finance_outstanding'].includes(item.final_status)) {
+      setRevertTargetFunnel('pending_executive_1');
+    } else {
+      setRevertTargetFunnel('pending_manager');
+    }
+    setRevertReason('');
+    setShowRevertModal(true);
+  };
+
+  const handleOpenBulkRevert = () => {
+    if (selectedItems.size === 0) return;
+    setSingleRevertItem(null);
+    if (subTab === 'transfer') {
+      setRevertTargetFunnel('pending_executive');
+    } else if (subTab === 'exec_final') {
+      setRevertTargetFunnel('pending_finance');
+    } else if (subTab === 'review') {
+      setRevertTargetFunnel('pending_executive_1');
+    } else {
+      setRevertTargetFunnel('pending_manager');
+    }
+    setRevertReason('');
+    setShowRevertModal(true);
+  };
+
+  const handleExecuteRevert = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const itemIds = singleRevertItem ? [singleRevertItem.id] : Array.from(selectedItems);
+    if (itemIds.length === 0) return;
+
+    setIsSubmitting(true);
+    try {
+      const res = await revertPaymentItemsByExecutive(itemIds, revertTargetFunnel, revertReason);
+      if (res && !res.success) {
+        throw new Error(res.error || 'Gagal memundurkan funnel');
+      }
+      alert(`Berhasil memundurkan ${itemIds.length} tagihan!\n\nKeterangan tersimpan:\n"${res.logNote}"`);
+      setShowRevertModal(false);
+      setSingleRevertItem(null);
+      setRevertReason('');
+      setSelectedItems(new Set());
+      loadData();
+      if (onSuccess) onSuccess();
+    } catch (err: any) {
+      alert('Gagal memundurkan status: ' + err.message);
     } finally {
       setIsSubmitting(false);
     }
@@ -601,6 +664,15 @@ export function GlobalCommandCenter({ role, onSuccess }: { role: string, onSucce
                                         </div>
                                       );
                                     })()}
+                                    {/* Tampilkan catatan pemunduran funnel jika ada */}
+                                    {item.executive_note && item.executive_note.includes('Dikembalikan ke') && (
+                                      <div 
+                                        className="text-[9.5px] font-semibold text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded whitespace-normal max-w-[220px] text-center leading-tight shadow-2xs mt-0.5"
+                                        title={item.executive_note}
+                                      >
+                                        ↩️ {item.executive_note.split('\n').filter((l: string) => l.includes('Dikembalikan ke')).pop()}
+                                      </div>
+                                    )}
                                   </div>
                                 </td>
                               </tr>
@@ -635,13 +707,25 @@ export function GlobalCommandCenter({ role, onSuccess }: { role: string, onSucce
                                             </div>
                                           </div>
                                         </div>
-                                        <button 
-                                          type="button" 
-                                          onClick={() => toggleExpandItem(item.id)}
-                                          className="text-xs text-slate-400 hover:text-slate-600 flex items-center gap-1 font-medium px-2.5 py-1 rounded-md hover:bg-slate-100 transition-colors"
-                                        >
-                                          <ChevronUp className="w-4 h-4" /> Tutup Detail
-                                        </button>
+                                        <div className="flex items-center gap-2">
+                                          {role === 'executive' && item.final_status !== 'paid' && (
+                                            <button 
+                                              type="button" 
+                                              onClick={() => handleOpenSingleRevert(item)}
+                                              className="text-xs text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-300 flex items-center gap-1.5 font-semibold px-3 py-1 rounded-md transition-colors shadow-2xs"
+                                              title="Mundurkan funnel untuk kreator ini"
+                                            >
+                                              <RotateCcw className="w-3.5 h-3.5" /> Mundurkan Funnel
+                                            </button>
+                                          )}
+                                          <button 
+                                            type="button" 
+                                            onClick={() => toggleExpandItem(item.id)}
+                                            className="text-xs text-slate-400 hover:text-slate-600 flex items-center gap-1 font-medium px-2.5 py-1 rounded-md hover:bg-slate-100 transition-colors"
+                                          >
+                                            <ChevronUp className="w-4 h-4" /> Tutup Detail
+                                          </button>
+                                        </div>
                                       </div>
 
                                       {/* 2. Funnel Progress Stepper (Alur 6 Tahap) */}
@@ -1044,6 +1128,19 @@ export function GlobalCommandCenter({ role, onSuccess }: { role: string, onSucce
           </div>
           
           <div className="flex flex-wrap justify-center gap-3">
+            {role === 'executive' && (
+              <button
+                type="button"
+                onClick={handleOpenBulkRevert}
+                disabled={isSubmitting}
+                className="px-6 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg font-bold shadow-lg shadow-amber-500/20 transition-all flex items-center gap-2"
+                title="Kembalikan tagihan terpilih ke funnel sebelumnya"
+              >
+                <RotateCcw className="w-5 h-5" />
+                Mundurkan Funnel ({selectedItems.size})
+              </button>
+            )}
+
             {(subTab === 'exec_review_1' || subTab === 'exec_final' || subTab === 'manager_review' || role === 'manager') ? (
               <button
                 onClick={handleBulkApproveExecMgr}
@@ -1161,6 +1258,173 @@ export function GlobalCommandCenter({ role, onSuccess }: { role: string, onSucce
               <button type="submit" disabled={isSubmitting} className="btn btn-primary flex items-center gap-2 px-6">
                 {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
                 Submit
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Revert Funnel Modal (Khusus Executive) */}
+      {showRevertModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <form onSubmit={handleExecuteRevert} className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden animate-in zoom-in-95">
+            <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-amber-50/60">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-amber-100 text-amber-800 rounded-xl">
+                  <RotateCcw className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-800">Mundurkan Funnel Pembayaran</h3>
+                  <p className="text-xs text-slate-500">Kembalikan tagihan kreator ke tahapan approval sebelumnya</p>
+                </div>
+              </div>
+              <button type="button" onClick={() => setShowRevertModal(false)} className="text-slate-400 hover:text-slate-600 font-bold p-1">✕</button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              {/* Info Tagihan */}
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs space-y-1.5">
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500">Target Tagihan:</span>
+                  <span className="font-bold text-slate-800">
+                    {singleRevertItem 
+                      ? `@${singleRevertItem.campaign_creators?.creators?.username || singleRevertItem.nama_penerima}`
+                      : `${selectedItems.size} Tagihan Terpilih`}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500">Total Nominal:</span>
+                  <span className="font-bold text-emerald-600 text-sm">
+                    Rp {(singleRevertItem ? Number(singleRevertItem.nominal) : selectedTotalNominal).toLocaleString('id-ID')}
+                  </span>
+                </div>
+              </div>
+
+              {/* Pilihan Target Funnel */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                  Kembalikan ke Tahapan:
+                </label>
+                <div className="space-y-2 text-xs">
+                  <label className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${
+                    revertTargetFunnel === 'pending_executive' ? 'bg-blue-50/70 border-blue-300' : 'bg-white border-slate-200 hover:bg-slate-50'
+                  }`}>
+                    <input
+                      type="radio"
+                      name="targetFunnel"
+                      value="pending_executive"
+                      checked={revertTargetFunnel === 'pending_executive'}
+                      onChange={() => setRevertTargetFunnel('pending_executive')}
+                      className="mt-0.5 text-blue-600 focus:ring-blue-500"
+                    />
+                    <div>
+                      <div className="font-bold text-slate-800">#4. Approval Final Executive (Meja Ko Calvin)</div>
+                      <div className="text-[11px] text-slate-500">Ditarik dari Siap Bayar, kembali ke meja review Ko Calvin untuk persetujuan final.</div>
+                    </div>
+                  </label>
+
+                  <label className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${
+                    revertTargetFunnel === 'pending_finance' ? 'bg-indigo-50/70 border-indigo-300' : 'bg-white border-slate-200 hover:bg-slate-50'
+                  }`}>
+                    <input
+                      type="radio"
+                      name="targetFunnel"
+                      value="pending_finance"
+                      checked={revertTargetFunnel === 'pending_finance'}
+                      onChange={() => setRevertTargetFunnel('pending_finance')}
+                      className="mt-0.5 text-indigo-600 focus:ring-indigo-500"
+                    />
+                    <div>
+                      <div className="font-bold text-slate-800">#3. Review Finance (Meja Finance)</div>
+                      <div className="text-[11px] text-slate-500">Dikembalikan ke tim Finance untuk diverifikasi ulang (rekening, nominal, kelengkapan).</div>
+                    </div>
+                  </label>
+
+                  <label className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${
+                    revertTargetFunnel === 'pending_executive_1' ? 'bg-purple-50/70 border-purple-300' : 'bg-white border-slate-200 hover:bg-slate-50'
+                  }`}>
+                    <input
+                      type="radio"
+                      name="targetFunnel"
+                      value="pending_executive_1"
+                      checked={revertTargetFunnel === 'pending_executive_1'}
+                      onChange={() => setRevertTargetFunnel('pending_executive_1')}
+                      className="mt-0.5 text-purple-600 focus:ring-purple-500"
+                    />
+                    <div>
+                      <div className="font-bold text-slate-800">#2. Review Executive 1</div>
+                      <div className="text-[11px] text-slate-500">Dikembalikan ke tahap Executive Review 1.</div>
+                    </div>
+                  </label>
+
+                  <label className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${
+                    revertTargetFunnel === 'pending_manager' ? 'bg-amber-50/70 border-amber-300' : 'bg-white border-slate-200 hover:bg-slate-50'
+                  }`}>
+                    <input
+                      type="radio"
+                      name="targetFunnel"
+                      value="pending_manager"
+                      checked={revertTargetFunnel === 'pending_manager'}
+                      onChange={() => setRevertTargetFunnel('pending_manager')}
+                      className="mt-0.5 text-amber-600 focus:ring-amber-500"
+                    />
+                    <div>
+                      <div className="font-bold text-slate-800">#1. Review Manager</div>
+                      <div className="text-[11px] text-slate-500">Dikembalikan ke Manager campaign untuk diperiksa / diajukan ulang.</div>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              {/* Alasan / Catatan */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Catatan / Alasan Penarikan (Opsional):
+                </label>
+                <textarea
+                  value={revertReason}
+                  onChange={(e) => setRevertReason(e.target.value)}
+                  placeholder="Contoh: Rekening salah, performa video perlu dicek ulang, atau hold dana..."
+                  rows={2}
+                  className="w-full text-xs p-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400 bg-slate-50 focus:bg-white resize-none"
+                />
+              </div>
+
+              {/* Live Note Preview */}
+              <div className="bg-amber-50/70 border border-amber-200 rounded-xl p-3 text-[11px] space-y-1">
+                <div className="font-bold text-amber-900 flex items-center gap-1.5">
+                  <AlertCircle className="w-3.5 h-3.5 text-amber-700" />
+                  <span>Keterangan yang akan otomatis dicatat di sistem:</span>
+                </div>
+                <div className="font-mono text-amber-900 bg-white/90 p-2 rounded-lg border border-amber-200">
+                  {`Dikembalikan ke ${
+                    revertTargetFunnel === 'pending_executive' ? 'approval final executive' :
+                    revertTargetFunnel === 'pending_finance' ? 'review finance' :
+                    revertTargetFunnel === 'pending_executive_1' ? 'review executive 1' : 'review manager'
+                  } oleh Calvin ${(() => {
+                    const now = new Date();
+                    const pad = (n: number) => String(n).padStart(2, '0');
+                    return `${pad(now.getDate())}/${pad(now.getMonth() + 1)}/${String(now.getFullYear()).slice(-2)} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+                  })()}${revertReason.trim() ? ` (Catatan: ${revertReason.trim()})` : ''}`}
+                </div>
+              </div>
+            </div>
+
+            <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setShowRevertModal(false)}
+                className="px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-200 rounded-lg transition-colors"
+              >
+                Batal
+              </button>
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="px-5 py-2 text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white rounded-lg shadow-md shadow-amber-500/20 disabled:opacity-50 flex items-center gap-1.5 transition-all"
+              >
+                {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}
+                Konfirmasi Mundurkan
               </button>
             </div>
           </form>
