@@ -5,7 +5,7 @@ import {
   Loader2, ChevronDown, ChevronUp, ChevronRight, CheckSquare, Square, 
   CheckCircle, CheckCircle2, XCircle, Clock, ShieldAlert, FileText, 
   Send, Calendar, Image as ImageIcon, ExternalLink, AlertCircle, 
-  User, CreditCard, Phone, RotateCcw
+  User, CreditCard, Phone, RotateCcw, Search, X, Filter
 } from 'lucide-react';
 import { 
   fetchCommandCenterBatches, 
@@ -18,6 +18,14 @@ import {
 import { getSenderAccounts } from '@/app/campaigns/actions/paymentActions';
 import { formatDateTime, formatUserWithRole, getItemApprovalBadge } from '@/utils/formatters';
 import { useAuth } from '@/providers/AuthProvider';
+
+const parseSearchKeywords = (raw: string): string[] => {
+  if (!raw) return [];
+  return raw
+    .split(/[\r\n,;\s]+/)
+    .map(k => k.trim().replace(/^@/, '').toLowerCase())
+    .filter(k => k.length > 0);
+};
 
 const getStoredSelected = (tab: string): number[] => {
   if (typeof window === 'undefined') return [];
@@ -130,6 +138,88 @@ export function GlobalCommandCenter({ role, onSuccess }: { role: string, onSucce
     return total;
   }, [batches, selectedItems]);
 
+  // State & Logika Batch Pencarian (Multi-Nama dipisah enter, spasi, koma)
+  const [searchRaw, setSearchRaw] = useState('');
+  const [isBatchSearchMode, setIsBatchSearchMode] = useState(false);
+
+  const searchKeywords = React.useMemo(() => {
+    return parseSearchKeywords(searchRaw);
+  }, [searchRaw]);
+
+  // Filter batches dan item berdasarkan kata kunci yang dicari
+  const { filteredBatches, matchedItemIds, unmatchedKeywords } = React.useMemo(() => {
+    if (searchKeywords.length === 0) {
+      return {
+        filteredBatches: batches,
+        matchedItemIds: new Set<number>(),
+        unmatchedKeywords: []
+      };
+    }
+
+    const matchedIds = new Set<number>();
+    const foundKeywords = new Set<string>();
+
+    const result = batches.map(batch => {
+      const items = batch.payment_items || [];
+      const matchingItems = items.filter((item: any) => {
+        const username = (item.campaign_creators?.creators?.username || '').toLowerCase();
+        const displayName = (item.campaign_creators?.creators?.display_name || '').toLowerCase();
+        const namaPenerima = (item.nama_penerima || '').toLowerCase();
+        const nomorRekening = (item.nomor_rekening || '').toLowerCase();
+        const transactionId = (item.transaction_id || '').toLowerCase();
+        const itemId = String(item.id || '').toLowerCase();
+        const batchLabel = (batch.batch_label || '').toLowerCase();
+        const campaignName = (batch.campaigns?.nama || '').toLowerCase();
+
+        let isMatch = false;
+        searchKeywords.forEach(kw => {
+          if (
+            username.includes(kw) ||
+            displayName.includes(kw) ||
+            namaPenerima.includes(kw) ||
+            nomorRekening.includes(kw) ||
+            transactionId.includes(kw) ||
+            itemId === kw ||
+            batchLabel.includes(kw) ||
+            campaignName.includes(kw)
+          ) {
+            isMatch = true;
+            foundKeywords.add(kw);
+          }
+        });
+
+        if (isMatch) {
+          matchedIds.add(item.id);
+        }
+        return isMatch;
+      });
+
+      if (matchingItems.length === 0) return null;
+      return {
+        ...batch,
+        payment_items: matchingItems
+      };
+    }).filter((b): b is any => b !== null);
+
+    const unmatched = searchKeywords.filter(kw => !foundKeywords.has(kw));
+
+    return {
+      filteredBatches: result,
+      matchedItemIds: matchedIds,
+      unmatchedKeywords: unmatched
+    };
+  }, [batches, searchKeywords]);
+
+  const handleSelectAllMatched = () => {
+    if (matchedItemIds.size === 0) return;
+    setSelectedItems(prev => {
+      const next = new Set(prev);
+      matchedItemIds.forEach(id => next.add(id));
+      setStoredSelected(subTab, Array.from(next));
+      return next;
+    });
+  };
+
   const loadData = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -233,7 +323,8 @@ export function GlobalCommandCenter({ role, onSuccess }: { role: string, onSucce
   };
 
   const toggleSelectBatch = (batchId: number) => {
-    const batch = batches.find(b => b.id === batchId);
+    const currentList = searchKeywords.length > 0 ? filteredBatches : batches;
+    const batch = currentList.find(b => b.id === batchId);
     if (!batch) return;
     
     const itemIds = batch.payment_items.map((i:any) => i.id);
@@ -252,7 +343,8 @@ export function GlobalCommandCenter({ role, onSuccess }: { role: string, onSucce
   };
 
   const handleSelectAll = () => {
-    const allItemIds = batches.flatMap(b => b.payment_items.map((i:any) => i.id));
+    const currentList = searchKeywords.length > 0 ? filteredBatches : batches;
+    const allItemIds = currentList.flatMap(b => b.payment_items.map((i:any) => i.id));
     setSelectedItems(prev => {
       const next = prev.size > 0 ? new Set<number>() : new Set<number>(allItemIds);
       setStoredSelected(subTab, Array.from(next));
@@ -573,14 +665,139 @@ export function GlobalCommandCenter({ role, onSuccess }: { role: string, onSucce
         </button>
       </div>
 
+      {/* Search & Batch Multi-Nama Bar */}
+      <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-sm font-bold text-slate-800">
+            <Search className="w-4 h-4 text-blue-600" />
+            <span>Pencarian Tagihan & Kreator</span>
+            {searchKeywords.length > 0 && (
+              <span className="bg-blue-100 text-blue-700 text-xs px-2.5 py-0.5 rounded-full font-bold">
+                {matchedItemIds.size} Cocok
+              </span>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsBatchSearchMode(prev => !prev)}
+            className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition-all border flex items-center gap-1.5 ${
+              isBatchSearchMode
+                ? 'bg-blue-50 text-blue-700 border-blue-200 shadow-sm'
+                : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+            }`}
+          >
+            <Filter className="w-3.5 h-3.5" />
+            {isBatchSearchMode ? 'Mode Batch: Aktif (Multi-Nama / Enter)' : '📋 Buka Mode Batch (Multi-Nama)'}
+          </button>
+        </div>
+
+        {isBatchSearchMode ? (
+          <div>
+            <textarea
+              rows={3}
+              value={searchRaw}
+              onChange={(e) => setSearchRaw(e.target.value)}
+              placeholder="Paste banyak nama kreator atau ID tagihan di sini (dipisahkan spasi, enter/baris baru, atau koma)...&#10;Contoh:&#10;@shopsyxxx_&#10;lonlysha&#10;Khumaerah3284"
+              className="w-full p-3 text-sm border border-slate-300 rounded-lg outline-none focus:border-blue-500 font-mono transition-colors"
+            />
+            <div className="text-[11px] text-slate-500 mt-1 flex justify-between items-center">
+              <span>Tips: Bisa langsung copy-paste satu kolom dari Excel atau chat WhatsApp. Otomatis pisahkan enter & spasi.</span>
+              {searchRaw && (
+                <button
+                  type="button"
+                  onClick={() => setSearchRaw('')}
+                  className="text-rose-600 hover:text-rose-700 font-semibold"
+                >
+                  ✕ Bersihkan Teks
+                </button>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <input
+              type="text"
+              value={searchRaw}
+              onChange={(e) => setSearchRaw(e.target.value)}
+              placeholder="Cari nama kreator (@username), ID (RC-...), atau rekening... (Bisa banyak nama dipisah spasi atau klik Mode Batch)"
+              className="w-full pl-9 pr-20 py-2.5 text-sm border border-slate-300 rounded-lg outline-none focus:border-blue-500 transition-colors"
+            />
+            {searchRaw && (
+              <button
+                type="button"
+                onClick={() => setSearchRaw('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded"
+              >
+                ✕ Reset
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Status & Bulk Action Hasil Pencarian */}
+        {searchKeywords.length > 0 && (
+          <div className="pt-2.5 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2 text-xs">
+            <div className="flex flex-wrap items-center gap-2 text-slate-600">
+              <span>
+                Mencari <strong className="text-slate-800">{searchKeywords.length} kata kunci</strong>:
+              </span>
+              <span className="font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded border border-emerald-100">
+                {matchedItemIds.size} tagihan cocok ditemukan di meja ini
+              </span>
+              {unmatchedKeywords.length > 0 && (
+                <span className="text-amber-800 bg-amber-50 px-2.5 py-0.5 rounded border border-amber-200" title={unmatchedKeywords.join(', ')}>
+                  ⚠️ {unmatchedKeywords.length} nama tidak ditemukan di meja ini: {unmatchedKeywords.slice(0, 3).map(k => `@${k}`).join(', ')}{unmatchedKeywords.length > 3 ? ` +${unmatchedKeywords.length - 3} lainnya` : ''}
+                </span>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2">
+              {matchedItemIds.size > 0 && (
+                <button
+                  type="button"
+                  onClick={handleSelectAllMatched}
+                  className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition-all flex items-center gap-1.5 shadow-sm"
+                >
+                  <CheckSquare className="w-3.5 h-3.5" />
+                  Centang Semua Hasil Cocok ({matchedItemIds.size})
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setSearchRaw('')}
+                className="px-2.5 py-1.5 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors font-medium"
+              >
+                Reset Pencarian
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
       {isLoading ? (
         <div className="flex justify-center items-center py-12"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>
       ) : batches.length === 0 ? (
         renderEmptyState()
+      ) : filteredBatches.length === 0 ? (
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-10 text-center space-y-3">
+          <Search className="w-10 h-10 text-slate-300 mx-auto" />
+          <h3 className="font-bold text-slate-700 text-base">Tidak Ada Tagihan yang Cocok</h3>
+          <p className="text-xs text-slate-500 max-w-md mx-auto">
+            Tidak ditemukan tagihan di tahapan funnel ini yang cocok dengan <strong>{searchKeywords.length} kata kunci</strong> dicari. Cek kembali nama kreator atau pastikan tagihan tidak berada di tahapan lain.
+          </p>
+          <button
+            type="button"
+            onClick={() => setSearchRaw('')}
+            className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg text-xs transition-colors"
+          >
+            ✕ Bersihkan Pencarian & Tampilkan Semua
+          </button>
+        </div>
       ) : (
         <div className="space-y-4">
-          {batches.map((batch) => {
-            const isExpanded = expandedBatches.has(batch.id);
+          {filteredBatches.map((batch) => {
+            const isExpanded = searchKeywords.length > 0 ? true : expandedBatches.has(batch.id);
             const batchItemIds = batch.payment_items.map((i:any) => i.id);
             const allSelected = batchItemIds.every((id:any) => selectedItems.has(id));
             const someSelected = batchItemIds.some((id:any) => selectedItems.has(id)) && !allSelected;
