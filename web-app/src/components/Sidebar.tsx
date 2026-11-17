@@ -1,7 +1,7 @@
 "use client";
 
 import Link from 'next/link';
-import { LayoutDashboard, Users, FolderKanban, Receipt, Wallet, Settings, Package, LogOut, Shield, Activity, Puzzle, ChevronLeft, ChevronRight, FileText, Database } from 'lucide-react';
+import { LayoutDashboard, Users, FolderKanban, Receipt, Wallet, Settings, Package, LogOut, Shield, Activity, Puzzle, ChevronLeft, ChevronRight, FileText, Database, Target } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/utils/cn';
 import { useState, useEffect } from 'react';
@@ -13,6 +13,7 @@ const navItems = [
   { name: 'Creator Pool', href: '/creator-pool', icon: Users, activePhase: true },
   { name: 'Staging Creator', href: '/creator-pool/staging', icon: Database, activePhase: true },
   { name: 'Campaign', href: '/campaigns', icon: FolderKanban, activePhase: true },
+  { name: 'Controlling PIC', href: '/pic-controlling', icon: Target, activePhase: true },
   { name: 'Dokumen', href: '/dokumen', icon: FileText, activePhase: true },
   { name: 'Master Produk', href: '/skus', icon: Package, activePhase: true },
   { name: 'Input Penjualan', href: '/input-penjualan', icon: Receipt, activePhase: true },
